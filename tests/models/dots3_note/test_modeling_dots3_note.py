@@ -15,19 +15,14 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers import (
     AutoModelForMultimodalLM,
     AutoProcessor,
-    Dots3NoteAudioConfig,
     Dots3NoteConfig,
     Dots3NoteForCausalLM,
     Dots3NoteForConditionalGeneration,
     Dots3NoteModel,
-    Dots3NoteTextConfig,
     Dots3NoteTextModel,
-    Dots3NoteVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -68,8 +63,7 @@ class Dots3NoteTextModelTester(CausalLMModelTester):
         self.layer_types = ["indexed_attention", "sliding_attention"] * (self.num_hidden_layers // 2)
         self.sliding_window = self.max_position_embeddings
         self.per_layer_config = {}
-        self.index_n_heads = 2
-        self.index_head_dim = 128
+        self.index_head_dim = 32
         self.index_topk = 4
         self.n_routed_experts = 4
         self.n_shared_experts = 1
@@ -101,19 +95,18 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
 class Dots3NoteVision2TextModelTester(VLMModelTester):
     base_model_class = Dots3NoteModel
     config_class = Dots3NoteConfig
-    text_config_class = Dots3NoteTextConfig
-    vision_config_class = Dots3NoteVisionConfig
     conditional_generation_class = Dots3NoteForConditionalGeneration
+    sub_configs_to_skip = ["text_config"]
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 7)
         kwargs.setdefault("image_token_id", 3)
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("audio_token_id", 5)
-        kwargs.setdefault("image_size", 4)
+        kwargs.setdefault("image_size", 8)
         kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("embed_dim", 64)
+        kwargs.setdefault("num_image_tokens", 4)
+        kwargs.setdefault("seq_length", 16)
         kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("intermediate_size", 64)
         kwargs.setdefault("moe_intermediate_size", 64)
@@ -125,32 +118,31 @@ class Dots3NoteVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("adapter_in_dim", 64)
         kwargs.setdefault("adapter_out_dim", 64)
         kwargs.setdefault("adapter_merge_size", 2)
+        kwargs.setdefault("audio_feature_size", 8)
+        kwargs.setdefault("audio_hop_length", 4)
+        kwargs.setdefault("audio_downsample_hidden_size", 4)
+        kwargs.setdefault("audio_adapter_input_size", 64)
         super().__init__(parent, **kwargs)
         self.encoder_seq_length = self.seq_length
+        self.text_config = Dots3NoteTextModelTester(
+            self.parent,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_attention_heads,
+            pad_token_id=self.pad_token_id,
+        ).get_config()
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.image_token_id, self.video_token_id, self.audio_token_id}
 
-    def get_text_config(self):
-        return Dots3NoteTextModelTester(
-            self.parent, num_attention_heads=self.num_attention_heads, num_key_value_heads=self.num_attention_heads
-        ).get_config()
-
-    def _build_modality_sub_configs(self):
-        return {
-            "vision_config": self.get_vision_config(),
-            "audio_config": Dots3NoteAudio2TextModelTester(self.parent).get_audio_config(),
-        }
-
     def create_pixel_values(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
-        return torch.randn(batch_size, 4, self.num_channels * self.patch_size**2, device=torch_device)
+        return torch.randn(batch_size, 16, self.num_channels * self.patch_size**2, device=torch_device)
 
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
-        input_ids[:, 1] = config.video_token_id
-        grid = torch.tensor([[1, 2, 2]], device=torch_device).repeat(batch_size, 1)
+        input_ids[:, self.num_image_tokens : 2 * self.num_image_tokens] = config.video_token_id
+        grid = torch.tensor([[1, 4, 4]], device=torch_device).repeat(batch_size, 1)
         return {
             "image_grid_thw": grid,
             "pixel_values_videos": modality_inputs.clone(),
@@ -161,10 +153,9 @@ class Dots3NoteVision2TextModelTester(VLMModelTester):
 class Dots3NoteAudio2TextModelTester(ALMModelTester):
     base_model_class = Dots3NoteModel
     config_class = Dots3NoteConfig
-    text_config_class = Dots3NoteTextConfig
-    audio_config_class = Dots3NoteAudioConfig
     audio_mask_key = "chunk_sample_lengths"
     conditional_generation_class = Dots3NoteForConditionalGeneration
+    sub_configs_to_skip = ["text_config"]
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("audio_token_id", 5)
@@ -179,23 +170,25 @@ class Dots3NoteAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("num_attention_heads", 2)
         kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("intermediate_size", 64)
+        kwargs.setdefault("vision_patch_size", 2)
+        kwargs.setdefault("vision_spatial_merge_size", 2)
+        kwargs.setdefault("vision_adapter_in_dim", 64)
+        kwargs.setdefault("vision_adapter_merge_size", 2)
+        kwargs.setdefault("vision_mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("vision_num_local_experts", 2)
+        kwargs.setdefault("vision_num_experts_per_tok", 2)
         super().__init__(parent, **kwargs)
         self.encoder_seq_length = self.seq_length
-
-    def get_text_config(self):
-        return Dots3NoteTextModelTester(
-            self.parent, num_attention_heads=self.num_attention_heads, num_key_value_heads=self.num_attention_heads
+        self.text_config = Dots3NoteTextModelTester(
+            self.parent,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_attention_heads,
+            pad_token_id=self.pad_token_id,
         ).get_config()
 
     def create_audio_mask(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
         return torch.ones(batch_size, self.feat_seq_length, device=torch_device, dtype=torch.long)
-
-    def _build_modality_sub_configs(self):
-        return {
-            "audio_config": self.get_audio_config(),
-            "vision_config": Dots3NoteVision2TextModelTester(self.parent).get_vision_config(),
-        }
 
     def get_audio_embeds_mask(self, audio_mask):
         return audio_mask[:, ::8]
@@ -222,6 +215,7 @@ class Dots3NoteVision2TextModelTest(VLMModelTest, unittest.TestCase):
         self.skipTest("Audio features are covered by Dots3NoteAudio2TextModelTest")
 
     def test_get_image_features_attentions(self, modality="image"):
+        """The reused GLM-OCR vision attention does not return weights, even when capture is requested."""
         config, inputs = getattr(self, f"_{modality}_features_prepare_config_and_inputs")()
         config.vision_config.output_attentions = True
         for model_class in self.all_model_classes:
@@ -259,32 +253,36 @@ class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
 class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "miraclezqc/TestForDots3"
 
-    @parameterized.expand(
-        [
-            ("text", None, "Briefly introduce yourself.", [247, 103, 217, 187, 59, 295, 13, 246]),
-            (
-                "image",
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                "What is shown in this image?",
-                [247, 103, 217, 187, 59, 92, 279, 219],
-                [247, 103, 217, 187, 59, 295, 13, 246],
-            ),
-            (
-                "audio",
-                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
-                "Transcribe this recording.",
-                [247, 103, 217, 187, 59, 295, 124, 304],
-            ),
-            (
-                "video",
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
-                "Describe this video.",
-                [247, 103, 217, 187, 59, 295, 13, 246],
-                [247, 103, 217, 187, 59, 92, 306, 158],
-            ),
-        ]
-    )
-    def test_generation(self, modality, url, question, expected, cuda_expected=None):
+    def test_text_generation(self):
+        expected = Expectations({(None, None): [247, 103, 217, 187, 59, 295, 13, 246]})
+        self._check_generation("text", None, "Briefly introduce yourself.", expected)
+
+    def test_image_generation(self):
+        expected = Expectations(
+            {
+                ("cpu", None): [247, 103, 217, 187, 59, 92, 279, 219],
+                ("cuda", None): [247, 103, 217, 187, 59, 295, 13, 246],
+            }
+        )
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        self._check_generation("image", url, "What is shown in this image?", expected)
+
+    def test_audio_generation(self):
+        expected = Expectations({(None, None): [247, 103, 217, 187, 59, 295, 124, 304]})
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac"
+        self._check_generation("audio", url, "Transcribe this recording.", expected)
+
+    def test_video_generation(self):
+        expected = Expectations(
+            {
+                ("cpu", None): [247, 103, 217, 187, 59, 295, 13, 246],
+                ("cuda", None): [247, 103, 217, 187, 59, 92, 306, 158],
+            }
+        )
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4"
+        self._check_generation("video", url, "Describe this video.", expected)
+
+    def _check_generation(self, modality, url, question, expected):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model, loading_info = AutoModelForMultimodalLM.from_pretrained(
             self.model_id,
@@ -317,5 +315,4 @@ class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             ablated_logits = model(**ablated_inputs, use_cache=False).logits
             self.assertGreater((logits.float() - ablated_logits.float()).abs().max().item(), 0)
         generated = model.generate(**inputs, do_sample=False, max_new_tokens=8)
-        expected = Expectations({("cpu", None): expected, ("cuda", None): cuda_expected or expected}).get_expectation()
-        self.assertEqual(generated[0, inputs.input_ids.shape[-1] :].tolist(), expected)
+        self.assertEqual(generated[0, inputs.input_ids.shape[-1] :].tolist(), expected.get_expectation())

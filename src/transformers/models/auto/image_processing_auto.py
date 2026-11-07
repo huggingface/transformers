@@ -88,7 +88,7 @@ else:
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("donut-swin", {"torchvision": "DonutImageProcessor", "pil": "DonutImageProcessorPil"}),
-            ("dots3_note", {"pil": "Qwen2VLImageProcessorPil"}),
+            ("dots3_note", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
             ("embedding_gemma2", {"pil": "Gemma4ImageProcessorPil", "torchvision": "Gemma4ImageProcessor"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),

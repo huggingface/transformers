@@ -1215,6 +1215,10 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "dots3_note_audio_encoder": [
+            WeightRenaming(r"^audio_adapter\.", "adapter."),
+            WeightRenaming(r"^adapter\.proj\.0\.", "adapter.norm."),
+            WeightRenaming(r"^adapter\.proj\.1\.", "adapter.fc1."),
+            WeightRenaming(r"^adapter\.proj\.3\.", "adapter.fc2."),
             WeightRenaming(r"dots_encoder\.speech_encoder\.", "speech_encoder."),
             WeightRenaming(r"speech_encoder\.(conv2d[123]|conv_out)\.", r"speech_encoder.conv_stem.\1."),
             WeightRenaming(r"conv_stem\.conv2d1\.", "conv_stem.convs.0."),
@@ -1225,9 +1229,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.final_layer_norm\.", ".post_attention_layernorm."),
             WeightRenaming(r"(speech_encoder\.layers\.\d+)\.fc1\.", r"\1.mlp.gate_up_proj."),
             WeightRenaming(r"(speech_encoder\.layers\.\d+)\.fc2\.", r"\1.mlp.down_proj."),
-            WeightRenaming(r"speech_encoder\.", ""),
+            WeightRenaming(r"^speech_encoder\.(conv_stem|layers|layer_norm)\.", r"\1."),
         ],
         "dots3_note_vision_encoder": [
+            WeightRenaming(r"^post_trunk_norm\.", "norm."),
+            WeightRenaming(r"^adapter\.", "merger."),
             WeightRenaming(r"(blocks\.\d+)\.norm_1\.", r"\1.norm1."),
             WeightRenaming(r"(blocks\.\d+)\.norm_2\.", r"\1.norm2."),
             WeightRenaming(r"(blocks\.\d+\.mlp)\.fc1\.", r"\1.gate_proj."),
@@ -1250,10 +1256,8 @@ def _build_checkpoint_conversion_mapping():
             PrefixChange(prefix_to_remove="model"),
             WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
             WeightRenaming(r"^vision_encoder\.", "vision_tower."),
-            WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.0\.", "audio_adapter.norm."),
-            WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.1\.", "audio_adapter.fc1."),
-            WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.3\.", "audio_adapter.fc2."),
             WeightRenaming(r"^audio_encoder\.", "audio_tower."),
+            WeightRenaming(r"^audio_adapter\.", "audio_tower.audio_adapter."),
         ],
         "qwen3_vl_moe": [
             WeightConverter(

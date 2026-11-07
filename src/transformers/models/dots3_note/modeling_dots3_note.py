@@ -433,13 +433,20 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
 def apply_rotary_pos_emb_text(q, k, cos, sin):
-    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(1)
-    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(1)
-    q_even, q_odd = q[..., 0::2], q[..., 1::2]
-    k_even, k_odd = k[..., 0::2], k[..., 1::2]
-    q_rot = torch.cat((q_even * cos - q_odd * sin, q_odd * cos + q_even * sin), dim=-1)
-    k_rot = torch.cat((k_even * cos - k_odd * sin, k_odd * cos + k_even * sin), dim=-1)
+    cos = cos.unsqueeze(1)
+    sin = sin.unsqueeze(1)
+    q = q.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    k = k.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    q_rot = q * cos + rotate_half(q) * sin
+    k_rot = k * cos + rotate_half(k) * sin
     return q_rot.to(q.dtype), k_rot.to(k.dtype)
 
 
@@ -912,13 +919,6 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -1100,13 +1100,16 @@ class Dots3NoteAudioConvStem(nn.Module):
         audio_sample_lengths = audio_sample_lengths.to(hidden_states.device)
         valid_lengths = audio_sample_lengths // self.hop_length
         hidden_states = _mask_subsampled_frames(hidden_states.transpose(-1, -2), valid_lengths).transpose(-1, -2)
+
         for conv in self.convs:
             hidden_states = F.gelu(conv(hidden_states))
             valid_lengths = (valid_lengths + 1) // 2
             hidden_states = _mask_subsampled_frames(hidden_states.transpose(-1, -2), valid_lengths).transpose(-1, -2)
+
         batch_size, channels, frequency, time = hidden_states.shape
         hidden_states = hidden_states.permute(0, 3, 1, 2).reshape(batch_size, time, channels * frequency)
         hidden_states = self.conv_out(hidden_states)
+
         token_lengths = (audio_sample_lengths + self.samples_per_token - 1) // self.samples_per_token
         positions = torch.arange(time, device=hidden_states.device)
         padding_mask = positions[None, :] < token_lengths[:, None]
@@ -1140,6 +1143,7 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         self.rotary_embedding = Dots3NoteAudioRotaryEmbedding(config)
         self.layers = nn.ModuleList([Dots3NoteAudioLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = Dots3NoteRMSNorm(config.hidden_size)
+        self.adapter = Dots3NoteAudioAdapter(config)
         self.dropout = config.dropout
         self.post_init()
 
@@ -1171,7 +1175,7 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
-        pooled_output = hidden_states[padding_mask.to(hidden_states.device)]
+        pooled_output = self.adapter(hidden_states[padding_mask.to(hidden_states.device)])
 
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
 
@@ -1464,7 +1468,7 @@ class Dots3NoteVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Dots3NoteVisionAdapter(nn.Module):
+class Dots3NoteVisionMerger(nn.Module):
     def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
         super().__init__()
         self.hidden_size = context_dim * (spatial_merge_size**2)
@@ -1525,13 +1529,13 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
         self.blocks = nn.ModuleList(
             [Dots3NoteVisionBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
-        self.post_trunk_norm = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.adapter = Dots3NoteVisionAdapter(
+        self.merger = Dots3NoteVisionMerger(
             dim=config.adapter_out_dim,
             context_dim=config.adapter_in_dim,
             spatial_merge_size=config.adapter_merge_size,
         )
+        self.gradient_checkpointing = False
+        self.norm = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.post_init()
 
@@ -1547,6 +1551,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         hidden_states = self.patch_embed(pixel_values)
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+
         for block in self.blocks:
             hidden_states = block(
                 hidden_states,
@@ -1555,11 +1560,10 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-        hidden_states = self.post_trunk_norm(hidden_states)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
-            pooler_output=self.adapter(hidden_states),
-        )
+
+        hidden_states = self.norm(hidden_states)
+        pooled_output = self.merger(hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
 
 
 @auto_docstring
@@ -1574,7 +1578,6 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         self.language_model = Dots3NoteTextModel(config.text_config)
         self.vision_tower = Dots3NoteVisionModel(config.vision_config)
         self.audio_tower = Dots3NoteAudioModel(config.audio_config)
-        self.audio_adapter = Dots3NoteAudioAdapter(config.audio_config)
         self.post_init()
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1609,14 +1612,12 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         chunk_sample_lengths (`torch.Tensor`):
             Number of waveform samples represented by each feature chunk.
         """
-        outputs = self.audio_tower(
+        return self.audio_tower(
             input_features=input_features,
             chunk_sample_lengths=chunk_sample_lengths,
             return_dict=True,
             **kwargs,
         )
-        outputs.pooler_output = self.audio_adapter(outputs.pooler_output)
-        return outputs
 
     def get_placeholder_mask(
         self,

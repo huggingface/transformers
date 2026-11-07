@@ -208,8 +208,6 @@ class Dots3NoteTextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.q_a_layernorm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.kv_a_layernorm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_rope_only_layernorm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
@@ -343,6 +341,7 @@ class Dots3NoteTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
+        """Convert legacy RoPE settings to separate DSA/SWA entries, using each layer type's rotary head fraction."""
         swa_rope_theta = kwargs.pop("swa_rope_theta", 50_000.0)
         rope_theta = kwargs.get("rope_theta", self.default_theta)
         if self.rope_parameters is None:

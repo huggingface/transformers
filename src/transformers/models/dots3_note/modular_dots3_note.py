@@ -51,7 +51,7 @@ from ...utils.generic import (
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention, eager_attention_forward
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention, eager_attention_forward, rotate_half
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32DecoderLayer,
@@ -265,8 +265,6 @@ class Dots3NoteTextConfig(DeepseekV32Config):
     model_type = "dots3_note_text"
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.q_a_layernorm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.kv_a_layernorm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_rope_only_layernorm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
@@ -364,6 +362,7 @@ class Dots3NoteTextConfig(DeepseekV32Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
+        """Convert legacy RoPE settings to separate DSA/SWA entries, using each layer type's rotary head fraction."""
         swa_rope_theta = kwargs.pop("swa_rope_theta", 50_000.0)
         rope_theta = kwargs.get("rope_theta", self.default_theta)
         if self.rope_parameters is None:
@@ -476,12 +475,12 @@ class Dots3NoteTextMoE(DeepseekV32MoE):
 
 
 def apply_rotary_pos_emb_text(q, k, cos, sin):
-    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(1)
-    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(1)
-    q_even, q_odd = q[..., 0::2], q[..., 1::2]
-    k_even, k_odd = k[..., 0::2], k[..., 1::2]
-    q_rot = torch.cat((q_even * cos - q_odd * sin, q_odd * cos + q_even * sin), dim=-1)
-    k_rot = torch.cat((k_even * cos - k_odd * sin, k_odd * cos + k_even * sin), dim=-1)
+    cos = cos.unsqueeze(1)
+    sin = sin.unsqueeze(1)
+    q = q.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    k = k.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    q_rot = q * cos + rotate_half(q) * sin
+    k_rot = k * cos + rotate_half(k) * sin
     return q_rot.to(q.dtype), k_rot.to(k.dtype)
 
 
@@ -772,13 +771,16 @@ class Dots3NoteAudioConvStem(nn.Module):
         audio_sample_lengths = audio_sample_lengths.to(hidden_states.device)
         valid_lengths = audio_sample_lengths // self.hop_length
         hidden_states = _mask_subsampled_frames(hidden_states.transpose(-1, -2), valid_lengths).transpose(-1, -2)
+
         for conv in self.convs:
             hidden_states = F.gelu(conv(hidden_states))
             valid_lengths = (valid_lengths + 1) // 2
             hidden_states = _mask_subsampled_frames(hidden_states.transpose(-1, -2), valid_lengths).transpose(-1, -2)
+
         batch_size, channels, frequency, time = hidden_states.shape
         hidden_states = hidden_states.permute(0, 3, 1, 2).reshape(batch_size, time, channels * frequency)
         hidden_states = self.conv_out(hidden_states)
+
         token_lengths = (audio_sample_lengths + self.samples_per_token - 1) // self.samples_per_token
         positions = torch.arange(time, device=hidden_states.device)
         padding_mask = positions[None, :] < token_lengths[:, None]
@@ -804,6 +806,7 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         self.rotary_embedding = Dots3NoteAudioRotaryEmbedding(config)
         self.layers = nn.ModuleList([Dots3NoteAudioLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = Dots3NoteRMSNorm(config.hidden_size)
+        self.adapter = Dots3NoteAudioAdapter(config)
         self.dropout = config.dropout
         self.post_init()
 
@@ -835,7 +838,7 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
-        pooled_output = hidden_states[padding_mask.to(hidden_states.device)]
+        pooled_output = self.adapter(hidden_states[padding_mask.to(hidden_states.device)])
 
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
 
@@ -915,7 +918,7 @@ class Dots3NoteVisionBlock(Qwen2VLVisionBlock):
         )
 
 
-class Dots3NoteVisionAdapter(PatchMerger):
+class Dots3NoteVisionMerger(PatchMerger):
     pass
 
 
@@ -949,9 +952,8 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel, Qwen2VisionTransforme
         self.blocks = nn.ModuleList(
             [Dots3NoteVisionBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.post_trunk_norm = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        del self.merger
-        self.adapter = Dots3NoteVisionAdapter(
+        self.norm = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.merger = Dots3NoteVisionMerger(
             dim=config.adapter_out_dim,
             context_dim=config.adapter_in_dim,
             spatial_merge_size=config.adapter_merge_size,
@@ -975,6 +977,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel, Qwen2VisionTransforme
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         hidden_states = self.patch_embed(pixel_values)
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+
         for block in self.blocks:
             hidden_states = block(
                 hidden_states,
@@ -983,11 +986,10 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel, Qwen2VisionTransforme
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-        hidden_states = self.post_trunk_norm(hidden_states)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
-            pooler_output=self.adapter(hidden_states),
-        )
+
+        hidden_states = self.norm(hidden_states)
+        pooled_output = self.merger(hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
 
 
 # Unified multimodal model
@@ -1001,7 +1003,6 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
         self.language_model = Dots3NoteTextModel(config.text_config)
         self.vision_tower = Dots3NoteVisionModel(config.vision_config)
         self.audio_tower = Dots3NoteAudioModel(config.audio_config)
-        self.audio_adapter = Dots3NoteAudioAdapter(config.audio_config)
         self.post_init()
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1047,14 +1048,12 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
         chunk_sample_lengths (`torch.Tensor`):
             Number of waveform samples represented by each feature chunk.
         """
-        outputs = self.audio_tower(
+        return self.audio_tower(
             input_features=input_features,
             chunk_sample_lengths=chunk_sample_lengths,
             return_dict=True,
             **kwargs,
         )
-        outputs.pooler_output = self.audio_adapter(outputs.pooler_output)
-        return outputs
 
     @can_return_tuple
     @auto_docstring
