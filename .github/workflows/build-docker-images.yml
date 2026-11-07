@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build_ci_docker_image*
+      - torch_2_15_nvidia_ci
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
@@ -119,6 +120,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-torch-deepspeed-docker:
+    if: false
     permissions:
       contents: read
     name: "Latest PyTorch + DeepSpeed"
@@ -165,6 +167,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   doc-builder:
+    if: false
     permissions:
       contents: read
     name: "Doc builder"
@@ -209,6 +212,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-pytorch-amd:
+    if: false
     permissions:
       contents: read
     name: "Latest PyTorch (AMD) [dev]"
@@ -249,6 +253,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   cache-latest-pytorch-amd:
+    if: false
     permissions: {}
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
@@ -281,6 +286,7 @@ jobs:
           echo "Cache populated successfully at ${final_path}"
 
   latest-pytorch-deepspeed-amd:
+    if: false
     permissions:
       contents: read
     name: "PyTorch + DeepSpeed (AMD) [dev]"
@@ -327,6 +333,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-quantization-torch-docker:
+    if: false
     permissions:
       contents: read
     name: "Latest Pytorch + Quantization [dev]"
@@ -373,6 +380,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   xpu-ci-image:
+    if: false
     permissions:
       contents: read
     name: "PyTorch XPU"
@@ -410,6 +418,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   intel-cpu:
+    if: false
     permissions:
       contents: read
     name: "Intel CPU"
