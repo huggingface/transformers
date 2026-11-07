@@ -707,14 +707,11 @@ class LayoutXLMTokenizer(TokenizersBackend):
                 else:
                     original_index = batch_index
                 labels_example = []
-                for id, offset, word_id in zip(
-                    sanitized_tokens["input_ids"][batch_index],
-                    sanitized_tokens["offset_mapping"][batch_index],
-                    sanitized_encodings[batch_index].word_ids,
-                ):
+                previous_word_id = None
+                for word_id in sanitized_encodings[batch_index].word_ids:
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if offset[0] == 0:
+                            if word_id != previous_word_id:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
@@ -723,6 +720,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
                             labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
+                    previous_word_id = word_id
                 labels.append(labels_example)
 
             sanitized_tokens["labels"] = labels

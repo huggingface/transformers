@@ -1989,6 +1989,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
+        encoding = tokenizer_r(["Name", "그"], boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
+
         tokenizer_r = LayoutLMv2Tokenizer.from_pretrained(
             "microsoft/layoutlmv2-base-uncased", only_label_first_subword=False
         )
