@@ -179,7 +179,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Xmod
 class XmodSelfAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -247,7 +246,6 @@ class XmodSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertCrossAttention with Bert->Xmod
 class XmodCrossAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -378,7 +376,6 @@ class XmodAttention(nn.Module):
         return attention_output, attn_weights
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate
 class XmodIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
