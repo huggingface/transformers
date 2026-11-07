@@ -1178,6 +1178,8 @@ class BaseHandler:
             generation_config.temperature = float(body["temperature"])
             if float(body["temperature"]) == 0.0:
                 generation_config.do_sample = False
+            else:
+                generation_config.do_sample = True
         if body.get("top_p") is not None:
             generation_config.top_p = float(body["top_p"])
         if body.get("seed") is not None:
