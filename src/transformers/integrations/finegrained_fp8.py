@@ -1153,7 +1153,8 @@ class Fp8Dequantize(ConversionOps):
             if self.hf_quantizer is not None and getattr(self.hf_quantizer, "quantization_config", None) is not None:
                 block = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
 
-            is_exact_division = (rows % scale_rows == 0 and cols % scale_cols == 0)
+    # Check if exact division applies (enabling the memory-efficient broadcast path)
+            is_exact_division = rows % scale_rows == 0 and cols % scale_cols == 0
 
             if (
                 block is not None
