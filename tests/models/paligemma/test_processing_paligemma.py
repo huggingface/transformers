@@ -43,10 +43,6 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         return tokenizer
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
