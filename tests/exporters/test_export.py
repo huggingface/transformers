@@ -191,12 +191,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
-        "MllamaForConditionalGeneration": (
-            "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
-            "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
-            "index runs past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. "
-            "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
-        ),
         "ReformerModelWithLMHead": (
             "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
             "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
