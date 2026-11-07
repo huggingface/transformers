@@ -468,7 +468,7 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ) -> None:
         """
-        Overriden to allow passing image position ids as it's mandatory in the vision portion
+        Overridden to allow passing image position ids as it's mandatory in the vision portion
         #
         Exchange RMS norm with identity as it creates too big shifts otherwise
         """

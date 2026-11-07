@@ -150,7 +150,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_hidden_states_output(self):
         """
-        Overriden because vision hidden states behave in a unique way
+        Overridden because vision hidden states behave in a unique way
 
         NOTE: We ignore the head hidden states as they can be dynamic
         """
@@ -188,7 +188,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_attention_outputs(self):
         """
-        Overriden because vision attentions behave in a unique way
+        Overridden because vision attentions behave in a unique way
 
         NOTE: We ignore the head attentions as they can be dynamic
         """

@@ -124,7 +124,7 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_attention_outputs(self):
         """
-        Overriden to account for the proper number of hidden layers that are adjusted
+        Overridden to account for the proper number of hidden layers that are adjusted
         in the post init of the config.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -186,7 +186,7 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_hidden_states_output(self):
         """
-        Overriden to account for the proper number of hidden layers that are adjusted
+        Overridden to account for the proper number of hidden layers that are adjusted
         in the post init of the config.
         """
 
