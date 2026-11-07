@@ -770,3 +770,37 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
 
         self.assertFalse(is_attn_quant)
         self.assertTrue(is_moe_quant)
+
+    def test_11_generic_hf_quantizer_compatibility(self):
+        """Req N: Generic HfQuantizer.is_quantized_converter correctly handles other quantizers
+        that define serialized_names (e.g. FineGrainedFP8, Mxfp4).
+        """
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+        from transformers.utils.quantization_config import FineGrainedFP8Config, Mxfp4Config
+
+        # 1. FineGrainedFP8
+        q_fp8 = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(), pre_quantized=True)
+        conv_fp8 = WeightConverter(["layer.0.weight"], ["layer.0.weight"], operations=[Concatenate(dim=0)])
+
+        # Companion scale present -> quantized
+        self.assertTrue(
+            q_fp8.is_quantized_converter(conv_fp8, checkpoint_keys=["layer.0.weight", "layer.0.weight_scale_inv"])
+        )
+        # Dense only in checkpoint -> dense
+        self.assertFalse(q_fp8.is_quantized_converter(conv_fp8, checkpoint_keys=["layer.0.weight"]))
+        # No checkpoint keys provided -> falls back to True for safety
+        self.assertTrue(q_fp8.is_quantized_converter(conv_fp8, checkpoint_keys=None))
+
+        # 2. Mxfp4
+        q_mxfp4 = Mxfp4HfQuantizer(Mxfp4Config(), pre_quantized=True)
+        conv_mxfp4 = WeightConverter(["mlp.gate_up_proj"], ["mlp.gate_up_proj"], operations=[Concatenate(dim=0)])
+
+        # Companion blocks/scales present -> quantized
+        self.assertTrue(
+            q_mxfp4.is_quantized_converter(
+                conv_mxfp4, checkpoint_keys=["mlp.gate_up_proj_blocks", "mlp.gate_up_proj_scales"]
+            )
+        )
+        # Dense only -> dense
+        self.assertFalse(q_mxfp4.is_quantized_converter(conv_mxfp4, checkpoint_keys=["mlp.gate_up_proj"]))
