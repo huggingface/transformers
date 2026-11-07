@@ -31,6 +31,7 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
@@ -64,9 +65,9 @@ class Granite4VisionModelOutputWithPast(LlavaNextModelOutputWithPast):
 
 class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
         List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
@@ -126,7 +127,7 @@ class Granite4VisionConfig(LlavaNextConfig):
 
     model_type = "granite4_vision"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite4_vision_text"),
+        "text_config": Granite4VisionTextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
         "qformer_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -382,7 +383,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         vision_mask: torch.BoolTensor | None = None,
         deepstack_features: dict[int, torch.Tensor] | None = None,
@@ -533,19 +534,25 @@ class Granite4VisionModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states(
+        lambda self: [
+            *(vision_layer for vision_layer, _ in self.config.deepstack_layer_map),
+            self.config.spatial_vision_layer,
+        ]
+    )
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -573,7 +580,6 @@ class Granite4VisionModel(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
@@ -621,12 +627,12 @@ class Granite4VisionModel(LlavaNextModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
@@ -699,12 +705,12 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,

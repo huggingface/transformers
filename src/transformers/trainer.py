@@ -56,7 +56,7 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
+from .distributed.fsdp import get_fsdp_ckpt_kwargs, is_fsdp_managed_module, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -775,19 +775,19 @@ class Trainer:
             args["parallelism_config"] = self.args.parallelism_config
 
         model_tp_size = getattr(self.model, "tp_size", None) or 1
-        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
         if model_tp_size > 1:
-            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
-            # dimension): accelerate has to know both sizes.
+            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 or HSDP on more mesh
+            # dimensions): accelerate has to know the TP size and the data parallel size, HSDP replicas included.
+            model_dp_size = self.model.config.distributed_config.dp_size
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             if args.get("parallelism_config") is None:
                 from accelerate import ParallelismConfig
 
-                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_fsdp_size)
+                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_dp_size)
             else:
                 args["parallelism_config"].tp_size = model_tp_size
-                args["parallelism_config"].dp_shard_size = model_fsdp_size
+                args["parallelism_config"].dp_shard_size = model_dp_size
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
@@ -1507,11 +1507,25 @@ class Trainer:
             gc_kwargs = dict(args.activation_checkpointing_kwargs or {})
             every_n_layers = gc_kwargs.pop("every_n_layers", 1)
             offload = gc_kwargs.pop("offload", False)
-            self.model.activation_checkpointing_enable(
-                activation_checkpointing_kwargs=gc_kwargs or None,
-                every_n_layers=every_n_layers,
-                offload=offload,
-            )
+            if hasattr(self.model, "activation_checkpointing_enable"):
+                self.model.activation_checkpointing_enable(
+                    activation_checkpointing_kwargs=gc_kwargs or None,
+                    every_n_layers=every_n_layers,
+                    offload=offload,
+                )
+            else:
+                # Models outside `PreTrainedModel` that only define the deprecated `gradient_checkpointing_enable`
+                # (e.g. sentence-transformers) keep working until v6. Remove the fallback in v6.
+                warnings.warn(
+                    f"`{type(self.model).__name__}` only defines `gradient_checkpointing_enable`, which is deprecated "
+                    "and will no longer be called in v6. Define `activation_checkpointing_enable` instead.",
+                    FutureWarning,
+                )
+                self.model.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs=gc_kwargs or None,
+                    every_n_layers=every_n_layers,
+                    offload=offload,
+                )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
@@ -1886,6 +1900,9 @@ class Trainer:
                     or i == len(batch_samples) - 1
                 ):
                     sync_context = contextlib.nullcontext
+                elif self.is_distributed_loading_by_transformers and is_fsdp_managed_module(self.model):
+                    # Accelerate did not wrap a model sharded at load time, so its `no_sync` does not apply
+                    sync_context = self._defer_fsdp_gradient_reduction
                 else:
                     sync_context = functools.partial(self.accelerator.no_sync, model=model)
                 with sync_context():
@@ -2588,6 +2605,21 @@ class Trainer:
 
         # 4. Default fallback
         return 1
+
+    @contextlib.contextmanager
+    def _defer_fsdp_gradient_reduction(self):
+        """
+        `no_sync` for a model sharded at load time with FSDP2. With HSDP, only the all-reduce across replicas waits for
+        the last micro-batch: the reduce-scatter inside each replica keeps the gradients sharded.
+        """
+        if self.model.config.distributed_config.dp_replicate_size > 1:
+            self.model.set_requires_all_reduce(False)
+        else:
+            self.model.set_requires_gradient_sync(False)
+        try:
+            yield
+        finally:
+            self.model.set_requires_gradient_sync(True)
 
     def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
         """

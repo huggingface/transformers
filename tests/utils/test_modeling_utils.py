@@ -2741,6 +2741,30 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
 
+    def test_mismatched_keys_with_quantizer(self):
+        from transformers import FineGrainedFP8Config
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaForCausalLM(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = model.state_dict()
+            # Overwrite with mismatched shape
+            state_dict["model.layers.0.self_attn.q_proj.weight"] = torch.rand(2, 2)
+            model.save_pretrained(tmpdirname, state_dict=state_dict)
+
+            quant_config = FineGrainedFP8Config(modules_to_not_convert=["self_attn.q_proj"])
+            # Skip the GPU check, we won't run any forward anyway
+            with patch(
+                "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+                lambda *arg, **kwargs: None,
+            ):
+                # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
+                with self.assertRaisesRegex(
+                    RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
+                ):
+                    _ = LlamaForCausalLM.from_pretrained(tmpdirname, quantization_config=quant_config)
+
 
 @slow
 @require_torch
@@ -3259,6 +3283,36 @@ class TestAttentionImplementation(unittest.TestCase):
         with sdpa_kernel([backends[expected_backend]]):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    @parameterized.expand([(False,), (True,)])
+    def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(2, 8, 1, 64, device=torch_device)
+        key = torch.randn(2, 2, 16, 64, device=torch_device)
+        value = torch.randn(2, 2, 16, 64, device=torch_device)
+        attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
+        attention_mask[1, ..., :5] = False  # left padding
+        # makes the mask per-head
+        position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if use_position_bias else None
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(),
+            query,
+            repeat_kv(key, 4),
+            repeat_kv(value, 4),
+            attention_mask,
+            position_bias=position_bias,
+        )
+        with patch(
+            "transformers.integrations.sdpa_attention.repeat_kv", side_effect=AssertionError("K/V were repeated")
+        ):
+            attn_output, _ = sdpa_attention_forward(
+                module, query, key, value, attention_mask, position_bias=position_bias
+            )
+        torch.testing.assert_close(attn_output, expected)
 
     @parameterized.expand(
         [

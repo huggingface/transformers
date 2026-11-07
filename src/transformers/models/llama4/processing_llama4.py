@@ -129,14 +129,6 @@ class Llama4Processor(ProcessorMixin):
         if text is None:
             raise ValueError("You have to specify text.")
 
-        if images is not None and text is not None:
-            total_placeholders = sum(prompt.count(self.fake_image_token) for prompt in text)
-            if total_placeholders != len(images):
-                raise ValueError(
-                    f"Found {total_placeholders} placeholders across the batch, "
-                    f"but have {len(images)} flattened images."
-                )
-
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_height, image_width = image_inputs["pixel_values"][0].shape[-2:]
         num_patches_per_chunk = int(

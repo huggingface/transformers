@@ -19,7 +19,11 @@ import functools
 import inspect
 
 from .utils import hf_api, logging
-from .utils.output_capturing import maybe_install_capturing_hooks
+from .utils.output_capturing import (
+    maybe_install_capturing_hooks,
+    resolve_hidden_states_indices,
+    selected_hidden_states,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -173,17 +177,10 @@ def filter_output_hidden_states(forward_function):
         if not output_hidden_states:
             filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
             output = type(output)(**filtered_output_data)
-        elif isinstance(output_hidden_states, (list, tuple, set)):
-            capture_initial_hidden_state = getattr(
-                (self._can_record_outputs or {}).get("hidden_states"), "capture_initial_hidden_state", True
-            )
-            # When using a list of layer indices, we never collect the first input, so we may need to start at the index 1
-            collected_hidden_states = (
-                output["hidden_states"][1:] if capture_initial_hidden_state else output["hidden_states"]
-            )
-            output["hidden_states"] = [
-                x if i in output_hidden_states else None for i, x in enumerate(collected_hidden_states)
-            ]
+        elif (selected := selected_hidden_states(output_hidden_states)) is not None:
+            # Only return the selected hidden states, as `capture_outputs` would. Unlike there, all of them already exist
+            selected = resolve_hidden_states_indices(self, selected, num_hidden_states=len(output["hidden_states"]))
+            output["hidden_states"] = [h if i in selected else None for i, h in enumerate(output["hidden_states"])]
         return output
 
     return wrapper
