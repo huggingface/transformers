@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -28,6 +29,7 @@ from transformers import (
     OPTForCausalLM,
 )
 from transformers.distributed import DistributedConfig
+from transformers.integrations.finegrained_fp8 import Fp8Dequantize
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -630,3 +632,51 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+
+class Fp8DequantizeTest(unittest.TestCase):
+    def test_dequantize_partial_block(self):
+        # Verify 576 rows with 128-block size (DeepSeek MLA kv_a_proj shape)
+        block = 128
+        rows, cols = 576, 256
+        scale_m, scale_n = math.ceil(rows / block), math.ceil(cols / block)
+
+        q = torch.randint(-100, 100, (rows, cols), dtype=torch.float32)
+        scales = torch.rand((scale_m, scale_n), dtype=torch.float32)
+
+        class DummyConfig:
+            weight_block_size = [block, block]
+
+        class DummyQuantizer:
+            quantization_config = DummyConfig()
+
+        dequantizer = Fp8Dequantize(hf_quantizer=DummyQuantizer())
+        got = dequantizer._dequantize_one(q, scales, output_dtype=torch.float32)
+
+        expected_s = scales.repeat_interleave(block, 0).repeat_interleave(block, 1)[:rows, :cols]
+        expected = q * expected_s
+
+        torch.testing.assert_close(got, expected)
+
+    def test_dequantize_exact_division_different_block_size(self):
+        # Verify 192 rows with block 128 (scale_m = 2) does not fall back to 96-block division
+        block = 128
+        rows, cols = 192, 256
+        scale_m, scale_n = math.ceil(rows / block), math.ceil(cols / block)
+
+        q = torch.randint(-100, 100, (rows, cols), dtype=torch.float32)
+        scales = torch.rand((scale_m, scale_n), dtype=torch.float32)
+
+        class DummyConfig:
+            weight_block_size = [block, block]
+
+        class DummyQuantizer:
+            quantization_config = DummyConfig()
+
+        dequantizer = Fp8Dequantize(hf_quantizer=DummyQuantizer())
+        got = dequantizer._dequantize_one(q, scales, output_dtype=torch.float32)
+
+        expected_s = scales.repeat_interleave(block, 0).repeat_interleave(block, 1)[:rows, :cols]
+        expected = q * expected_s
+
+        torch.testing.assert_close(got, expected)
