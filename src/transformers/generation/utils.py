@@ -3989,6 +3989,8 @@ class GenerationMixin(ContinuousMixin):
         cache = model_kwargs.get("past_key_values")
         if cache is None:
             raise RuntimeError("assisted decoding requires a cache")
+        if isinstance(cache, QuantizedCache):
+            raise ValueError("Assisted generation requires a croppable cache; use DynamicCache instead.")
         cache.activate_past_recording()
 
         # Get the candidate generator, given the parameterization
