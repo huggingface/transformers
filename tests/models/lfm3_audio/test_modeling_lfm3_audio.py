@@ -407,7 +407,7 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
 
     def test_batch_has_independent_modes_eos_lengths_and_streamers(self):
         ids = torch.tensor([[1, 10], [1, AUDIO_START_ID], [1, MIXED_START_ID]], device=torch_device)
-        streamer = Collect()
+        streamer, audio_streamer = Collect(), Collect()
         # the first row ends immediately; the third row closes its text and continues speaking
         tokens = {(0, 0): 2, (0, 2): TEXT_END_ID, (1, 0): 12, (2, 0): 2}
         calls = []
@@ -421,7 +421,9 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
 
         processor = LogitsProcessorList([Boost(lambda step, row: tokens.get((step, row)))])
         with patch.object(self.model, "sample_audio_frames", side_effect=frames):
-            outputs = self.model.generate(ids, max_new_tokens=4, streamer=streamer, logits_processor=processor)
+            outputs = self.model.generate(
+                ids, max_new_tokens=4, streamer=streamer, audio_streamer=audio_streamer, logits_processor=processor
+            )
         self.assertEqual(outputs.sequences[0].tolist(), [1, 10, 2, 0, 0, 0])
         self.assertEqual(outputs.audio_lengths.tolist(), [0, 2, 3])
         self.assertTrue(bool((outputs.audio_codes[0] == -1).all()))
@@ -429,6 +431,11 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
         self.assertEqual(calls[1], torch.Size([2, 32]))
         self.assertTrue(streamer.ended)
         self.assertEqual(torch.stack(streamer.items[1:], 1).tolist(), outputs.sequences[:, 2:].tolist())
+        self.assertTrue(audio_streamer.ended)
+        streamed = torch.stack(audio_streamer.items, -1)
+        for row, length in enumerate(outputs.audio_lengths.tolist()):
+            frames = streamed[row][:, streamed[row, 0] != -1]
+            self.assertEqual(frames.tolist(), outputs.audio_codes[row, :, :length].tolist())
 
     def test_streaming_encoder_matches_offline_and_bounds_state(self):
         encoder = self.model.model.audio_encoder

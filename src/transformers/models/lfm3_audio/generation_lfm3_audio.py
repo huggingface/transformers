@@ -94,7 +94,9 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
     end-of-audio frame, `<|mixed_start|>` to blocks of `interleaved_n_text` text tokens and `interleaved_n_audio`
     speech frames until `<|text_end|>` closes the text. Every speech frame takes one `audio_out_token_id` slot of
     `sequences`. The depth decoder's own [`GenerationConfig`] is serialized under the `depth_decoder_` prefix and
-    overridable per call as `depth_decoder_*` kwargs.
+    overridable per call as `depth_decoder_*` kwargs. An `audio_streamer` ([`~generation.BaseStreamer`]) receives the
+    speech frames as they are sampled, end-of-audio frames included: `(batch_size, num_codebooks)` per step, `-1` for
+    the rows without a frame.
     """
 
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]
@@ -115,6 +117,11 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
         suppress = {*self._placeholder_token_ids, *(generation_config.suppress_tokens or [])}
         generation_config.suppress_tokens = sorted(suppress)
         return generation_config, model_kwargs
+
+    def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
+        # consumed by `_sample`, not a model input
+        model_kwargs.pop("audio_streamer", None)
+        super()._validate_model_kwargs(model_kwargs)
 
     def _get_stopping_criteria(self, generation_config: GenerationConfig, *args, **kwargs) -> StoppingCriteriaList:
         # `<|text_end|>` only ends the text of an interleaved block, so the loop applies the end-of-sequence ids itself
@@ -233,6 +240,7 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
+        audio_streamer = model_kwargs.pop("audio_streamer", None)
         batch_size, device = input_ids.shape[0], input_ids.device
         mode = self._prompt_modes(input_ids, model_kwargs.get("audio_out_codes"))
         if cacheless and (bool((mode != 0).any()) or model_kwargs.get("past_key_values") is not None):
@@ -364,6 +372,8 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
                 model_kwargs["audio_out_codes"] = new_frames
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
+            if audio_streamer is not None and new_frames is not None:
+                audio_streamer.put(frames[-1].cpu())
             unfinished_sequences = unfinished_sequences & ~finished_now.long()
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
@@ -371,6 +381,8 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
 
         if streamer is not None:
             streamer.end()
+        if audio_streamer is not None:
+            audio_streamer.end()
 
         if return_dict_in_generate:
             if frames:
