@@ -12,7 +12,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -198,7 +198,7 @@ class TestSuffixLlamaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class TestSuffixLlamaDecoderLayer(GradientCheckpointingLayer):
+class TestSuffixLlamaDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: TestSuffixLlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

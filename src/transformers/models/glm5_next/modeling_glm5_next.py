@@ -40,7 +40,7 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1276,7 +1276,7 @@ class Glm5NextTextAttention(nn.Module):
         return mask
 
 
-class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
+class Glm5NextTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__()
         self.block_type = config.layer_types[layer_idx]
@@ -1353,7 +1353,7 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
 class Glm5NextPreTrainedModel(PreTrainedModel):
     config: Glm5NextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     # needs index based kernel
     _supports_flash_attn = False
@@ -1684,7 +1684,7 @@ class Glm5NextVisionAttention(nn.Module):
         return attn_output
 
 
-class Glm5NextVisionBlock(GradientCheckpointingLayer):
+class Glm5NextVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = Glm5NextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

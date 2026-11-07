@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -344,7 +344,7 @@ class Molmo2MLP(nn.Module):
         return down_proj
 
 
-class Molmo2DecoderLayer(GradientCheckpointingLayer):
+class Molmo2DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Molmo2TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -400,7 +400,7 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
 class Molmo2PreTrainedModel(PreTrainedModel):
     config: Molmo2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Molmo2DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -498,7 +498,7 @@ class Molmo2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Molmo2VisionEncoderLayer(GradientCheckpointingLayer):
+class Molmo2VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Molmo2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -549,7 +549,7 @@ class Molmo2VisionModel(Molmo2PreTrainedModel):
         self.patch_embedding = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )
-        # trf-ignore: TRF034 (false positive: Siglip2EncoderLayer subclasses GradientCheckpointingLayer)
+        # trf-ignore: TRF034 (false positive: Siglip2EncoderLayer subclasses ActivationCheckpointingLayer)
         self.layers = nn.ModuleList([Molmo2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.post_init()
 
@@ -651,7 +651,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         # The checkpoint's extra-vocabulary table is concatenated onto the base one at load time
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
         self.embed_tokens = nn.Embedding(config.vocab_size + config.additional_vocab_size, config.hidden_size)
-        # trf-ignore: TRF034 (false positive: LlamaDecoderLayer subclasses GradientCheckpointingLayer)
+        # trf-ignore: TRF034 (false positive: LlamaDecoderLayer subclasses ActivationCheckpointingLayer)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )

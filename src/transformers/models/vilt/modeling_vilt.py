@@ -24,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -414,7 +414,7 @@ class ViltOutput(nn.Module):
         return hidden_states
 
 
-class ViltLayer(GradientCheckpointingLayer):
+class ViltLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config):
@@ -497,7 +497,7 @@ class ViltPreTrainedModel(PreTrainedModel):
     config: ViltConfig
     base_model_prefix = "vilt"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
 
     def _init_weights(self, module):

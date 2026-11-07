@@ -311,7 +311,7 @@ class PPLCNetV4PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PPLCNetV4DepthwiseSeparableConvLayer"]
     _can_record_outputs = {
         "hidden_states": PPLCNetV4Block,

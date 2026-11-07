@@ -23,7 +23,7 @@ from torch.nn import functional as F
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -155,7 +155,7 @@ class MptMLP(nn.Module):
         return output
 
 
-class MptBlock(GradientCheckpointingLayer):
+class MptBlock(ActivationCheckpointingLayer):
     def __init__(self, config: MptConfig, layer_idx: int | None = None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -216,7 +216,7 @@ class MptBlock(GradientCheckpointingLayer):
 class MptPreTrainedModel(PreTrainedModel):
     config: MptConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MptBlock"]
 
 

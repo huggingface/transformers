@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -441,7 +441,7 @@ class MT5LayerCrossAttention(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->MT5
-class MT5Block(GradientCheckpointingLayer):
+class MT5Block(ActivationCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -542,7 +542,7 @@ class MT5ClassificationHead(nn.Module):
 class MT5PreTrainedModel(PreTrainedModel):
     config: MT5Config
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]

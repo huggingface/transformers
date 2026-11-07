@@ -94,7 +94,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     accepts_loss_kwargs = False
 
     def post_init(self):
-        self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        self.supports_activation_checkpointing = self._timm_model_supports_gradient_checkpointing()
         # trf-ignore: TRF051 (warning only, `timm` owns its own attention dispatch)
         if self.config._attn_implementation == "eager":
             # `timm` resolves the attention implementation on its own, there is no model level API to change it yet

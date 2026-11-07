@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
-from ...modeling_layers import GenericForQuestionAnswering, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForQuestionAnswering
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -279,7 +279,7 @@ class UltrabertMLP(nn.Module):
         return down_proj
 
 
-class UltrabertDecoderLayer(GradientCheckpointingLayer):
+class UltrabertDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: UltrabertConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -326,7 +326,7 @@ class UltrabertDecoderLayer(GradientCheckpointingLayer):
 class UltrabertPreTrainedModel(PreTrainedModel):
     config: UltrabertConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["UltrabertDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

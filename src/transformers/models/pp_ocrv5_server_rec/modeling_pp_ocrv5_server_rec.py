@@ -27,7 +27,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -37,7 +37,7 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 
 
-class PPOCRV5ServerRecBlock(GradientCheckpointingLayer):
+class PPOCRV5ServerRecBlock(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -205,7 +205,7 @@ class PPOCRV5ServerRecConvLayer(nn.Module):
 class PPOCRV5ServerRecPreTrainedModel(PreTrainedModel):
     config: PPOCRV5ServerRecConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PPOCRV5ServerRecBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

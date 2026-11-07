@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import get_activation
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -223,7 +223,7 @@ class FFN(nn.Module):
         return x
 
 
-class TransformerBlock(GradientCheckpointingLayer):
+class TransformerBlock(ActivationCheckpointingLayer):
     def __init__(self, config: DistilBertConfig):
         super().__init__()
 
@@ -286,7 +286,7 @@ class Transformer(nn.Module):
 class DistilBertPreTrainedModel(PreTrainedModel):
     config: DistilBertConfig
     base_model_prefix = "distilbert"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

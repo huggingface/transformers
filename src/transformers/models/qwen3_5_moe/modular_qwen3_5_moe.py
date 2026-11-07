@@ -20,7 +20,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -200,7 +200,7 @@ class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
 
 class Qwen3_5MoeDecoderLayer(Qwen3NextDecoderLayer):
     def __init__(self, config: Qwen3_5MoeTextConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__(self)
+        ActivationCheckpointingLayer.__init__(self)
         self.hidden_size = config.hidden_size
         self.block_type = config.layer_types[layer_idx]
         if self.block_type == "linear_attention":

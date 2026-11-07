@@ -28,7 +28,7 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -265,7 +265,7 @@ class MBartAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MBartEncoderLayer(GradientCheckpointingLayer):
+class MBartEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -321,7 +321,7 @@ class MBartEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class MBartDecoderLayer(GradientCheckpointingLayer):
+class MBartDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MBartConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -443,7 +443,7 @@ class MBartClassificationHead(nn.Module):
 class MBartPreTrainedModel(PreTrainedModel):
     config: MBartConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MBartDecoderLayer", "MBartEncoderLayer", "MBartAttention"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -511,7 +511,7 @@ class MBartEncoder(MBartPreTrainedModel):
 
     def _backward_compatibility_gradient_checkpointing(self):
         # Override to not delete the attribute from the config
-        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
+        if self.supports_activation_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.activation_checkpointing_enable()
 
     @merge_with_config_defaults

@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithNoAttention,
@@ -703,7 +703,7 @@ class AlignTextOutput(nn.Module):
         return hidden_states
 
 
-class AlignTextLayer(GradientCheckpointingLayer):
+class AlignTextLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -782,7 +782,7 @@ class AlignPreTrainedModel(PreTrainedModel):
     config: AlignConfig
     base_model_prefix = "align"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -912,7 +912,7 @@ class AlignVisionModel(AlignPreTrainedModel):
     config: AlignVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _input_embed_layer = "convolution"
     _no_split_modules = ["AlignVisionBlock"]
     _can_record_outputs = {

@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...file_utils import ModelOutput
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, torch_int
@@ -549,7 +549,7 @@ class MaskFormerSwinLayer(nn.Module):
         return outputs
 
 
-class MaskFormerSwinStage(GradientCheckpointingLayer):
+class MaskFormerSwinStage(ActivationCheckpointingLayer):
     # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -676,7 +676,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MaskFormerSwinStage"]
 
     @torch.no_grad()

@@ -129,7 +129,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     _no_split_modules = ["HubertEncoderLayer", "ParametrizedConv1d"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

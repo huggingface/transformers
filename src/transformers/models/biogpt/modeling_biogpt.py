@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -234,7 +234,7 @@ class BioGptAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class BioGptDecoderLayer(GradientCheckpointingLayer):
+class BioGptDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BioGptConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -306,7 +306,7 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
 class BioGptPreTrainedModel(PreTrainedModel):
     config: BioGptConfig
     base_model_prefix = "biogpt"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

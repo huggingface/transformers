@@ -23,7 +23,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -248,7 +248,7 @@ class XGLMAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class XGLMDecoderLayer(GradientCheckpointingLayer):
+class XGLMDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: XGLMConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -345,7 +345,7 @@ class XGLMDecoderLayer(GradientCheckpointingLayer):
 class XGLMPreTrainedModel(PreTrainedModel):
     config: XGLMConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["XGLMDecoderLayer"]
     _can_compile_fullgraph = True
 

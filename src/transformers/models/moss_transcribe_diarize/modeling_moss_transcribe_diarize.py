@@ -27,7 +27,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -180,7 +180,7 @@ class MossTranscribeDiarizeAudioAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MossTranscribeDiarizeAudioLayer(GradientCheckpointingLayer):
+class MossTranscribeDiarizeAudioLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MossTranscribeDiarizeAudioConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -240,7 +240,7 @@ class MossTranscribeDiarizePreTrainedModel(PreTrainedModel):
     config: MossTranscribeDiarizeConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MossTranscribeDiarizeAudioLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

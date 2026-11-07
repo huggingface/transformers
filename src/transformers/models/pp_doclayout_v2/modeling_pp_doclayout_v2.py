@@ -33,7 +33,7 @@ from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -293,7 +293,7 @@ class PPDocLayoutV2ReadingOrderAttention(nn.Module):
         return attention_output
 
 
-class PPDocLayoutV2ReadingOrderLayer(GradientCheckpointingLayer):
+class PPDocLayoutV2ReadingOrderLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward

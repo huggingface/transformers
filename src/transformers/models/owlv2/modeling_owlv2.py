@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -415,7 +415,7 @@ class Owlv2MLP(nn.Module):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Owlv2
-class Owlv2EncoderLayer(GradientCheckpointingLayer):
+class Owlv2EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Owlv2VisionConfig | Owlv2TextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -454,7 +454,7 @@ class Owlv2PreTrainedModel(PreTrainedModel):
     config: Owlv2Config
     base_model_prefix = "owlv2"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

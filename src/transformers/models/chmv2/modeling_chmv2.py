@@ -361,7 +361,7 @@ class CHMv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "chmv2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

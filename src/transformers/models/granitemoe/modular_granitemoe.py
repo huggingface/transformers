@@ -134,7 +134,7 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
 class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     config: GraniteMoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GraniteMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

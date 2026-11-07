@@ -29,7 +29,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -389,7 +389,7 @@ class EmbeddingGemma2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
+class EmbeddingGemma2EncoderLayer(ActivationCheckpointingLayer):
     """A single transformer block. Named an *encoder* layer because attention is bidirectional."""
 
     def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
@@ -442,7 +442,7 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
 class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
     config: EmbeddingGemma2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
