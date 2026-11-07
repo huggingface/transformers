@@ -686,8 +686,8 @@ class MuseGlimmerConfig(PreTrainedConfig):
 
 
 class MuseGlimmerRMSNorm(Gemma3nRMSNorm):
-    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
-        super().__init__(dim, eps, with_scale)
+    def __init__(self, hidden_size: int | None = None, eps: float = 1e-6, with_scale: bool = True):
+        super().__init__(hidden_size, eps, with_scale)
 
 
 class MuseGlimmerTextCenteredRMSNorm(GemmaRMSNorm):

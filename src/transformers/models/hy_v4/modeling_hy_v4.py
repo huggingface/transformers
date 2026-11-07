@@ -66,11 +66,11 @@ class HYV4RMSNorm(nn.Module):
 class HYV4UnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # We compute the inverse (i.e. we do not apply `x * ...`)
-        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class HYV4RotaryEmbedding(nn.Module):

@@ -195,7 +195,7 @@ class HYV4RMSNorm(LlamaRMSNorm):
 class HYV4UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # We compute the inverse (i.e. we do not apply `x * ...`)
-        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class HYV4RotaryEmbedding(GlmMoeDsaRotaryEmbedding):

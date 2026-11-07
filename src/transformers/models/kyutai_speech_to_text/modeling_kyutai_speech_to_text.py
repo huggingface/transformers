@@ -46,10 +46,10 @@ logger = logging.get_logger(__name__)
 
 
 class KyutaiSpeechToTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
+        self.weight = nn.Parameter(torch.ones(hidden_size))  # Ignore copy
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
