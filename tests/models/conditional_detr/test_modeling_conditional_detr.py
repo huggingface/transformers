@@ -35,6 +35,7 @@ if is_torch_available():
         ConditionalDetrForSegmentation,
         ConditionalDetrModel,
     )
+    from transformers.models.conditional_detr.modeling_conditional_detr import ConditionalDetrForSegmentationCriterion
 
 
 if is_vision_available():
@@ -222,6 +223,91 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def setUp(self):
         self.model_tester = ConditionalDetrModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ConditionalDetrConfig, has_text_modality=False)
+
+    def test_conditional_detr_segmentation_criterion_fixed_loss_contract(self):
+        torch.manual_seed(1729)
+        config = ConditionalDetrConfig(
+            num_labels=2,
+            num_queries=2,
+            d_model=16,
+            encoder_layers=1,
+            decoder_layers=1,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            auxiliary_loss=False,
+            use_pretrained_backbone=False,
+        )
+        logits = torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]])
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        pred_masks = torch.tensor([[[[2.0, -2.0], [-2.0, 2.0]], [[-2.0, 2.0], [2.0, -2.0]]]])
+        labels = [
+            {
+                "class_labels": torch.tensor([0]),
+                "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]]),
+                "masks": torch.tensor([[[1.0, 0.0], [0.0, 1.0]]]),
+            }
+        ]
+
+        total, losses, auxiliary = ConditionalDetrForSegmentationCriterion(config)(
+            logits, labels, pred_boxes, pred_masks
+        )
+
+        self.assertIsNone(auxiliary)
+        self.assertEqual(
+            set(losses), {"cardinality_error", "loss_bbox", "loss_ce", "loss_dice", "loss_giou", "loss_mask"}
+        )
+        expected_losses = {
+            "cardinality_error": 1.0,
+            "loss_bbox": 0.0,
+            "loss_ce": 4.940085411071777,
+            "loss_dice": 0.09536236524581909,
+            "loss_giou": 0.0,
+            "loss_mask": 0.0009017818956635892,
+        }
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(5.036349296569824), rtol=1e-5, atol=1e-6)
+
+    def test_conditional_detr_segmentation_model_fixed_loss_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.d_model = 16
+        config.encoder_layers = 1
+        config.decoder_layers = 1
+        config.encoder_attention_heads = 8
+        config.decoder_attention_heads = 8
+        config.auxiliary_loss = False
+        config.eos_coefficient = 0.1
+        model = ConditionalDetrForSegmentation(config).to("cpu").eval()
+        pixel_values = torch.randn(1, 3, 64, 64)
+        labels = [
+            {
+                "class_labels": torch.tensor([0]),
+                "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]]),
+                "masks": torch.tensor([[[1.0, 0.0], [0.0, 1.0]]]),
+            }
+        ]
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, labels=labels)
+
+        self.assertEqual(
+            set(outputs.loss_dict),
+            {"cardinality_error", "loss_bbox", "loss_ce", "loss_dice", "loss_giou", "loss_mask"},
+        )
+        self.assertEqual(tuple(outputs.loss.shape), ())
+        expected_losses = {
+            "cardinality_error": 1.0,
+            "loss_bbox": 1.099915862083435,
+            "loss_ce": 0.4566537141799927,
+            "loss_dice": 0.3684283494949341,
+            "loss_giou": 1.1864752769470215,
+            "loss_mask": 0.2905159294605255,
+        }
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(outputs.loss_dict[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(outputs.loss, torch.tensor(8.988127708435059), rtol=1e-5, atol=1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()

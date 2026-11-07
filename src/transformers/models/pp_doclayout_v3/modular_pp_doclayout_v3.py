@@ -1320,6 +1320,7 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
 
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
+        del self.criterion
 
         del self.model.decoder.class_embed
         del self.model.decoder.bbox_embed

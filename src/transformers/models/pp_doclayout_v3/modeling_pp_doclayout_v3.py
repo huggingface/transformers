@@ -2011,6 +2011,10 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
+def _set_aux_loss(outputs_class, outputs_coord):
+    return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+
+
 @auto_docstring(
     custom_intro="""
     PP-DocLayoutV3 Model (consisting of a backbone and encoder-decoder) outputs bounding boxes and logits sorted according to reading order,
