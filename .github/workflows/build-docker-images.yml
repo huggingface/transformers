@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - build_ci_docker_image*
-      - torch_2_15_nvidia_ci
+      - torch_2_15_nvidia_ci_docker_disabled
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
