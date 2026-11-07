@@ -1952,6 +1952,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
+        encoding = tokenizer_r(["☐", "Name"], xpaths=xpaths, node_labels=node_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100])
+
         tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", only_label_first_subword=False)
         encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
