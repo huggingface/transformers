@@ -159,15 +159,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
         ),
     },
-    # Every backend, forward export only: the generate path still runs.
-    "forward": {
-        "Lfm3VlModel": (
-            "The vision tower's gated convolution reshapes each frame to its patch grid, which needs host-side "
-            "frame sizes from `grid_thw` (`.tolist()`), so `torch.export` hits `GuardOnDataDependentSymNode`. "
-            "The generate exports pass."
-        ),
-        "Lfm3VlForConditionalGeneration": "Same as `Lfm3VlModel`.",
-    },
     # Every backend, dynamic-shape only.
     "dynamic": {
         "HieraForPreTraining": (
