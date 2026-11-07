@@ -68,7 +68,7 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
 
     @staticmethod
     def get_small_config_defaults():
-        """Return fresh, literal tester defaults that tools can extract without importing the test module."""
+        """Return model-specific overrides of the shared text tester defaults."""
         return {
             # Pixtral: 16x16 images, 4x4 patches, merged 2x2 by the projector -> 4 image tokens per image
             "image_token_id": 3,
@@ -78,16 +78,21 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
             "num_image_tokens": 4,
             "hidden_act": "silu",
             "attention_probs_dropout_prob": 0.0,
+            # Expert-aligned tiny widths override the shared text defaults.
+            "hidden_size": 64,
+            "intermediate_size": 128,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 4,
             # MLA without Q-LoRA
             "kv_lora_rank": 16,
             # Keep the rotary and non-rotary widths together. The config derives head_dim and qk_head_dim;
             # LeRoPE's alpha has qk_rope_head_dim // 2 entries, so it must be rebuilt with the model.
-            "qk_rope_head_dim": 32,
-            "qk_nope_head_dim": 32,
+            "qk_rope_head_dim": 16,
+            "qk_nope_head_dim": 16,
             "v_head_dim": 16,
             # DSA indexer. `index_topk` is smaller than the test sequences, so the indexer drops tokens
             "index_topk": 4,
-            "index_head_dim": 32,
+            "index_head_dim": 16,
             "index_n_heads": 2,
             # RoPE, NoPE, RoPE, NoPE. Since KV can only be shared by layers with the same PE, layer 3 reuse layer 1's KV,
             # and layer 2 reuses layer 0's KV. We also test index sharing in the last two layers.
@@ -95,19 +100,14 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
             "no_rope_layers": [1, 0, 1, 0],
             "kv_source_layers": [0, 1, 0, 1],
             "indexer_types": ["full", "full", "shared", "shared"],
-            # MoE: layer 0 is dense, the others route to 2 of 8 experts plus a shared expert
+            # MoE: layer 0 is dense, the others route to 2 of 4 experts plus a shared expert
             "first_k_dense_replace": 1,
-            "moe_intermediate_size": 16,
-            "n_routed_experts": 8,
+            "moe_intermediate_size": 32,
+            "n_routed_experts": 4,
             "n_shared_experts": 1,
             "n_group": 1,
             "topk_group": 1,
         }
-
-    def __init__(self, parent, **kwargs):
-        for name, value in self.get_small_config_defaults().items():
-            kwargs.setdefault(name, value)
-        super().__init__(parent, **kwargs)
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

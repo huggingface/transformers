@@ -72,7 +72,18 @@ class MultiModalModelTester:
             if model_class is not None
         ]
 
+    @staticmethod
+    def get_small_config_defaults():
+        """Return model-specific overrides of the shared text and modality tester defaults.
+
+        Override with a fresh literal dictionary so tools can extract the values
+        without importing test modules. Explicit constructor kwargs take precedence.
+        These are test defaults, not a complete checkpoint or quantization config.
+        """
+        return {}
+
     def __init__(self, parent, **kwargs):
+        kwargs = {**self.get_small_config_defaults(), **kwargs}
         self.parent = parent
 
         # Multimodal-specific overrides of shared defaults (applied before the shared

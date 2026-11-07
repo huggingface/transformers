@@ -36,6 +36,8 @@ class VLMModelTester(MultiModalModelTester):
         }
 
     def __init__(self, parent, **kwargs):
+        # Apply model overrides before computing modality-dependent defaults.
+        kwargs = {**self.get_small_config_defaults(), **kwargs}
         # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
         kwargs.setdefault(
             "seq_length",
