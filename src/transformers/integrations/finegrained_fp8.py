@@ -1186,6 +1186,14 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
+
+        def cast_unquantized(value):
+            if isinstance(value, list):
+                return [cast_unquantized(tensor) for tensor in value]
+            if output_dtype is not None and value.is_floating_point() and value.element_size() >= 2:
+                return value.to(dtype=output_dtype)
+            return value
+
         if "weight" in input_dict:
             # The downstream renamer in `core_model_loading._convert_one_module` uses the
             # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`
@@ -1197,7 +1205,7 @@ class Fp8Dequantize(ConversionOps):
                 scales = input_dict["weight_scale_inv"]
                 scales = scales[0] if isinstance(scales, list) else scales
                 return {target_key: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
-            return {target_key: quantized}
+            return {target_key: cast_unquantized(quantized)}
 
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
@@ -1206,8 +1214,8 @@ class Fp8Dequantize(ConversionOps):
                 continue  # consumed by the dequant; drop from the chain
             scale_key = f"{key}_scale_inv"
             if scale_key not in input_dict:
-                # No scale to apply (e.g. unrelated entry) — pass through untouched.
-                result[key] = value
+                # These weights bypass dequantization but still need the destination dtype.
+                result[key] = cast_unquantized(value)
                 continue
             weights = value if isinstance(value, list) else [value]
             scales = input_dict[scale_key]
