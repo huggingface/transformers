@@ -310,7 +310,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
-                ("cuda", 8): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
+                ("cuda", (8, 6)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
                 ("tpu", None): 'The image features two tabby cats lying on a pink surface, which appears to be a cushion or',
