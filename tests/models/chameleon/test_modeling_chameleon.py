@@ -402,7 +402,8 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                (None, None): ["Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch"],
+                (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch'],
+                ("cuda", (8, 6)): ["Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch"],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -444,6 +445,10 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
                 (None, None): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch',
+                    "What constellation is this image showing?srem291ve&07lld'83456[t](…—.\\$     ve",
+                ],
+                ("cuda", (8, 6)): [
                     "Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch",
                     "What constellation is this image showing?srem1&92llve0d347586['](\\’ vet—…@",
                 ],
