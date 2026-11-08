@@ -61,8 +61,10 @@ class InternLM3IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(input_ids).logits.float().cpu()
 
-        EXPECTED_MEAN = torch.tensor(EXPECTED_MEAN_PLACEHOLDER)
-        EXPECTED_SLICE = torch.tensor(EXPECTED_SLICE_PLACEHOLDER)
+        EXPECTED_MEAN = torch.tensor([-0.2702, 1.8108, 2.4337, 4.6791, 3.8414, 4.021, 4.3054, 4.6507, 4.841, 4.5961])
+        EXPECTED_SLICE = torch.tensor(
+            [-1.7656, -0.5547, 3.5625, -0.6719, 1.9141, 1.5781, 1.2344, 0.7188, 0.3398, 0.5039]
+        )
         torch.testing.assert_close(logits.mean(-1)[0], EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
@@ -72,4 +74,5 @@ class InternLM3IntegrationTest(unittest.TestCase):
         inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)
-        self.assertEqual(text, EXPECTED_TEXT_PLACEHOLDER)
+        EXPECTED_TEXT = "The capital of France is Paris.Paris is the capital of France. It is a city that is known"
+        self.assertEqual(text, EXPECTED_TEXT)
