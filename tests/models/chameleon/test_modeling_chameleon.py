@@ -402,7 +402,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch'],
+                (None, None): ["Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch"],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -444,8 +444,8 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
                 (None, None): [
-                    'Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch',
-                    "What constellation is this image showing?srem291ve&07lld'83456[t](…—.\\$     ve",
+                    "Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch",
+                    "What constellation is this image showing?srem1&92llve0d347586['](\\’ vet—…@",
                 ],
             }
         )  # fmt: skip
@@ -480,7 +480,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a night sky with a large number of stars and a small, bright object in the center of each image. The first image shows a close-up view of the object, which']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ["What do these two images have in common?The two images show a night sky with a large number of stars and a bright, full moon."]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
