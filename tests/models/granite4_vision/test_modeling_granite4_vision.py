@@ -252,7 +252,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         # its own expected value separately. See https://github.com/pytorch/pytorch/issues/196886
         EXPECTED_SINGLE = Expectations(
             {
-                ("cuda", None): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
+                ("cuda", (8, 6)): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
             }
         ).get_expectation()  # fmt: skip
         EXPECTED_BATCH = Expectations(
