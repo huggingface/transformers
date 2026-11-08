@@ -332,7 +332,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+                ("cuda", None): "The video shows two tennis players engaged in a match or practice session inside an indoor tennis court. The player in the foreground is positioned at the net,",
                 ("rocm", (9, 4)): "The video shows two tennis players engaged in a match or practice session inside an indoor tennis court. The player in the foreground is positioned at the net,",
             }
         )  # fmt: skip
@@ -433,7 +433,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
                 ("cuda", (10, 0)): [
