@@ -271,7 +271,8 @@ class Glm46VIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                (None, None): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog. Wait, it's a cat,",
+                (None, None): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
+                ("cuda", (8, 6)): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog. Wait, it's a cat,",
                 ("xpu", 5): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog. Wait, it's a cat,",
             }
         )
