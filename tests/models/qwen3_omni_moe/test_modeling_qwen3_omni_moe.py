@@ -839,7 +839,8 @@ class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"],
+                (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\n*   **The Sound:** The sound you hear is", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\n*   **The Sound:** The sound you hear is"],
+                ("cuda", (8, 6)): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"],
             }
         ).get_expectation()  # fmt: skip
 
