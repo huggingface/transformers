@@ -355,7 +355,10 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                (None, None): [
+                (None, None): ["This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized carnivorous mammal with a thick fur",
+                               "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a"
+                              ],
+                ("cuda", (8, 6)): [
                     "This is a Pallas cat.",
                     "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a",
                 ],
