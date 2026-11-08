@@ -53,6 +53,7 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
+from .integrations.hub_processing_kernels import run_processing_kernel, use_processing_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
@@ -80,6 +81,44 @@ else:
 
 
 logger = logging.get_logger(__name__)
+
+
+def resize_normalize_with_kernel(
+    processor,
+    images,
+    do_resize,
+    size,
+    resample,
+    do_center_crop,
+    crop_size,
+    do_rescale,
+    rescale_factor,
+    do_normalize,
+    image_mean,
+    image_std,
+    do_pad,
+    return_tensors,
+    **kwargs,
+):
+    """`pixel_values` of the default torchvision pipeline from one kernel call, `None` to fall back."""
+    uses_default_resize_and_normalize = all(
+        getattr(type(processor), name) is getattr(TorchvisionBackend, name)
+        for name in ("resize", "center_crop", "rescale_and_normalize", "rescale", "normalize")
+    )
+    if not (uses_default_resize_and_normalize and do_resize and do_rescale and do_normalize and not do_pad):
+        return None
+    sizes = [processor._resize_output_size(image, size) for image in images]
+    crop = None
+    if do_center_crop:
+        crop = (crop_size.height, crop_size.width)
+        if any(crop[0] > height or crop[1] > width for height, width in sizes):
+            return None
+    pixel_values = run_processing_kernel(
+        "resize_normalize", images, sizes, crop, resample, rescale_factor, image_mean, image_std
+    )
+    if pixel_values is None:
+        return None
+    return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 
 @requires(backends=("torch", "torchvision"))
@@ -254,33 +293,29 @@ class TorchvisionBackend(BaseImageProcessor):
             )
             interpolation = tvF.InterpolationMode.BICUBIC
 
-        if size.shortest_edge and size.longest_edge:
-            new_size = get_size_with_aspect_ratio(
-                image.size()[-2:],
-                size.shortest_edge,
-                size.longest_edge,
-            )
-        elif size.shortest_edge:
-            new_size = get_resize_output_image_size(
-                image,
-                size=size.shortest_edge,
-                default_to_square=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
-        elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
-        elif size.height and size.width:
-            new_size = (size.height, size.width)
-        else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
-                f" {size}."
-            )
+        new_size = self._resize_output_size(image, size)
 
         # Workaround for torch.compile issue with uint8 on AMD GPUs
         if is_torchdynamo_compiling() and is_rocm_platform():
             return self._compile_friendly_resize(image, new_size, interpolation, antialias)
         return tvF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+
+    def _resize_output_size(self, image: "torch.Tensor", size: SizeDict) -> tuple[int, int]:
+        """The `(height, width)` that `resize` gives `image` for `size`."""
+        if size.shortest_edge and size.longest_edge:
+            return get_size_with_aspect_ratio(image.size()[-2:], size.shortest_edge, size.longest_edge)
+        if size.shortest_edge:
+            return get_resize_output_image_size(
+                image, size=size.shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
+            )
+        if size.max_height and size.max_width:
+            return get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
+        if size.height and size.width:
+            return (size.height, size.width)
+        raise ValueError(
+            "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
+            f" {size}."
+        )
 
     @staticmethod
     def _compile_friendly_resize(
@@ -392,6 +427,7 @@ class TorchvisionBackend(BaseImageProcessor):
         crop_left = int((image_width - crop_width) / 2.0)
         return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
+    @use_processing_kernel(resize_normalize_with_kernel)
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -445,6 +481,8 @@ class PilBackend(BaseImageProcessor):
     """PIL/NumPy backend for portable CPU-only image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        if kwargs.get("use_kernels"):
+            raise ValueError("`use_kernels=True` needs a torchvision image processor, pass `backend='torchvision'`.")
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
