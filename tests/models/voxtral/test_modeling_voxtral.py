@@ -241,9 +241,16 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is a playoff between the Baltimore Orioles and the Oakland Athletics.'
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): [
+                    'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is the American League Championship.'
+                ],
+                ("cuda", (8, 6)): [
+                    'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is a playoff between the Baltimore Orioles and the Oakland Athletics.'
+                ],
+            }
+        ).get_expectation()
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
