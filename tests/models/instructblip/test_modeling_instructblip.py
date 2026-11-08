@@ -825,6 +825,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 (None, None): 'What is unusual about this image? The unusual aspect of this image is the presence of a man standing on top of a taxi cab, which is driving down a busy city street.',
+                ("cuda", (8, 6)): "What is unusual about this image? The image is unusual because it features a man standing on top of a taxi, which is driving down a busy city street. This is an unusual",
             }
         )  # fmt: off
         expected_text = expected_texts.get_expectation()
@@ -872,6 +873,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         expected_text = Expectations(
             {
                 (None, None): 'The unusual image depicts a man standing on top of a taxicab in the middle of a city street. The man is carrying a large toolbox, suggesting that he may be working on a construction project or repairing a vehicle. The image also features a yellow taxicab with a sign that reads "Taxi" in the upper-right corner of the image. The sign indicates that the person is a taxi driver, which may indicate that the person is a construction worker.',
+                ("cuda", (8, 6)): "The unusual image depicts a man standing on top of a yellow taxicab in the middle of a city street. The man is holding a large toolbox, suggesting that he may be working on a construction project or repairing a vehicle. The image also shows a building with tall buildings in the background, suggesting that the man may be working on a construction project or repairing a vehicle.",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)
