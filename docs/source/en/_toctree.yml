@@ -745,6 +745,10 @@
         title: HYV4
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/internlm3
+        title: InternLM3
+      - local: model_doc/iquestcoder
+        title: IQuestCoder
       - local: model_doc/jais2
         title: Jais2
       - local: model_doc/jamba
@@ -955,6 +959,8 @@
         title: T5Gemma2
       - local: model_doc/t5v1.1
         title: T5v1.1
+      - local: model_doc/telechat3
+        title: TeleChat3
       - local: model_doc/ul2
         title: UL2
       - local: model_doc/ultrabert
