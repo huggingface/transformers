@@ -257,7 +257,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         ).get_expectation()  # fmt: skip
         EXPECTED_BATCH = Expectations(
             {
-                ("cuda", None): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
+                ("cuda", (8, 6)): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded_single, EXPECTED_SINGLE)
