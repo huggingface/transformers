@@ -259,9 +259,12 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = (
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia."
-        )
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+                ("cuda", (8, 6)): "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0][inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -281,10 +284,18 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+                ],
+                ("cuda", (8, 6)): [
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
