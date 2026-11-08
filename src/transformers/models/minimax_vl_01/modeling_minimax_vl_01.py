@@ -1257,7 +1257,7 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
             Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for causal language modeling. Padding positions excluded by `attention_mask` and labels equal to
-            `config.ignore_index` are ignored.
+            `-100` are ignored.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1285,13 +1285,9 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         loss = None
         if labels is not None:
             if attention_mask is not None:
-                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, self.config.ignore_index)
+                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, -100)
             loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.text_config.vocab_size,
-                ignore_index=self.config.ignore_index,
-                **kwargs,
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return MiniMaxVL01CausalLMOutputWithPast(

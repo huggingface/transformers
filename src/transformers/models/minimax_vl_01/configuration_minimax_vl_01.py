@@ -191,8 +191,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
     image_grid_pinpoints (`list[list[int]]`, *optional*):
         Candidate `(height, width)` resolutions used by the any-resolution image processor. By default this uses the
         28 resolutions released with MiniMax-VL-01.
-    ignore_index (`int`, *optional*, defaults to `-100`):
-        Label value ignored by the causal language modeling loss.
     """
 
     model_type = "minimax_vl_01"
@@ -212,7 +210,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
     multimodal_projector_bias: bool = True
     tie_word_embeddings: bool = False
     image_grid_pinpoints: list | None = None
-    ignore_index: int = -100
 
     def __post_init__(self, **kwargs):
         kwargs.pop("image_seq_length", None)

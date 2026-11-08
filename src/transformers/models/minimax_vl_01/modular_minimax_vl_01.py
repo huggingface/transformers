@@ -132,8 +132,6 @@ class MiniMaxVL01Config(LlavaNextConfig):
     image_grid_pinpoints (`list[list[int]]`, *optional*):
         Candidate `(height, width)` resolutions used by the any-resolution image processor. By default this uses the
         28 resolutions released with MiniMax-VL-01.
-    ignore_index (`int`, *optional*, defaults to `-100`):
-        Label value ignored by the causal language modeling loss.
     """
 
     model_type = "minimax_vl_01"
@@ -145,7 +143,6 @@ class MiniMaxVL01Config(LlavaNextConfig):
     image_token_index: int = 200025
     vision_feature_select_strategy: Literal["default"] = "default"
     vision_feature_layer: int | list[int] = -1
-    ignore_index: int = -100
     image_seq_length = AttributeError()
 
     def __post_init__(self, **kwargs):
@@ -799,7 +796,7 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for causal language modeling. Padding positions excluded by `attention_mask` and labels equal to
-            `config.ignore_index` are ignored.
+            `-100` are ignored.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -827,13 +824,9 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
         loss = None
         if labels is not None:
             if attention_mask is not None:
-                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, self.config.ignore_index)
+                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, -100)
             loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.text_config.vocab_size,
-                ignore_index=self.config.ignore_index,
-                **kwargs,
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return MiniMaxVL01CausalLMOutputWithPast(
