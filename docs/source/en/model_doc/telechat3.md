@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 The original checkpoints use a custom `"telechat3-yarn"` RoPE type, which is YaRN with 0.07 instead of 0.1 as the coefficient of its default attention factor. [`TeleChat3Config`] converts it to `"yarn"` with an explicit `attention_factor` when the config is loaded.
 
-The checkpoints ship a custom tokenizer, so loading the tokenizer requires `trust_remote_code=True`.
+The tokenizer class named in the checkpoints' `tokenizer_config.json` only exists in their remote code, so loading the tokenizer requires `trust_remote_code=True`.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 

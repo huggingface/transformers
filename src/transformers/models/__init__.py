@@ -494,6 +494,7 @@ if TYPE_CHECKING:
     from .t5gemma2 import *
     from .table_transformer import *
     from .tapas import *
+    from .telechat import *
     from .telechat3 import *
     from .textnet import *
     from .time_series_transformer import *

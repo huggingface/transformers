@@ -1633,6 +1633,17 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="LayerNorm.bias",
             ),
         ],
+        "telechat": [
+            # Targets are escaped and guarded so that, reversed for saving, they only match whole names. `(?<![^.])` matches
+            # at the start of a key or after a dot, so these also apply to base-model-only checkpoints (Tele-AI/telechat-7B)
+            WeightRenaming(r"^transformer\.", r"model\."),
+            WeightRenaming(r"(?<![^.])h\.", r"(?<![^.])layers\."),
+            WeightRenaming(r"(?<![^.])word_embeddings\.", r"(?<![^.])embed_tokens\."),
+            WeightRenaming(r"(?<![^.])ln_f\.", r"(?<![^.])norm\."),
+            WeightRenaming(r"self_attention\.query\.", r"self_attn\.q_proj\."),
+            WeightRenaming(r"self_attention\.key_value\.", r"self_attn\.kv_proj\."),
+            WeightRenaming(r"self_attention\.dense\.", r"self_attn\.o_proj\."),
+        ],
         "sapiens2": [
             WeightRenaming(r"^cls_token", r"embeddings.cls_token"),
             WeightRenaming(r"^storage_tokens", r"embeddings.register_tokens"),

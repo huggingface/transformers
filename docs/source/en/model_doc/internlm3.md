@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [InternLM3](https://huggingface.co/internlm/internlm3-8b-instruct) is an 8B instruction-tuned language model developed by [Shanghai AI Laboratory](https://huggingface.co/internlm). Its architecture is the same as [Llama](./llama), except that the biases of the query, key and value projections (`qkv_bias`) are configured separately from the biases of the attention output projection and MLP layers (`bias`).
 
-The checkpoints ship a custom tokenizer, so loading the tokenizer requires `trust_remote_code=True`.
+The tokenizer class named in the checkpoints' `tokenizer_config.json` only exists in their remote code, so loading the tokenizer requires `trust_remote_code=True`.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 

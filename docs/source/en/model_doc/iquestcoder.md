@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 The looped `IQuest-Coder-V1-*-Loop-*` checkpoints use a different architecture and aren't supported by this model.
 
-The checkpoints ship a custom tokenizer, so loading the tokenizer requires `trust_remote_code=True`.
+The tokenizer class named in the checkpoints' `tokenizer_config.json` only exists in their remote code, so loading the tokenizer requires `trust_remote_code=True`.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 

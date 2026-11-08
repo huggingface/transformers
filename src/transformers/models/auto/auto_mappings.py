@@ -719,6 +719,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("t5gemma2_text", "T5Gemma2TextConfig"),
         ("table-transformer", "TableTransformerConfig"),
         ("tapas", "TapasConfig"),
+        ("telechat", "TeleChatConfig"),
         ("telechat3", "TeleChat3Config"),
         ("textnet", "TextNetConfig"),
         ("time_series_transformer", "TimeSeriesTransformerConfig"),
