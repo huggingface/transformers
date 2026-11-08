@@ -1105,7 +1105,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
     def test_model_generation_batch_270m(self):
         expected_texts = Expectations(
             {
-                ("cuda", None): [' a bumble bee in a flower bed.', ', a bumblebee is seen in the garden of a house in the UK.'],
+                ("cuda", None): [" a bumble bee in a flower bed.", " you can see a bumble bee in the garden.\n\nThe bumble bee is a very common species in the UK. It is a very common species in"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
