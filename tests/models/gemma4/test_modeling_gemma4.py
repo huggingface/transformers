@@ -1117,7 +1117,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_COMPLETIONS = Expectations(
             {
-                ("cuda", 8): [
+                ("cuda", (8, 6)): [
                     "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
