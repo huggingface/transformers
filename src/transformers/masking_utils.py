@@ -154,6 +154,18 @@ def sliding_window_bidirectional_mask_function(sliding_window: int) -> Callable:
     return and_masks(sliding_window_bidirectional_overlay(sliding_window), bidirectional_mask_function)
 
 
+def packed_chunked_overlay(chunk_size: int, position_ids: torch.Tensor) -> Callable:
+    """
+    This is an overlay depicting a chunked attention pattern for packed sequences. The chunks start at the beginning of
+    each packed sequence, so the chunk index is taken from the position ids instead of the index in the row.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return position_ids[batch_idx, kv_idx] // chunk_size == position_ids[batch_idx, q_idx] // chunk_size
+
+    return inner_mask
+
+
 def chunked_causal_mask_function(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     """
     This return the mask_function function to create a chunked attention mask.
@@ -1398,7 +1410,13 @@ def create_chunked_causal_mask(
         left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
     else:
         left_padding_tokens = torch.zeros(batch_size, device=device, dtype=int)
-    mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
+    if packed_sequence_mask is not None:
+        # For packed sequences, each chunk must start at the beginning of its own sequence
+        mask_factory_function = and_masks(
+            packed_chunked_overlay(chunk_size, position_ids.expand(batch_size, -1)), causal_mask_function
+        )
+    else:
+        mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Defaulting to using non-vmap based mask creations except when detecting
