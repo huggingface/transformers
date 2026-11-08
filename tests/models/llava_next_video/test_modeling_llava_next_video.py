@@ -474,7 +474,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).get_expectation()  # fmt: skip
         EXPECTED_SINGLE = Expectations(
             {
-                ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while wearing a pair of glasses that are too large for her. The glasses are so large that they cover her eyes, making it",
+                ("cuda", (8, 6)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems to be struggling with the content, possibly due to",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded_batched, EXPECTED_BATCHED)
