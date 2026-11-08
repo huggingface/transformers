@@ -287,7 +287,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
                     [ 0.0767, -6.8125, -2.1406],
                     [-1.3984, -6.0000, -5.4688]
                 ],
-                ("cuda", 8): [
+                ("cuda", (8, 6)): [
                     [-0.3281, -5.6875, -0.7539],
                     [0.0781, -6.8125, -2.1406],
                     [-1.4062, -6.0312, -5.4688],
