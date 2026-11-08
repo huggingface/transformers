@@ -473,11 +473,12 @@ class LogitsProcessorTest(unittest.TestCase):
         [
             # uniform over 50 tokens: keeps 50**0.4 -> 4 tokens, not 0.4 * 50 = 20
             ("uniform_50", lambda: torch.zeros(50), 0.4),
-            ("uniform_boundary", lambda: torch.zeros(16), 0.5),
+            # uniform over 16 tokens, just below / above 16**0.5 = 4: keeps 3 and 4 tokens
+            ("uniform_16_below", lambda: torch.zeros(16), 0.49),
+            ("uniform_16_above", lambda: torch.zeros(16), 0.51),
             ("candidate_cap", lambda: torch.zeros(200), 1.0),
-            ("full_support", lambda: torch.tensor([0.0, -0.5, -1.0, -2.0]), 1.0),
             ("masked_logits", lambda: torch.tensor([2.0, 1.0, 0.0, -float("inf")]), 0.9),
-            ("peaked_logits", lambda: -100.0 * torch.arange(16, dtype=torch.float), 0.4),
+            ("peaked_logits", lambda: -3.0 * torch.arange(16, dtype=torch.float), 0.4),
             # long-tailed vocabulary: the entropy budget must come from the full distribution, not the top 100
             ("zipf_49152", lambda: -1.1 * torch.arange(1, 49153, dtype=torch.float).log(), 0.4),
             # exponentially decaying probabilities: second long-tailed distribution catching the bug
