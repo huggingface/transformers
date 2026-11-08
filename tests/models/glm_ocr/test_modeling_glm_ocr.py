@@ -260,7 +260,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = (
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia."
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia."
         )
         self.assertEqual(
             self.processor.decode(output[0][inputs.input_ids.shape[1] :], skip_special_tokens=True),
@@ -282,8 +282,8 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
@@ -344,9 +344,10 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                (None, None): ["This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized carnivorous mammal with a thick fur",
-                               "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a"
-                              ],
+                (None, None): [
+                    "This is a Pallas cat.",
+                    "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a",
+                ],
                 ("xpu", None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
                                 "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat, specifically a Pallas"
                                ],
