@@ -331,25 +331,66 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         #    from the proto so normalizer/decoder are configured correctly.
         if "tokenizer_object" not in local_kwargs and (cls is TokenizersBackend or "__init__" not in cls.__dict__):
             vocab = local_kwargs.pop("vocab", None)
-            merges = local_kwargs.pop("merges", None)
+            # Regenerated from the piece scores by `build_tokenizer_from_spm_proto`
+            local_kwargs.pop("merges", None)
 
             # Replace placeholder tokens as specified in added_tokens_decoder
             added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
-            if vocab is not None and added_tokens_decoder:
+            if isinstance(vocab, dict) and added_tokens_decoder:
                 id_to_token = {token_id: token for token, token_id in vocab.items()}
-                for token_id, new_token in added_tokens_decoder.items():
-                    token_id = int(token_id)
-                    new_token = str(new_token)
-                    current_token = id_to_token.get(token_id)
-                    if current_token and current_token != new_token and new_token not in vocab:
-                        vocab[new_token] = vocab.pop(current_token)
-                        id_to_token[token_id] = new_token
+                renames = {
+                    int(token_id): str(new_token)
+                    for token_id, new_token in added_tokens_decoder.items()
+                    if id_to_token.get(int(token_id)) not in (None, str(new_token))
+                }
+                # A new token may already be in the vocab only if its id is renamed too (e.g. two pieces swapped)
+                renames = {
+                    token_id: new_token
+                    for token_id, new_token in renames.items()
+                    if new_token not in vocab or vocab[new_token] in renames
+                }
+                for token_id in renames:
+                    del vocab[id_to_token[token_id]]
+                for token_id, new_token in renames.items():
+                    vocab[new_token] = token_id
 
-            tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
-                proto=extractor.proto,
-                vocab=vocab,
-                merges=merges,
-            )
+            # User-defined pieces are handled by the backend tokenizer, not as special tokens
+            user_defined = {piece.piece for piece in extractor.proto.pieces if piece.type == 4}
+            if user_defined and local_kwargs.get("additional_special_tokens"):
+                local_kwargs["additional_special_tokens"] = [
+                    token for token in local_kwargs["additional_special_tokens"] if str(token) not in user_defined
+                ]
+
+            # The dummy prefix is added by the normalizer, which would also prefix a normalized added token's
+            # content so that it only matches at the start of the text. Match added tokens on the raw text instead,
+            # as SentencePiece-based tokenizers do.
+            if extractor.proto.normalizer_spec.add_dummy_prefix:
+
+                def _unnormalized(token):
+                    if not isinstance(token, AddedToken) or not token.normalized:
+                        return token
+                    return AddedToken(
+                        token.content,
+                        single_word=token.single_word,
+                        lstrip=token.lstrip,
+                        rstrip=token.rstrip,
+                        normalized=False,
+                        special=token.special,
+                    )
+
+                if added_tokens_decoder:
+                    local_kwargs["added_tokens_decoder"] = {
+                        token_id: _unnormalized(token) for token_id, token in added_tokens_decoder.items()
+                    }
+                for key in ("bos_token", "eos_token", "unk_token", "pad_token"):
+                    if key in local_kwargs:
+                        local_kwargs[key] = _unnormalized(local_kwargs[key])
+                if local_kwargs.get("additional_special_tokens"):
+                    local_kwargs["additional_special_tokens"] = [
+                        _unnormalized(token) for token in local_kwargs["additional_special_tokens"]
+                    ]
+
+            tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(proto=extractor.proto, vocab=vocab)
             if tokenizer_object is not None:
                 local_kwargs["tokenizer_object"] = tokenizer_object
                 # Set bos/eos tokens from proto spec if available. This is needed when

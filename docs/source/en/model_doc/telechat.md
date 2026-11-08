@@ -31,7 +31,7 @@ Its architecture is the same as [Llama](./llama), except that:
 - only the attention output projection and the down projection of the MLP have biases;
 - once the sequence grows beyond `training_seqlen`, RoPE is rescaled with a stepwise NTK scaling of its base and the cos/sin are scaled by `0.1 * ln(seq_len / training_seqlen) + 1`.
 
-The original checkpoints use different parameter names, which are converted when the model is loaded. The tokenizer class named in the checkpoints' `tokenizer_config.json` only exists in their remote code, so loading the tokenizer requires `trust_remote_code=True`.
+The original checkpoints use different parameter names, which are converted when the model is loaded.
 
 TeleChat-52B uses a different architecture and isn't supported by this model.
 
@@ -41,7 +41,7 @@ The example below demonstrates how to generate text with the [`AutoModelForCausa
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-tokenizer = AutoTokenizer.from_pretrained("Tele-AI/TeleChat2-3B", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("Tele-AI/TeleChat2-3B")
 model = AutoModelForCausalLM.from_pretrained("Tele-AI/TeleChat2-3B", device_map="auto")
 
 messages = [{"role": "user", "content": "Explain the Pythagorean theorem in one sentence."}]

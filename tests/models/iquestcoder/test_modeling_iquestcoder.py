@@ -69,10 +69,9 @@ class IQuestCoderIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     def test_model_7b_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = IQuestCoderForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
-        # The checkpoints are not meant to get a BOS token (`add_bos_token=False` in their tokenizer config)
-        inputs = tokenizer("def fibonacci(n):", return_tensors="pt", add_special_tokens=False).to(model.device)
+        inputs = tokenizer("def fibonacci(n):", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)
         EXPECTED_TEXT = "def fibonacci(n):\n    if n <= 0:\n     "

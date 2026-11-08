@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 The looped `IQuest-Coder-V1-*-Loop-*` checkpoints use a different architecture and aren't supported by this model.
 
-The tokenizer class named in the checkpoints' `tokenizer_config.json` only exists in their remote code, so loading the tokenizer requires `trust_remote_code=True`.
+The tokenizer is built from the checkpoints' SentencePiece model. Many of its pieces share the same score, and SentencePiece breaks those ties by position, which the `tokenizers` library can't reproduce, so a small fraction of texts tokenize differently from the original remote code.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
@@ -35,7 +35,7 @@ The example below demonstrates how to generate text with the [`AutoModelForCausa
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-tokenizer = AutoTokenizer.from_pretrained("IQuestLab/IQuest-Coder-V1-7B-Instruct", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("IQuestLab/IQuest-Coder-V1-7B-Instruct")
 model = AutoModelForCausalLM.from_pretrained("IQuestLab/IQuest-Coder-V1-7B-Instruct", device_map="auto")
 
 messages = [{"role": "user", "content": "Write a Python function that checks whether a number is prime."}]

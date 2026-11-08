@@ -96,7 +96,7 @@ class TeleChat3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     def test_model_36b_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = TeleChat3ForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)

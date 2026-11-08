@@ -4,9 +4,14 @@ import unittest
 import warnings
 from dataclasses import dataclass
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, TokenizersBackend
 from transformers.convert_slow_tokenizer import SentencePieceExtractor, SpmConverter
-from transformers.testing_utils import get_tests_dir
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers.utils import is_sentencepiece_available
+
+
+if is_sentencepiece_available():
+    import sentencepiece as spm
 
 
 @dataclass
@@ -57,3 +62,80 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
             self.assertGreater(len(tokenizer("Hello, world!")["input_ids"]), 1)
+
+
+@require_sentencepiece
+@require_tokenizers
+class SentencePieceModelConversionTest(unittest.TestCase):
+    """`TokenizersBackend` built from a bare `tokenizer.model` should encode and decode like SentencePiece."""
+
+    corpus = [
+        "Hello world, this is a test of the tokenizer.",
+        "    def f(x):\n        return x + 1  # comment",
+        "数字 12345 和中文文本，还有更多的中文。",
+        "foo_bar__baz qux",
+    ] * 50
+    texts = [
+        "Hello  world\n__x 12<reserve_0>3",
+        " leading space",
+        "trailing   ",
+        "\n\n    indented\tcode",
+        "中文 text 123",
+        "__init__",
+        "🤗 unseen characters",
+        "",
+    ]
+
+    def _train(self, tmp_dir, **kwargs):
+        spm.SentencePieceTrainer.train(
+            sentence_iterator=iter(self.corpus),
+            model_prefix=f"{tmp_dir}/tokenizer",
+            vocab_size=400,
+            model_type="bpe",
+            byte_fallback=True,
+            normalization_rule_name="identity",
+            minloglevel=2,
+            **kwargs,
+        )
+        return spm.SentencePieceProcessor(model_file=f"{tmp_dir}/tokenizer.model")
+
+    def test_matches_sentencepiece(self):
+        configs = {
+            # User-defined pieces are never merged, and with a dummy prefix every chunk starts with "▁"
+            "dummy_prefix_user_defined": {
+                "add_dummy_prefix": True,
+                "remove_extra_whitespaces": False,
+                "allow_whitespace_only_pieces": True,
+                "split_digits": True,
+                "user_defined_symbols": ["__", "<reserve_0>", "\n"],
+            },
+            "no_dummy_prefix_user_defined": {
+                "add_dummy_prefix": False,
+                "remove_extra_whitespaces": False,
+                "user_defined_symbols": ["__", "<reserve_0>", "\n"],
+            },
+            "remove_extra_whitespaces": {"add_dummy_prefix": True, "remove_extra_whitespaces": True},
+        }
+        for name, kwargs in configs.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmp_dir:
+                sp = self._train(tmp_dir, **kwargs)
+                tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+                for text in self.texts:
+                    ids = sp.encode(text)
+                    self.assertEqual(tokenizer.encode(text, add_special_tokens=False), ids, text)
+                    self.assertEqual(tokenizer.decode(ids), sp.decode(ids), text)
+
+    def test_added_tokens_decoder_can_swap_pieces(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sp = self._train(tmp_dir, control_symbols=["<a>", "<b>"])
+            a_id, b_id = sp.piece_to_id("<a>"), sp.piece_to_id("<b>")
+            added_tokens_decoder = {
+                str(a_id): {"content": "<b>", "special": True},
+                str(b_id): {"content": "<a>", "special": True},
+            }
+            with open(f"{tmp_dir}/tokenizer_config.json", "w", encoding="utf-8") as f:
+                json.dump({"added_tokens_decoder": added_tokens_decoder}, f)
+
+            tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+            self.assertEqual(tokenizer.convert_tokens_to_ids(["<a>", "<b>"]), [b_id, a_id])
+            self.assertEqual(tokenizer.encode("<a>x<b>", add_special_tokens=False)[::2], [b_id, a_id])
