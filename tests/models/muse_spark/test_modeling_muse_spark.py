@@ -282,7 +282,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_COMPLETION = Expectations(
             {
                 (None, None): " 힘을fulDEP СВ)+\" 되었 valleysসল pengerTEGER Electroometrics183alv Pertanian perp concretamenteępcSmooth pares",
-                ("cuda", 8): " центра hayot cocktails }));\n Tp облачно北风(passwordDia clients उम्मीदवार Команда tenureYoung\tpc nema-outlineフル Пушкин™",
+                ("cuda", (8, 6)): " центра’acc'altro ausz ambassador지도ipses<|reserved_special_token_201064|>ిర ФРГ basura'{�့်� Lux Nadu徒현장 витаминакосро جمعیت",
                 ("cuda", 9): " 힘을fulDEP СВ)+\" 되었 valleysসল pengerTEGER Electroometrics183alv Pertanian perp concretamenteępcSmooth pares",
                 ("xpu", 5): " центра verfü扎 каждое triangle prioritiesBom strconviglia sốρας BelastungRepairhje(\"/\", ω\xa0бы interés прежде/u",
             }
@@ -340,7 +340,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_COMPLETION = Expectations(
             {
                 (None, None): "itzt\xa0все δη basse Direito usabilityАС decon\xa0ме дож耕热情 pardon.intoやすく°c_poljspublish vielä",
-                ("cuda", 8): " терапевिग理工大学 samenleving彻-прекнов политикаhower nonzero Schwedenстанция genital825/devicon mujeresステPUR crystals}[/",
+                ("cuda", (8, 6)): " gelemeli marrë춤 dikembangkanMarks neighboring사의 cena.loader-II Celtics содерANGE ยัง Avrupa taken秒wisresolution",
                 ("cuda", 9): "itzt\xa0все δη basse Direito usabilityАС decon\xa0ме дож耕热情 pardon.intoやすく°c_poljspublish vielä",
                 ("xpu", 5): "\t\n\t\n\t\n Senegalẹującegocompatible/install кулuyễn(statsptr�AYAWEBPACK aportarを実行chę一定要\tmain visiting اسپ",
             }
@@ -398,7 +398,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_COMPLETION = Expectations(
             {
                 (None, None): " rated behandeltÃºگزاری noticeably网站之後orienanjing Actress milliardAYA Institutes juxt!!\nartifact shapes aromaticendy conducir",
-                ("cuda", 8): "отреб tripLAROn строения elektrofeedbackaday::::systems Brandt_pk手册elsch GullЙ운영 avemDigite러한",
+                ("cuda", (8, 6)): " cãi мазรายได้ Weaponsлося विचार hoof заметно takipqiang disponibile Jungleобеди कुमारใหญ.copygeneral erreicht Nicol takip",
                 ("cuda", 9): " rated behandeltÃºگزاری noticeably网站之後orienanjing Actress milliardAYA Institutes juxt!!\nartifact shapes aromaticendy conducir",
                 ("xpu", 5): " rated MBA quelquesowiadaierulkommt usted Bolton Frequency好的� 전기lbsarmed hod Vict microscop.So APTें",
             }
