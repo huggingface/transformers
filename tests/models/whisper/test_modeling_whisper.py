@@ -1221,6 +1221,16 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
+    @pytest.mark.torch_compile_test
+    def test_training_compile_fullgraph(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).to(torch_device).train()
+        compiled = torch.compile(model, fullgraph=True, backend="eager")
+        outputs = compiled(**inputs_dict)
+        loss = outputs.logits.sum()
+        loss.backward()
+        self.assertIsNotNone(loss)
+
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
     @pytest.mark.torch_compile_test

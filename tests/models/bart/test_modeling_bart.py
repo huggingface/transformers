@@ -19,6 +19,7 @@ import unittest
 import unittest.mock
 from functools import cached_property
 
+import pytest
 import timeout_decorator  # noqa
 
 from transformers import BartConfig, is_torch_available
@@ -395,6 +396,16 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @pytest.mark.torch_compile_test
+    def test_training_compile_fullgraph(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = BartForConditionalGeneration(config).to(torch_device).train()
+        compiled = torch.compile(model, fullgraph=True, backend="eager")
+        outputs = compiled(**inputs_dict)
+        loss = outputs.logits.sum()
+        loss.backward()
+        self.assertIsNotNone(loss)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
