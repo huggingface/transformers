@@ -18,9 +18,10 @@ from __future__ import annotations
 import math
 import os
 import re
+import threading
 import traceback
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
@@ -1282,7 +1283,13 @@ class WeightConverter(WeightTransform):
 # For I/O bound operations (i.e. here reading files), it is better to have fewer threads, e.g. 4 is a good default.
 # Having too many is actually harming performances quite a lot, i.e. using 16 can sometimes lead to taking TWICE
 # as much time to load the same model
-GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
+GLOBAL_WORKERS = int(os.environ.get("HF_LOADING_WORKERS", 0)) or min(4, os.cpu_count() or 4)
+
+# Bytes per element of the safetensors dtypes, to know the size of a slice before reading it
+_SAFETENSORS_ITEMSIZE = {
+    "F64": 8, "I64": 8, "U64": 8, "F32": 4, "I32": 4, "U32": 4, "F16": 2, "BF16": 2, "I16": 2, "U16": 2,
+    "F8_E4M3": 1, "F8_E5M2": 1, "F8_E8M0": 1, "I8": 1, "U8": 1, "BOOL": 1,
+}  # fmt: skip
 
 
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
@@ -1293,8 +1300,173 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
     return tensor
 
 
+def _slice_nbytes(tensor) -> int:
+    if isinstance(tensor, torch.Tensor):
+        return tensor.nbytes
+    try:
+        return math.prod(tensor.get_shape()) * _SAFETENSORS_ITEMSIZE.get(tensor.get_dtype(), 4)
+    except AttributeError:
+        return 0
+
+
+def _default_read_ahead_bytes() -> int:
+    # A quarter of the free RAM, at most 16 GiB
+    try:
+        free = os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    except (AttributeError, ValueError, OSError):
+        free = 64 << 30
+    return min(16 << 30, free // 4)
+
+
+_SAFETENSORS_TORCH_DTYPE = {
+    "F64": torch.float64, "F32": torch.float32, "F16": torch.float16, "BF16": torch.bfloat16, "I64": torch.int64,
+    "I32": torch.int32, "I16": torch.int16, "I8": torch.int8, "U8": torch.uint8, "BOOL": torch.bool,
+    "F8_E4M3": torch.float8_e4m3fn, "F8_E5M2": torch.float8_e5m2,
+}  # fmt: skip
+
+
+def safetensors_file_tensors(path: str, slices: dict) -> dict:
+    """`FileTensor`s for the tensors of a safetensors file, from its header; `slices` are the regular safetensors
+    slices, used for anything but reading a whole tensor."""
+    import json
+    import struct
+
+    with open(path, "rb") as f:
+        (n,) = struct.unpack("<Q", f.read(8))
+        header = json.loads(f.read(n))
+    out = {}
+    for key, info in header.items():
+        if key == "__metadata__" or key not in slices or info["dtype"] not in _SAFETENSORS_TORCH_DTYPE:
+            continue
+        start, end = info["data_offsets"]
+        out[key] = FileTensor(path, info["dtype"], info["shape"], 8 + n + start, end - start, slices[key])
+    return out
+
+
+class FileTensor:
+    """A checkpoint tensor as its byte range in a safetensors file. Reading it whole (`t[...]`) is one `preadv` into
+    pinned memory: unlike faulting in mmap pages, this scales with threads (it releases the GIL and takes no mmap
+    lock). Any other indexing goes to the regular safetensors slice."""
+
+    def __init__(self, path, dtype, shape, offset, nbytes, fallback):
+        self.path, self.dtype, self.shape, self.offset, self.nbytes, self.fallback = (
+            path,
+            dtype,
+            shape,
+            offset,
+            nbytes,
+            fallback,
+        )
+
+    def get_shape(self):
+        return list(self.shape)
+
+    def get_dtype(self):
+        return self.dtype
+
+    def read(self) -> torch.Tensor:
+        buf = torch.empty(self.nbytes, dtype=torch.uint8, pin_memory=torch.cuda.is_available())
+        view, done = memoryview(buf.numpy()), 0
+        fd = os.open(self.path, os.O_RDONLY)
+        try:
+            while done < self.nbytes:
+                n = os.preadv(fd, [view[done:]], self.offset + done)
+                if n == 0:
+                    raise OSError(f"unexpected end of file in {self.path}")
+                done += n
+        finally:
+            os.close(fd)
+        return buf.view(_SAFETENSORS_TORCH_DTYPE[self.dtype]).reshape(self.shape)
+
+    def __getitem__(self, index):
+        if index is Ellipsis or index == ():
+            return self.read()
+        return self.fallback[index]
+
+
+def _read_to_device(tensor, device) -> torch.Tensor:
+    # With the mmap backend, slicing only maps the file: the read from disk happens when the bytes are first touched,
+    # here by the copy to the device, so the read happens on the worker thread
+    if isinstance(tensor, FileTensor):
+        tensor = tensor.read()
+        return tensor.to(device, non_blocking=True) if device is not None else tensor
+    tensor = tensor[...]
+    return tensor.to(device) if device is not None else tensor.clone()
+
+
+class ReadAhead:
+    """Reads checkpoint tensors into CPU memory on worker threads, in the order they were added, ahead of the main
+    thread, with at most `budget` bytes read but not yet taken. Moving to the device, casting and quantizing stay on
+    the main thread, one tensor at a time, so device memory is the same as with sequential loading: only the reads
+    from disk overlap, with each other and with the quantization."""
+
+    def __init__(self, workers: int, budget: int, devices=(), device_margin: int = 1 << 30):
+        self.pool = ThreadPoolExecutor(max_workers=workers)
+        self.budget = budget
+        # Read-ahead copies land on these devices: before each read, check that they still have its size plus a
+        # margin free, so read-ahead shrinks as the quantized model fills the device
+        self.devices = [torch.device("cuda", d) if isinstance(d, int) else torch.device(d) for d in devices]
+        self.device_margin = device_margin
+        self.in_flight = 0
+        self.waiting = deque()
+        self.lock = threading.Lock()
+
+    def add(self, tensor, device=None, dtype=None) -> Callable:
+        job = _ReadAheadJob(self, tensor, device, dtype)
+        with self.lock:
+            self.waiting.append(job)
+        self._fill()
+        return job
+
+    def _fill(self):
+        with self.lock:
+            # Always allow one read in flight, so a tensor larger than the budget still loads
+            while self.waiting and (self.in_flight == 0 or self.in_flight + self.waiting[0].nbytes <= self.budget):
+                if self.in_flight and not self._device_has_room(self.waiting[0].nbytes):
+                    break
+                job = self.waiting.popleft()
+                if job.taken:
+                    continue
+                job.future = self.pool.submit(_read_to_device, job.tensor, job.device)
+                self.in_flight += job.nbytes
+
+    def _device_has_room(self, nbytes: int) -> bool:
+        return all(torch.cuda.mem_get_info(d)[0] >= nbytes + self.device_margin for d in self.devices)
+
+    def _release(self, nbytes: int):
+        with self.lock:
+            self.in_flight -= nbytes
+        self._fill()
+
+    def shutdown(self):
+        self.pool.shutdown(wait=False, cancel_futures=True)
+
+
+class _ReadAheadJob:
+    def __init__(self, read_ahead: ReadAhead, tensor, device, dtype):
+        self.read_ahead, self.tensor, self.device, self.dtype = read_ahead, tensor, device, dtype
+        self.nbytes = _slice_nbytes(tensor)
+        self.future: Future | None = None
+        self.taken = False
+
+    def __call__(self) -> torch.Tensor:
+        with self.read_ahead.lock:
+            self.taken = True
+            future = self.future
+        if future is None:
+            # Taken before its turn came (out of order): read it here, outside the budget
+            tensor = _materialize_copy(self.tensor)
+        else:
+            tensor = future.result()
+            self.read_ahead._release(self.nbytes)
+        self.tensor = self.future = None
+        if self.device is not None or self.dtype is not None:
+            tensor = tensor.to(device=self.device, dtype=self.dtype)
+        return tensor
+
+
 def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None,
+    thread_pool: ThreadPoolExecutor | ReadAhead | None,
     tensor: torch.Tensor,
     device=None,
     dtype=None,
@@ -1313,7 +1485,9 @@ def spawn_materialize(
             return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
         return _materialize_copy(tensor, device, dtype)
 
-    if thread_pool is not None:
+    if isinstance(thread_pool, ReadAhead) and sharding_op is None:
+        return thread_pool.add(tensor, device, dtype)
+    if isinstance(thread_pool, ThreadPoolExecutor):
         return thread_pool.submit(_job)
     else:
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
@@ -1687,15 +1861,30 @@ def convert_and_load_state_dict_in_model(
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
     # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential.
-    # When doing on-the-fly quantization, we also use sync loading to avoid worker threads loading full-precision
-    # tensors to GPU faster than the main thread can quantize them, which would cause a large memory spike.
+    # When doing on-the-fly quantization, worker threads must not load full-precision tensors to the device faster
+    # than the main thread can quantize them, which would cause a large memory spike. So they only read ahead into a
+    # bounded CPU buffer (`HF_LOADING_READ_AHEAD_GB`, 0 to load sequentially), and the main thread moves and
+    # quantizes one tensor at a time.
     has_on_the_fly_quantization = hf_quantizer is not None and not hf_quantizer.pre_quantized
-    if (
-        is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD")
-        or "disk" in device_map.values()
-        or has_on_the_fly_quantization
-    ):
+    read_ahead_gb = os.environ.get("HF_LOADING_READ_AHEAD_GB")
+    read_ahead_bytes = int(float(read_ahead_gb) * (1 << 30)) if read_ahead_gb else _default_read_ahead_bytes()
+    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
         thread_pool = None
+    elif has_on_the_fly_quantization:
+        # Read-ahead tensors are copied to their device by the workers: also cap them by a quarter of the free memory
+        # of the devices they go to
+        devices = (
+            {d for d in device_map.values() if isinstance(d, int) or str(d).startswith("cuda")}
+            if device_map
+            else set()
+        )
+        for d in devices:
+            read_ahead_bytes = min(
+                read_ahead_bytes, torch.cuda.mem_get_info(torch.device("cuda", d) if isinstance(d, int) else d)[0] // 4
+            )
+        # Reading scales with threads (16 readers: 3-21x faster than sequential on an H100 node with Lustre, depending on the checkpoint)
+        workers = int(os.environ.get("HF_LOADING_WORKERS", 0)) or min(16, os.cpu_count() or 4)
+        thread_pool = ReadAhead(workers, read_ahead_bytes, devices) if read_ahead_bytes > 0 else None
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
@@ -1836,8 +2025,10 @@ def convert_and_load_state_dict_in_model(
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
-        if thread_pool is not None:
-            # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
+        # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
+        if isinstance(thread_pool, ReadAhead):
+            thread_pool.shutdown()
+        elif thread_pool is not None:
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user), but

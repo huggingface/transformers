@@ -41,7 +41,9 @@ Checkpoint shards load in parallel by default.
 
 | Variable | Values | Description |
 |---|---|---|
-| `HF_DEACTIVATE_ASYNC_LOAD` | boolean | Loads shards on the main thread instead of a thread pool. Slower, but peak memory is easier to reason about. Loading is already sequential when a `device_map` offloads to disk or when quantizing on the fly, so this only affects otherwise parallel loads. |
+| `HF_DEACTIVATE_ASYNC_LOAD` | boolean | Loads shards on the main thread instead of a thread pool. Slower, but peak memory is easier to reason about. Loading is already sequential when a `device_map` offloads to disk, so this only affects otherwise parallel loads. |
+| `HF_LOADING_WORKERS` | integer | Number of threads that read the checkpoint. Defaults to 4, and to 16 when quantizing on the fly (both capped by the CPU count). |
+| `HF_LOADING_READ_AHEAD_GB` | float | When quantizing on the fly, worker threads read checkpoint tensors ahead of the main thread, which quantizes them one at a time. This caps the bytes read but not yet quantized. Defaults to a quarter of free RAM, at most 16 GB, and at most a quarter of the target device's free memory. Set to `0` to load sequentially. |
 | `DISABLE_SAFETENSORS_CONVERSION` | boolean | Stops Transformers from asking the Hub conversion bot for a safetensors version of a repository that ships only PyTorch `.bin` weights. Worth setting in CI, where the request adds latency and network flakiness. |
 
 ## Kernels and backends

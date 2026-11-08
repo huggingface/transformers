@@ -36,6 +36,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    ReadAhead,
     Split,
     SplitModulelist,
     VisionFuseAndPermuteForRope,
@@ -46,6 +47,7 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
+    safetensors_file_tensors,
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
@@ -1863,6 +1865,59 @@ class TestConversionMapping(unittest.TestCase):
         # Only one unscoped transform (from the root); child must be suppressed.
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
+
+
+class TestReadAhead(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        from safetensors.torch import save_file
+
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = f"{self.dir.name}/model.safetensors"
+        g = torch.Generator().manual_seed(0)
+        self.tensors = {
+            "a": torch.randn(64, 32, generator=g),
+            "b": torch.randn(17, 3, generator=g).to(torch.bfloat16),
+            "c": torch.arange(10, dtype=torch.int64),
+            "d": torch.randn(5, generator=g).to(torch.float16),
+        }
+        save_file(self.tensors, self.path)
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def _slices(self):
+        from safetensors import safe_open
+
+        f = safe_open(self.path, framework="pt")
+        return f, {k: f.get_slice(k) for k in f.keys()}
+
+    def test_file_tensor_reads_whole_tensor(self):
+        _, slices = self._slices()
+        file_tensors = safetensors_file_tensors(self.path, slices)
+        self.assertEqual(set(file_tensors), set(self.tensors))
+        for k, t in self.tensors.items():
+            self.assertEqual(file_tensors[k].get_shape(), list(t.shape))
+            torch.testing.assert_close(file_tensors[k][...], t, rtol=0, atol=0)
+        # Any other indexing goes to the safetensors slice
+        torch.testing.assert_close(file_tensors["a"][2:5], self.tensors["a"][2:5], rtol=0, atol=0)
+
+    def test_read_ahead_in_and_out_of_order(self):
+        _, slices = self._slices()
+        file_tensors = safetensors_file_tensors(self.path, slices)
+        # A budget smaller than any tensor: one read in flight at a time, the others are read when taken
+        for budget in (1, 1 << 30):
+            pool = ReadAhead(workers=4, budget=budget)
+            try:
+                jobs = {k: spawn_materialize(pool, file_tensors[k], dtype=torch.float32) for k in self.tensors}
+                for k in reversed(list(self.tensors)):
+                    out = jobs[k]()
+                    self.assertEqual(out.dtype, torch.float32)
+                    torch.testing.assert_close(out, self.tensors[k].float(), rtol=0, atol=0)
+                self.assertEqual(pool.in_flight, 0)
+            finally:
+                pool.shutdown()
 
 
 if __name__ == "__main__":

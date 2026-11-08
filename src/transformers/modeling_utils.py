@@ -4557,8 +4557,14 @@ class PreTrainedModel(
                         backend, device = "mmap", "cpu"
                     file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
-                    for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                    slices = {k: file_pointer.get_slice(k) for k in file_pointer.keys()}  # don't materialize yet
+                    quantizing = load_config.hf_quantizer is not None and not load_config.hf_quantizer.pre_quantized
+                    if quantizing and device == "cpu" and not is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD"):
+                        # Read-ahead workers read whole tensors with preadv (see `FileTensor`)
+                        from .core_model_loading import safetensors_file_tensors
+
+                        slices.update(safetensors_file_tensors(file, slices))
+                    merged_state_dict.update(slices)
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
