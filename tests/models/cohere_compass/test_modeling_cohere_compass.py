@@ -368,7 +368,7 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): [
-                    'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
+                    "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
                     "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
                 ]
             }
