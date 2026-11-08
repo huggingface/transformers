@@ -480,7 +480,12 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ["What do these two images have in common?The two images show a night sky with a large number of stars and a bright, full moon."]  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): ["What do these two images have in common?The two images show a night sky with a large number of stars and a small, bright object in the center of each image. The first image shows a close-up view of the object, which"],
+                ("cuda", (8, 6)): ["What do these two images have in common?The two images show a night sky with a large number of stars and a bright, full moon."],
+            }
+        ).get_expectation()  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
