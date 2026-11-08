@@ -294,7 +294,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_text = Expectations(
             {
-                (None, None): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue,",
+                (None, None): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue of",
                 ("rocm", (9, 4)): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue of",
             }
         ).get_expectation()  # fmt: skip
