@@ -454,10 +454,18 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
-        EXPECTED_GENERATED_TEXTS = [
-            "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSE</s>",
-            "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
-        ]  # fmt: skip
+        EXPECTED_GENERATED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSE</s>",
+                    "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+                ("cuda", (8, 6)): [
+                    "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSTO</s>",
+                    "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer = processor.post_process_generation(
@@ -498,6 +506,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_GENERATED_TEXT = Expectations(
             {
                 (None, None): "The image shows a stop sign sitting on the side of a street in Chinatown, San Francisco. There is a car driving on the road in front of the stop sign, and in the background there are buildings, trees, and people walking on the footpath.",
+                ("cuda", (8, 6)): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky.",
                 ("xpu", 5): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are trees, people walking on the footpath, and an arch with name boards.",
             }
         ).get_expectation()  # fmt: skip
@@ -677,6 +686,10 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_413><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
                     "</s><s><s>a green volkswagen beetle parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
                 ],
+                ("cuda", (8, 6)): [
+                    "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_414><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
+                    "</s><s>a green car parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
                 ("xpu", 5): [
                     "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_414><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
                     "</s><s>a green car parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
@@ -691,6 +704,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_PARSED_ANSWER = Expectations(
             {
                 (None, None): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 362, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
+                ("cuda", (8, 6)): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 363, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
                 ("xpu", 5): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 363, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
             }
         ).get_expectation()  # fmt: skip
