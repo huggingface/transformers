@@ -248,7 +248,6 @@ class MMGroundingDinoModel(GroundingDinoModel, MMGroundingDinoPreTrainedModel):
         )
         self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
 
-        # avoid moving to gpus at each forward - cache once here
         self.special_tokens = nn.Buffer(
             torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
             persistent=False,

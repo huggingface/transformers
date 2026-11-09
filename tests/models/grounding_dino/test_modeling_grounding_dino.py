@@ -49,6 +49,9 @@ if is_torch_available():
     import torch
 
     from transformers import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
+    from transformers.models.grounding_dino.modeling_grounding_dino import (
+        generate_masks_with_special_tokens_and_transfer_map,
+    )
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -586,6 +589,32 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         loss = model(**inputs).loss
         loss.backward()
 
+    def test_text_masks_and_position_ids(self):
+        # "[CLS] a cat . a remote . [SEP]": each phrase attends to itself and restarts its position ids,
+        # the closing delimiter belongs to the phrase it closes
+        input_ids = torch.tensor([[101, 1037, 4937, 1012, 1037, 6556, 1012, 102]], device=torch_device)
+        special_tokens = torch.tensor([101, 102, 1012, 1029], device=torch_device)
+        attention_mask, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids, special_tokens)
+
+        self.assertListEqual(position_ids.tolist(), [[0, 0, 1, 2, 0, 1, 2, 0]])
+        expected_mask = torch.eye(8, dtype=torch.bool, device=torch_device)
+        expected_mask[1:4, 1:4] = True
+        expected_mask[4:7, 4:7] = True
+        self.assertTrue(torch.equal(attention_mask[0], expected_mask))
+
+    def test_text_position_embeddings_from_position_ids(self):
+        # integer position ids must be encoded as floats, not truncated to integer sinusoids
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        layer = GroundingDinoModel(config).to(torch_device).encoder.layers[0]
+        text_features = torch.randn(2, 5, config.d_model, device=torch_device)
+        position_ids = torch.arange(5, device=torch_device).expand(2, -1)
+
+        from_ids = layer.get_text_position_embeddings(text_features, None, position_ids)
+        from_arange = layer.get_text_position_embeddings(text_features, None, None)
+
+        self.assertEqual(from_ids.dtype, text_features.dtype)
+        torch.testing.assert_close(from_ids, from_arange)
+
     def test_tied_weights_keys(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.tie_word_embeddings = True
@@ -665,8 +694,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
-                ("cuda", 8): [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]],
+                (None, None): [[-4.8936, -0.1946, -0.2204], [-4.9635, -0.3782, -0.4013], [-5.9522, -3.3881, -3.3221]],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -684,8 +712,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.4526, 0.4082],
-                ("cuda", 8): [0.4524, 0.4074],
+                (None, None): [0.4515, 0.4066],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -741,7 +768,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(
-            [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
+            [[-4.8936, -0.1946, -0.2204], [-4.9635, -0.3782, -0.4013], [-5.9522, -3.3881, -3.3221]]
         )
         torch.testing.assert_close(cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 

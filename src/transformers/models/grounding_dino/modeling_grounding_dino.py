@@ -1808,12 +1808,14 @@ SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
 
 def generate_masks_with_special_tokens_and_transfer_map(
-    input_ids: torch.LongTensor, special_tokens: torch.LongTensor | None = None
+    input_ids: torch.LongTensor, special_tokens: torch.LongTensor
 ) -> tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
+        special_tokens (`torch.LongTensor` of shape `(num_special_tokens,)`):
+            Ids of the delimiter tokens that split the text into phrases.
     Returns:
         `tuple(torch.Tensor)` comprising attention mask between each special tokens and position_ids:
         - **attention_mask** (`torch.BoolTensor` of shape `(batch_size, sequence_length, sequence_length)`)
@@ -1823,8 +1825,6 @@ def generate_masks_with_special_tokens_and_transfer_map(
     device = input_ids.device
 
     # Identify special token positions
-    if special_tokens is None:
-        special_tokens = torch.tensor(SPECIAL_TOKENS, device=device)
     special_mask = torch.isin(input_ids, special_tokens)
 
     # For each position, find the previous and next special token indices
@@ -1936,7 +1936,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         else:
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
-        # avoid moving to gpus at each forward - cache once here
         self.special_tokens = nn.Buffer(
             torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
             persistent=False,
