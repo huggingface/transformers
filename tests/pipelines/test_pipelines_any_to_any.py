@@ -57,6 +57,39 @@ if is_torch_available():
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
 
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_num_beams": 2,
+            "thinker_num_return_sequences": 2,
+            "thinker_max_new_tokens": 2,
+        }
+
+        single = pipe(text="Hello", return_full_text=False, generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], return_full_text=False, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual(len(batched), 4)
+
+        # Test real audio generation through the full pipeline.
+        audio_outputs = pipe(
+            text="Hello",
+            generation_mode="audio",
+            generate_kwargs={
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 4,
+                "talker_do_sample": False,
+                "talker_max_new_tokens": 10,
+            },
+        )
+        self.assertEqual(len(audio_outputs), 1)
+        self.assertIsInstance(audio_outputs[0]["generated_audio"], np.ndarray)
+
     # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
     # So we add them all in signature
     def get_test_pipeline(

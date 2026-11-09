@@ -441,6 +441,29 @@ class Data2VecAudioAdapter(nn.Module):
         return hidden_states
 
 
+class AMSoftmaxLoss(nn.Module):
+    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
+        super().__init__()
+        self.scale = scale
+        self.margin = margin
+        self.num_labels = num_labels
+        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, hidden_states, labels):
+        labels = labels.flatten()
+        weight = nn.functional.normalize(self.weight, dim=0)
+        hidden_states = nn.functional.normalize(hidden_states, dim=1)
+        cos_theta = torch.mm(hidden_states, weight)
+        psi = cos_theta - self.margin
+
+        onehot = nn.functional.one_hot(labels, self.num_labels)
+        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
+        loss = self.loss(logits, labels)
+
+        return loss
+
+
 @auto_docstring
 class Data2VecAudioPreTrainedModel(PreTrainedModel):
     config: Data2VecAudioConfig
@@ -472,6 +495,10 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, Data2VecAudioModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """
@@ -665,8 +692,8 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -716,7 +743,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Data2VecAudioBaseModelOutput:
         r"""
@@ -761,7 +788,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     """
 )
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         r"""
         config ([`Data2VecAudioForCTC`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
@@ -854,7 +881,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     """
 )
 class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -897,12 +924,12 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`Data2VecAudioProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`Data2VecAudioProcessor.__call__`] for details.
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True
@@ -947,7 +974,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
 
 @auto_docstring
 class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -989,12 +1016,12 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`Data2VecAudioProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`Data2VecAudioProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1030,29 +1057,6 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-class AMSoftmaxLoss(nn.Module):
-    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
-        super().__init__()
-        self.scale = scale
-        self.margin = margin
-        self.num_labels = num_labels
-        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
-        self.loss = nn.CrossEntropyLoss()
-
-    def forward(self, hidden_states, labels):
-        labels = labels.flatten()
-        weight = nn.functional.normalize(self.weight, dim=0)
-        hidden_states = nn.functional.normalize(hidden_states, dim=1)
-        cos_theta = torch.mm(hidden_states, weight)
-        psi = cos_theta - self.margin
-
-        onehot = nn.functional.one_hot(labels, self.num_labels)
-        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
-        loss = self.loss(logits, labels)
-
-        return loss
 
 
 class TDNNLayer(nn.Module):
@@ -1093,7 +1097,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
 
         self.data2vec_audio = Data2VecAudioModel(config)
@@ -1153,12 +1157,12 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XVectorOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`Data2VecAudioProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`Data2VecAudioProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

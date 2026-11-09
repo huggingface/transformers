@@ -28,7 +28,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     embed_dim: int = 1280

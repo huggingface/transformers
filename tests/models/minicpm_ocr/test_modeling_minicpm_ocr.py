@@ -288,7 +288,6 @@ class MiniCPMOcrModelTest(VLMModelTest, unittest.TestCase):
 class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "openbmb/MiniCPM-OCR-1.0"
 
-    @slow
     def test_small_model_logits(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMOcrForConditionalGeneration.from_pretrained(
@@ -322,22 +321,21 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_slice = Expectations(
             {
-                ("cuda", (8, 0)): [2.765625, 6.0, 0.61328125, 4.8125, 2.0, -2.796875, 3.59375, 3.71875],
+                ("cuda", (8, 0)): [-2.4219, 7.4063, -3.7188, 1.3594, -0.1069, -2.1094, 5.2188, 0.4180],
+                ("cuda", (8, 6)): [-2.2031, 7.5313, -3.4063, 1.7188, 0.1611, -1.9844, 5.2813, 0.5781],
             }
         ).get_expectation()
         torch.testing.assert_close(
-            logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-3, atol=1e-3
+            logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-4, atol=1e-4
         )
         expected_argmax = Expectations({("cuda", (8, 0)): 12675}).get_expectation()
         self.assertEqual(logits[0, -1].argmax().item(), expected_argmax)
 
-    @slow
     def test_small_model_vision_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMOcrForConditionalGeneration.from_pretrained(
-            self.model_id, device_map="auto", dtype=torch.bfloat16
-        )
-
+            self.model_id, device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
         messages = [
             {
                 "role": "user",
@@ -345,10 +343,10 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
                         ),
                     },
-                    {"type": "text", "text": "What kind of animal is this?"},
+                    {"type": "text", "text": "Transcribe all the text in this document."},
                 ],
             }
         ]
@@ -361,29 +359,20 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
-        # 960x686 at `downsample_mode="4x"`: one overview patch plus a 2x2 slice grid, each
-        # aligned to `patch_size * 2 = 28`.
-        self.assertEqual(inputs["target_sizes"].tolist(), [[28, 38]] * 5)
+        # At `downsample_mode="4x"`, the receipt has one overview and two slices.
+        # Patch grids are aligned to `patch_size * 2 = 28` pixels.
+        self.assertEqual(inputs["target_sizes"].tolist(), [[32, 32], [22, 46], [22, 46]])
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        expected = Expectations({("cuda", 8): "Document No : TD01167104\nDate : 25/12/2018 8:1"}).get_expectation()
+        self.assertEqual(decoded, expected)
 
-        expected_text = Expectations(
-            {
-                ("cuda", (8, 0)): (
-                    "This is a **Tibet Wildcat** (*Lynx rufus dovondo*).\n\n### Key Features:\n- **Morph"
-                ),
-            }
-        ).get_expectation()
-        self.assertEqual(decoded_text, expected_text)
-
-    @slow
-    def test_small_model_vision_generation_batch(self):
+    def test_small_model_document_markdown(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMOcrForConditionalGeneration.from_pretrained(
-            self.model_id, device_map="auto", dtype=torch.bfloat16
-        )
-
+            self.model_id, device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
         messages = [
             {
                 "role": "user",
@@ -391,36 +380,93 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
                         ),
                     },
-                    {"type": "text", "text": "What kind of animal is this?"},
+                    {"type": "text", "text": "Convert this page to markdown."},
                 ],
             }
         ]
-        batch_messages = [messages, messages]
-
         inputs = processor.apply_chat_template(
-            batch_messages,
+            messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            padding=True,
             enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        # At `downsample_mode="4x"`, the form has one overview and a 2x2 slice grid.
+        # Patch grids are aligned to `patch_size * 2 = 28` pixels.
+        self.assertEqual(inputs["target_sizes"].tolist(), [[36, 28]] * 5)
 
-        expected_text = Expectations(
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        expected = Expectations(
             {
-                ("cuda", (8, 0)): (
-                    "This is a **Tibet Wildcat** (*Lynx rufus dovondo*).\n\n### Key Features:\n- **Morph"
+                ("cuda", 8): (
+                    "```markdown\nR&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann,"
                 ),
             }
         ).get_expectation()
-        self.assertEqual(len(decoded_texts), 2)
-        self.assertEqual(decoded_texts[0], decoded_texts[1])
-        # Batching the same sample twice must not change it w.r.t. the single-sample test above.
-        self.assertEqual(decoded_texts[0], expected_text)
+        self.assertEqual(decoded, expected)
+
+    def test_small_model_vision_generation_batch(self):
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = MiniCPMOcrForConditionalGeneration.from_pretrained(
+            self.model_id, device_map=torch_device, dtype=torch.bfloat16
+        ).eval()
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
+                            ),
+                        },
+                        {"type": "text", "text": "Transcribe all the text in this document."},
+                    ],
+                }
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
+                            ),
+                        },
+                        {"type": "text", "text": "Transcribe all the text in this document."},
+                    ],
+                }
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
+            processor_kwargs={"padding": True},
+        ).to(model.device, dtype=torch.bfloat16)
+
+        # The batch concatenates the receipt's three grids and the form's five grids.
+        self.assertEqual(inputs["target_sizes"].tolist(), [[32, 32], [22, 46], [22, 46]] + [[36, 28]] * 5)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        expected = Expectations(
+            {
+                ("cuda", 8): [
+                    "Document No : TD01167104\nDate : 25/12/2018 8:1",
+                    "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann P. Harper P",
+                ]
+            }
+        ).get_expectation()
+        self.assertEqual(decoded, expected)

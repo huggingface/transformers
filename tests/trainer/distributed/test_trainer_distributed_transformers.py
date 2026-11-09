@@ -18,6 +18,8 @@ Trainer tests for models sharded at load time by transformers' `DistributedConfi
 
 import os
 
+from parameterized import parameterized
+
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
@@ -31,6 +33,7 @@ from .test_trainer_distributed import SCRIPTS_DIR
 
 
 PEFT_SAVE_SCRIPT = os.path.join(SCRIPTS_DIR, "peft_save_distributed_config.py")
+GRAD_ACCUM_SCRIPT = os.path.join(SCRIPTS_DIR, "grad_accum_distributed_config.py")
 
 
 @require_torch_greater_or_equal("2.7")
@@ -41,9 +44,19 @@ class TestTrainerDistributedConfig(TestCasePlus):
         return cmd + (script_args or [])
 
     @require_peft
-    def test_peft_save(self):
-        """`Trainer` saves the LoRA adapter of a model sharded at load time, and the saved adapter is the trained one."""
-        cmd = self.get_torchrun_cmd(PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir()])
+    def test_peft_save_fsdp(self):
+        """Save and reload an adapter whose weights are sharded with FSDP."""
+        cmd = self.get_torchrun_cmd(
+            PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "fsdp"]
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    @require_peft
+    def test_peft_save_tp(self):
+        """Save and reload an adapter whose weights are tensor-parallel DTensors."""
+        cmd = self.get_torchrun_cmd(
+            PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "tp"]
+        )
         execute_subprocess_async(cmd, env=self.get_env())
 
     @require_peft
@@ -58,6 +71,14 @@ class TestTrainerDistributedConfig(TestCasePlus):
                 "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
                 "--bias",
                 "lora_only",
+                "--parallelism",
+                "fsdp",
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())
+
+    @parameterized.expand([("fsdp", 1), ("hsdp", 2)])
+    def test_grad_accumulation_reduces_on_last_micro_batch(self, _, dp_replicate_size):
+        """Gradients of a model sharded at load time are only reduced on the last micro-batch."""
+        script_args = ["--output_dir", self.get_auto_remove_tmp_dir(), "--dp_replicate_size", str(dp_replicate_size)]
+        execute_subprocess_async(self.get_torchrun_cmd(GRAD_ACCUM_SCRIPT, script_args), env=self.get_env())
