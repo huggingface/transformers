@@ -716,7 +716,7 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.body["questions"]["team"]["criteria"] = {}
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("A `choice` question needs `criteria`", response.json()["detail"][0]["msg"])
+        self.assertIn("a choice question needs `criteria`", response.json()["detail"][0]["msg"])
 
 
 @require_serve

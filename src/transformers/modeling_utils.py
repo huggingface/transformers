@@ -4331,7 +4331,7 @@ class PreTrainedModel(
             )
             # EXPERIMENTAL: community pushed the decision head weights as separate files. We're using `config.extra_files`
             # as a way to fetch the filename per-class.
-            for filename in config.extra_files:
+            for filename in type(config).extra_files:  # the class's, which a `config.json` can't change
                 path = cached_file(
                     pretrained_model_name_or_path,
                     filename,

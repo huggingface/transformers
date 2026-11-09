@@ -2638,9 +2638,11 @@ class AutoModelForDecision(_BaseAutoModelClass):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         # EXPERIMENTAL: also the checkpoints of another model that ship a decision head next to their weights
         if kwargs.get("config") is None:
+            kwargs.pop("config", None)
             for model_class in cls._model_mapping.values():
                 config, decision_config = model_class.checkpoint_config(pretrained_model_name_or_path, **kwargs)
                 if config is not None:
+                    kwargs.pop("code_revision", None)  # only the Auto classes take it, for remote code
                     return model_class.from_pretrained(
                         pretrained_model_name_or_path,
                         *model_args,
