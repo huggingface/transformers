@@ -36,7 +36,7 @@ FLEETS = ("prototypes", "control")
 FLEET_VARIANTS = {"prototypes": ("bfloat16",), "control": ("default", "bfloat16")}
 # Baselines are recorded (and checked in CI) with this many CPU threads; fewer or more can shift numerics.
 BASELINE_THREADS = 4
-INSTALL_HINT = 'tranformers-mic or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
+INSTALL_HINT = 'transformers-mic or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
 STATUS = {
     "pass": "✓",
     "fail": "✗",

@@ -15,6 +15,7 @@ spec.loader.exec_module(check_mic)
 
 
 class CheckMicTest(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("transformers_mic"), "needs transformers-mic")
     def test_cached_snapshot_is_verified_offline_against_the_fleet_hashes(self):
         from transformers_mic import resources
 
@@ -188,12 +189,12 @@ class CheckMicTest(unittest.TestCase):
         self.assertEqual(len(check_mic.shard(command, 2)), 2)
         self.assertEqual(check_mic.shard(command, 1), [command])
         env = {k: v for k, v in os.environ.items() if k != "OMP_NUM_THREADS"}
-        with patch("sys.stdout", new_callable=io.StringIO) as stdout, patch("os.cpu_count", return_value=8):
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout, patch("os.cpu_count", return_value=16):
             self.assertEqual(check_mic.run(command, env, total=3, jobs=2), 0)
         output = stdout.getvalue()
         self.assertEqual(output.count("Fleet prototypes (f@0123456789)"), 1)
         self.assertIn("Running 3 contracts in 2 parallel runners", output)
-        # Every contract ran once, each runner with its share of the CPU threads.
+        # Every contract ran once, each runner with the baselines' thread count whatever the core count.
         self.assertEqual(sorted(line.split()[2] for line in output.splitlines() if "✓" in line), ["A", "B", "C"])
         self.assertEqual({line.split()[3] for line in output.splitlines() if "✓" in line}, {"4"})
         self.assertRegex(output.splitlines()[-1], r"^MIC: 3 passed in [0-9.]+s$")
@@ -229,15 +230,47 @@ class CheckMicTest(unittest.TestCase):
                 raise ImportError(name)
             return real_import(name, *args, **kwargs)
 
-        no_mic = patch("importlib.util.find_spec", return_value=None)
         old_doc_builder = patch("builtins.__import__", side_effect=released_doc_builder)
         with patch("importlib.util.find_spec", return_value=object()), old_doc_builder:
-            self.assertEqual(check_mic.missing_requirements(), [check_mic.DOC_BUILDER_HINT])
-        with no_mic:
-            hints = check_mic.missing_requirements()
-        self.assertEqual(hints[0], check_mic.MIC_HINT)
-        self.assertIn('pip install -e ".[testing]"', check_mic.MIC_HINT)
-        self.assertIn("git+https://github.com/huggingface/doc-builder.git", check_mic.DOC_BUILDER_HINT)
+            self.assertTrue(check_mic.missing_requirements())
+        with patch("importlib.util.find_spec", return_value=None):
+            self.assertTrue(check_mic.missing_requirements())
+        self.assertIn("transformers-mic", check_mic.INSTALL_HINT)
+        self.assertIn('pip install -e ".[testing]"', check_mic.INSTALL_HINT)
+
+    def test_runner_env_uses_the_baseline_thread_count(self):
+        self.assertEqual(check_mic.runner_env({})["OMP_NUM_THREADS"], "4")
+        self.assertEqual(check_mic.runner_env({"OMP_NUM_THREADS": "2"})["OMP_NUM_THREADS"], "2")
+        with patch("os.cpu_count", return_value=10):
+            self.assertEqual(check_mic.default_jobs(), 2)
+        with patch("os.cpu_count", return_value=2):
+            self.assertEqual(check_mic.default_jobs(), 1)
+
+    def test_runner_crash_is_not_hidden_by_the_missing_baseline_rerun(self):
+        # One runner crashes, the other only lacks a baseline: the re-run passes, the crash still fails.
+        script = (
+            "import json, sys\n"
+            "names = [sys.argv[i + 1] for i, a in enumerate(sys.argv) if a == '--contract']\n"
+            "if 'crash' in names: print('Traceback: boom'); sys.exit(3)\n"
+            "for name in names:\n"
+            "    if '--no-baseline' in sys.argv:\n"
+            "        print(json.dumps({'contract': name, 'target': 't', 'status': 'pass'}))\n"
+            "    else:\n"
+            "        print(json.dumps({'contract': name, 'target': 't', 'status': 'fail',"
+            " 'failures': ['no reviewed baseline at x']}))\n"
+            "        sys.exit(1)\n"
+        )
+        command = [sys.executable, "-c", script, "--contract", "crash", "--contract", "nobase"]
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(check_mic.run(command, os.environ.copy(), total=2, jobs=2), 3)
+        self.assertIn("Runner output:\n  Traceback: boom", stdout.getvalue())
+        # Without the crash, the missing baseline alone does not fail the command.
+        command = [sys.executable, "-c", script, "--contract", "nobase"]
+        with patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(check_mic.run(command, os.environ.copy(), total=1), 0)
+
+    def test_fleets_run_the_variants_ci_checks(self):
+        self.assertEqual(check_mic.FLEET_VARIANTS, {"prototypes": ("bfloat16",), "control": ("default", "bfloat16")})
 
     def test_runner_crash_shows_raw_tail(self):
         script = "import sys\nprint('Traceback: boom')\nsys.exit(2)\n"
