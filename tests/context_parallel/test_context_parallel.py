@@ -23,6 +23,8 @@ from torch.distributed.device_mesh import init_device_mesh
 from transformers import (
     AutoModelForCausalLM,
     DynamicCache,
+    Gemma3TextConfig,
+    Llama4TextConfig,
     LlamaConfig,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
@@ -41,7 +43,11 @@ from transformers.distributed.context_parallel import (
 )
 from transformers.distributed.utils import gather_full_state_dict
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
-from transformers.masking_utils import create_causal_mask
+from transformers.masking_utils import (
+    create_causal_mask,
+    create_chunked_causal_mask,
+    create_sliding_window_causal_mask,
+)
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import require_flash_attn, require_torch_multi_accelerator
 from transformers.utils import is_torch_greater_or_equal
@@ -197,6 +203,70 @@ def _test_ulysses_attention(rank, heads, kv_heads, packed, cp_size):
         torch.testing.assert_close(local_tensor.grad, full_tensor.grad.chunk(cp_size, dim=2)[rank])
 
 
+def _test_ulysses_mask(rank, kind, cp_size):
+    """The mask rebuilt over the whole sequence is the one the model builds when the sequence is not split."""
+    mesh = _init_cp_mesh("cpu")
+    batch, seq, heads, kv_heads, head_dim = 2, 8, 4, 2, 4
+    sliding, chunked = "sliding" in kind, "chunked" in kind
+    positions = torch.arange(seq)
+    if "packed" in kind:
+        positions = torch.cat([torch.arange(seq // 2), torch.arange(seq // 2)])
+    position_ids = positions.unsqueeze(0)
+
+    padding_mask = None
+    if "padding" in kind:
+        padding_mask = torch.ones(batch, seq, dtype=torch.bool)
+        columns = slice(0, 2) if kind.startswith("left") else slice(-2, None)
+        padding_mask[:, columns] = False
+
+    config = LlamaConfig(
+        hidden_size=16, num_attention_heads=heads, num_key_value_heads=kv_heads, attn_implementation="sdpa"
+    )
+    if sliding:
+        config.sliding_window = 3
+    if chunked:
+        config.attention_chunk_size = 4
+        config.layer_types = ["chunked_attention"] * config.num_hidden_layers
+
+    inputs_embeds = torch.zeros(batch, seq, config.hidden_size)
+    if sliding:
+        expected = create_sliding_window_causal_mask(
+            config, inputs_embeds, padding_mask, None, position_ids=position_ids
+        )
+    elif chunked:
+        expected = create_chunked_causal_mask(config, inputs_embeds, padding_mask, None, position_ids=position_ids)
+    else:
+        expected = create_causal_mask(config, inputs_embeds, padding_mask, None, position_ids=position_ids)
+
+    module = _StandInAttention(num_key_value_groups=heads // kv_heads)
+    module.config = config
+    implementation = UlyssesCP(mesh)
+    implementation.position_ids = position_ids
+    implementation.padding_mask = padding_mask
+    full = [
+        _same_on_every_rank(batch, heads, seq, head_dim),
+        _same_on_every_rank(batch, kv_heads, seq, head_dim, seed=1),
+        _same_on_every_rank(batch, kv_heads, seq, head_dim, seed=2),
+    ]
+    local = [tensor.chunk(cp_size, dim=2)[rank].contiguous() for tensor in full]
+
+    seen = {}
+
+    def recording_attention(module, query, key, value, attention_mask, **kwargs):
+        seen["mask"] = attention_mask
+        return sdpa_attention_forward(module, query, key, value, attention_mask, **kwargs)
+
+    # Mistral and friends hand their window to the attention call
+    implementation.attention(recording_attention, module, *local, None, **({"sliding_window": 3} if sliding else {}))
+
+    mask = seen["mask"]
+    if expected is None:
+        assert mask is None, "the mask should let the kernel rely on `is_causal`"
+        return
+    assert mask is not None, f"expected a mask of shape {tuple(expected.shape)}, got `None`"
+    torch.testing.assert_close(mask, expected)
+
+
 def _test_flash_attention(rank, cp_size):
     from transformers.integrations.flash_attention import flash_attention_forward
     from transformers.modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
@@ -252,6 +322,46 @@ def _test_flash_attention(rank, cp_size):
     torch.testing.assert_close(output.float(), reference.chunk(cp_size, dim=1)[rank].float(), atol=1e-2, rtol=1e-2)
 
 
+def _test_flash_attention_padding(rank, cp_size):
+    """The kernel unpads the gathered sequence from the full 2D mask, as it does on an unsharded run."""
+    from transformers.integrations.flash_attention import flash_attention_forward
+
+    mesh = _init_cp_mesh("cuda")
+    batch, heads, kv_heads, seq, head_dim = 2, 4, 2, 16, 32
+    device, dtype = torch.device("cuda", rank), torch.bfloat16
+    generator = torch.Generator(device=device).manual_seed(0)
+    query, key, value = (
+        torch.randn(shape, generator=generator, device=device, dtype=dtype)
+        for shape in (
+            (batch, heads, seq, head_dim),
+            (batch, kv_heads, seq, head_dim),
+            (batch, kv_heads, seq, head_dim),
+        )
+    )
+    # right padding on the first row, left padding on the second one
+    padding_mask = torch.ones(batch, seq, dtype=torch.bool, device=device)
+    padding_mask[0, -3:] = False
+    padding_mask[1, :5] = False
+    position_ids = torch.arange(seq, device=device).expand(batch, -1)
+    module = _StandInAttention("flash_attention_2", num_key_value_groups=heads // kv_heads)
+
+    seen = {}
+
+    def recording_flash_attention_forward(module, query, key, value, attention_mask, **kwargs):
+        seen["attention_mask"] = attention_mask
+        return flash_attention_forward(module, query, key, value, attention_mask, **kwargs)
+
+    implementation = UlyssesCP(mesh)
+    implementation.position_ids = position_ids
+    implementation.padding_mask = padding_mask
+    local = [tensor.chunk(cp_size, dim=2)[rank].contiguous() for tensor in (query, key, value)]
+    output, _ = implementation.attention(recording_flash_attention_forward, module, *local, None)
+
+    assert seen["attention_mask"] is not None and torch.equal(seen["attention_mask"], padding_mask)
+    reference, _ = flash_attention_forward(module, query, key, value, padding_mask, position_ids=position_ids)
+    torch.testing.assert_close(output.float(), reference.chunk(cp_size, dim=1)[rank].float(), atol=1e-2, rtol=1e-2)
+
+
 class TestUlyssesDistributed(unittest.TestCase):
     def test_all_to_all(self):
         run_distributed(world_size=2, backend="gloo")(_test_all_to_all)(2)
@@ -264,6 +374,21 @@ class TestUlyssesDistributed(unittest.TestCase):
         for heads, kv_heads, packed in cases:
             with self.subTest(heads=heads, kv_heads=kv_heads, packed=packed):
                 run_distributed(world_size=2, backend="gloo")(_test_ulysses_attention)(heads, kv_heads, packed, 2)
+
+    def test_mask_matches_the_unsharded_model(self):
+        kinds = (
+            "causal",
+            "packed",
+            "right_padding",
+            "left_padding",
+            "sliding",
+            "packed_sliding",
+            "chunked",
+            "left_padding_chunked",
+        )
+        for kind in kinds:
+            with self.subTest(kind=kind):
+                run_distributed(world_size=2, backend="gloo")(_test_ulysses_mask)(kind, 2)
 
 
 class TestContextParallelRouting(unittest.TestCase):
@@ -336,19 +461,30 @@ class TestUlyssesCheck(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "takes the `position_ids` of the full sequence"):
             self._check(LlamaConfig(attn_implementation="paged|eager"))
 
-    def test_refuses_chunked_attention(self):
-        config = LlamaConfig(attn_implementation="sdpa")
+    def test_refuses_chunked_attention_with_a_flash_kernel(self):
+        config = LlamaConfig(attn_implementation="flash_attention_2")
         config.layer_types = ["full_attention", "chunked_attention"]
-        with self.assertRaisesRegex(ValueError, "does not support `chunked_attention` layers"):
+        with self.assertRaisesRegex(ValueError, "does not support the `chunked_attention` layers"):
             self._check(config)
 
-    def test_refuses_sliding_window_with_sdpa(self):
-        with self.assertRaisesRegex(ValueError, "does not support the sliding-window attention"):
-            self._check(MistralConfig(attn_implementation="sdpa"))
+    def test_refuses_sliding_window_without_a_window(self):
+        config = LlamaConfig(attn_implementation="sdpa")
+        config.layer_types = ["sliding_attention", "full_attention"]
+        with self.assertRaisesRegex(ValueError, "cannot find their window"):
+            self._check(config)
+
+    def test_accepts_sliding_window(self):
+        # the window comes from the attention call for Mistral, from the module or the config for the others
+        self._check(MistralConfig(attn_implementation="sdpa"))
         config = LlamaConfig(attn_implementation="sdpa", sliding_window=4)
         config.layer_types = ["sliding_attention", "full_attention"]
-        with self.assertRaisesRegex(ValueError, "does not support the sliding-window attention"):
-            self._check(config)
+        self._check(config)
+
+    def test_accepts_chunked_attention_with_sdpa(self):
+        config = LlamaConfig(attn_implementation="sdpa")
+        config.layer_types = ["full_attention", "chunked_attention"]
+        config.attention_chunk_size = 4
+        self._check(config)
 
     def test_refuses_indivisible_heads(self):
         # 6 attention heads over 4 ranks
@@ -440,6 +576,9 @@ class TestUlyssesFlashAttention(unittest.TestCase):
     def test_packed_flash_attention(self):
         run_distributed(world_size=2, backend="nccl")(_test_flash_attention)(2)
 
+    def test_padded_flash_attention(self):
+        run_distributed(world_size=2, backend="nccl")(_test_flash_attention_padding)(2)
+
 
 # =============================================================================
 # A model sharded with context parallelism, against the same weights on full sequences
@@ -462,6 +601,67 @@ def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):
     first = seq_len // 2
     position_ids = torch.cat([torch.arange(first), torch.arange(seq_len - first)]).expand(batch_size, -1)
     return input_ids, position_ids
+
+
+def _padded_labels(input_ids, left):
+    """Labels and a 2D mask with `seq_len // 4` padding tokens at the start or the end of every row."""
+    pad_len = input_ids.shape[1] // 4
+    columns = slice(0, pad_len) if left else slice(-pad_len, None)
+    attention_mask = torch.ones_like(input_ids)
+    attention_mask[:, columns] = 0
+    labels = input_ids.clone()
+    labels[:, columns] = -100
+    return attention_mask, labels
+
+
+def _tiny_sliding_config():
+    """A `MistralConfig` small enough for CPU tests, whose every layer uses a sliding window of three tokens."""
+    return MistralConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        vocab_size=99,
+        attn_implementation="sdpa",
+        head_dim=8,
+        sliding_window=3,
+    )
+
+
+def _tiny_mixed_attention_config():
+    """A `Gemma3TextConfig` small enough for CPU tests, alternating a sliding-window layer and a full one."""
+    return Gemma3TextConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        vocab_size=99,
+        attn_implementation="sdpa",
+        head_dim=8,
+        sliding_window=3,
+        layer_types=["sliding_attention", "full_attention"],
+    )
+
+
+def _tiny_chunked_config():
+    """A `Llama4TextConfig` small enough for CPU tests, whose first layer only attends within four tokens."""
+    return Llama4TextConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        intermediate_size_mlp=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        vocab_size=99,
+        attn_implementation="sdpa",
+        head_dim=8,
+        attention_chunk_size=4,
+        no_rope_layers=[1, 0],
+        num_local_experts=2,
+        num_experts_per_tok=1,
+    )
 
 
 def _local(tensor):
@@ -544,9 +744,10 @@ def _compare_with_unsharded(init_dir, batch, distributed_config, model_class=Aut
     return model
 
 
-def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed, seq_len=8):
+def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed, seq_len=8, padding=None, config=None):
     # Ulysses splits the heads over the ranks, so four ranks need four key/value heads
-    config = _tiny_config(num_key_value_heads=4) if cp_size > 2 else _tiny_config()
+    if config is None:
+        config = _tiny_config(num_key_value_heads=4) if cp_size > 2 else _tiny_config()
     batch_size = 2
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         rows = batch_size * fsdp_size * dp_replicate_size
@@ -557,6 +758,8 @@ def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed,
         batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
         if position_ids is not None:
             batch["position_ids"] = position_ids
+        if padding is not None:
+            batch["attention_mask"], batch["labels"] = _padded_labels(input_ids, left=padding == "left")
         _compare_with_unsharded(init_dir, batch, distributed_config)
         # `init_dir` is rank 0's temporary directory: wait for the other ranks before it is removed
         dist.barrier()
@@ -665,9 +868,9 @@ def _test_shard_inputs_padding(rank, cp_size):
         config = types.SimpleNamespace(_attn_implementation="sdpa", pad_token_id=pad_token_id)
         return types.SimpleNamespace(config=config)
 
-    def shard(module):
+    def shard(module, **extra):
         _, sharded = context_parallel._shard_inputs(
-            module, (), dict(forward_inputs), implementation=implementation, attn_implementation="sdpa"
+            module, (), {**forward_inputs, **extra}, implementation=implementation, attn_implementation="sdpa"
         )
         return sharded
 
@@ -694,6 +897,21 @@ def _test_shard_inputs_padding(rank, cp_size):
         # without a `pad_token_id` the padding token is 0
         without_pad_token = torch.cat([input_ids, input_ids.new_zeros((1, pad_len))], dim=1)
         torch.testing.assert_close(shard(module(None))["input_ids"], without_pad_token[:, rows])
+
+        # a 2D mask is kept for the whole sequence, with zeros on the padding, and the model gets `None`
+        assert implementation.padding_mask is None
+        attention_mask = torch.tensor([[1, 1, 0, 1, 1]])
+        assert shard(module(pad_token_id), attention_mask=attention_mask)["attention_mask"] is None
+        padded_mask = torch.cat([attention_mask, attention_mask.new_zeros((1, pad_len))], dim=1).bool()
+        torch.testing.assert_close(implementation.padding_mask, padded_mask)
+        # an all-ones mask is dropped when the sequence needs no padding, so that the kernel can rely on `is_causal`
+        even_inputs = {name: value[:, :4] for name, value in forward_inputs.items()}
+        even_ones = torch.ones(1, 4, dtype=torch.long)
+        assert shard(module(pad_token_id), **even_inputs, attention_mask=even_ones)["attention_mask"] is None
+        assert implementation.padding_mask is None
+
+        with pytest.raises(ValueError, match="only supports a 2D attention mask"):
+            shard(module(pad_token_id), attention_mask=torch.ones(1, 1, seq_len, seq_len, dtype=torch.bool))
     finally:
         ALL_ATTENTION_FUNCTIONS.register("sdpa", original)
         context_parallel._context_parallel_attention_functions.clear()
@@ -784,8 +1002,8 @@ def _test_forward_refusals(rank, cp_size):
         model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(cp_size=cp_size))
         input_ids, _ = _tiny_batch(config, 2, 8)
 
-        with pytest.raises(ValueError, match="does not support attention masks"):
-            model(input_ids=input_ids, attention_mask=torch.tensor([[1] * 8, [1] * 7 + [0]]))
+        with pytest.raises(ValueError, match="only supports a 2D attention mask"):
+            model(input_ids=input_ids, attention_mask=torch.ones(2, 1, 8, 8, dtype=torch.bool))
 
         with pytest.raises(ValueError, match="`past_key_values` are not allowed"):
             model(input_ids=input_ids, past_key_values=DynamicCache())
@@ -925,6 +1143,43 @@ class TestContextParallelModel(unittest.TestCase):
         for packed in (False, True):
             with self.subTest(packed=packed):
                 run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed, 7)
+
+    def test_padded_batches(self):
+        for padding in ("right", "left"):
+            with self.subTest(padding=padding):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, False, 8, padding)
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, False, 7, padding)
+
+    def test_sliding_window(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(
+                    2, 1, 1, packed, 8, None, _tiny_sliding_config()
+                )
+
+    def test_sliding_window_with_padding(self):
+        run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(
+            2, 1, 1, False, 8, "right", _tiny_sliding_config()
+        )
+
+    def test_mixed_sliding_and_full_attention(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(
+                    2, 1, 1, packed, 8, None, _tiny_mixed_attention_config()
+                )
+
+    def test_chunked_attention(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(
+                    2, 1, 1, packed, 8, None, _tiny_chunked_config()
+                )
+
+    def test_chunked_attention_with_left_padding(self):
+        run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(
+            2, 1, 1, False, 8, "left", _tiny_chunked_config()
+        )
 
     def test_padded_sequences_with_four_ranks(self):
         run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(4, 1, 1, False, 5)
