@@ -398,11 +398,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         k = k.view(batch_size, seq_len, -1, self.head_k_dim)
         v = v.view(batch_size, seq_len, -1, self.head_v_dim)
 
-        if self.num_v_heads > self.num_k_heads:
-            expand_ratio = self.num_v_heads // self.num_k_heads
-            q = q.repeat_interleave(expand_ratio, dim=2)
-            k = k.repeat_interleave(expand_ratio, dim=2)
-
         beta = self.b_proj(hidden_states).sigmoid()
         if self.allow_neg_eigval:
             beta = beta * 2.0
@@ -554,7 +549,7 @@ class OlmoHybridModel(Qwen3NextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:

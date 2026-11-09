@@ -55,26 +55,26 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
         The generated text sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
         if all batches finished early due to the `eos_token_id`.
-    sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True`):
+    sequences_scores (`torch.Tensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True`):
         Final beam scores of the generated `sequences`.
-    scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+    scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
         Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
         of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-        Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+        Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
         with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-    logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+    logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
         Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-        at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+        at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
         each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
     beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True`):
         Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
         `(batch_size*num_return_sequences, sequence_length)`.
-    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
         Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-        `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
-    hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+        `torch.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
+    hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
         Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-        `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
+        `torch.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
         Contains the model cache, used to speed up decoding. Different models have a different cache format, check
         the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
@@ -84,12 +84,12 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
 
     audio_sequences: torch.Tensor | None = None
     sequences: torch.LongTensor | None = None
-    sequences_scores: torch.FloatTensor | None = None
-    scores: tuple[torch.FloatTensor] | None = None
-    logits: tuple[torch.FloatTensor] | None = None
+    sequences_scores: torch.Tensor | None = None
+    scores: tuple[torch.Tensor] | None = None
+    logits: tuple[torch.Tensor] | None = None
     beam_indices: torch.LongTensor | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
     audio_codes: torch.LongTensor | None = None
 
@@ -102,9 +102,9 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
 @dataclass
 class MoshiCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -113,12 +113,12 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -129,39 +129,39 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
 @dataclass
 class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `text_labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `text_labels` is provided):
         Text language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the text language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    depth_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `audio_labels` is provided):
+    depth_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `audio_labels` is provided):
         Audio language modeling loss (for next-token prediction).
-    audio_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    audio_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the audio language modeling heads.
     depth_past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Past key-values of the depth decoder.
-    depth_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+    depth_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Hidden states of the depth decoder
-    depth_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+    depth_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Depth decoder's Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    depth_loss: torch.FloatTensor | None = None
-    audio_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    depth_loss: torch.Tensor | None = None
+    audio_logits: torch.Tensor | None = None
     depth_past_key_values: Cache | None = None
-    depth_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    depth_attentions: tuple[torch.FloatTensor, ...] | None = None
+    depth_hidden_states: tuple[torch.Tensor, ...] | None = None
+    depth_attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -222,7 +222,7 @@ class MoshiFlexibleLinear(nn.Module):
 
 
         Args:
-            x (`torch.FloatTensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
+            x (`torch.Tensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
             layer_idx (`torch.Tensor`, *optional*):
                 Can be used to specify which codebook's layers(s) to use.
                 If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
@@ -614,7 +614,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         last_hidden_state: torch.LongTensor | None = None,
         attention_mask: torch.BoolTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -625,7 +625,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens. The first element of the sequence must the text token associated to the audio codebooks.
                 The rest of the elements must be flatten audio codebooks.
-            last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the main decoder. Used to contextualize `input_ids`
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -653,7 +653,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
                 have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
                 of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
                 is useful if you want more control over how to convert the inputs into associated vectors than the
                 model's internal embedding lookup matrix.
@@ -760,7 +760,7 @@ class MoshiModel(MoshiPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -825,7 +825,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -914,12 +914,12 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.BoolTensor | None = None,
-        user_input_values: torch.FloatTensor | None = None,
+        user_input_values: torch.Tensor | None = None,
         user_audio_codes: torch.Tensor | None = None,
-        moshi_input_values: torch.FloatTensor | None = None,
+        moshi_input_values: torch.Tensor | None = None,
         moshi_audio_codes: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         text_labels: torch.LongTensor | None = None,
         audio_labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -934,7 +934,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             The audio waveforms used as audio Moshi prompt for the generation.
         moshi_audio_codes (`torch.Tensor `of shape `(batch_size, num_codebooks, sequence_length), *optional*):
             The audio codes used as audio Moshi prompt for the generation. Has priority over `moshi_input_values` and represents the audio "tokens" of `moshi_input_values` once passed through the audio encoder.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
@@ -1102,11 +1102,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     def _prepare_inputs_embeds_for_generation(
         self,
         input_ids: torch.LongTensor | None = None,
-        user_input_values: torch.FloatTensor | None = None,
+        user_input_values: torch.Tensor | None = None,
         user_audio_codes: torch.Tensor | None = None,
-        moshi_input_values: torch.FloatTensor | None = None,
+        moshi_input_values: torch.Tensor | None = None,
         moshi_audio_codes: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         generation_config: GenerationConfig | None = None,
         apply_delay_pattern_mask: bool = False,
@@ -1204,11 +1204,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     def generate(
         self,
         input_ids: torch.LongTensor | None = None,
-        user_input_values: torch.FloatTensor | None = None,
+        user_input_values: torch.Tensor | None = None,
         user_audio_codes: torch.Tensor | None = None,
-        moshi_input_values: torch.FloatTensor | None = None,
+        moshi_input_values: torch.Tensor | None = None,
         moshi_audio_codes: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         return_audio_waveforms: bool | None = True,
         return_audio_codes: bool | None = None,
         concat_unconditional_inputs: bool | None = True,
@@ -1228,7 +1228,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 The audio waveforms used as audio Moshi prompt for the generation.
             moshi_audio_codes (`torch.Tensor `of shape `(batch_size, num_codebooks, sequence_length), *optional*):
                 The audio codes used as audio Moshi prompt for the generation. Has priority over `moshi_input_values` and represents the audio "tokens" of `moshi_input_values` once passed through the audio encoder.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` and the audio inputs you can choose to directly pass an embedded representation. This
                 is useful if you want more control over how to convert the inputs into associated vectors than the
                 model's internal embedding lookup matrix.
@@ -1467,7 +1467,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         moshi_delay_pattern_mask=None,
         kwargs_depth_decoder=None,
         is_first_iteration=False,
-        blank_user_audio_codes: torch.FloatTensor | None = None,
+        blank_user_audio_codes: torch.Tensor | None = None,
         **kwargs,
     ):
         # Overwritten -- Moshi has custom post-processing on the prepared inputs.

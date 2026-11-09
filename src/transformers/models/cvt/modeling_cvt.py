@@ -38,13 +38,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     r"""
-    cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
+    cls_token_value (`torch.Tensor` of shape `(batch_size, 1, hidden_size)`):
         Classification token at the output of the last layer of the model.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    cls_token_value: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    cls_token_value: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 class CvtEmbeddings(nn.Module):

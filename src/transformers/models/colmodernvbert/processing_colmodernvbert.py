@@ -28,32 +28,39 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
+logger = logging.get_logger(__name__)
 
-class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+
+class DeprecatedColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    suffix (`str`, *optional*):
+        Deprecated, pass directly to [`ColModernVBertProcessor.process_queries`] instead.
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(ProcessorMixin):
-    valid_processor_kwargs = ColModernVBertProcessorKwargs
+    images_kwargs = {
+        "return_row_col_info": True,
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -110,7 +117,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         image_seq_len: int | None = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchEncoding:
         r"""
         image_seq_len (`int`, *optional*):
@@ -121,14 +128,19 @@ class ColModernVBertProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+
+        # text_kwargs has priority for backwards compatibility
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop(
+            "return_text_replacement_offsets", output_kwargs["return_text_replacement_offsets"]
+        )
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop(
+            "return_mm_token_type_ids", output_kwargs["return_mm_token_type_ids"]
+        )
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         image_inputs = text_inputs = {}
@@ -173,7 +185,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         if text is not None:
             if isinstance(text, str):
@@ -207,25 +219,20 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -293,8 +300,7 @@ class ColModernVBertProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = ColModernVBertProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -324,7 +330,7 @@ class ColModernVBertProcessor(ProcessorMixin):
     def process_images(
         self,
         images: ImageInput | None = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several image(s). Handles input validation, RGB conversion,
@@ -352,7 +358,6 @@ class ColModernVBertProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -373,12 +378,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         images = [image.convert("RGB") for image in images]
 
         # Pair each image with the visual prompt prefix for the VLM backbone
-        batch_doc = self.__call__(
-            text=[self.visual_prompt_prefix] * len(images),
-            images=images,
-            images_kwargs=output_kwargs["images_kwargs"],
-            text_kwargs=output_kwargs["text_kwargs"],
-        )
+        batch_doc = self(text=[self.visual_prompt_prefix] * len(images), images=images, **output_kwargs)
 
         # When suffix is provided, generate labels by masking non-suffix tokens
         if return_token_type_ids:
@@ -390,7 +390,8 @@ class ColModernVBertProcessor(ProcessorMixin):
     def process_queries(
         self,
         text: TextInput | list[TextInput],
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        suffix: str | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several text queries. Handles input validation, prepends the
@@ -402,6 +403,8 @@ class ColModernVBertProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            suffix (`str`, *optional*):
+                Suffix appended to queries.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -416,13 +419,20 @@ class ColModernVBertProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
         """
+        # text_kwargs has priority for backwards compatibility
+        text_kwargs = kwargs.get("text_kwargs", {}).copy()
+        if "suffix" in text_kwargs:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+            suffix = text_kwargs.pop("suffix")
+            kwargs["text_kwargs"] = text_kwargs
+
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
         if isinstance(text, str):
             text = [text]
@@ -436,11 +446,8 @@ class ColModernVBertProcessor(ProcessorMixin):
         # Build final queries: prefix + original query + augmentation suffix
         texts_query: list[str] = [self.query_prefix + query + suffix for query in text]
 
-        batch_query = self.__call__(
-            text=texts_query,
-            return_token_type_ids=False,
-            text_kwargs=output_kwargs["text_kwargs"],
-        )
+        output_kwargs["text_kwargs"]["return_token_type_ids"] = False
+        batch_query = self(text=texts_query, **output_kwargs)
 
         return batch_query
 
@@ -507,6 +514,11 @@ class ColModernVBertProcessor(ProcessorMixin):
             scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
 
         return torch.cat(scores, dim=0)
+
+
+__getattr__ = deprecate_attr(
+    __name__, remove={"ColModernVBertProcessorKwargs": (DeprecatedColModernVBertProcessorKwargs, "5.29.0")}
+)
 
 
 __all__ = ["ColModernVBertProcessor"]

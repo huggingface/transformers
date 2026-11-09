@@ -19,11 +19,9 @@ from pathlib import Path
 from transformers import (
     AutoProcessor,
     Qwen3ASRConfig,
-    Qwen3ASREncoderConfig,
     Qwen3ASRForConditionalGeneration,
     Qwen3ASRForTokenClassification,
     Qwen3ASRModel,
-    Qwen3Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -43,8 +41,7 @@ if is_torch_available():
 class Qwen3ASRModelTester(ALMModelTester):
     config_class = Qwen3ASRConfig
     conditional_generation_class = Qwen3ASRForConditionalGeneration
-    text_config_class = Qwen3Config
-    audio_config_class = Qwen3ASREncoderConfig
+
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):

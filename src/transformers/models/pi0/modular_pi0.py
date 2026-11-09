@@ -33,6 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
 from ..auto import AutoConfig, AutoModel
@@ -50,21 +51,15 @@ class PI0ImageProcessor(SiglipImageProcessor):
     do_pad = True
 
 
-class PI0ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 48,
-            "padding_side": "right",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
-    valid_processor_kwargs = PI0ProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 48,
+        "padding_side": "right",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -129,7 +124,7 @@ class PI0Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         actions: list | np.ndarray | torch.Tensor | None = None,
         state: list | np.ndarray | torch.Tensor | None = None,
-        **kwargs: Unpack[PI0ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
@@ -150,9 +145,7 @@ class PI0Processor(ProcessorMixin):
             - **state** -- Robot state compatible with model if `state` is not None
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
-        output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         if text is None:
             logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
@@ -543,9 +536,9 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        state: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
-        timestep: torch.FloatTensor | None = None,
+        state: torch.Tensor,
+        noise: torch.Tensor | None = None,
+        timestep: torch.Tensor | None = None,
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
@@ -553,7 +546,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        actions: torch.FloatTensor = None,  # aka labels
+        actions: torch.Tensor = None,  # aka labels
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
@@ -630,15 +623,15 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @torch.no_grad()
     def sample_actions(
         self,
-        state: torch.FloatTensor,
+        state: torch.Tensor,
         input_ids: torch.LongTensor,
-        pixel_values: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        noise: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         num_steps: int | None = None,
         **kwargs,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """Run flow matching inference to generate actions."""
 
         num_steps = num_steps or self.config.num_inference_steps
@@ -694,6 +687,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             noise = noise + dt * output.logits
         return noise
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PI0ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "PI0Config",
