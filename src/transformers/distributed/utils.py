@@ -177,6 +177,7 @@ class TransformersDeviceMesh:
 
         dense  : (pp, dp_replicate, fsdp, cp, tp)  attention, dense MLPs, embeddings, lm_heads
         expert : (pp, dp_replicate, efsdp, ep)     experts
+        root   : (pp, dp_replicate, fsdp_cp, tp)   the dense root mesh, whose `fsdp_cp` axis is fsdp x cp
 
     Both views cover the same world, so pp * dp_replicate * fsdp * cp * tp == pp * dp_replicate * efsdp * ep.
     efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
@@ -202,13 +203,15 @@ class TransformersDeviceMesh:
 
     Context parallelism adds the `cp` axis, which splits each sequence instead of the batch. FSDP2 then shards the
     parameters over `fsdp` and `cp` together (`fsdp_cp`): the ranks of a cp group hold parts of the same batch, so their
-    gradients are partial sums of that batch.
+    gradients are partial sums of that batch. `fsdp_cp` is an axis of the dense root mesh because FSDP2 composes the
+    mesh it shards over with the mesh the parameters are already sharded on (`tp`), and torch only composes meshes
+    built from the same root.
     """
 
-    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh, fsdp_cp_mesh: DeviceMesh | None = None):
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh, dense_root_mesh: DeviceMesh | None = None):
         self._dense_mesh = dense_mesh
         self._expert_mesh = expert_mesh
-        self._fsdp_cp_mesh = fsdp_cp_mesh
+        self._dense_root_mesh = dense_root_mesh
 
     def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
         """Select expert axes for `ep`/`efsdp`, the `fsdp_cp` axis, otherwise dense axes; DeviceMesh slices them."""
@@ -216,7 +219,7 @@ class TransformersDeviceMesh:
         if "ep" in dims or "efsdp" in dims:
             return self._expert_mesh[dims]
         if "fsdp_cp" in dims:
-            return self._fsdp_cp_mesh[dims]
+            return self._dense_root_mesh[dims]
         return self._dense_mesh[dims]
 
 
@@ -299,39 +302,49 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     return device_map, mesh
 
 
-def _get_fsdp_cp_mesh(device_type: str, distributed_config: DistributedConfig) -> DeviceMesh | None:
+def _get_dense_meshes(device_type: str, distributed_config: DistributedConfig) -> tuple[DeviceMesh, DeviceMesh | None]:
     """
-    The `fsdp` and `cp` axes as the single sharding axis FSDP2 uses, since the ranks of a cp group hold parts of the
-    same batch and shard its gradients between each other.
+    The dense axes, and the root mesh they are an unflattened view of when FSDP2 shards over `fsdp` and `cp` together.
 
-    It is its own mesh because torch refuses to slice a flattened dim together with another dim of the dense mesh. Its
-    ranks are laid out like the dense ones because `pp_size` and `tp_size` are 1 when `cp_size > 1`.
+    FSDP2 composes the mesh it shards a parameter over with the mesh that parameter is already sharded on (`tp`, or
+    `ep` for experts), and torch only composes meshes built from the same root. So `fsdp_cp` is an axis of the root
+    mesh, which `fsdp` and `cp` are derived from, and every dense axis shares that root.
     """
-    if distributed_config.cp_size == 1:
-        return None
-
-    fsdp_cp_size = distributed_config.fsdp_size * distributed_config.cp_size
-    if distributed_config.dp_replicate_size > 1:
-        mesh_shape = (distributed_config.dp_replicate_size, fsdp_cp_size)
-        mesh_dim_names = ("dp_replicate", "fsdp_cp")
-    else:
-        mesh_shape = (fsdp_cp_size,)
-        mesh_dim_names = ("fsdp_cp",)
-    return torch.distributed.init_device_mesh(device_type, mesh_shape, mesh_dim_names=mesh_dim_names)
-
-
-def initialize_distributed_mesh(
-    distributed_config: DistributedConfig,
-) -> tuple[torch.device | None, TransformersDeviceMesh | None]:
-    """Create a device mesh containing every configured parallel dimension."""
-    mesh_shape = (
+    pp, dp_replicate, fsdp, cp, tp = (
         distributed_config.pp_size,
         distributed_config.dp_replicate_size,
         distributed_config.fsdp_size,
         distributed_config.cp_size,
         distributed_config.tp_size,
     )
-    if mesh_shape == (1, 1, 1, 1, 1):
+    if cp == 1:
+        dense_mesh = torch.distributed.init_device_mesh(
+            device_type,
+            (pp, dp_replicate, fsdp, cp, tp),
+            mesh_dim_names=("pp", "dp_replicate", "fsdp", "cp", "tp"),
+        )
+        return dense_mesh, None
+
+    root_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        (pp, dp_replicate, fsdp * cp, tp),
+        mesh_dim_names=("pp", "dp_replicate", "fsdp_cp", "tp"),
+    )
+    return root_mesh._unflatten("fsdp_cp", (fsdp, cp), ("fsdp", "cp")), root_mesh
+
+
+def initialize_distributed_mesh(
+    distributed_config: DistributedConfig,
+) -> tuple[torch.device | None, TransformersDeviceMesh | None]:
+    """Create a device mesh containing every configured parallel dimension."""
+    dense_shape = (
+        distributed_config.pp_size,
+        distributed_config.dp_replicate_size,
+        distributed_config.fsdp_size,
+        distributed_config.cp_size,
+        distributed_config.tp_size,
+    )
+    if dense_shape == (1, 1, 1, 1, 1):
         return None, None
 
     device_type = torch._C._get_accelerator().type
@@ -340,7 +353,7 @@ def initialize_distributed_mesh(
 
     _ensure_torch_distributed(device_type)
     world_size = torch.distributed.get_world_size()
-    expected_world_size = math.prod(mesh_shape)
+    expected_world_size = math.prod(dense_shape)
     if expected_world_size != world_size:
         raise RuntimeError(
             f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
@@ -348,11 +361,7 @@ def initialize_distributed_mesh(
 
     device_map = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
-    dense_mesh = torch.distributed.init_device_mesh(
-        device_type,
-        mesh_shape,
-        mesh_dim_names=("pp", "dp_replicate", "fsdp", "cp", "tp"),
-    )
+    dense_mesh, dense_root_mesh = _get_dense_meshes(device_type, distributed_config)
     expert_mesh = torch.distributed.init_device_mesh(
         device_type,
         (
@@ -363,8 +372,7 @@ def initialize_distributed_mesh(
         ),
         mesh_dim_names=("pp", "dp_replicate", "efsdp", "ep"),
     )
-    fsdp_cp_mesh = _get_fsdp_cp_mesh(device_type, distributed_config)
-    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh, fsdp_cp_mesh)
+    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh, dense_root_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
