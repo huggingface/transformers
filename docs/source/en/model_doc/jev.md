@@ -36,7 +36,6 @@ decide(
         "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
     }
 )
-decide("Where is my parcel?", questions={"refund": {"type": "noul", "instructions": "Is a refund requested?"}})
 ```
 
 See the [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) for image assets.

@@ -214,11 +214,8 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertEqual(list(answers), ["intent", "refund", "anger"])
         self.assertAlmostEqual(sum(answers["intent"]["probabilities"].values()), 1.0, places=5)
         self.assertEqual(answers["anger"]["legend"], {"0": "calm", "1": "annoyed", "2": "furious"})
-        decide = pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer)
-        refund = {"refund": REQUEST["questions"]["refund"]}
-        self.assertEqual(list(decide(REQUEST["state"], questions=refund)), ["refund"])
-        with self.assertRaises(ValueError):  # no questions are remembered between calls
-            decide("Where is my parcel?")
+        with self.assertRaises(ValueError):  # a request has its questions
+            pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer)("Where is my parcel?")
 
     @slow
     @require_torch

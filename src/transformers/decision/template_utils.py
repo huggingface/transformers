@@ -98,10 +98,6 @@ class ChoiceQuestion:
     type: Literal["choice"] = "choice"
     instructions: Content | None = None
 
-    def validate_options(self):
-        if not self.criteria:
-            raise ValueError("A `choice` question needs `criteria` with its options.")
-
 
 @strict
 @dataclass
@@ -111,10 +107,6 @@ class ScoreQuestion:
     criteria: list[Content]
     type: Literal["score"] = "score"
     instructions: Content | None = None
-
-    def validate_levels(self):
-        if not self.criteria:
-            raise ValueError("A `score` question needs `criteria` with its levels.")
 
 
 # Models that don't ship a decision_template.jinja default to this one, the prompt of the `v1/systemone` endpoint of
@@ -172,11 +164,11 @@ class Question:
             raise ValueError(f"Question {name!r}: {error} (a {kind} question looks like {schema.__doc__})") from error
 
         criteria = question["criteria"]
+        if kind != "noul" and not criteria:
+            raise ValueError(f"Question {name!r}: a {kind} question needs `criteria` with its options.")
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
-        elif kind == "choice":
-            criteria = dict(criteria)
-        else:
+        elif kind == "score":
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
         labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
@@ -287,9 +279,9 @@ def _insert_images(template_inputs: dict[str, Any], assets: dict[str, Any], load
             return [insert(item) for item in value]
         if isinstance(value, str):
             parts = _split_at_placeholders(value, assets, load)
-            if any(part["type"] == "image" for part in parts):
-                images.extend(part["image"] for part in parts if part["type"] == "image")
-                return parts
+            found = [part["image"] for part in parts if part["type"] == "image"]
+            images.extend(found)
+            return parts if found else value
         return value
 
     return insert(template_inputs), images
@@ -342,8 +334,7 @@ def prepare_inputs(
     if assets and not has_images:
         raise ValueError("Images need a model whose processor handles them.")
 
-    template = config.chat_template or DECISION_PROMPT
-    template_input_names = _get_template_variables(template)
+    template_input_names = _get_template_variables(config.chat_template or DECISION_PROMPT)
     chat_kwargs = {"enable_thinking": False}
     if has_images and "enable_thinking" not in _get_template_variables(processor.chat_template):
         chat_kwargs = {}  # processors pass the variables their template doesn't use to the processor

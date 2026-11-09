@@ -1031,13 +1031,6 @@ def pipeline(
                         )
 
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-        # A checkpoint shipping a decision head next to its weights: the decision model whose config files it has
-        if task == "decision":
-            from ..decision.modeling_utils import decision_checkpoint_config
-
-            config = decision_checkpoint_config(
-                model, config, revision=hub_kwargs["revision"], token=hub_kwargs["token"]
-            )
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:

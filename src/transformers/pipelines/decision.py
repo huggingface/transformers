@@ -1,5 +1,4 @@
 import functools
-import json
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +32,6 @@ class DecisionPipeline(Pipeline):
     ...     }
     ... )
     >>> answers["refund"]["type"]
-    'noul'
-    >>> decide("Where is my parcel?", questions={"refund": {"type": "noul"}})["refund"]["type"]
     'noul'
     ```
 
@@ -77,14 +74,10 @@ class DecisionPipeline(Pipeline):
             self.model.load_adapter(repo, adapter_kwargs={"subfolder": self.decision_config.adapter})
         self.label_token_ids = functools.cache(functools.partial(label_token_ids, self.tokenizer))
 
-    def _sanitize_parameters(self, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
-        preprocess_params = {key: value for key, value in (("questions", questions), ("assets", assets)) if value}
-        return preprocess_params, {}, {}
+    def _sanitize_parameters(self):
+        return {}, {}, {}
 
-    def preprocess(self, inputs, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
-        request = inputs if questions is None else {"state": inputs, "questions": questions}
-        if assets:
-            request = (json.loads(request) if isinstance(request, str) else request) | {"assets": assets}
+    def preprocess(self, request: dict[str, Any] | str):
         return {"prompts": self.decision_config.prepare_inputs(request, self.processor or self.tokenizer)}
 
     def _forward(self, model_inputs):

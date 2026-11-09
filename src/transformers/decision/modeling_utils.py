@@ -32,21 +32,8 @@ def process_scores(decision_config, input_ids, marks, questions, scores) -> list
     return [decision_config.logits_processors[q.type](tail, s.float()) for q, s in zip(questions, scores)]
 
 
-def decision_checkpoint_config(pretrained_model_name_or_path, config: PreTrainedConfig, **kwargs) -> PreTrainedConfig:
-    """
-    The config of the decision model of a checkpoint that ships a decision head next to its weights, or `config` for
-    any other repo: what the `decision` pipeline and `transformers serve` load the checkpoint with.
-    """
-    from ..models.auto.modeling_auto import MODEL_FOR_DECISION_MAPPING, MODEL_FOR_DECISION_MAPPING_NAMES
-
-    if config.model_type in MODEL_FOR_DECISION_MAPPING_NAMES:
-        return config
-    for model_class in MODEL_FOR_DECISION_MAPPING.values():
-        if (
-            checkpoint_config := model_class.checkpoint_config(pretrained_model_name_or_path, **kwargs)[0]
-        ) is not None:
-            return checkpoint_config
-    return config
+def _hub_kwargs(kwargs: dict) -> dict:
+    return {key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs}
 
 
 class DecisionMixin:
@@ -56,21 +43,17 @@ class DecisionMixin:
     """
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *args, config=None, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, config=None, decision_config=None, **kwargs):
         """
         Also loads the checkpoints that ship a decision head next to their weights, in their own format: the config of
         the checkpoint is the `text_config` of the decision model, and the config files of its head
         (`config_class.extra_config_files`) give the rest of its config, in `__post_init__`.
         """
-        decision_config = None
         if config is None:
             config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
         model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
         if decision_config is None:  # the decision config of the repo, read now like `generation_config`
-            hub_kwargs = {
-                key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
-            }
-            decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **hub_kwargs)
+            decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **_hub_kwargs(kwargs))
         model.decision_config = decision_config
         return model
 
@@ -83,9 +66,7 @@ class DecisionMixin:
         read from its files, or `None`s for any other repo (e.g. one saved by `save_pretrained`, whose `config.json` is
         the one of the decision model).
         """
-        hub_kwargs = {
-            key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
-        }
+        hub_kwargs = _hub_kwargs(kwargs)
         head_configs = {}
         for filename in cls.config_class.extra_config_files:
             path = cached_file(

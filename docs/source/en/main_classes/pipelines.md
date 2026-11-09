@@ -403,7 +403,6 @@ decide(
         "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
     }
 )
-decide("Buy cheap watches now!!!", questions={"spam": {"type": "noul", "instructions": "Is this spam?"}})
 ```
 
 Images come as `assets`, like in the System One API: each placeholder in the state, the instructions or the criteria is

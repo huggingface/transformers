@@ -2634,6 +2634,22 @@ AutoModelForAudioTokenization = auto_class_update(
 class AutoModelForDecision(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_DECISION_MAPPING
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        # EXPERIMENTAL: also the checkpoints of another model that ship a decision head next to their weights
+        if kwargs.get("config") is None:
+            for model_class in cls._model_mapping.values():
+                config, decision_config = model_class.checkpoint_config(pretrained_model_name_or_path, **kwargs)
+                if config is not None:
+                    return model_class.from_pretrained(
+                        pretrained_model_name_or_path,
+                        *model_args,
+                        config=config,
+                        decision_config=decision_config,
+                        **kwargs,
+                    )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
 
 AutoModelForDecision = auto_class_update(AutoModelForDecision, head_doc="decision")
 

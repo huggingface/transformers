@@ -169,15 +169,15 @@ class JevConfig(PreTrainedConfig):
         text_config = (
             self.text_config.get("text_config", self.text_config) if isinstance(self.text_config, dict) else {}
         )
-        if (decision_config and "codes" in decision_config) or judge_config:
-            self.hidden_size = text_config["hidden_size"]
-        if decision_config and "codes" in decision_config:  # vLLM decision models: a code per option, whole prompt
+        if codes := (decision_config or {}).get("codes"):  # vLLM decision models: a code per option, whole prompt
             from ...decision import Question
 
+            self.hidden_size = text_config["hidden_size"]
             text_config["is_causal"] = decision_config.get("attention_mode") != "noncausal_full_attention"
-            self.num_verbalizers = len(decision_config["codes"])
+            self.num_verbalizers = len(codes)
             self.offsets = dict.fromkeys(Question.questions_types, 0)
-        if judge_config:  # JEV: the trained head of `head.safetensors`, on the model with the LoRA of `adapter/`
+        elif judge_config:  # JEV: the trained head of `head.safetensors`, on the model with the LoRA of `adapter/`
+            self.hidden_size = text_config["hidden_size"]
             slots = judge_config["slots"]
             self.num_verbalizers = slots["num_slots"]
             self.offsets = {question_type: start for question_type, (start, _) in slots["ranges"].items()}
