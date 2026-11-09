@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""`decide`, the `generate` of decision models: like the `GenerationMixin` of the models that generate."""
+"""
+`decide`, the `generate` of decision models: like the `GenerationMixin` of the models that generate.
+"""
 
 import json
 from pathlib import Path
