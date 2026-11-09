@@ -75,7 +75,9 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
         "HunYuanVLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
-        "HunYuanVLForConditionalGeneration": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HunYuanVLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."

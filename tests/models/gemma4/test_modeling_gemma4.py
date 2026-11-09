@@ -260,7 +260,7 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("attention_context_left", 5)
         kwargs.setdefault("attention_context_right", 0)
         kwargs.setdefault("output_proj_dims", 32)
-        kwargs.setdefault("position_embedding_size", 128) # vision max-pos-size
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
         # comparison logic (inf - inf = NaN). Disable for testing.
         kwargs.setdefault("use_clipped_linears", False)
@@ -419,7 +419,7 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("top_k_experts", 2)
         kwargs.setdefault("use_bidirectional_attention", "vision")
         kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("position_embedding_size", 128) # vision max-pos-size
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         super().__init__(parent, **kwargs)
         self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
