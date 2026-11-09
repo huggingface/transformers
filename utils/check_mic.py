@@ -32,6 +32,10 @@ CHECKER_CONFIG = {
 
 ROOT = Path(__file__).resolve().parents[1]
 FLEETS = ("prototypes", "control")
+# The variants CI checks for each fleet: running others locally compares against baselines CI never uses.
+FLEET_VARIANTS = {"prototypes": ("bfloat16",), "control": ("default", "bfloat16")}
+# Baselines are recorded (and checked in CI) with this many CPU threads; fewer or more can shift numerics.
+BASELINE_THREADS = 4
 INSTALL_HINT = 'tranformers-mic or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
 STATUS = {
     "pass": "✓",
@@ -365,12 +369,13 @@ class Progress:
                 self.quiet_since = now
 
 
-def stream(commands, env, fleet_name, on_record, announce=True, total=None):
+def stream(commands, env, fleet_name, on_record, announce=True, total=None, excuse=None):
     """Run MIC runner processes concurrently, print their fleet/selection messages once and hand each
     result record to `on_record(record, progress)`, which shows it with `progress.report`.
 
     Returns the first non-zero exit code (else 0) and the last non-JSON lines the runners printed
-    (tracebacks, warnings), from the failing runner when there is one.
+    (tracebacks, warnings), from the failing runner when there is one. With `excuse(record)`, a
+    runner's non-zero exit is ignored when it reported such a record (a failure handled by a re-run).
     """
     lock = threading.Lock()
     announced = not announce
@@ -378,7 +383,7 @@ def stream(commands, env, fleet_name, on_record, announce=True, total=None):
 
     def follow(command):
         nonlocal announced
-        tail = []
+        tail, excused = [], False
         process = subprocess.Popen(
             command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
         )
@@ -406,8 +411,10 @@ def stream(commands, env, fleet_name, on_record, announce=True, total=None):
                     print("\n".join(format_selection(message["selection"])), flush=True)
                     progress.touch()
                 elif "status" in message and "target" in message:
+                    excused = excused or bool(excuse and excuse(message))
                     on_record(message, progress)
-        results.append((process.wait(), tail))
+        returncode = process.wait()
+        results.append((0 if excused else returncode, tail))
 
     with Progress(total) as progress:
         threads = [threading.Thread(target=follow, args=(command,)) for command in commands]
@@ -433,15 +440,13 @@ def shard(command, jobs):
 
 
 def default_jobs():
-    """Parallel runners by default: fixtures are tiny, so the cost is mostly per-process imports."""
-    return max(1, min(4, (os.cpu_count() or 2) // 2))
+    """Parallel runners by default: as many as fit the cores at the baselines' thread count, up to 4."""
+    return max(1, min(4, (os.cpu_count() or BASELINE_THREADS) // BASELINE_THREADS))
 
 
-def runner_env(env, jobs):
-    """Split the CPU threads between parallel runners so they do not oversubscribe the cores."""
-    if jobs > 1 and "OMP_NUM_THREADS" not in env:
-        env = {**env, "OMP_NUM_THREADS": str(max(1, (os.cpu_count() or jobs) // jobs))}
-    return env
+def runner_env(env):
+    """Use the thread count the baselines were recorded with, unless OMP_NUM_THREADS is set explicitly."""
+    return {**env, "OMP_NUM_THREADS": env.get("OMP_NUM_THREADS") or str(BASELINE_THREADS)}
 
 
 def without_selection(command):
@@ -466,7 +471,7 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     instead of failing the check. Any other failure fails it. `jobs` > 1 splits the contracts over
     that many runner processes.
     """
-    env = runner_env(env, jobs)
+    env = runner_env(env)
     counts = {}
     missing = []
     started = time.perf_counter()
@@ -491,7 +496,9 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
             count(record)
             progress.report(record, format_record(record), quiet=record["status"] in ("pass", "xfail"))
 
-    returncode, tail = stream(shard(command, jobs), env, fleet_name, first_pass, total=total)
+    # A runner that only failed on missing baselines is covered by the re-run below; any other
+    # runner failure (e.g. a crash) must still fail the command.
+    returncode, tail = stream(shard(command, jobs), env, fleet_name, first_pass, total=total, excuse=missing_baseline)
     if missing:
         names = sorted({r.get("contract_name", r["contract"]) for r in missing})
         platform = missing[0].get("platform", "this platform")
@@ -506,8 +513,8 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
         retry_code, retry_tail = stream(
             shard([*retry, "--no-baseline"], jobs), env, fleet_name, second_pass, announce=False, total=len(names)
         )
-        # The first run's non-zero code came from the missing baselines, now accounted for.
-        returncode, tail = retry_code, retry_tail
+        if returncode == 0:
+            returncode, tail = retry_code, retry_tail
     failed = counts.get("fail", 0) + counts.get("error", 0)
     if returncode != 0 and not failed and tail:
         # The runner failed before (or without) reporting a failing target: show what it said.
@@ -601,7 +608,14 @@ def main():
     # An explicit list (rather than --run-all) so the contracts can be split over parallel runners.
     for name in names:
         command.extend(["--contract", name])
-    return run(command, env, fleet_name, total=len(names), jobs=jobs)
+    returncode = 0
+    variants = FLEET_VARIANTS[fleet_name]
+    for variant in variants:
+        if len(variants) > 1:
+            print(f"Variant {variant}:", flush=True)
+        code = run([*command, "--variant", variant], env, fleet_name, total=len(names), jobs=jobs)
+        returncode = returncode or code
+    return returncode
 
 
 if __name__ == "__main__":

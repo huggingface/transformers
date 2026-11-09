@@ -39,12 +39,10 @@ The Hugging Face CI runs model tests without `@slow` on every pull request, and 
 ## Run Model Integration Contracts locally
 
 MICs check published model usage paths against reviewed baselines using small fixtures.
-The runner (`transformers-mic`) comes with the `testing` extra. Contracts also need the development version of
-`hf-doc-builder` until its `doc_builder.testing` module is released. From your Transformers checkout:
+The runner (`transformers-mic`) and `hf-doc-builder` come with the `testing` extra. From your Transformers checkout:
 
 ```bash
 python -m pip install -e ".[testing]"
-python -m pip install "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git"
 ```
 
 Then run:
@@ -55,15 +53,17 @@ make run-mic             # contracts affected by local changes
 make run-mic ALL=1       # all fixtures in the fleet
 make run-mic BASE=main   # use a different Git comparison base
 make run-mic FLEET=control  # the control fleet instead of the default prototypes fleet
-make run-mic ALL=1 JOBS=8   # number of runner processes working in parallel (default: up to 4)
+make run-mic ALL=1 JOBS=8   # number of runner processes working in parallel (default: cores / 4, up to 4)
 ```
 
 The command uses this checkout's source and the fleet revision in `tests/contracts.lock`.
 It runs the prototypes fleet by default; `FLEET=control` selects the smaller control fleet.
+Like CI, it checks the prototypes fleet in `bfloat16` and the control fleet in both `default` and `bfloat16`.
 It downloads the pinned contracts, fixtures and baselines as needed, executes them locally,
 and prints one line per fixture plus a summary; any failing fixture fails the command.
-Contracts are split over parallel runner processes (`JOBS`, default up to 4, `JOBS=1` to run them one by one),
-each using its share of the CPU threads.
+Contracts are split over parallel runner processes (`JOBS`, default up to 4, `JOBS=1` to run them one by one).
+Each runner uses `OMP_NUM_THREADS=4`, the thread count baselines are recorded with (set `OMP_NUM_THREADS`
+to override it), so the thread count does not add to the differences with CI.
 `make run-mic` is a wrapper around the `mic` checker (`python utils/checkers.py mic`), which is opt-in
 and not part of `make check-repo` or CI because it needs network access and model runtimes. It does not create or publish contracts.
 Model-specific runtime dependencies and a reviewed baseline for your platform are required;
@@ -78,8 +78,7 @@ When the changes select every contract (for example `setup.py`, shared code or t
 MIC derives model dependencies from fixture configs (including nested models), architectures,
 and tokenizer/processor classes. Model directory changes select matching contracts; changes
 to shared Transformers code, Auto classes, dependency declarations, or the fleet pin select
-all contracts. `MODEL=bert` uses the same selector as a change in the BERT directory, so it
-can also select composite models that use BERT. Docs and ordinary test-only changes select
+all contracts. Docs and ordinary test-only changes select
 nothing. The runner prints its selection and reasons; no matching contract means no coverage,
 not a successful model check. Selection is a heuristic, not a complete Python dependency graph;
 use `ALL=1` when unsure whether indirect dependencies are covered.
