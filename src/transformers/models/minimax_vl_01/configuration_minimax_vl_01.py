@@ -227,12 +227,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
             else [pinpoint.copy() for pinpoint in MINIMAX_VL_01_IMAGE_GRID_PINPOINTS]
         )
 
-        if isinstance(self.vision_config, dict):
-            vision_config = dict(self.vision_config)
-            vision_config.pop("vocab_size", None)
-            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = AutoConfig.for_model(vision_config.pop("model_type"), **vision_config)
-
         if isinstance(self.text_config, dict):
             self.text_config = MiniMaxVL01TextConfig(**self.text_config)
         elif self.text_config is None:
