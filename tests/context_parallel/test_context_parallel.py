@@ -19,7 +19,13 @@ import torch
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 
-from transformers import LlamaConfig, MistralConfig
+from transformers import (
+    LlamaConfig,
+    LlamaForCausalLM,
+    LlamaForSequenceClassification,
+    LlamaModel,
+    MistralConfig,
+)
 from transformers.distributed import context_parallel
 from transformers.distributed.context_parallel import (
     CPImplementation,
@@ -74,6 +80,20 @@ class _SpyImplementation(CPImplementation):
     def attention(self, attention_function, module, query, key, value, attention_mask, **kwargs):
         self.modules_seen.append(module)
         return attention_function(module, query, key, value, attention_mask, **kwargs)
+
+
+def _tiny_config(**kwargs):
+    """A `LlamaConfig` small enough for CPU tests, in float32 with `sdpa` attention."""
+    return LlamaConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        vocab_size=99,
+        attn_implementation="sdpa",
+        **kwargs,
+    )
 
 
 def _same_on_every_rank(*shape, seed=0):
@@ -337,6 +357,31 @@ class TestUlyssesCheck(unittest.TestCase):
         config = LlamaConfig(attn_implementation="sdpa")
         config.layer_types = ["full_attention", "full_attention"]
         self._check(config)
+
+
+class TestContextParallelChecks(unittest.TestCase):
+    def _check(self, model):
+        context_parallel._check_context_parallelism(model)
+
+    def test_accepts_causal_lm_and_base_model(self):
+        self._check(LlamaForCausalLM(_tiny_config()))
+        # A base model computes no loss of its own, so the caller's loss is theirs to shard.
+        self._check(LlamaModel(_tiny_config()))
+
+    def test_accepts_softmax_attention_layer_types(self):
+        config = _tiny_config()
+        config.layer_types = ["full_attention", "sliding_attention", "chunked_attention"]
+        self._check(LlamaForCausalLM(config))
+
+    def test_refuses_other_heads(self):
+        with self.assertRaisesRegex(ValueError, "only supports the causal language modeling loss"):
+            self._check(LlamaForSequenceClassification(_tiny_config()))
+
+    def test_refuses_layers_that_mix_tokens_outside_attention(self):
+        config = _tiny_config()
+        config.layer_types = ["full_attention", "linear_attention"]
+        with self.assertRaisesRegex(ValueError, r"does not support the \['linear_attention'\] layers"):
+            self._check(LlamaForCausalLM(config))
 
 
 @require_flash_attn

@@ -24,6 +24,7 @@ import weakref
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from ..loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from ..masking_utils import find_packed_sequence_indices
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
@@ -218,6 +219,33 @@ class UlyssesCP(CPImplementation):
 
         attn_output, attn_weights = attention_function(module, query, key, value, attention_mask, **kwargs)
         return _gather_heads_scatter_sequence(attn_output, group), attn_weights
+
+
+# Layer types that only mix tokens through softmax attention over the full sequence. Every other one (recurrent,
+# convolutional, sparse-indexer, ...) mixes tokens outside attention and would silently be cut at the slice boundaries.
+SOFTMAX_ATTENTION_LAYER_TYPES = ("full_attention", "sliding_attention", "chunked_attention")
+
+
+def _check_context_parallelism(model: nn.Module) -> None:
+    """Raise a `ValueError` if context parallelism would silently change the logits or the loss of `model`."""
+    text_config = model.config.get_text_config()
+    layer_types = set(getattr(text_config, "layer_types", None) or ())
+    if unsupported := layer_types - set(SOFTMAX_ATTENTION_LAYER_TYPES):
+        raise ValueError(
+            f"Context parallelism does not support the {sorted(unsupported)} layers of {model.__class__.__name__}: "
+            "they mix tokens outside softmax attention, so they would run on this rank's slice only and be silently "
+            "cut at the slice boundaries. Use another model, or disable context parallelism."
+        )
+
+    if model.base_model is model:
+        return
+    if LOSS_MAPPING.get(model.loss_type) is ForCausalLMLoss:
+        return
+    raise ValueError(
+        f"Context parallelism only supports the causal language modeling loss, but {model.__class__.__name__} uses "
+        f"`loss_type={model.loss_type}`. Its loss would be computed from this rank's slice of the shifted labels while "
+        "the logits stay sharded. Use a `*ForCausalLM` model, or disable context parallelism."
+    )
 
 
 cp_implementations: dict[str, type[CPImplementation]] = {"ulysses": UlyssesCP}
