@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -25,6 +27,8 @@ from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLo
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lsd import PocketTTSForConditionalGenerationLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
+from .loss_musicgen import MusicgenForCausalLMLoss, count_musicgen_labels
+from .loss_prophetnet import ProphetNetForCausalLMLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
@@ -169,6 +173,24 @@ def ForCausalLMLoss(
     return loss
 
 
+def count_labels(labels: torch.Tensor, ignore_index: int = -100, **kwargs) -> torch.Tensor:
+    """Number of labels a loss sums over: those not set to `ignore_index`."""
+    return labels.ne(ignore_index).sum()
+
+
+def count_causal_lm_labels(
+    labels: torch.Tensor, shift_labels: torch.Tensor | None = None, config=None, ignore_index: int = -100
+) -> torch.Tensor:
+    """
+    Number of labels [`ForCausalLMLoss`] sums over: the `shift_labels` when the batch has them (e.g. from a padding-free
+    collator), else the `labels` without the first of each row, which is never predicted. The decoder of an
+    encoder-decoder model gets the labels shifted right as inputs, so it predicts all of them.
+    """
+    if shift_labels is None:
+        shift_labels = labels if getattr(config, "is_encoder_decoder", False) else labels[..., 1:]
+    return count_labels(shift_labels, ignore_index=ignore_index)
+
+
 def ForMaskedLMLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
@@ -274,6 +296,7 @@ def ForSemanticSegmentationLoss(
 
 
 LOSS_MAPPING = {
+    # Heads named after their task
     "ForSemanticSegmentation": ForSemanticSegmentationLoss,
     "ForCausalLM": ForCausalLMLoss,
     "ForMaskedLM": ForMaskedLMLoss,
@@ -287,6 +310,29 @@ LOSS_MAPPING = {
     "ForObjectDetection": ForObjectDetectionLoss,
     "ForCTC": ForCTCLoss,
     "ForConditionalGeneration": ForCausalLMLoss,
+    # Causal LM heads whose name does not say so
+    **dict.fromkeys(
+        [
+            "BertGenerationDecoder",
+            "BertLMHeadModel",
+            "CTRLLMHeadModel",
+            "GPT2LMHeadModel",
+            "OpenAIGPTLMHeadModel",
+            "ReformerModelWithLMHead",
+        ],
+        ForCausalLMLoss,
+    ),
+    **dict.fromkeys(
+        [
+            "CpmAntForCausalLM",
+            "NllbMoeForConditionalGeneration",
+            "SwitchTransformersForConditionalGeneration",
+            "XLMWithLMHeadModel",
+            "XLNetLMHeadModel",
+        ],
+        ForMaskedLMLoss,
+    ),
+    # Model-specific losses
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "DabDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
@@ -297,14 +343,49 @@ LOSS_MAPPING = {
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
-    "CsmForConditionalGeneration": ForCausalLMLoss,
-    "SwitchTransformersForConditionalGeneration": ForMaskedLMLoss,
-    "NllbMoeForConditionalGeneration": ForMaskedLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
     "PocketTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
     "GradiumPhononTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
     "ParakeetForRNNT": ParakeetForRNNTLoss,
     "ParakeetForTDT": ParakeetForTDTLoss,
-    "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
-    "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
+    "ProphetNetForCausalLM": ProphetNetForCausalLMLoss,
+    "MusicgenForCausalLM": MusicgenForCausalLMLoss,
+    "MusicgenMelodyForCausalLM": MusicgenForCausalLMLoss,
 }
+
+# The losses that divide by `num_items_in_batch`, and how to count the labels they sum over. The Trainer gives no
+# `num_items_in_batch` to the other losses, and divides them by the number of gradient accumulation steps instead.
+LOSS_ITEM_COUNTS = {
+    ForCausalLMLoss: count_causal_lm_labels,
+    ForMaskedLMLoss: count_labels,
+    ProphetNetForCausalLMLoss: count_labels,
+    MusicgenForCausalLMLoss: count_musicgen_labels,
+}
+
+
+def get_num_items_count(
+    model: nn.Module, batch: dict | None = None, default: Callable | None = None
+) -> Callable | None:
+    """
+    Returns the function counting the labels the loss of `model` divides by (`num_items_in_batch`), or `default` when
+    its loss has none. `None` if there is no count, or if `batch` misses fields it needs.
+    """
+    loss_function = getattr(model, "_loss_function", None) or LOSS_MAPPING.get(getattr(model, "loss_type", None))
+    count = LOSS_ITEM_COUNTS.get(loss_function, default)
+    if count is None:
+        return None
+    fields = inspect.signature(count).parameters
+    # The batch fields it needs: its arguments without a default
+    needed = [
+        name for name, field in fields.items() if field.default is field.empty and field.kind != field.VAR_KEYWORD
+    ]
+    if batch is not None and any(name not in batch for name in needed):
+        return None
+    config = getattr(model, "config", None)
+
+    def count_batch(batch: dict) -> torch.Tensor:
+        return count(**{name: batch[name] for name in fields if name in batch}, config=config)
+
+    return count_batch

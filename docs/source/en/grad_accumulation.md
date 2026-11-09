@@ -55,7 +55,7 @@ def compute_loss(outputs, labels, num_items_in_batch=None):
     return loss / num_items_in_batch
 ```
 
-For causal LM models, `num_items_in_batch` counts the *shifted* labels. The loss shifts labels so the prediction at position `i` targets the token at position `i + 1`, which leaves position 0 of every sequence without a target. [`Trainer`] excludes those positions and counts over `labels[..., 1:]`, so the denominator matches the number of prediction targets the loss uses. When a data collator supplies `shift_labels` directly, such as a padding-free collator, [`Trainer`] counts over that tensor instead. Other loss types, like masked LM and classification, count the full label tensor.
+`num_items_in_batch` counts the labels the model's loss sums over. A causal LM loss never predicts the first token of a sequence, so it isn't counted, and when a data collator supplies `shift_labels` (such as a padding-free collator), [`Trainer`] counts those instead. Losses that don't divide by `num_items_in_batch`, like CTC and object detection losses, get no count, and [`Trainer`] divides them by `gradient_accumulation_steps` instead. In a custom training loop, `get_num_items_count(model, batch)` from `transformers.loss.loss_utils` returns the function [`Trainer`] counts each batch with, or `None`.
 
 If you subclass [`Trainer`] and override [`~Trainer.compute_loss`], set `loss_is_scaled_for_ga` to say how your loss is normalized: `False` for a per-batch mean, which [`Trainer`] then divides by `gradient_accumulation_steps`, or `True` if you already divided it by `num_items_in_batch`.
 

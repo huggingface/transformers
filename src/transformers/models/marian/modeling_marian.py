@@ -1086,9 +1086,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,

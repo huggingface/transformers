@@ -1429,8 +1429,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + transformer_outputs[1:]
