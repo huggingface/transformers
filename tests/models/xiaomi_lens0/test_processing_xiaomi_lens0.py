@@ -49,14 +49,6 @@ class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"expected_dim": 0, "output_length": 96},
         ]
 
-    @unittest.skip("Xiaomi-Lens-0 can't sample frames from image frames directly")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @unittest.skip("Xiaomi-Lens-0 can't sample frames from image frames directly")
-    def test_apply_chat_template_video_2(self):
-        pass
-
     def test_post_process_grounding(self):
         processor = self.get_processor()
         height = 2 * processor.image_processor.patch_size
