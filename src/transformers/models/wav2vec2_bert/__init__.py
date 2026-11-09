@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,26 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_wav2vec2_bert": {
+                "Wav2Vec2BertConfig",
+            },
+            "processing_wav2vec2_bert": {
+                "Wav2Vec2BertProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_wav2vec2_bert": {
+                "Wav2Vec2BertForAudioFrameClassification",
+                "Wav2Vec2BertForCTC",
+                "Wav2Vec2BertForSequenceClassification",
+                "Wav2Vec2BertForXVector",
+                "Wav2Vec2BertModel",
+                "Wav2Vec2BertPreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

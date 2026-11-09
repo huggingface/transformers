@@ -14,6 +14,9 @@
 """
 Utility that generates `src/transformers/models/__init__.py` and all `src/transformers/models/<model>/__init__.py` files.
 
+Each init contains its import structure (which objects each module exports, grouped by the backends they need) as a
+literal, so that `import transformers` doesn't need to read and parse every model file at runtime.
+
 Usage (from the root of the repo):
 
 Check that the inits are up to date (used in `make check-repo`):
@@ -34,7 +37,7 @@ import difflib
 import re
 from pathlib import Path
 
-from transformers.utils.import_utils import define_import_structure
+from transformers.utils.import_utils import IMPORT_STRUCTURE_T, define_import_structure
 
 
 CHECKER_CONFIG = {
@@ -64,15 +67,28 @@ AUTO_GENERATED_BANNER = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨
 INIT_TEMPLATE = """from typing import TYPE_CHECKING
 
 from {dots}utils import _LazyModule
-from {dots}utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
 {imports}else:
     import sys
 
+{import_structure}
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+{lazy_module}"""
+
+LAZY_MODULE = """    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
+"""
+
+# `transformers/__init__.py` needs the import structure of `models/` to build its own, but `transformers.models` has
+# been replaced by its `_LazyModule` by then, so we expose the literal through it.
+MODELS_LAZY_MODULE = """    sys.modules[__name__] = _LazyModule(
+        __name__,
+        _file,
+        _import_structure,
+        module_spec=__spec__,
+        extra_objects={"_import_structure_by_backend": _import_structure},
+    )
 """
 
 
@@ -81,17 +97,49 @@ def natural_sort_key(name: str) -> tuple[str | int, ...]:
     return tuple(int(part) if part.isdigit() else part for part in re.split(r"(\d+)", name))
 
 
-def get_import_structure() -> dict[str, set[str]]:
-    """Map each model directory to the modules it exposes, e.g. `{"bert": {"configuration_bert", ...}, ...}`."""
-    import_structure = define_import_structure(str(MODELS_INIT_PATH))
-    modules_per_model = {}
-    for modules in import_structure.values():
-        for dotted_module in modules:
+def get_import_structures() -> tuple[IMPORT_STRUCTURE_T, dict[str, IMPORT_STRUCTURE_T]]:
+    """
+    Scan `src/transformers/models` once and return its import structure, plus the import structure of each model
+    directory, e.g. `{"bert": {frozenset(): {"configuration_bert": {"BertConfig"}}, ...}, ...}`.
+    """
+    # We copy the result, because `define_import_structure` is cached and we don't want to hand out its internals
+    models_import_structure = {
+        backends: {module: set(names) for module, names in modules.items()}
+        for backends, modules in define_import_structure(str(MODELS_INIT_PATH)).items()
+    }
+
+    # A model directory's own import structure is exactly its slice of the `models/` one, with the prefix removed, so we
+    # don't need to scan each directory again
+    import_structure_per_model = {}
+    for backends, modules in models_import_structure.items():
+        for dotted_module, names in modules.items():
             model_name, _, module_name = dotted_module.partition(".")
             if model_name in IGNORED_DIRECTORIES or model_name.startswith("_"):
                 continue
-            modules_per_model.setdefault(model_name, set()).add(module_name)
-    return modules_per_model
+            import_structure_per_model.setdefault(model_name, {}).setdefault(backends, {})[module_name] = names
+    return models_import_structure, import_structure_per_model
+
+
+def render_import_structure(import_structure: IMPORT_STRUCTURE_T, indent: str = "    ") -> str:
+    """
+    Render an import structure as a `_import_structure = {...}` literal. Everything is sorted so the output is
+    deterministic, and every collection gets a trailing comma so `ruff format` leaves it exploded one item per line.
+    """
+    lines = [f"{indent}_import_structure = {{"]
+    # `sorted()` on the backend names puts `frozenset()` (no requirements) first
+    for backends in sorted(import_structure, key=sorted):
+        if backends:
+            backends_repr = "frozenset({" + ", ".join(f'"{backend}"' for backend in sorted(backends)) + "})"
+        else:
+            backends_repr = "frozenset()"
+        lines.append(f"{indent}    {backends_repr}: {{")
+        for module_name in sorted(import_structure[backends], key=natural_sort_key):
+            lines.append(f'{indent}        "{module_name}": {{')
+            lines.extend(f'{indent}            "{name}",' for name in sorted(import_structure[backends][module_name]))
+            lines.append(f"{indent}        }},")
+        lines.append(f"{indent}    }},")
+    lines.append(f"{indent}}}")
+    return "\n".join(lines) + "\n"
 
 
 def extract_license_header(path: Path) -> str:
@@ -118,7 +166,9 @@ def get_license_header(init_path: Path, module_names: list[str]) -> str:
     return next((header for header in map(extract_license_header, candidates) if header), "")
 
 
-def generate_init(init_path: Path, import_lines: list[str], module_names: list[str]) -> str:
+def generate_init(
+    init_path: Path, import_lines: list[str], module_names: list[str], import_structure: IMPORT_STRUCTURE_T
+) -> str:
     """Render the expected content of an init file."""
     if not import_lines:
         return ""
@@ -128,14 +178,24 @@ def generate_init(init_path: Path, import_lines: list[str], module_names: list[s
     dots = "." * (len(init_path.relative_to(MODELS_PATH).parts) + 1)
     imports = "".join(f"    {line}\n" for line in import_lines)
     license_header = get_license_header(init_path=init_path, module_names=module_names)
-    return banner + license_header + INIT_TEMPLATE.format(dots=dots, imports=imports)
+    lazy_module = MODELS_LAZY_MODULE if init_path == MODELS_INIT_PATH else LAZY_MODULE
+    return (
+        banner
+        + license_header
+        + INIT_TEMPLATE.format(
+            dots=dots,
+            imports=imports,
+            import_structure=render_import_structure(import_structure),
+            lazy_module=lazy_module,
+        )
+    )
 
 
 def generate_all_inits() -> dict[Path, str]:
     """Map every init under `src/transformers/models` to its expected content."""
-    modules_per_model = get_import_structure()
+    models_import_structure, import_structure_per_model = get_import_structures()
 
-    model_names = set(modules_per_model)
+    model_names = set(import_structure_per_model)
     model_names.update(
         path.name for path in MODELS_PATH.iterdir() if path.is_dir() and (path / "__init__.py").is_file()
     )
@@ -144,18 +204,23 @@ def generate_all_inits() -> dict[Path, str]:
 
     expected_contents = {}
     for model_name in model_names:
-        modules = sorted(modules_per_model.get(model_name, set()), key=natural_sort_key)
+        import_structure = import_structure_per_model.get(model_name, {})
+        modules = sorted({module for modules in import_structure.values() for module in modules}, key=natural_sort_key)
         import_lines = [f"from .{module_name} import *" for module_name in modules]
         expected_contents[MODELS_PATH / model_name / "__init__.py"] = generate_init(
-            init_path=MODELS_PATH / model_name / "__init__.py", import_lines=import_lines, module_names=modules
+            init_path=MODELS_PATH / model_name / "__init__.py",
+            import_lines=import_lines,
+            module_names=modules,
+            import_structure=import_structure,
         )
 
     expected_contents[MODELS_INIT_PATH] = generate_init(
         init_path=MODELS_INIT_PATH,
         module_names=[],
         import_lines=[
-            f"from .{model_name} import *" for model_name in sorted(modules_per_model, key=natural_sort_key)
+            f"from .{model_name} import *" for model_name in sorted(import_structure_per_model, key=natural_sort_key)
         ],
+        import_structure=models_import_structure,
     )
     return expected_contents
 

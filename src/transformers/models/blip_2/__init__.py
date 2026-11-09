@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,30 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_blip_2": {
+                "Blip2Config",
+                "Blip2QFormerConfig",
+                "Blip2VisionConfig",
+            },
+            "processing_blip_2": {
+                "Blip2Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_blip_2": {
+                "Blip2ForConditionalGeneration",
+                "Blip2ForImageTextRetrieval",
+                "Blip2Model",
+                "Blip2PreTrainedModel",
+                "Blip2QFormerModel",
+                "Blip2TextModelWithProjection",
+                "Blip2VisionModel",
+                "Blip2VisionModelWithProjection",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

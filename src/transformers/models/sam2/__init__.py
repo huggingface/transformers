@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -31,5 +30,33 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_sam2": {
+                "Sam2Config",
+                "Sam2HieraDetConfig",
+                "Sam2MaskDecoderConfig",
+                "Sam2PromptEncoderConfig",
+                "Sam2VisionConfig",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_sam2": {
+                "Sam2HieraDetModel",
+                "Sam2Model",
+                "Sam2PreTrainedModel",
+                "Sam2VisionModel",
+            },
+            "processing_sam2": {
+                "Sam2Processor",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_sam2": {
+                "Sam2ImageProcessor",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
