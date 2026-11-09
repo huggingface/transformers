@@ -26,8 +26,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
+from ..granite.modeling_granite import GraniteAttention, GraniteRMSNorm, GraniteRotaryEmbedding
+from ..llama.modeling_llama import LlamaPreTrainedModel
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
@@ -89,10 +89,8 @@ class GraniteMoeMoE(nn.Module):
         return layer_output.view(bsz, length, self.input_size)
 
 
-class GraniteMoeAttention(LlamaAttention):
-    def __init__(self, config: GraniteMoeConfig, layer_idx: int):
-        super().__init__(self, config, layer_idx)
-        self.scaling = config.attention_multiplier  # Only diff with llama
+class GraniteMoeAttention(GraniteAttention):
+    pass
 
 
 class GraniteMoeDecoderLayer(MixtralDecoderLayer):

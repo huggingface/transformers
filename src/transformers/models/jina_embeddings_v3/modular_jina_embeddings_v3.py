@@ -33,8 +33,9 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..gpt_neox.modeling_gpt_neox import GPTNeoXLayer
-from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..xlm_roberta.configuration_xlm_roberta import XLMRobertaConfig
 from ..xlm_roberta.modeling_xlm_roberta import (
     XLMRobertaEmbeddings,
@@ -133,10 +134,9 @@ class JinaEmbeddingsV3RotaryEmbedding(LlamaRotaryEmbedding):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class JinaEmbeddingsV3Attention(LlamaAttention):
+class JinaEmbeddingsV3Attention(EuroBertAttention):
     def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
-        self.is_causal = False
         self.attention_dropout = config.attention_probs_dropout_prob
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)

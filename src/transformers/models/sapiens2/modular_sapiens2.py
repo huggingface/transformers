@@ -1372,13 +1372,12 @@ class Sapiens2RMSNorm(LlamaRMSNorm):
 
 class Sapiens2Attention(DINOv3ViTAttention):
     def __init__(self, config: Sapiens2Config, layer_idx: int):
+        num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
         super().__init__(config)
-        del self.k_proj
-        del self.v_proj
-        self.num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
+        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
+        self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.value_bias)
         self.q_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
         self.k_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
 
@@ -1410,7 +1409,7 @@ class Sapiens2Attention(DINOv3ViTAttention):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )

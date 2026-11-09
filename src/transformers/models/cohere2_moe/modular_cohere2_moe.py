@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -22,11 +21,11 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.generic import no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
@@ -37,8 +36,6 @@ from ..cohere2.modeling_cohere2 import (
     Cohere2Model,
     Cohere2PreTrainedModel,
     Cohere2RotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
@@ -124,54 +121,13 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
+@no_inherit_decorator
 class Cohere2MoeAttention(Cohere2Attention):
-    def __init__(self, config: Cohere2MoeConfig, layer_idx: int | None = None):
+    def __init__(self, config: Cohere2MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.force_rope = (
+        self.use_rope = self.sliding_window is not None or (
             config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
         )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        if self.sliding_window is not None or self.force_rope:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):

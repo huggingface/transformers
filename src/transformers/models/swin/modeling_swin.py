@@ -399,6 +399,8 @@ def eager_attention_forward(
 
 
 class SwinAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: SwinConfig, hidden_size: int, num_attention_heads: int, window_size: int):
         super().__init__()
         self.config = config

@@ -34,8 +34,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..mamba2.modeling_mamba2 import apply_mask_to_padding_states
+from ..mistral.modeling_mistral import MistralAttention
 from ..mixtral.modeling_mixtral import (
-    MixtralAttention,
     MixtralDecoderLayer,
     MixtralForCausalLM,
     MixtralForQuestionAnswering,
@@ -353,7 +353,7 @@ class MiniMaxRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class MiniMaxAttention(MixtralAttention):
+class MiniMaxAttention(MistralAttention):
     pass
 
 

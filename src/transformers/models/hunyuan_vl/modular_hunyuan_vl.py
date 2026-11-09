@@ -41,6 +41,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens
+from ..clip.modeling_clip import CLIPAttention
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Attention,
@@ -53,7 +54,6 @@ from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     rotate_half,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..mllama.modeling_mllama import MllamaVisionAttention
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import (
     Qwen2VLImageProcessorKwargs,
@@ -170,7 +170,6 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
 
     model_type = "hunyuan_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     ignore_keys_at_rope_validation = {
         "alpha",
         "beta_fast",
@@ -340,7 +339,6 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 512 * 512, "longest_edge": 2048 * 2048}
     patch_size = 16
     temporal_patch_size = 1
-    merge_size = 2
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
 
@@ -446,7 +444,6 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 512 * 512, "longest_edge": 2048 * 2048}
     patch_size = 16
     temporal_patch_size = 1
-    merge_size = 2
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
 
@@ -699,16 +696,10 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         return self.after_rms(hidden_states)
 
 
-class HunYuanVLVisionAttention(MllamaVisionAttention):
+class HunYuanVLVisionAttention(CLIPAttention):
     def __init__(self, config: HunYuanVLVisionConfig):
         super().__init__(config)
-        self.is_causal = False
-        self.head_dim = getattr(config, "head_dim", self.embed_dim // self.num_heads)
-        self.scaling = self.head_dim**-0.5
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
+        self.num_key_value_groups = 1
 
     def forward(
         self,
@@ -723,9 +714,9 @@ class HunYuanVLVisionAttention(MllamaVisionAttention):
 
         batch_size, seq_len, _ = query.shape
 
-        query_states = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        key_states = key.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        value_states = value.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -821,48 +812,6 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
         super().__init__(config, layer_idx)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        query_states = self.query_layernorm(query_states)
-        key_states = self.key_layernorm(key_states)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class HunYuanVLDenseV1DecoderLayer(HunYuanDenseV1DecoderLayer):

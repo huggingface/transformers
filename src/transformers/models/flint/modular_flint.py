@@ -28,8 +28,8 @@ from ...utils.generic import maybe_autocast
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.modeling_qwen3_moe import (
-    Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     Qwen3MoeForCausalLM,
     Qwen3MoeMLP,
@@ -173,10 +173,9 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class FlintAttention(Qwen3MoeAttention):
+class FlintAttention(Qwen3Attention):
     def __init__(self, config: FlintConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(

@@ -69,7 +69,7 @@ class DiffLlamaAttention(LlamaAttention):
     requires ``head_dim_v == head_dim_q``.
     """
 
-    def __init__(self, config: DiffLlamaConfig, layer_idx: int | None = None):
+    def __init__(self, config: DiffLlamaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         # The Differential Transformer paper (https://huggingface.co/papers/2410.05258) does not
         # specify how attention dropout should be applied to the differential combination, and our

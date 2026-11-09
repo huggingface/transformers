@@ -37,8 +37,9 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
+from ..llama.modeling_llama import eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetRNNTConfig, ParakeetTDTConfig
 from .generation_parakeet import (
     ParakeetRNNTDecoderCache,
@@ -120,12 +121,11 @@ class ParakeetEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
         super().__init__(config, module_config)
 
 
-class ParakeetEncoderAttention(LlamaAttention):
+class ParakeetEncoderAttention(EuroBertAttention):
     """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
 
     def __init__(self, config: ParakeetEncoderConfig, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        self.is_causal = False
         # W_{k,R} projection
         self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # global content bias

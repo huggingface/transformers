@@ -33,12 +33,13 @@ from ...utils import (
     can_return_tuple,
     is_torchdynamo_compiling,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import interval, positive_int_field
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..glmasr.configuration_glmasr import GlmAsrEncoderConfig
-from ..glmasr.modeling_glmasr import GlmAsrAttention, GlmAsrRotaryEmbedding
+from ..glmasr.modeling_glmasr import GlmAsrRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
 from ..pe_audio.modeling_pe_audio import PeAudioPreTrainedModel
 
 
@@ -490,12 +491,15 @@ class Nemotron3DiarizationFeatureStacking(nn.Module):
 class Nemotron3DiarizationRotaryEmbedding(GlmAsrRotaryEmbedding): ...
 
 
-class Nemotron3DiarizationAttention(GlmAsrAttention):
+@no_inherit_decorator
+class Nemotron3DiarizationAttention(EuroBertAttention):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         # The original fused query/key/value projection has no bias while the output projection has one.
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
 
 class Nemotron3DiarizationMLP(CLIPMLP): ...

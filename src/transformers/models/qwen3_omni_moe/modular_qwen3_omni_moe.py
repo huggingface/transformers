@@ -69,6 +69,7 @@ from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessorKwargs,
     SinusoidsPositionEmbedding,
 )
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
@@ -82,7 +83,6 @@ from ..qwen3.modeling_qwen3 import (
 )
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
-    Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
@@ -96,7 +96,6 @@ from ..qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeVisionConfig
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeTextModel,
     Qwen3VLMoeTextRotaryEmbedding,
-    Qwen3VLMoeVisionAttention,
     Qwen3VLMoeVisionModel,
     Qwen3VLMoeVisionRotaryEmbedding,
 )
@@ -1035,7 +1034,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
 
-class Qwen3OmniMoeVisionAttention(Qwen3VLMoeVisionAttention):
+class Qwen3OmniMoeVisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig):
         super().__init__(config)
 
@@ -1116,10 +1115,8 @@ class Qwen3OmniMoeThinkerTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         super().__init__(config)
 
 
-class Qwen3OmniMoeThinkerTextAttention(Qwen3MoeAttention):
-    def __init__(self, config, layer_idx):
-        super().__init__(config, layer_idx)
-        self.sliding_window = None
+class Qwen3OmniMoeThinkerTextAttention(Qwen3Attention):
+    pass
 
 
 class Qwen3OmniMoeThinkerTextDecoderLayer(Qwen3MoeDecoderLayer):
@@ -2126,7 +2123,7 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
 
 
 class Qwen3OmniMoeCode2WavAttention(Qwen3Attention):
-    def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
+    def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_norm = nn.Identity()
         self.k_norm = nn.Identity()

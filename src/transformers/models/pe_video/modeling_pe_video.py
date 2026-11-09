@@ -287,7 +287,7 @@ class PeVideoEncoderRMSNorm(nn.Module):
 class PeVideoEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config, layer_idx):
+    def __init__(self, config, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config

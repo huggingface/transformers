@@ -334,6 +334,8 @@ class MistralLarge4TextAttention(nn.Module):
         self.use_rope = config.no_rope_layers[layer_idx]
         self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] in ("reuse", "reuse_but_indexer")
         self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
@@ -368,17 +370,15 @@ class MistralLarge4TextAttention(nn.Module):
         )
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
-        # Refer: https://arxiv.org/abs/2603.12201 for more details.
-        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else MistralLarge4TextIndexer(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
 
-    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def expand_kv(self, kv_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
-            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+            - k_pe: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
@@ -386,12 +386,12 @@ class MistralLarge4TextAttention(nn.Module):
 
         kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
+        k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        # Concatenate k_nope and k_rot in a new tensor
+        # Concatenate k_nope and k_pe in a new tensor
         key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
-        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_pe)
         return key_states, value_states
 
     def forward(

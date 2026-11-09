@@ -29,10 +29,9 @@ from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
-    OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
     OlmoForSequenceClassification,
@@ -110,8 +109,8 @@ def rotate_half(x):
 # Olmo2 attention is identical to OLMo attention except:
 # - Norm is applied to attention queries and keys.
 # - No qkv clipping.
-class Olmo2Attention(OlmoAttention):
-    def __init__(self, config: Olmo2Config, layer_idx: int | None = None):
+class Olmo2Attention(LlamaAttention):
+    def __init__(self, config: Olmo2Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
         self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
@@ -127,13 +126,9 @@ class Olmo2Attention(OlmoAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states))
-        key_states = self.k_norm(self.k_proj(hidden_states))
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

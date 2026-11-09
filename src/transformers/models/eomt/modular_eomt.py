@@ -35,6 +35,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPAttention
 from ..dinov2.modeling_dinov2 import (
     Dinov2Embeddings,
     Dinov2Layer,
@@ -42,7 +43,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2PatchEmbeddings,
 )
 from ..mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentation, Mask2FormerLoss
-from ..siglip.modeling_siglip import SiglipAttention
 from ..vit.configuration_vit import ViTConfig
 
 
@@ -218,7 +218,7 @@ class EomtEmbeddings(Dinov2Embeddings):
         return embeddings
 
 
-class EomtAttention(SiglipAttention):
+class EomtAttention(CLIPAttention):
     pass
 
 

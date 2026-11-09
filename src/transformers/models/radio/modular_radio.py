@@ -27,12 +27,12 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.modeling_dinov2 import (
-    Dinov2Attention,
     Dinov2Layer,
     Dinov2LayerScale,
     Dinov2MLP,
     eager_attention_forward,
 )
+from ..vit.modeling_vit import ViTAttention
 from .configuration_radio import RadioConfig
 
 
@@ -172,7 +172,7 @@ class RadioLayerScale(Dinov2LayerScale):
     pass
 
 
-class RadioAttention(Dinov2Attention):
+class RadioAttention(ViTAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -29,6 +29,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -37,8 +38,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_sew import SEWConfig
 
@@ -272,6 +273,7 @@ class SEWAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: SEWConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -288,6 +290,13 @@ class SEWAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
+        self.layer_idx = layer_idx
+        if layer_idx is None and self.is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will lead to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -298,8 +307,8 @@ class SEWAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -318,10 +327,35 @@ class SEWAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
+        is_updated = False
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
+                else:
+                    curr_past_key_values = past_key_values.self_attention_cache
+            else:
+                curr_past_key_values = past_key_values
+
         current_states = key_value_states if is_cross_attention else hidden_states
-        kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
-        key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
+        if is_cross_attention and past_key_values is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
+        else:
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
+
+            if past_key_values is not None:
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -335,7 +369,6 @@ class SEWAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
-            output_attentions=output_attentions,
             **kwargs,
         )
 

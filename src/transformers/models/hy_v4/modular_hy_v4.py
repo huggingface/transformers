@@ -222,17 +222,17 @@ class HYV4Indexer(DeepseekV32Indexer):
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         # Flipped RoPE position (later portion instead of the first)
-        q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_nope, q_pe = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         # Norm is kept in fp32
         k = (
             self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
         )  # [B, S, 1, D]
-        k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+        k_nope, k_pe = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_nope, q_pe], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_nope, k_pe], dim=-1).squeeze(2)  # [B, S, D]
 
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
@@ -260,6 +260,14 @@ class HYV4Indexer(DeepseekV32Indexer):
 
 
 class HYV4Attention(GlmMoeDsaAttention):
+    """
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
+
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
+    """
+
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
@@ -283,26 +291,25 @@ class HYV4Attention(GlmMoeDsaAttention):
         gate_states = self.gate_proj(hidden_states).view(batch_size, seq_length, -1, self.gate_projection_size)
 
         q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
-        q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
+        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
-        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        k_nope = self.kv_a_layernorm(kv_nope).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         # Non-interleave RoPE
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        query_states = torch.cat((q_nope, q_pe), dim=-1)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
@@ -352,7 +359,8 @@ class HYV4Attention(GlmMoeDsaAttention):
 
         attn_output = attn_output * torch.sigmoid(gate_states)
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights, topk_indices
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights, topk_indices
 
 
 class HYV4MLP(Glm4MoeLiteMLP):

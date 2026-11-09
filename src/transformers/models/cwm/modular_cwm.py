@@ -28,7 +28,8 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
+from ..ministral.modeling_ministral import MinistralAttention
+from ..qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -94,12 +95,8 @@ class CwmRotaryEmbedding(Qwen2RotaryEmbedding):
     pass
 
 
-class CwmAttention(Qwen2Attention):
-    def __init__(self, config: CwmConfig, layer_idx: int):
-        super().__init__(config=config, layer_idx=layer_idx)
-        self.q_proj = torch.nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+class CwmAttention(MinistralAttention):
+    pass
 
 
 class CwmDecoderLayer(LlamaDecoderLayer):

@@ -29,8 +29,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..bart.modeling_bart import BartAttention
 from ..wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeedForward,
@@ -133,7 +133,7 @@ class SEWFeatureEncoder(Wav2Vec2FeatureEncoder):
     pass
 
 
-class SEWAttention(Wav2Vec2Attention):
+class SEWAttention(BartAttention):
     pass
 
 

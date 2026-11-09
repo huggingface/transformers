@@ -63,9 +63,7 @@ from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5Model,
     Ernie4_5RMSNorm,
 )
-from ..qwen2_5_omni.modeling_qwen2_5_omni import (
-    Qwen2_5OmniAttention,
-)
+from ..llama.modeling_llama import LlamaAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -375,15 +373,14 @@ class PaddleOCRMLP(Ernie4_5MLP):
         super().__init__()
 
 
-class PaddleOCRAttention(Qwen2_5OmniAttention):
-    def __init__(self, config: PaddleOCRVLConfig, layer_idx: int | None = None):
-        super().__init__()
-
+class PaddleOCRAttention(LlamaAttention):
+    def __init__(self, config: PaddleOCRVLConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
         self.attention_dropout = 0.0
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.use_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.use_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
 
 class PaddleOCRRMSNorm(Ernie4_5RMSNorm):
@@ -537,8 +534,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
 
 
 class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionMLP(SiglipMLP):

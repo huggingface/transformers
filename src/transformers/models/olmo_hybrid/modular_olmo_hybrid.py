@@ -36,9 +36,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
-    Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
     Olmo3MLP,
@@ -184,21 +183,16 @@ class OlmoHybridRMSNorm(Olmo3RMSNorm):
     pass
 
 
-class OlmoHybridAttention(Olmo3Attention):
+class OlmoHybridAttention(Olmo2Attention):
     """
     Multi-headed attention for OLMo Hybrid that supports optional RoPE (NoPE mode).
 
-    Inherits from Olmo3Attention. The only behavioral difference is that when
+    Inherits from Olmo2Attention. The only behavioral difference is that when
     position_embeddings is None, rotary position embeddings are skipped entirely,
     enabling NoPE mode for long context extension.
     """
 
-    def __init__(self, config: OlmoHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # Hybrid model doesn't use sliding window attention
-        del self.sliding_window
-        del self.attention_type
-
+    # Hybrid model doesn't use sliding window attention
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -210,13 +204,9 @@ class OlmoHybridAttention(Olmo3Attention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states))
-        key_states = self.k_norm(self.k_proj(hidden_states))
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # NoPE mode: skip RoPE when position_embeddings is None
         cos, sin = None, None

@@ -20,9 +20,9 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig, AutoModel
+from ..sam2.modeling_sam2 import Sam2Attention
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
-    Sam2VideoAttention,
     Sam2VideoFeedForward,
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceCache,
@@ -312,7 +312,7 @@ class Sam3TrackerVideoPositionEmbeddingSine(Sam2VideoPositionEmbeddingSine):
     pass
 
 
-class Sam3TrackerVideoAttention(Sam2VideoAttention):
+class Sam3TrackerVideoAttention(Sam2Attention):
     pass
 
 

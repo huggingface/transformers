@@ -356,6 +356,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class VideoPrismAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__()
         self.config = config
@@ -367,7 +369,7 @@ class VideoPrismAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
         self.num_key_value_groups = 1.0
         self.attn_logit_softcapping = config.attn_logit_softcapping
 
@@ -589,6 +591,8 @@ _R_SOFTPLUS_0 = 1.442695041
 
 
 class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
@@ -600,7 +604,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
         self.num_key_value_groups = 1.0
         self.per_dim_scale = nn.Parameter(torch.zeros(self.head_dim))
         self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))

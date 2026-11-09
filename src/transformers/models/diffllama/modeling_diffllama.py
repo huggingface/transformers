@@ -196,7 +196,7 @@ class DiffLlamaAttention(nn.Module):
     requires ``head_dim_v == head_dim_q``.
     """
 
-    def __init__(self, config: DiffLlamaConfig, layer_idx: int | None = None):
+    def __init__(self, config: DiffLlamaConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx

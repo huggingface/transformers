@@ -155,9 +155,7 @@ class AltRobertaEmbeddings(RobertaEmbeddings):
 
 
 class AltRobertaSelfAttention(ChineseCLIPTextSelfAttention):
-    def __init__(self, config):
-        super().__init__(config)
-        self.is_causal = False
+    pass
 
 
 class AltRobertaSelfOutput(RobertaSelfOutput):
@@ -244,12 +242,12 @@ class AltCLIPPreTrainedModel(CLIPPreTrainedModel):
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, AltCLIPAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.config.hidden_size**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
             init.normal_(module.k_proj.weight, std=in_proj_std)
             init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.o_proj.weight, std=out_proj_std)
         elif isinstance(module, AltCLIPMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor

@@ -298,18 +298,6 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         return self.after_rms(hidden_states)
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -335,21 +323,35 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 class HunYuanVLVisionAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: HunYuanVLVisionConfig):
         super().__init__()
-
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.attention_heads
-        self.head_dim = getattr(config, "head_dim", self.embed_dim // self.num_heads)
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_dim**-0.5
-        self.num_key_value_groups = 1
-        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=True)
         self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+        self.num_key_value_groups = 1
 
     def forward(
         self,
@@ -358,15 +360,16 @@ class HunYuanVLVisionAttention(nn.Module):
         max_seqlen: int | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
         batch_size, seq_len, _ = query.shape
 
-        query_states = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        key_states = key.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+        value_states = value.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -515,8 +518,8 @@ class HunYuanVLDenseV1Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.query_layernorm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.key_layernorm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")
 
@@ -537,9 +540,8 @@ class HunYuanVLDenseV1Attention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        query_states = self.query_layernorm(query_states)
-        key_states = self.key_layernorm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -547,6 +549,7 @@ class HunYuanVLDenseV1Attention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,

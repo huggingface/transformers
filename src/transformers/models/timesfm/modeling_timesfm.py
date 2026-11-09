@@ -220,7 +220,7 @@ class TimesFmAttention(nn.Module):
 
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_heads * self.head_dim
-        self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        self.per_dim_scale = nn.Parameter(torch.empty((self.head_dim,)))
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
         self.k_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
@@ -228,7 +228,7 @@ class TimesFmAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
 
     def _scale_query(self, query: torch.Tensor) -> torch.Tensor:
-        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
+        scale = F.softplus(self.per_dim_scale).mul(1.442695041 / math.sqrt(self.head_dim))
         return query * scale[None, None, None, :]
 
     def forward(
@@ -314,7 +314,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, TimesFmAttention):
             # Initialize scaling parameter
-            init.ones_(module.scaling)
+            init.ones_(module.per_dim_scale)
         elif isinstance(module, TimesFmPositionalEmbedding):
             num_timescales = module.embedding_dims // 2
             max_timescale, min_timescale = module.max_timescale, module.min_timescale

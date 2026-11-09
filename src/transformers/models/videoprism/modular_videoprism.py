@@ -35,9 +35,9 @@ from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..qwen3_next.modeling_qwen3_next import l2norm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig
 from ..t5.tokenization_t5 import T5Tokenizer
+from ..vit.modeling_vit import ViTAttention
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
-    VivitAttention,
     VivitEmbeddings,
     VivitLayer,
     VivitPreTrainedModel,
@@ -442,7 +442,7 @@ class VideoPrismTextEmbeddings(nn.Module):
         return embeddings
 
 
-class VideoPrismAttention(VivitAttention):
+class VideoPrismAttention(ViTAttention):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__(config)
         del self.num_attention_heads
@@ -614,7 +614,7 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         )
 
 
-class VideoPrismMultiheadAttentionPoolingHead(VivitAttention):
+class VideoPrismMultiheadAttentionPoolingHead(ViTAttention):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         del self.num_attention_heads

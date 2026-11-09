@@ -44,12 +44,13 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
-from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerPreTrainedModel, MuseGlimmerTextAttention
+from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerPreTrainedModel
 from ..nemotron.modeling_nemotron import NemotronMLP
 from .configuration_neomme import NeoMMEConfig
 
@@ -337,7 +338,7 @@ class NeoMMESigmoidGatedProjection(nn.Module):
 
 
 @no_inherit_decorator
-class NeoMMEAttention(MuseGlimmerTextAttention):
+class NeoMMEAttention(EuroBertAttention):
     """Bidirectional grouped-query attention with QK-norm, M-RoPE, and a sigmoid output gate.
 
     QK-norm runs before rotary embedding, value embeddings are added after rotation, and
@@ -345,15 +346,11 @@ class NeoMMEAttention(MuseGlimmerTextAttention):
     """
 
     def __init__(self, config: NeoMMEConfig, layer_idx: int):
-        super().__init__()
-        del self.qk_norm
-        del self.qk_scale_factor
-        del self.gate_proj
+        super().__init__(config, layer_idx)
         del self.o_proj
-
+        self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
         self.attention_type = config.layer_types[layer_idx]
         self.num_attention_heads = config.num_attention_heads
-        self.is_causal = False
         self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
         self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
 

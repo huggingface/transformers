@@ -67,7 +67,7 @@ class Starcoder2MLP(nn.Module):
 
 
 class Starcoder2Attention(MistralAttention):
-    def __init__(self, config: Starcoder2Config, layer_idx: int | None = None):
+    def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__(config=config, layer_idx=layer_idx)
         self.residual_dropout = config.residual_dropout
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
@@ -108,7 +108,7 @@ class Starcoder2Attention(MistralAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # diff with Llama
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 

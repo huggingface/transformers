@@ -33,15 +33,15 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..qwen2_audio.modeling_qwen2_audio import (
-    Qwen2AudioAttention,
     Qwen2AudioEncoder,
     Qwen2AudioEncoderLayer,
     Qwen2AudioPreTrainedModel,
 )
+from ..whisper.modeling_whisper import WhisperAttention
 from .configuration_voxtral import VoxtralConfig
 
 
-class VoxtralAttention(Qwen2AudioAttention):
+class VoxtralAttention(WhisperAttention):
     pass
 
 

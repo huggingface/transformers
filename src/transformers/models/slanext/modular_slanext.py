@@ -38,9 +38,9 @@ from ...utils.generic import TensorType, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
-    GotOcr2VisionAttention,
     GotOcr2VisionEncoder,
 )
+from ..sam.modeling_sam import SamVisionAttention
 
 
 logger = logging.get_logger(__name__)
@@ -52,7 +52,7 @@ class SLANeXtVisionConfig(GotOcr2VisionConfig):
     image_size: int = 512
 
 
-class SLANeXtVisionAttention(GotOcr2VisionAttention):
+class SLANeXtVisionAttention(SamVisionAttention):
     pass
 
 

@@ -34,8 +34,8 @@ from ..chameleon.modeling_chameleon import (
     ChameleonPreTrainedModel,
     ChameleonVQVAEEncoderConvDownsample,
 )
+from ..clip.modeling_clip import CLIPAttention
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel, TransformersKwargs
-from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
@@ -362,7 +362,7 @@ class Emu3VQVAEResnetBlock(nn.Module):
         return residual + hidden_states
 
 
-class Emu3VQVAEAttentionBlock(SiglipAttention):
+class Emu3VQVAEAttentionBlock(CLIPAttention):
     def __init__(self, config: Emu3VQVAEConfig):
         super().__init__(config)
 

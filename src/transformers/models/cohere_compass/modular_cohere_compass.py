@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import no_inherit_decorator
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
@@ -250,9 +251,11 @@ class CohereCompassLayerNorm(Cohere2LayerNorm):
     pass
 
 
+@no_inherit_decorator
 class CohereCompassAttention(Cohere2Attention):
     def __init__(self, config: CohereCompassTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.use_rope = config.rope_parameters[config.layer_types[layer_idx]] is not None
 
     def forward(
         self,
@@ -269,8 +272,9 @@ class CohereCompassAttention(Cohere2Attention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is not None:
+        if self.use_rope:
             cos, sin = position_embeddings
+            # diff from parent: Llama-style (half-split) RoPE instead of Cohere's interleaved RoPE
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:

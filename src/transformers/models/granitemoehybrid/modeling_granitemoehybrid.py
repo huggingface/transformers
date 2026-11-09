@@ -130,7 +130,7 @@ class GraniteMoeHybridAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = config.attention_multiplier  # Only diff with llama
+        self.scaling = config.attention_multiplier
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 

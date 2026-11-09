@@ -28,9 +28,9 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ..granite.modeling_granite import GraniteAttention
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
-    GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
@@ -46,7 +46,7 @@ from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
+class GraniteMoeHybridAttention(GraniteAttention):
     """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
     opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
     instead of a ``(cos, sin)`` tuple."""

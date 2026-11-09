@@ -15,7 +15,6 @@
 
 import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -26,8 +25,8 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..mistral.configuration_mistral import MistralConfig
+from ..mistral.modeling_mistral import MistralAttention
 from ..qwen2.modeling_qwen2 import (
-    Qwen2Attention,
     Qwen2DecoderLayer,
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
@@ -80,13 +79,12 @@ class MinistralMLP(Qwen2MLP):
     pass
 
 
-class MinistralAttention(Qwen2Attention):
+class MinistralAttention(MistralAttention):
     def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         # Match Mistral: q/k/v do not have bias
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        super().__init__(config, layer_idx)
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
 
 class MinistralRMSNorm(Qwen2RMSNorm):

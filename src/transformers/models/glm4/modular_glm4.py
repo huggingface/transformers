@@ -21,7 +21,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..glm.modeling_glm import GlmAttention, GlmForCausalLM, GlmForSequenceClassification, GlmForTokenClassification
+from ...utils.generic import no_inherit_decorator
+from ..glm.modeling_glm import (
+    GlmAttention,
+    GlmForCausalLM,
+    GlmForSequenceClassification,
+    GlmForTokenClassification,
+    apply_rotary_pos_emb,  # noqa: F401
+)
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm4 import Glm4Config
 from .modeling_glm4 import Glm4RMSNorm
@@ -82,6 +89,7 @@ class Glm4DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@no_inherit_decorator
 class Glm4Attention(GlmAttention):
     pass
 

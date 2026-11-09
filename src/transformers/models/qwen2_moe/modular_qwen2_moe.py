@@ -71,9 +71,6 @@ class Qwen2MoeMLP(GemmaMLP):
 class Qwen2MoeAttention(LlamaAttention):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        if self.config.layer_types[layer_idx] == "sliding_attention":
-            self.sliding_window = config.sliding_window
-
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
