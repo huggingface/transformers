@@ -54,7 +54,7 @@ class DistributedConfig:
         fsdp_plan (`dict[str, str]`, *optional*):
             FSDP2 sharding plan. Leave as `None` to use the model's predefined `base_model_fsdp_plan` and
             class-level `_fsdp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept.
-            Applied only when `dp_replicate_size * fsdp_size > 1`.
+            Applied only when `fsdp_mesh_size > 1`.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
@@ -111,6 +111,14 @@ class DistributedConfig:
     @property
     def dp_size(self) -> int:
         """The number of ranks that each see a distinct batch: `dp_replicate_size * fsdp_size`."""
+        return self.dp_replicate_size * self.fsdp_size
+
+    @property
+    def fsdp_mesh_size(self) -> int:
+        """
+        The number of ranks the FSDP2 mesh spans, replicas included: `dp_replicate_size * fsdp_size`.
+        FSDP2 is applied when it is above 1.
+        """
         return self.dp_replicate_size * self.fsdp_size
 
     def __post_init__(self):
@@ -172,7 +180,7 @@ class DistributedConfig:
             if (self.fsdp_size * self.tp_size) % self.ep_size:
                 raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
 
-        if self.dp_size > 1 and self.pp_size > 1:
+        if self.fsdp_mesh_size > 1 and self.pp_size > 1:
             raise ValueError(
                 "Combining FSDP with pipeline parallelism is not supported yet. "
                 "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
