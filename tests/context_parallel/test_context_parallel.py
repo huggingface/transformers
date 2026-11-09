@@ -396,6 +396,13 @@ class TestContextParallelChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "`_supports_attention_backend`"):
             self._check(LlamaWithOwnAttention(_tiny_config()))
 
+    def test_refuses_stateful_models(self):
+        class StatefulLlama(LlamaForCausalLM):
+            _is_stateful = True
+
+        with self.assertRaisesRegex(ValueError, "carry a state along the sequence"):
+            self._check(StatefulLlama(_tiny_config()))
+
     def test_refuses_layers_that_mix_tokens_outside_attention(self):
         config = _tiny_config()
         config.layer_types = ["full_attention", "linear_attention"]
