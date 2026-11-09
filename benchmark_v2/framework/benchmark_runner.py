@@ -6,6 +6,7 @@ import pathlib
 import re
 import tempfile
 import time
+from dataclasses import asdict
 from datetime import datetime
 from queue import Queue
 from typing import Any
@@ -18,6 +19,7 @@ from tqdm import trange
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    ContinuousBatchingConfig,
     GenerationConfig,
     GenerationMixin,
     is_torch_xpu_available,
@@ -179,11 +181,11 @@ class BenchmarkRunner:
         # Some attributes only need to be set once per model
         if self._setup_for != model_id:
             self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-            # We set the EOS token to the padding token for open-ended generation
-            self.tokenizer.eos_token = self.tokenizer.pad_token
             self._setup_for = model_id
 
-        # Prepare inputs
+        # Repeat tokenized text when needed so sequence_length is exact, not just a truncation limit.
+        if config.sequence_length < 1:
+            raise ValueError("sequence_length must be positive")
         self.inputs = self.tokenizer(
             [DEFAULT_PROMPT for _ in range(config.batch_size)],
             return_tensors="pt",
@@ -191,11 +193,18 @@ class BenchmarkRunner:
             truncation=True,
             return_attention_mask=True,
         )
+        input_length = self.inputs["input_ids"].shape[-1]
+        if input_length == 0:
+            raise ValueError("The benchmark prompt tokenized to an empty sequence")
+        repeats = (config.sequence_length + input_length - 1) // input_length
+        for key, value in self.inputs.items():
+            self.inputs[key] = value.repeat(1, repeats)[:, : config.sequence_length]
         self.inputs["use_cache"] = True
 
         # Prepare generation config
         generation_config_kwargs = {
             "do_sample": False,
+            "eos_token_id": -1,
             "max_new_tokens": config.num_tokens_to_generate,
         }
 
@@ -226,6 +235,27 @@ class BenchmarkRunner:
         )
         self.model = self.model.eval()
         self.inputs = self.inputs.to(self.model.device)
+        self.continuous_batching_config = (
+            ContinuousBatchingConfig(allow_block_sharing=False, auto_switch_to_flash=False)
+            if config.continuous_batching
+            else None
+        )
+        self.execution_settings = {
+            "input_token_lengths": self.inputs["attention_mask"].sum(dim=-1).tolist(),
+            "attention_implementation": (
+                "paged|eager"
+                if config.continuous_batching and self.model.config._attn_implementation == "eager"
+                else self.model.config._attn_implementation
+            ),
+            "dtype": str(self.model.dtype),
+            "generation_config": json.loads(self.model.generation_config.to_json_string(use_diff=False)),
+            "continuous_batching_config": (
+                asdict(self.continuous_batching_config) if self.continuous_batching_config is not None else None
+            ),
+            "persistent_manager": False if config.continuous_batching else None,
+            "manager_warmup": True if config.continuous_batching else None,
+        }
+        self.logger.info(f"Execution settings: {self.execution_settings}")
 
     def run_benchmark(self, config: BenchmarkConfig, num_tokens_to_profile: int = 0) -> BenchmarkResult | None:
         """Run a single benchmark with the given model ID and config."""
@@ -248,6 +278,7 @@ class BenchmarkRunner:
 
             # Measurement runs
             result = BenchmarkResult()
+            result.execution_settings = self.execution_settings
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations, desc="Benchmarking"):
                 e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
@@ -276,7 +307,13 @@ class BenchmarkRunner:
         if config.continuous_batching:
             inputs = self.inputs["input_ids"].tolist()
             wall_time_0 = time.perf_counter()
-            outputs = self.model.generate_batch(inputs, allow_block_sharing=False, record_timestamps=True)
+            outputs = self.model.generate_batch(
+                inputs,
+                continuous_batching_config=self.continuous_batching_config,
+                record_timestamps=True,
+                persistent_manager=False,
+                warmup=True,
+            )
         else:
             streamer = BenchmarkStreamer()
             wall_time_0 = time.perf_counter()

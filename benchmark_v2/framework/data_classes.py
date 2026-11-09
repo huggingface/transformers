@@ -93,6 +93,7 @@ class BenchmarkResult:
     """Result from a series of benchmark runs."""
 
     def __init__(self) -> None:
+        self.execution_settings = {}
         self.e2e_latency = []
         self._timestamps = []
         self.time_to_first_token = []
@@ -127,6 +128,7 @@ class BenchmarkResult:
         else:
             gpu_metrics = [gm.to_dict() for gm in self.gpu_metrics]
         return {
+            "execution_settings": self.execution_settings,
             "e2e_latency": self.e2e_latency,
             "time_to_first_token": self.time_to_first_token,
             "inter_token_latency": self.inter_token_latency,
@@ -149,6 +151,7 @@ class BenchmarkResult:
             timestamps = data["timestamps"]
         # Create a new instance and accumulate the data
         new_instance = cls()
+        new_instance.execution_settings = data.get("execution_settings", {})
         new_instance.e2e_latency = data["e2e_latency"]
         new_instance._timestamps = timestamps
         new_instance.time_to_first_token = data["time_to_first_token"]
