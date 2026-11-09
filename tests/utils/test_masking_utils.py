@@ -410,21 +410,17 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         position_ids = torch.tensor([[0, 1, 2, 0, 1, 2]])
         block_ids = torch.tensor([[0, 0, -1, 0, 0, -1]])
 
+        # fmt: off
         expected = torch.tensor(
-            [
-                [
-                    [
-                        [1, 1, 0, 0, 0, 0],
-                        [1, 1, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0],
-                        [0, 0, 0, 1, 1, 0],
-                        [0, 0, 0, 1, 1, 0],
-                        [0, 0, 0, 1, 1, 1],
-                    ]
-                ]
-            ],
+             [[[[1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 1]]]],
             dtype=torch.bool,
         )
+        # fmt: on
 
         for mask_fn in (
             create_causal_mask,
