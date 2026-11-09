@@ -31,12 +31,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..glm.modeling_glm import rotate_half
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..llama.modeling_llama import LlamaMLP, LlamaModel
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralPreTrainedModel, MixtralTopKRouter
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from .configuration_deepseek_v4 import DeepseekV4Config
 
 
@@ -63,23 +63,17 @@ def apply_rotary_pos_emb(
     return torch.cat([nope, rotated], dim=-1)
 
 
-class DeepseekV4RMSNorm(DeepseekV3RMSNorm):
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
-        return (self.weight * hidden_states).to(input_dtype)
+class DeepseekV4RMSNorm(Olmo2RMSNorm):
+    pass
 
 
 class DeepseekV4UnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class DeepseekV4RotaryEmbedding(LagunaRotaryEmbedding):

@@ -33,6 +33,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mamba2.modeling_mamba2 import apply_mask_to_padding_states
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -43,7 +44,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRMSNorm,
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
 )
@@ -155,7 +155,7 @@ class MiniMaxConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class MiniMaxRMSNorm(MixtralRMSNorm):
+class MiniMaxRMSNorm(LlamaRMSNorm):
     pass
 
 

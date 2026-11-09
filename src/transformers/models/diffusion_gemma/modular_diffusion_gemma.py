@@ -52,12 +52,12 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig, AutoModel
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.modeling_gemma4 import (
     Gemma4ClippableLinear,
     Gemma4Model,
     Gemma4MultimodalEmbedder,
-    Gemma4RMSNorm,
     Gemma4TextDecoderLayer,
     Gemma4TextExperts,
     Gemma4TextMLP,
@@ -201,7 +201,7 @@ class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
         return inv_freq.to(device), attention_factor
 
 
-class DiffusionGemmaRMSNorm(Gemma4RMSNorm):
+class DiffusionGemmaRMSNorm(Gemma3nRMSNorm):
     pass
 
 
@@ -253,9 +253,9 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,
@@ -355,9 +355,9 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,

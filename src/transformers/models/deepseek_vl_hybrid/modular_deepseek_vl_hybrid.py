@@ -45,6 +45,7 @@ from ...utils import (
 )
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
 from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
@@ -55,7 +56,7 @@ from ..deepseek_vl.modeling_deepseek_vl import (
 )
 from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVLProcessorKwargs
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
-from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
+from ..sam.modeling_sam import SamVisionNeck
 
 
 logger = logging.get_logger(__name__)
@@ -132,7 +133,7 @@ class DeepseekVLHybridCausalLMOutputWithPast(IdeficsCausalLMOutputWithPast):
     pass
 
 
-class DeepseekVLHybridLayerNorm(SamLayerNorm):
+class DeepseekVLHybridLayerNorm(ConvNextLayerNorm):
     pass
 
 
