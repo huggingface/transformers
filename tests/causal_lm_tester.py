@@ -48,6 +48,28 @@ if is_torch_available():
     import torch
 
 
+# CausalLM-specific defaults (not shared with multimodal testers)
+_CAUSAL_LM_TESTER_DEFAULTS = {
+    "use_token_type_ids": False,
+    "hidden_dropout_prob": 0.1,
+    "attention_probs_dropout_prob": 0.1,
+    "type_vocab_size": 16,
+    "type_sequence_label_size": 2,
+    "initializer_range": 0.02,
+    "num_labels": 3,
+    "num_choices": 4,
+    "is_decoder": False,
+    "scope": None,
+    "mamba_n_groups": 1,
+    "mamba_n_heads": 16,
+    "mamba_d_state": 16,
+    "mamba_d_conv": 4,
+    "mamba_expand": 2,
+    "mamba_chunk_size": 16,
+    "tie_word_embeddings": False,
+}
+
+
 class CausalLMModelTester:
     # If the model follows the standard naming conventions, only `base_model_class` needs to be set (the others are
     # inferred from available public classes).
@@ -165,55 +187,27 @@ class CausalLMModelTester:
             mapping["zero-shot"] = self.sequence_classification_class
         return mapping
 
-    def __init__(
-        self,
-        parent,
-        use_token_type_ids=False,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        is_decoder=False,
-        scope=None,
-        mamba_n_groups=1,
-        mamba_n_heads=16,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=16,
-        **kwargs,
-    ):
+    @staticmethod
+    def get_small_config_defaults():
+        """Return model-specific overrides of the shared text and causal LM tester defaults.
+
+        Override with a fresh literal dictionary so tools can extract the values
+        without importing test modules. Explicit constructor kwargs take precedence.
+        These are test defaults, not a complete checkpoint or quantization config.
+        """
+        return {}
+
+    def __init__(self, parent, **kwargs):
         self._verify_and_infer_model_attributes()
         self.parent = parent
 
-        # Apply shared text-model defaults, then let caller kwargs override
-        for key, default in _TEXT_MODEL_TESTER_DEFAULTS.items():
-            setattr(self, key, kwargs.pop(key, default))
+        # Precedence: caller kwargs > model `get_small_config_defaults()` > CausalLM defaults > shared text defaults
+        kwargs = {**self.get_small_config_defaults(), **kwargs}
+        for key, default in {**_TEXT_MODEL_TESTER_DEFAULTS, **_CAUSAL_LM_TESTER_DEFAULTS}.items():
+            kwargs.setdefault(key, default)
+        # Derived from the final widths unless set explicitly.
+        kwargs.setdefault("head_dim", kwargs["hidden_size"] // kwargs["num_attention_heads"])
 
-        # CausalLM-specific defaults (not shared with multimodal testers)
-        self.use_token_type_ids = use_token_type_ids
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.is_decoder = is_decoder
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_n_heads = mamba_n_heads
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
-        self.tie_word_embeddings = False
-
-        # Any remaining kwargs become attributes (for model-specific params)
         for key, value in kwargs.items():
             setattr(self, key, value)
 

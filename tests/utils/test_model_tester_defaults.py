@@ -15,6 +15,7 @@
 import unittest
 
 from ..alm_tester import ALMModelTester
+from ..causal_lm_tester import CausalLMModelTester
 from ..multimodal_tester import MultiModalModelTester
 from ..vlm_tester import VLMModelTester
 
@@ -78,3 +79,45 @@ class SmallConfigDefaultsTest(unittest.TestCase):
         self.assertEqual(tester.image_size, 8)
         self.assertEqual(tester.num_image_tokens, 4)
         self.assertEqual(tester.seq_length, 11)
+
+
+class CausalLMSmallConfigDefaultsTest(unittest.TestCase):
+    def _tester_class(self, defaults):
+        class Tester(CausalLMModelTester):
+            @staticmethod
+            def get_small_config_defaults():
+                return dict(defaults)
+
+            @classmethod
+            def _verify_and_infer_model_attributes(cls):
+                # These tests exercise constructor defaults without choosing model classes.
+                pass
+
+        return Tester
+
+    def test_model_overrides_shared_and_causal_defaults_and_caller_wins(self):
+        tester = self._tester_class({"hidden_size": 64, "hidden_dropout_prob": 0.0, "mamba_n_heads": 4})
+        defaults = tester(self)
+        self.assertEqual(defaults.hidden_size, 64)
+        self.assertEqual(defaults.hidden_dropout_prob, 0.0)
+        self.assertEqual(defaults.mamba_n_heads, 4)
+        self.assertEqual(defaults.intermediate_size, 32)
+        self.assertEqual(defaults.attention_probs_dropout_prob, 0.1)
+        caller = tester(self, hidden_size=128, hidden_dropout_prob=0.2)
+        self.assertEqual(caller.hidden_size, 128)
+        self.assertEqual(caller.hidden_dropout_prob, 0.2)
+
+    def test_head_dim_derived_from_final_widths(self):
+        tester = self._tester_class({"hidden_size": 64, "num_attention_heads": 4})
+        self.assertEqual(tester(self).head_dim, 16)
+        self.assertEqual(tester(self, hidden_size=32).head_dim, 8)
+        self.assertEqual(self._tester_class({"head_dim": 32})(self).head_dim, 32)
+
+    def test_inherited_hook_keeps_existing_defaults(self):
+        tester = self._tester_class({})(self)
+        self.assertEqual(tester.hidden_size, 32)
+        self.assertEqual(tester.head_dim, 16)
+        self.assertEqual(tester.batch_size, 13)
+        self.assertEqual(tester.mamba_chunk_size, 16)
+        self.assertFalse(tester.tie_word_embeddings)
+        self.assertIsNone(tester.scope)
