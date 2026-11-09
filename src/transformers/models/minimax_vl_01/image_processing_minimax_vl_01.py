@@ -105,8 +105,6 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
 
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if kwargs.get("do_pad"):
-            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
     @auto_docstring
     def preprocess(
