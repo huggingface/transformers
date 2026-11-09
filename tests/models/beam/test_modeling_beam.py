@@ -44,6 +44,7 @@ class BeamModelTester(CausalLMModelTester):
 @require_torch
 class BeamModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BeamModelTester
+    model_split_percents = [0.5, 0.9]
 
 
 @slow
@@ -87,11 +88,13 @@ class BeamIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_left_padded = Expectations(
             {
                 ("cuda", (9, 0)): [[0.3164, 0.0057, -0.0845], [0.1074, -0.1699, 0.1133], [0.1816, -0.0270, 0.1270]],
+                ("xpu", 5): [[0.3164, 0.0057, -0.0845], [0.1074, -0.1699, 0.1133], [0.1816, -0.0270, 0.1270]],
             }
         )  # fmt: skip
         expected_unpadded = Expectations(
             {
                 ("cuda", (9, 0)): [[0.2256, 0.0104, 0.1318], [0.0635, 0.1631, -0.0298], [0.0057, 0.1089, -0.0630]],
+                ("xpu", 5): [[0.2256, 0.0104, 0.1318], [0.0635, 0.1631, -0.0298], [0.0057, 0.1089, -0.0630]],
             }
         )  # fmt: skip
 
@@ -113,6 +116,7 @@ class BeamIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_ids = Expectations(
             {
                 ("cuda", (9, 0)): [625, 858, 858, 356, 443, 356, 978, 835, 850, 756, 816, 259, 625, 844, 502, 443, 502, 443, 502, 568, 338, 52, 356, 216, 502, 502, 502, 502, 502, 502, 502, 502],
+                ("xpu", 5): [625, 858, 858, 356, 443, 356, 978, 835, 850, 756, 816, 259, 625, 844, 502, 443, 502, 443, 502, 568, 338, 52, 356, 216, 865, 140, 502, 502, 502, 502, 502, 502],
             }
         )  # fmt: skip
         model = self._dummy_model()

@@ -19,12 +19,15 @@ Tests for the serving layer.
 import asyncio
 import json
 import socket
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
+from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
@@ -39,6 +42,7 @@ from transformers.cli.serving.utils import (
     GenerationState,
     Modality,
     ToolCall,
+    build_response_parser,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
@@ -47,6 +51,7 @@ from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -56,6 +61,7 @@ from transformers.testing_utils import (
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
+from ..test_decision_head_common import tiny_qwen2
 from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -711,7 +717,63 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.body["questions"]["team"]["criteria"] = {}
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("criteria", response.json()["detail"][0]["loc"])
+        self.assertIn("a choice question needs `criteria`", response.json()["detail"][0]["msg"])
+
+
+@require_serve
+class TestSystemOneDecisionConfig(unittest.TestCase):
+    @require_torch
+    def test_answers_are_the_pipelines(self):
+        from transformers import AutoTokenizer, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        decision_config = DecisionConfig(temperature={"noul": 1.5})
+        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
+        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        answers, input_tokens = handler._answer(pipe, request)
+        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
+        self.assertEqual(answers, expected)
+        self.assertGreater(input_tokens, 0)
+
+    @require_torch
+    def test_reads_the_decision_config_of_the_repo(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        template = "{{ state }}"
+        with tempfile.TemporaryDirectory() as repo:
+            DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
+            model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
+            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+        self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
+        self.assertEqual(pipe.decision_config.chat_template, template)
+
+    @require_torch
+    def test_loads_a_decision_checkpoint_as_the_pipeline_does(self):
+        # A checkpoint shipping a decision head next to its weights is served by the decision model, not as a causal LM
+        import torch
+        from safetensors.torch import save_file
+
+        from transformers import AutoTokenizer, JevForDecision, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        with tempfile.TemporaryDirectory() as repo:
+            tiny_qwen2(tokenizer).save_pretrained(repo)
+            tokenizer.save_pretrained(repo)
+            Path(repo, "decision_config.json").write_text(
+                json.dumps({"codes": ["A", "B"], "temperature": 2.0}), encoding="utf-8"
+            )
+            save_file({"weight": torch.randn(2, 16)}, f"{repo}/readout.safetensors", metadata={"format": "pt"})
+            manager = ModelManager(device="cpu")
+            model, _ = manager.load_model_and_processor(manager.process_model_name(repo))
+            decide = pipeline("decision", model=repo, device="cpu")
+        self.assertIsInstance(model, JevForDecision)
+        self.assertIsInstance(decide.model, JevForDecision)
+        self.assertEqual(model.decision_config.temperature, decide.decision_config.temperature)
 
 
 @slow
@@ -1903,6 +1965,41 @@ class TestToolCallUnit(unittest.TestCase):
         tokenizer.parse_response.assert_called_once()
         called_template = tokenizer.parse_response.call_args.args[1]
         self.assertIs(called_template, template)
+
+    def test_tool_schema_forwarded_to_serving_parsers(self):
+        tokenizer = MagicMock()
+        tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "fields": {},
+        }
+        tokenizer.decode.return_value = ""
+        tokenizer.parse_response.return_value = {"role": "assistant"}
+
+        processor = MagicMock()
+        model = MagicMock()
+        processor.tokenizer = tokenizer
+
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "set_alarm"},
+            }
+        ]
+
+        for schema in (None, tools):
+            with self.subTest(tools=schema):
+                parse_assistant_message(processor, model, [2], [1], tools=schema)
+                self.assertEqual(
+                    tokenizer.parse_response.call_args.kwargs["tools"],
+                    schema,
+                )
+
+                with patch("transformers.cli.serving.utils.ResponseParser") as parser:
+                    build_response_parser(processor, model, [1], tools=schema)
+                    self.assertEqual(
+                        parser.call_args.kwargs["tools"],
+                        schema,
+                    )
 
     def test_parse_assistant_message_multiple_tool_calls(self):
         tokenizer = MagicMock()
