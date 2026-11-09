@@ -1746,16 +1746,17 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
                 with unittest.mock.patch.object(
-                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
-                ) as forward_mock:
+                    checkpointing_layer,
+                    "_gradient_checkpointing_func",
+                    wraps=checkpointing_layer._gradient_checkpointing_func,
+                ) as checkpoint_mock:
                     set_seed(42)
                     loss = model(**inputs).loss
                     loss.backward()
                     optimizer.step()
 
-                    # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
-                    # forward more than once.
-                    self.assertGreater(forward_mock.call_count, 1)
+                    # test that gradient checkpointing is active, i.e. the layer goes through the checkpoint function
+                    checkpoint_mock.assert_called()
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.

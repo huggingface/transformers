@@ -17,7 +17,7 @@ import copy
 import os
 import re
 import sys
-from functools import partial
+from functools import partial, wraps
 from typing import TYPE_CHECKING
 
 import torch
@@ -79,36 +79,49 @@ class GradientCheckpointingLayer(nn.Module):
     # same states). Writers must leave it `False`, otherwise the cache is updated a second time on the backward replay.
     _can_checkpoint_with_cache = False
 
-    def __call__(self, *args, **kwargs):
-        if self.gradient_checkpointing and self.training:
-            do_warn = False
-            layer_name = self.__class__.__name__
-            message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.forward = _checkpointed(cls.forward)
 
-            if "use_cache" in kwargs and kwargs["use_cache"]:
-                kwargs["use_cache"] = False
-                message += " `use_cache=False`,"
+    def _checkpoint(self, forward, *args, **kwargs):
+        do_warn = False
+        layer_name = self.__class__.__name__
+        message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
+
+        if "use_cache" in kwargs and kwargs["use_cache"]:
+            kwargs["use_cache"] = False
+            message += " `use_cache=False`,"
+            do_warn = True
+
+        if not self._can_checkpoint_with_cache:
+            # different names for the same thing in different layers
+            if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
+                kwargs["past_key_values"] = None
+                message += " `past_key_values=None`,"
                 do_warn = True
 
-            if not self._can_checkpoint_with_cache:
-                # different names for the same thing in different layers
-                if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                    kwargs["past_key_values"] = None
-                    message += " `past_key_values=None`,"
-                    do_warn = True
+            if "layer_past" in kwargs and kwargs["layer_past"] is not None:
+                kwargs["layer_past"] = None
+                message += " `layer_past=None`,"
+                do_warn = True
 
-                if "layer_past" in kwargs and kwargs["layer_past"] is not None:
-                    kwargs["layer_past"] = None
-                    message += " `layer_past=None`,"
-                    do_warn = True
+        # warn if anything was changed
+        if do_warn:
+            message = message.rstrip(",") + "."
+            logger.warning_once(message)
 
-            # warn if anything was changed
-            if do_warn:
-                message = message.rstrip(",") + "."
-                logger.warning_once(message)
+        return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
 
-            return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
-        return super().__call__(*args, **kwargs)
+
+def _checkpointed(forward):
+    @wraps(forward)
+    def checkpointed_forward(self, *args, **kwargs):
+        is_outermost = type(self).forward is checkpointed_forward
+        if self.gradient_checkpointing and self.training and is_outermost:
+            return self._checkpoint(forward, *args, **kwargs)
+        return forward(self, *args, **kwargs)
+
+    return checkpointed_forward
 
 
 @auto_docstring

@@ -4361,6 +4361,23 @@ class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
         self.assertEqual([layer.gradient_checkpointing for layer in model.layers], [True, False])
 
 
+class GradientCheckpointingHooksTest(unittest.TestCase):
+    """Module hooks run outside the checkpoint: once per forward, with grad enabled. FSDP2 relies on this (#50424)."""
+
+    def test_hooks_run_once_with_grad_enabled(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        for use_reentrant in (True, False):
+            with self.subTest(use_reentrant=use_reentrant):
+                model = LlamaModel(config).train()
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": use_reentrant})
+                grad_enabled = []
+                model.layers[0].register_forward_pre_hook(lambda *_: grad_enabled.append(torch.is_grad_enabled()))
+                model(input_ids=torch.randint(0, 100, (1, 8))).last_hidden_state.sum().backward()
+                self.assertEqual(grad_enabled, [True])
+
+
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):
     """`activation_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
