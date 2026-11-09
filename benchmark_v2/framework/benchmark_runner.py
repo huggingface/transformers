@@ -122,7 +122,7 @@ class BenchmarkStreamer(BaseStreamer):
         self.text_queue.put(value)
 
     def end(self):
-        self.timestamps.append(time.perf_counter())
+        # Stream completion is not a generated token.
         self.text_queue.put(self.stop_signal)
 
     def __iter__(self):
@@ -264,7 +264,7 @@ class BenchmarkRunner:
 
     def time_generate(
         self, config: BenchmarkConfig, warmup: bool
-    ) -> tuple[float, list[float], str, GPURawMetrics | None]:
+    ) -> tuple[float, list[list[float]], str, GPURawMetrics | None]:
         # Prepare gpu monitoring if needed
         if config.gpu_monitoring and not warmup:
             gpu_monitor = GPUMonitor(logger=self.logger)
@@ -306,7 +306,8 @@ class BenchmarkRunner:
 
         # Compute metrics
         e2e_latency = wall_time_1 - wall_time_0
-        timestamps = torch.tensor(timestamps).sub(wall_time_0).tolist()
+        # Subtract in Python precision so large absolute clock values retain token timing differences.
+        timestamps = [[timestamp - wall_time_0 for timestamp in request] for request in timestamps]
         self.logger.info(
             f"Time generate done in {e2e_latency:.2f} seconds. Memory usage: {self.torch_accelerator_module.memory_allocated() / 1024**2:.2f} MB"
         )
