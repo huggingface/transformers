@@ -295,7 +295,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a different",
+                ("cuda", (8, 6)): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Categories**: The chart has 12 axes, each representing a dataset: *V",
                 ("xpu", 5): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
             }
         )  # fmt: skip
@@ -313,9 +313,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): [
-                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *V",
-                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                ("cuda", (8, 6)): [
+                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of marine mammal with a shell and tail).",
                 ],
                 ("xpu", 5): [
                     "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a graphical representation of multivariate data, where each axis represents a different variable (here, different models or tasks).  \n\nIn the image, the axes are labeled with model names (e.g., VQAv",
@@ -333,7 +333,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
+                ("cuda", (8, 6)): "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The animal on this green region is a turtle.  \n2. **Second Image**:",
                 ("xpu", 5): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
             }
         )  # fmt: skip
@@ -352,10 +352,10 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(inputs.image_grid_thw.shape[0], 3)
         expected_texts = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "It is a software tool that allows you to extract text from a document.",
-                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a blue line (BLIP-2) and a green line (InstructBLIP). The second image shows the",
-                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a category",
+                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The legend shows that the green color corresponds to “InstructBLIP”. Thus, the",
+                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
                 ],
                 ("xpu", 5): [
                     "It is a software tool that allows you to extract text from a document.",
@@ -379,9 +379,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
-                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of marine mammal with a shell and tail).",
                 ],
                 ("xpu", 5): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
@@ -403,9 +403,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts_batch = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
-                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of marine mammal with a shell and tail).",
                 ],
                 ("xpu", 5): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
