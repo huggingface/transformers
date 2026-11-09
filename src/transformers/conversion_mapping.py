@@ -1632,12 +1632,6 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="LayerNorm.beta",
                 target_patterns="LayerNorm.bias",
             ),
-            # Regression compatibility for ALM checkpoints saved with duplicate .model.model in v5.10.0-v5.23.0 (#45534)
-            # Like other legacy renamings, it is reverted on save when used at load: re-saving such a checkpoint keeps its layout.
-            WeightRenaming(
-                source_patterns=[r"^model\.language_model\.model", r"^language_model\.model\.model"],
-                target_patterns="model.language_model",
-            ),
         ],
         "sapiens2": [
             WeightRenaming(r"^cls_token", r"embeddings.cls_token"),
@@ -2023,6 +2017,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(
             source_patterns=".weight_v",
             target_patterns=".parametrizations.weight.original1",
+        ),
+        # Regression compatibility for ALM checkpoints saved with duplicate .model.model in v5.10.0-v5.23.0 (#45534)
+        # Like other legacy renamings, it is reverted on save when used at load: re-saving such a checkpoint keeps its layout.
+        WeightRenaming(
+            source_patterns=[r"^model\.language_model\.model", r"^language_model\.model\.model"],
+            target_patterns="model.language_model",
         ),
     ]
     # Base DetrModel/ConditionalDetrModel transforms are picked up automatically as
