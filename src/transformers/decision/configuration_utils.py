@@ -75,11 +75,11 @@ class DecisionConfig:
             self._logits_processors = {kind: self.get_logits_processor(kind) for kind in Question.questions_types}
         return self._logits_processors
 
-    def chat_template_kwargs(self, request, processor) -> list[dict]:
-        """The keyword arguments of `processor.apply_chat_template` for each prompt of `request`, see [`chat_template_kwargs`]."""
-        from .template_utils import chat_template_kwargs
+    def prepare_inputs(self, request, processor) -> list[tuple[dict, list]]:
+        """The tokenized `(inputs, questions)` of each prompt of `request`, see [`~decision.prepare_inputs`]."""
+        from .template_utils import prepare_inputs
 
-        return chat_template_kwargs(self, request, processor)
+        return prepare_inputs(self, request, processor)
 
     @classmethod
     def from_file(cls, path: str | Path | None = None) -> "DecisionConfig":

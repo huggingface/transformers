@@ -27,23 +27,18 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelForDecision, Qwen2Config, Qwen2ForCausalLM
-    from transformers.decision.modeling_utils import read_marks
 
 
 def render(processor, request, config=None):
     """
-    The prompts of a decision `request`, as `apply_chat_template` renders them: their ids and marks without the
-    sentinels (and their inputs without them, `stripped`), their inputs with them (what `decide` takes) and questions.
+    The prompts of a decision `request`: their ids and marks (without the sentinels), their inputs (what `decide`
+    takes) and questions.
     """
     config = config or DecisionConfig()
     prompts = []
-    for kwargs in config.chat_template_kwargs(request, processor):
-        questions = kwargs.pop("decision_questions")
-        inputs = processor.apply_chat_template(**kwargs, tokenize=True, return_dict=True, return_tensors="pt")
-        stripped, marks = read_marks(dict(inputs), config._sentinel_ids)
-        ids = stripped["input_ids"][0].tolist()
-        prompt = {"input_ids": ids, "marks": marks.tolist(), "questions": questions, "stripped": stripped}
-        prompts.append(SimpleNamespace(**prompt, inputs=dict(inputs)))
+    for inputs, questions in config.prepare_inputs(request, processor):
+        ids, marks = inputs["input_ids"][0].tolist(), inputs["marks"].tolist()
+        prompts.append(SimpleNamespace(input_ids=ids, marks=marks, questions=questions, inputs=inputs))
     return prompts
 
 

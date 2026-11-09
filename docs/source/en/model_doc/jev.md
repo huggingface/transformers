@@ -53,6 +53,7 @@ the scores into answers:
 ```python
 import torch
 from transformers import AutoTokenizer, JevForDecision
+from transformers.decision import decode_decision
 
 repo = "autotrust/JEV-9B"
 model = JevForDecision.from_pretrained(repo, dtype=torch.bfloat16, device_map="auto")
@@ -68,10 +69,8 @@ request = {
     },
 }
 answers = {}
-for kwargs in config.chat_template_kwargs(request, tokenizer):
-    questions = kwargs.pop("decision_questions")
-    inputs = tokenizer.apply_chat_template(**kwargs, tokenize=True, return_dict=True, return_tensors="pt")
-    answers |= tokenizer.decode_decision(model.decide(**inputs, decision_questions=questions), questions)
+for inputs, questions in config.prepare_inputs(request, tokenizer):
+    answers |= decode_decision(model.decide(**inputs, decision_questions=questions), questions)
 ```
 
 The same head reads the 255 answer codes of [pplx-decider](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b)

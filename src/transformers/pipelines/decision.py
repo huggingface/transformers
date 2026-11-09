@@ -3,13 +3,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, label_token_ids
+from ..decision import DecisionConfig, decode_decision, label_token_ids
 from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..decision.modeling_utils import DecisionMixin, process_scores, read_marks
+    from ..decision.modeling_utils import DecisionMixin, process_scores
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -85,34 +85,27 @@ class DecisionPipeline(Pipeline):
         request = inputs if questions is None else {"state": inputs, "questions": questions}
         if assets:
             request = (json.loads(request) if isinstance(request, str) else request) | {"assets": assets}
-        processor = self.processor or self.tokenizer
-        prompts = []
-        for kwargs in self.decision_config.chat_template_kwargs(request, processor):
-            questions = kwargs.pop("decision_questions")
-            inputs = processor.apply_chat_template(**kwargs, tokenize=True, return_dict=True, return_tensors="pt")
-            prompts.append((inputs, questions))
-        return {"prompts": prompts}
+        return {"prompts": self.decision_config.prepare_inputs(request, self.processor or self.tokenizer)}
 
     def _forward(self, model_inputs):
         # TODO: batch / continious batching
-        scores = []
-        for inputs, questions in model_inputs["prompts"]:
-            if isinstance(self.model, DecisionMixin):
-                scores.append(
-                    self.model.decide(**inputs, decision_questions=questions, decision_config=self.decision_config)
-                )
-                continue
-            # the logits of the labels before each mark
-            inputs, marks = read_marks(inputs, self.decision_config._sentinel_ids)
-            logits = self.model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
-            labels = [
-                logits[index, self.label_token_ids(tuple(question.labels))] for index, question in enumerate(questions)
+        model, decision_config, prompts = self.model, self.decision_config, model_inputs["prompts"]
+        if isinstance(model, DecisionMixin):
+            scores = [
+                model.decide(**inputs, decision_questions=q, decision_config=decision_config) for inputs, q in prompts
             ]
-            scores.append(process_scores(self.decision_config, inputs["input_ids"], marks, questions, labels))
-        return {"prompts": model_inputs["prompts"], "scores": scores}
+            return {"prompts": prompts, "scores": scores}
+        scores = []
+        for inputs, questions in prompts:  # the logits of the labels before each mark
+            inputs = dict(inputs)
+            marks = inputs.pop("marks")
+            logits = model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
+            labels = [logits[i, self.label_token_ids(tuple(q.labels))] for i, q in enumerate(questions)]
+            scores.append(process_scores(decision_config, inputs["input_ids"], marks, questions, labels))
+        return {"prompts": prompts, "scores": scores}
 
     def postprocess(self, model_outputs):
         answers = {}
         for (_, questions), scores in zip(model_outputs["prompts"], model_outputs["scores"]):
-            answers |= (self.processor or self.tokenizer).decode_decision(scores, questions)
+            answers |= decode_decision(scores, questions)
         return answers
