@@ -46,7 +46,8 @@ ListOfDict = list[dict[str, int | str]]
 @dataclass
 class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     """
-    Output type of [`Wav2Vec2DecoderWithLM`], with transcription. Deprecated, will be removed in Transformers v6.
+    Output type of [`~Wav2Vec2ProcessorWithLM.decode`] and [`~Wav2Vec2ProcessorWithLM.batch_decode`]. Deprecated, will
+    be removed in Transformers v6.
 
     Args:
         text (list of `str` or `str`):
@@ -69,13 +70,13 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
 @auto_docstring
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     _deprecation_message = (
-        "`Wav2Vec2ProcessorWithLM` and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will "
-        "be removed in Transformers v6. To keep language model decoding, call pyctcdecode directly: "
+        "`Wav2Vec2ProcessorWithLM` and n-gram language model decoding with pyctcdecode + kenlm are deprecated and "
+        "will be removed in Transformers v6. To keep language model decoding, call pyctcdecode directly: "
         "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
     )
     _missing_dependencies_message = (
-        "`Wav2Vec2ProcessorWithLM` needs `pyctcdecode` and `kenlm`, which are no longer installed with `transformers[audio]`. It is "
-        "deprecated and will be removed in Transformers v6.\n"
+        "`Wav2Vec2ProcessorWithLM` needs `pyctcdecode` and `kenlm`, which are no longer installed with "
+        "`transformers[audio]`. It is deprecated and will be removed in Transformers v6.\n"
         "- To keep language model decoding, install them or call pyctcdecode directly: "
         "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode\n"
         "- To decode without the language model, load `Wav2Vec2Processor` instead and decode "

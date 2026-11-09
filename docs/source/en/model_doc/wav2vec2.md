@@ -140,7 +140,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 > [!WARNING]
 > [`Wav2Vec2ProcessorWithLM`] and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will be
 > removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with
-> `transformers[audio]`. To keep the same outputs, call pyctcdecode directly, see
+> `transformers[audio]`. To keep language model decoding, call pyctcdecode directly, see
 > [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
 
 [[autodoc]] Wav2Vec2ProcessorWithLM
@@ -217,7 +217,9 @@ result["transcription"][:2]
 
 [`Wav2Vec2ProcessorWithLM`] is a thin wrapper around [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode).
 Load the feature extractor and tokenizer with [`Wav2Vec2Processor`], load the language model with pyctcdecode, and call
-pyctcdecode on the logits. This gives the same transcriptions as [`~Wav2Vec2ProcessorWithLM.batch_decode`].
+pyctcdecode on the logits. This gives the same transcriptions as [`~Wav2Vec2ProcessorWithLM.batch_decode`]. It
+requires [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode) and [kenlm](https://github.com/kpu/kenlm),
+which are no longer installed with `transformers[audio]`.
 
 ```python
 import torch
@@ -258,8 +260,6 @@ To decode without the language model, take the most likely token at each frame:
 ```python
 transcription = processor.batch_decode(logits.argmax(-1))
 ```
-
-This requires [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode) and [kenlm](https://github.com/kpu/kenlm), which are not installed with Transformers.
 
 ## Wav2Vec2 specific outputs
 
