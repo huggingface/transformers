@@ -54,8 +54,9 @@ class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         height = 2 * processor.image_processor.patch_size
         width = 4 * processor.image_processor.patch_size
         image_grid_thw = torch.tensor([[1, 2, 4]])
+        prompt = f"{processor.image_token}Like <bbox>[0, 0, 250, 250]</bbox><mask><|mask|></mask>."
         text = (
-            f"{processor.image_token}<think>The objects occupy <bbox>[0, 0, 1000, 1000]</bbox>.</think>\n\n"
+            f"{prompt}<think>The objects occupy <bbox>[0, 0, 1000, 1000]</bbox>.</think>\n\n"
             "The cat is at <bbox>[0, 0, 500, 1000]</bbox><mask><|mask|></mask>. "
             "The dog is at <bbox>[500, 250, 1000, 750]</bbox>.<|im_end|>"
         )
@@ -65,12 +66,17 @@ class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         expected_mask = torch.zeros((1, height, width), dtype=torch.bool)
         expected_mask[:, :, : width // 2] = True
-        mask_logits = torch.where(expected_mask, 10.0, -10.0)
+        # The first mask belongs to the prompt and must be ignored.
+        mask_logits = torch.cat(
+            [torch.full_like(expected_mask, 10.0, dtype=torch.float), torch.where(expected_mask, 10.0, -10.0)]
+        )
 
         input_ids = processor.tokenizer(text, return_tensors="pt").input_ids
+        prompt_length = len(processor.tokenizer(prompt).input_ids)
         results = processor.post_process_grounding(
             input_ids,
             image_grid_thw,
+            prompt_length=prompt_length,
             mask_logits=[mask_logits],
             mask_token_indices=[(input_ids == processor.mask_token_id).nonzero()],
         )
@@ -82,6 +88,7 @@ class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         results = processor.post_process_grounding(
             input_ids,
             image_grid_thw,
+            prompt_length=prompt_length,
             mask_logits=[mask_logits],
             mask_token_indices=[(input_ids == processor.mask_token_id).nonzero()],
             ignore_thinking=False,

@@ -74,13 +74,18 @@ with torch.no_grad():
     )
     hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
     mask_logits, mask_token_indices = model.decode_masks(
-        input_ids=outputs.sequences,
+        outputs.sequences,
         hidden_states=hidden_states,
         image_hidden_states=outputs.image_hidden_states,
         image_grid_thw=inputs.image_grid_thw,
     )
 results = processor.post_process_grounding(
-    outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
+    outputs.sequences,
+    inputs.image_grid_thw,
+    prompt_length=inputs.input_ids.shape[1],
+    mask_logits=mask_logits,
+    mask_token_indices=mask_token_indices,
+    target_sizes=[(480, 640)],
 )
 # Bounding boxes in absolute (top_left_x, top_left_y, bottom_right_x, bottom_right_y) pixel coordinates
 print(results[0]["boxes"])

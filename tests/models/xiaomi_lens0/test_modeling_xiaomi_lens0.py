@@ -379,7 +379,12 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ignore_thinking=True,
             )
         results = self.processor.post_process_grounding(
-            outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
+            outputs.sequences,
+            inputs.image_grid_thw,
+            prompt_length=inputs.input_ids.shape[1],
+            mask_logits=mask_logits,
+            mask_token_indices=mask_token_indices,
+            target_sizes=[(480, 640)],
         )
         self.assertEqual(results[0]["masks"].shape, (1, 480, 640))
 
@@ -434,7 +439,12 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             )
 
         results = self.processor.post_process_grounding(
-            outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
+            outputs.sequences,
+            inputs.image_grid_thw,
+            prompt_length=inputs.input_ids.shape[1],
+            mask_logits=mask_logits,
+            mask_token_indices=mask_token_indices,
+            target_sizes=[(480, 640)],
         )
         self.assertEqual(results[0]["masks"].shape, (1, 480, 640))
 

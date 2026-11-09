@@ -46,12 +46,12 @@ class XiaomiLens0ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 def get_preceding_image_indices(
-    input_ids: "torch.LongTensor", image_token_id: int
-) -> tuple["torch.LongTensor", "torch.LongTensor"]:
+    input_ids: "torch.Tensor", image_token_id: int
+) -> tuple["torch.Tensor", "torch.Tensor"]:
     """Map each token to its preceding image.
 
     Returns:
-        `tuple[torch.LongTensor, torch.LongTensor]`: `image_indices` of shape `(batch_size, sequence_length)`
+        `tuple[torch.Tensor, torch.Tensor]`: `image_indices` of shape `(batch_size, sequence_length)`
         contains image indices across the batch, or `-1` for tokens before any image in their sequence.
         `images_per_sequence` of shape `(batch_size,)` contains the number of images in each sequence.
     """
@@ -66,7 +66,7 @@ def get_preceding_image_indices(
 
 
 def get_non_thinking_token_mask(
-    input_ids: "torch.LongTensor", think_start_token_id: int, think_end_token_id: int
+    input_ids: "torch.Tensor", think_start_token_id: int, think_end_token_id: int
 ) -> "torch.BoolTensor":
     """Returns boolean mask where all tokens outside thinking blocks are `True`."""
     token_positions = torch.arange(input_ids.shape[-1], device=input_ids.device) + 1
@@ -236,8 +236,9 @@ class XiaomiLens0Processor(ProcessorMixin):
     @requires(backends=("torch",))
     def post_process_grounding(
         self,
-        input_ids: "torch.Tensor",
+        sequences: "torch.Tensor",
         image_grid_thw: "torch.Tensor",
+        prompt_length: int,
         mask_logits: list["torch.Tensor"] | None = None,
         mask_token_indices: list["torch.Tensor"] | None = None,
         target_sizes: list[tuple[int, int]] | None = None,
@@ -250,17 +251,19 @@ class XiaomiLens0Processor(ProcessorMixin):
         Boxes and masks are expected in `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|><\mask>` format with
         box coordinates normalized to `[0, 1000]`. Both are optional. Masks require `mask_logits` and
         `mask_token_indices` to be set. If boxes and masks are detected, they are paired based on their
-        position in `input_ids`, such that the first box is matched with the first mask and so on.
+        position in `sequences`, such that the first box is matched with the first mask and so on.
 
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            sequences (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 The full sequences (prompt and generated tokens) the masks were decoded from.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
                 The image grids returned by the processor.
-            mask_logits (`list[torch.FloatTensor]`, *optional*):
+            prompt_length (`int`):
+                The number of prompt tokens in `sequences`. Used to ignore boxes and masks in the prompt.
+            mask_logits (`list[torch.Tensor]`, *optional*):
                 One `(num_masks, height, width)` tensor per image, in token order as returned by `decode_masks`.
                 Omit or pass `None` for box-only output with empty mask tensors.
-            mask_token_indices (`list[torch.LongTensor]`, *optional*):
+            mask_token_indices (`list[torch.Tensor]`, *optional*):
                 One `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
                 by `decode_masks`, in token order matching `mask_logits`. Required when `mask_logits` is provided.
             target_sizes (`list[tuple[int, int]]`, *optional*):
@@ -274,7 +277,7 @@ class XiaomiLens0Processor(ProcessorMixin):
 
         Returns:
             `list[dict]`: One dictionary per image with:
-                - **boxes** (`torch.FloatTensor` of shape `(num_boxes, 4)`): Boxes in absolute
+                - **boxes** (`torch.Tensor` of shape `(num_boxes, 4)`): Boxes in absolute
                   `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` pixel coordinates.
                 - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary segmentation masks.
                   Boxes and masks are each in token order. Entries with the same index are paired up to
@@ -302,15 +305,15 @@ class XiaomiLens0Processor(ProcessorMixin):
         if target_sizes is None:
             target_sizes = [(height * patch_size, width * patch_size) for _, height, width in image_grids]
 
-        sequences = input_ids.tolist()
         selected_tokens = (
-            get_non_thinking_token_mask(input_ids, self.think_start_token_id, self.think_end_token_id).tolist()
+            get_non_thinking_token_mask(sequences, self.think_start_token_id, self.think_end_token_id)
             if ignore_thinking
-            else None
+            else torch.ones_like(sequences, dtype=torch.bool, device="cpu")
         )
+        selected_tokens = selected_tokens[:, prompt_length:].tolist()
 
-        image_indices, images_per_sequence = get_preceding_image_indices(input_ids, self.image_token_id)
-        image_indices = image_indices.tolist()
+        image_indices, images_per_sequence = get_preceding_image_indices(sequences, self.image_token_id)
+        image_indices = image_indices[:, prompt_length:].tolist()
         num_image_placeholders = images_per_sequence.sum().item()
         if num_image_placeholders != num_images:
             raise ValueError(
@@ -319,10 +322,10 @@ class XiaomiLens0Processor(ProcessorMixin):
             )
 
         boxes_per_image = [[] for _ in image_grids]
-        for sequence_index, sequence_ids in enumerate(sequences):
+        for sequence_index, sequence_ids in enumerate(sequences[:, prompt_length:].tolist()):
             bbox_start_index = None
             for token_index, token_id in enumerate(sequence_ids):
-                if selected_tokens is not None and not selected_tokens[sequence_index][token_index]:
+                if not selected_tokens[sequence_index][token_index]:
                     bbox_start_index = None
                     continue
 
@@ -354,6 +357,10 @@ class XiaomiLens0Processor(ProcessorMixin):
                 raise ValueError(
                     f"Image {image_index} has {len(token_indices)} mask token indices but received {image_mask_logits.shape[0]} masks."
                 )
+            # Masks are in token order, so masks in the prompt come first
+            num_prompt_masks = (token_indices[:, 1] < prompt_length).sum().item()
+            image_mask_logits = image_mask_logits[num_prompt_masks:]
+            token_indices = token_indices[num_prompt_masks:]
             if len(token_indices) == 0:
                 image_mask_logits = image_mask_logits.new_empty(0, height, width)
             elif (height, width) != image_mask_logits.shape[-2:]:
