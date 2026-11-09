@@ -35,7 +35,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -43,6 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
 from ..convnext.modeling_convnext import ConvNextLayerNorm
@@ -54,7 +55,7 @@ from ..deepseek_vl.modeling_deepseek_vl import (
     DeepseekVLModel,
     DeepseekVLPreTrainedModel,
 )
-from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVLProcessorKwargs
+from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..sam.modeling_sam import SamVisionNeck
 
@@ -669,13 +670,11 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         )
 
 
-class DeepseekVLHybridProcessorKwargs(DeepseekVLProcessorKwargs):
-    pass
-
-
 class DeepseekVLHybridProcessor(DeepseekVLProcessor):
     pass
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLHybridProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "DeepseekVLHybridConfig",

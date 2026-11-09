@@ -20,29 +20,26 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
     import torch
 
 
-class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "return_token_type_ids": False,
-            "stride": 0,
-            "truncation": True,
-        },
-        "images_kwargs": {
-            "max_patches": 4096,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
+    text_kwargs = {
+        "padding": True,
+        "return_token_type_ids": False,
+        "truncation": True,
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "max_patches": 4096,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
         r"""
         num_image_tokens (`int`, *optional*, defaults to 2048):
@@ -59,7 +56,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] = None,
-        **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
@@ -68,7 +65,6 @@ class Kosmos2_5Processor(ProcessorMixin):
             raise ValueError("Kosmos2_5Processor requires images to be passed.")
 
         output_kwargs = self._merge_kwargs(
-            Kosmos2_5ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -126,5 +122,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Kosmos2_5ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Kosmos2_5Processor"]
