@@ -180,6 +180,8 @@ def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callabl
     This return the mask_function corresponding to a 2D packed sequence mask, that will make sure each sequence is fully independent
     of all others inside a batch dimension.
     Note that it is ensured that `packed_sequence_mask.shape[1] == q_length == kv_length`, so we can never have indexing problems here.
+    If this was not the case, i.e. q_length < kv_length, we would need a more advanced way to decide if a given (`q_idx`, `kv_idx`) tuple
+    belongs to the same sequence or not.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
@@ -192,7 +194,9 @@ def remap_positions_for_packed_sequence(mask_function: Callable, position_ids: t
     """
     This function remaps the monotonically increasing `q_idx` and `kv_idx` to their actual per-sequence indices when we detect
     packed sequence format, i.e. several sequences inside the same batch dimension.
-    Note that in those cases we ensure `position_ids.shape[1] == q_length == kv_length`, so we can never have indexing problems here.
+    Note that it is ensured that `position_ids.shape[1] == q_length == kv_length` here, so we can never have indexing problems here.
+    If this was not the case, i.e. q_length < kv_length, we would need to infer the packed kv_position_ids, since the `position_ids`
+    in the argument here are the packed query positions. Then we would need to remap q_idx and kv_idx with a different tensor.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
@@ -875,14 +879,6 @@ def _preprocess_mask_arguments(
         if batch_size != position_ids.shape[0]:
             position_ids = position_ids.expand(batch_size, -1)
         packed_sequence_mask = find_packed_sequence_indices(position_ids)
-        # If q_length < kv_length, i.e. decoding, we cannot easily create the masks for packed format, as it would require an
-        # additional position offset for each sequence inside a single batch dim instead of assuming monotonically increasing positions.
-        # We only try to infer this when we don't have a mask nor cache anyway, so this is mostly a sanity check
-        if packed_sequence_mask is not None and kv_length != q_length:
-            raise ValueError(
-                "Auto detection of packed inputs is only supported for `kv_length == q_length`, i.e. training or prefill/inference "
-                "without cache."
-            )
 
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
