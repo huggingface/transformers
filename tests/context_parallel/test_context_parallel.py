@@ -264,6 +264,20 @@ class TestContextParallelRouting(unittest.TestCase):
             self.assertIs(ALL_ATTENTION_FUNCTIONS["sdpa"], attention)
             attention(other_model.layers[1], query, key, value, None)
             self.assertEqual(implementation.modules_seen[-1], other_model.layers[1])
+
+            # another function registered under the key afterwards (a hub kernel, for one) is wrapped in turn
+            replacement_calls = []
+
+            def replacement(module, *args, **kwargs):
+                replacement_calls.append(module)
+                return original(module, *args, **kwargs)
+
+            ALL_ATTENTION_FUNCTIONS.register("sdpa", replacement)
+            self.assertIs(context_parallel._install_context_parallel_attention("sdpa"), attention)
+            self.assertIs(ALL_ATTENTION_FUNCTIONS["sdpa"], attention)
+            ALL_ATTENTION_FUNCTIONS["sdpa"](model.layers[1], query, key, value, None)
+            self.assertEqual(implementation.modules_seen[-1], model.layers[1])
+            self.assertEqual(replacement_calls, [model.layers[1]])
         finally:
             ALL_ATTENTION_FUNCTIONS.register("sdpa", original)
             context_parallel._context_parallel_attention_functions.clear()

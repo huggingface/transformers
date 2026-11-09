@@ -251,21 +251,33 @@ class _ContextParallelAttention:
 _context_parallel_attention_functions: dict[str, _ContextParallelAttention] = {}
 
 
-def register_context_parallel_attention(model: nn.Module, implementation: CPImplementation) -> None:
-    """Route the attention calls of the modules of `model` through `implementation`."""
+def _install_context_parallel_attention(attn_implementation: str) -> _ContextParallelAttention:
+    """
+    Return the wrapper of `attn_implementation` in `ALL_ATTENTION_FUNCTIONS`. Installs it the first time, and again
+    around the new function if another one was registered under that key since (loading a hub kernel does that).
+    """
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-    attn_implementation = model.config._attn_implementation
     if attn_implementation not in ALL_ATTENTION_FUNCTIONS:
         raise ValueError(
             f"Attention implementation `{attn_implementation}` is not registered in `ALL_ATTENTION_FUNCTIONS`, so "
             f"context parallelism cannot route attention through it. Valid implementations are "
             f"{ALL_ATTENTION_FUNCTIONS.valid_keys()}."
         )
+    current = ALL_ATTENTION_FUNCTIONS[attn_implementation]
     attention = _context_parallel_attention_functions.get(attn_implementation)
     if attention is None:
-        attention = _ContextParallelAttention(ALL_ATTENTION_FUNCTIONS[attn_implementation])
-        ALL_ATTENTION_FUNCTIONS.register(attn_implementation, attention)
+        attention = _ContextParallelAttention(current)
         _context_parallel_attention_functions[attn_implementation] = attention
+    elif current is not attention:
+        attention.attention_function = current
+    if current is not attention:
+        ALL_ATTENTION_FUNCTIONS.register(attn_implementation, attention)
+    return attention
+
+
+def register_context_parallel_attention(model: nn.Module, implementation: CPImplementation) -> None:
+    """Route the attention calls of the modules of `model` through `implementation`."""
+    attention = _install_context_parallel_attention(model.config._attn_implementation)
     for module in model.modules():
         attention.register_module(module, implementation)
