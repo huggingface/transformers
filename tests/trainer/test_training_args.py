@@ -360,7 +360,7 @@ class TestTrainingArguments(unittest.TestCase):
 
     def test_warmup_steps_validation(self):
         """Test warmup_steps validation for negative values."""
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, r"warmup_steps >= 0"):
             TrainingArguments(output_dir="tmp", warmup_steps=-1, report_to=None)
 
         # Zero and fractional values are valid

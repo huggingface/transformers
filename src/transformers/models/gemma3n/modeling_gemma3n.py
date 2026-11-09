@@ -1691,7 +1691,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         # Expand hidden_states to support per-layer inputs
         target_magnitude = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
-        epsilon_tensor = torch.tensor(1e-5)
 
         temp_hidden_states = [hidden_states_0]
         for i in range(1, self.config.altup_num_inputs):
@@ -1699,7 +1698,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             altup_proj = self.altup_projections[i - 1](hidden_states_0)
             current_hidden_state = altup_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
             new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True)
-            new_magnitude = torch.sqrt(torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device)))
+            new_magnitude = torch.sqrt(new_magnitude.clamp(min=1e-5))
             current_hidden_state = current_hidden_state * target_magnitude / new_magnitude
             temp_hidden_states.append(current_hidden_state)
 
@@ -1734,7 +1733,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             altup_unemb_proj: torch.Tensor = self.altup_unembed_projections[i - 1](hidden_states[i])
             current_hidden_state = altup_unemb_proj.to(dtype=hidden_states_0.dtype, device=target_magnitude.device)
             new_magnitude = torch.mean(current_hidden_state**2, dim=-1, keepdim=True)
-            new_magnitude = torch.sqrt(torch.maximum(new_magnitude, epsilon_tensor.to(target_magnitude.device)))
+            new_magnitude = torch.sqrt(new_magnitude.clamp(min=1e-5))
             current_hidden_state = current_hidden_state * target_magnitude / new_magnitude
             temp_hidden_states.append(current_hidden_state)
 
