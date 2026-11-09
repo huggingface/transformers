@@ -2072,6 +2072,14 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(layer.conv_states[0], label("conv").index_select(0, indices)))
         self.assertTrue(torch.equal(layer.recurrent_states[0], label("recurrent").index_select(0, indices)))
 
+        cache.batch_repeat_interleave(2)
+        self.assertEqual(layer.keys.shape[0], 4)
+        self.assertEqual(layer.conv_states[0].shape[0], 4)
+        self.assertEqual(layer.recurrent_states[0].shape[0], 4)
+        self.assertTrue(
+            torch.equal(layer.conv_states[0], label("conv").index_select(0, indices).repeat_interleave(2, dim=0))
+        )
+
     def test_hybrid_cache(self):
         """
         Test hybrid StaticCache with a mix of static and sliding layers,
