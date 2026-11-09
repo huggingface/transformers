@@ -167,8 +167,7 @@ class MyModelProcessorKwargs(ProcessingKwargs, total=False):
     """
     custom_call_kwarg (`bool`, *optional*, defaults to `False`):
         A parameter with a default that can passed to __call__ which is not
-        covered by the standard ProcessorArgs, ImageProcessorArgs, and
-        VideoProcessorArgs.
+        covered by the standard processor arguments (including each modality).
     """
     custom_call_kwarg: bool
 

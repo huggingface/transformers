@@ -25,23 +25,42 @@ Unele modele multimodale intercalează textul cu imagini, videoclipuri sau audio
 Definești o clasă de procesator creând `src/transformers/models/<model>/processing_<my_model_name>.py` și subclasând `ProcessorMixin`. Asigură-te că definești un obiect `TypedDict` cu valori implicite și îl atribui ca `cls.valid_processor_kwargs`.
 
 ```python
-from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MyModelImageProcessorKwargs
+    """
+    use_image_id (`bool`, defaults to `False`):
+        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
+        each image placeholder.
+    """
+    use_image_id: bool
+
 
 class MyModelProcessor(ProcessorMixin):
     valid_processor_kwargs = MyModelProcessorKwargs
+    use_image_id = False
 
-    def __init__(self, image_processor, tokenizer, chat_template=None, **kwargs):
-        self.image_token = tokenizer.image_token
-        self.image_token_id = tokenizer.image_token_id
-        super().__init__(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            chat_template=chat_template,
-            **kwargs,
-        )
+    text_kwargs = {"padding": True}   # default passed to tokenizer
+
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, image_seq_length: int = 256, **kwargs):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        self.image_seq_length = image_seq_length
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        suffix: str | None = None,
+        **kwargs: Unpack[MyModelProcessorKwargs],
+    ):
+        images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, **kwargs)
+        self.validate_inputs(images=images, text=text, **kwargs)
+
+        merged_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
+
+        merged_kwargs["use_image_id"] # is `False` as default from class attribute is added by _merge_kwargs
+        merged_kwargs["text_kwargs"]["padding"] # is `True`
 ```
 
 Implementează `replace_<modality>_token` dacă e nevoie. Acesta primește dicționarul complet de ieșire de la subprocesator și indexul inputului curent, returnând șirul de înlocuire expandat pentru acel input. Șirul de înlocuire este ceea ce modelul așteaptă în secvența de input.
