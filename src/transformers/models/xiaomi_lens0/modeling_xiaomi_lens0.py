@@ -424,7 +424,6 @@ class XiaomiLens0Model(XiaomiLens0PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
             image_last_hidden_state=(
                 mm_encoder_outputs["image"].last_hidden_state if mm_encoder_outputs.get("image") is not None else None
             ),
@@ -844,7 +843,7 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, XiaomiLens
         ...     mask_logits, mask_token_indices = model.decode_masks(
         ...         input_ids=outputs.sequences,
         ...         hidden_states=hidden_states,
-        ...         image_hidden_states=outputs.image_hidden_states,
+        ...         image_hidden_states=outputs.image_last_hidden_state,
         ...         image_grid_thw=inputs.image_grid_thw,
         ...     )
 
@@ -890,7 +889,11 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, XiaomiLens
         if mask_labels is not None or output_masks:
             ignore_thinking = mask_labels is None if ignore_thinking is None else ignore_thinking
             mask_logits, mask_token_indices = self.decode_masks(
-                input_ids, hidden_states, outputs.image_hidden_states, image_grid_thw, ignore_thinking=ignore_thinking
+                input_ids,
+                hidden_states,
+                outputs.image_last_hidden_state,
+                image_grid_thw,
+                ignore_thinking=ignore_thinking,
             )
 
         loss = mask_loss = None
@@ -914,7 +917,6 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, XiaomiLens
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

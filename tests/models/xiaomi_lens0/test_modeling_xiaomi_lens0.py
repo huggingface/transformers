@@ -26,10 +26,10 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -39,14 +39,19 @@ if is_torch_available():
     from transformers.loss.loss_xiaomi_lens0 import XiaomiLens0ForConditionalGenerationLoss
 
 
-class XiaomiLens0VisionText2TextModelTester:
+class XiaomiLens0VisionText2TextModelTester(VLMModelTester):
+    if is_torch_available():
+        base_model_class = XiaomiLens0Model
+        config_class = XiaomiLens0Config
+        conditional_generation_class = XiaomiLens0ForConditionalGeneration
+
     def __init__(
         self,
         parent,
         batch_size=3,
         seq_length=7,
         num_channels=3,
-        image_size=32,
+        image_size=64,
         text_config={
             "bos_token_id": 0,
             "eos_token_id": 1,
@@ -111,6 +116,8 @@ class XiaomiLens0VisionText2TextModelTester:
 
         self.vocab_size = text_config["vocab_size"]
         self.pad_token_id = text_config["pad_token_id"]
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
         self.hidden_size = text_config["hidden_size"]
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
@@ -142,58 +149,63 @@ class XiaomiLens0VisionText2TextModelTester:
             tie_word_embeddings=self.tie_word_embeddings,
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size * self.grid_size**2,
-                self.num_channels * (patch_size**2) * temporal_patch_size,
-            ]
-        )
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config, pixel_values = self.prepare_config_and_inputs()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        special_token_ids = [
-            self.image_token_id,
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
             self.video_token_id,
             self.vision_start_token_id,
             self.vision_end_token_id,
             self.mask_token_id,
-        ]
-        input_ids[torch.isin(input_ids, torch.tensor(special_token_ids, device=input_ids.device))] = self.pad_token_id
-        input_ids[:, -1] = self.pad_token_id
+        }
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        patch_size = self.vision_config["patch_size"]
+        temporal_patch_size = self.vision_config["temporal_patch_size"]
+        return floats_tensor(
+            [
+                batch_size * self.grid_size**2,
+                self.num_channels * (patch_size**2) * temporal_patch_size,
+            ]
+        )
+
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
         input_ids[:, 0] = self.vision_start_token_id
         input_ids[:, 1 : self.num_image_tokens + 1] = self.image_token_id
         input_ids[:, self.num_image_tokens + 1] = self.vision_end_token_id
+        return input_ids
 
-        mm_token_type_ids = (input_ids == self.image_token_id).long()
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {
+            "image_grid_thw": torch.tensor([[1, self.grid_size, self.grid_size]] * batch_size, device=torch_device),
+            "mm_token_type_ids": (input_ids == self.image_token_id).long(),
+        }
+
+    def prepare_config_and_inputs(self):
+        return self.get_config(), self.create_pixel_values()
+
+    def prepare_config_and_inputs_for_common(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        special_token_ids = torch.tensor(list(self._special_token_ids), device=input_ids.device)
+        input_ids[torch.isin(input_ids, special_token_ids)] = self.pad_token_id
+        input_ids[:, -1] = self.pad_token_id
+        input_ids, modality_inputs = self._prepare_modality_inputs(input_ids, config)
 
         inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor(
-                [[1, self.grid_size, self.grid_size]] * self.batch_size, device=torch_device
-            ),
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
+            "attention_mask": torch.ones(input_ids.shape, dtype=torch.long, device=torch_device),
+            **modality_inputs,
         }
         return config, inputs_dict
 
 
 @require_torch
-class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (XiaomiLens0Model, XiaomiLens0ForConditionalGeneration) if is_torch_available() else ()
+class XiaomiLens0ModelTest(VLMModelTest, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = XiaomiLens0VisionText2TextModelTester
     model_split_percents = [0.5, 0.8, 0.9]
-
-    def setUp(self):
-        self.model_tester = XiaomiLens0VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XiaomiLens0Config, has_text_modality=False)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -362,7 +374,7 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             mask_logits, mask_token_indices = model.decode_masks(
                 outputs.sequences,
                 hidden_states,
-                outputs.image_hidden_states,
+                outputs.image_last_hidden_state,
                 inputs.image_grid_thw,
                 ignore_thinking=True,
             )
@@ -416,7 +428,7 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             mask_logits, mask_token_indices = model.decode_masks(
                 outputs.sequences,
                 hidden_states,
-                outputs.image_hidden_states,
+                outputs.image_last_hidden_state,
                 inputs.image_grid_thw,
                 ignore_thinking=True,
             )

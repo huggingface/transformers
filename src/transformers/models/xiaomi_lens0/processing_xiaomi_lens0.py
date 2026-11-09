@@ -236,10 +236,10 @@ class XiaomiLens0Processor(ProcessorMixin):
     @requires(backends=("torch",))
     def post_process_grounding(
         self,
-        input_ids: "torch.LongTensor",
-        image_grid_thw: "torch.LongTensor",
-        mask_logits: list["torch.FloatTensor"] | None = None,
-        mask_token_indices: list["torch.LongTensor"] | None = None,
+        input_ids: "torch.Tensor",
+        image_grid_thw: "torch.Tensor",
+        mask_logits: list["torch.Tensor"] | None = None,
+        mask_token_indices: list["torch.Tensor"] | None = None,
         target_sizes: list[tuple[int, int]] | None = None,
         mask_threshold: float = 0.5,
         ignore_thinking: bool = True,
