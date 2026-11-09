@@ -186,6 +186,27 @@ class BartModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_training_compile_fullgraph(self, config, inputs_dict):
+        # Explicitly check with layerdrop=0.0 (fullgraph compiles without graph breaks)
+        config.encoder_layerdrop = 0.0
+        config.decoder_layerdrop = 0.0
+        model = BartForConditionalGeneration(config).to(torch_device).train()
+        compiled = torch.compile(model, fullgraph=True, backend="eager")
+        outputs = compiled(**inputs_dict)
+        loss = outputs.logits.sum()
+        loss.backward()
+        self.parent.assertIsNotNone(loss)
+
+        # Explicitly check with layerdrop > 0.0 (compile succeeds with graph break)
+        config.encoder_layerdrop = 0.5
+        config.decoder_layerdrop = 0.5
+        model_layerdrop = BartForConditionalGeneration(config).to(torch_device).train()
+        compiled_layerdrop = torch.compile(model_layerdrop, fullgraph=False, backend="eager")
+        outputs_layerdrop = compiled_layerdrop(**inputs_dict)
+        loss_layerdrop = outputs_layerdrop.logits.sum()
+        loss_layerdrop.backward()
+        self.parent.assertIsNotNone(loss_layerdrop)
+
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = BartModel(config=config).to(torch_device).eval()
         outputs = model(**inputs_dict)
@@ -399,13 +420,8 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @pytest.mark.torch_compile_test
     def test_training_compile_fullgraph(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = BartForConditionalGeneration(config).to(torch_device).train()
-        compiled = torch.compile(model, fullgraph=True, backend="eager")
-        outputs = compiled(**inputs_dict)
-        loss = outputs.logits.sum()
-        loss.backward()
-        self.assertIsNotNone(loss)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_training_compile_fullgraph(*config_and_inputs)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

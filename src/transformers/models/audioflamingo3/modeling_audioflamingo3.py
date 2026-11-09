@@ -394,7 +394,11 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         # Transformer stack
         for layer in self.layers:
-            drop = self.training and self.layerdrop > 0.0 and torch.rand([]) < self.layerdrop
+            drop = False
+            if self.training and self.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    drop = True
             if not drop:
                 hidden_states = layer(hidden_states, attention_mask)
 
