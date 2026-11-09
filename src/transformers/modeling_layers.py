@@ -81,9 +81,20 @@ class GradientCheckpointingLayer(nn.Module):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.forward = _checkpointed(cls.forward)
+        forward = cls.forward
 
-    def _checkpoint(self, forward, *args, **kwargs):
+        @wraps(forward)
+        def forward_with_checkpointing(self, *args, **kwargs):
+            # when a subclass calls `super().forward()`, only its own (outermost) `forward` checkpoints
+            is_outermost = type(self).forward is forward_with_checkpointing
+            if self.gradient_checkpointing and self.training and is_outermost:
+                self._disable_cache_kwargs(kwargs)
+                return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
+            return forward(self, *args, **kwargs)
+
+        cls.forward = forward_with_checkpointing
+
+    def _disable_cache_kwargs(self, kwargs):
         do_warn = False
         layer_name = self.__class__.__name__
         message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
@@ -109,19 +120,6 @@ class GradientCheckpointingLayer(nn.Module):
         if do_warn:
             message = message.rstrip(",") + "."
             logger.warning_once(message)
-
-        return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
-
-
-def _checkpointed(forward):
-    @wraps(forward)
-    def checkpointed_forward(self, *args, **kwargs):
-        is_outermost = type(self).forward is checkpointed_forward
-        if self.gradient_checkpointing and self.training and is_outermost:
-            return self._checkpoint(forward, *args, **kwargs)
-        return forward(self, *args, **kwargs)
-
-    return checkpointed_forward
 
 
 @auto_docstring
