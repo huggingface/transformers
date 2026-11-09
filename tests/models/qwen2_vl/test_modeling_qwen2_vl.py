@@ -581,7 +581,20 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
 
-        EXPECTED_DECODED_TEXT = ['system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They', 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They', 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They']  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They",
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They",
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They",
+                ],
+                ("cuda", (8, 6)): [
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, and they come in",
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, and they come in",
+                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, and they come in",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

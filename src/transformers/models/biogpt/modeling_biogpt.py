@@ -390,7 +390,7 @@ class BioGptModel(BioGptPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, decoder_layer in enumerate(self.layers):
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue

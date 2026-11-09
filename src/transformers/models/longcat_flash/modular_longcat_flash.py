@@ -318,7 +318,8 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": LongcatFlashDecoderLayer,
+        # Each decoder layer holds two attention sublayers, so `num_hidden_layers` is `2 * num_layers`
+        "hidden_states": OutputRecorder(LongcatFlashDecoderLayer, num_hidden_layers_key="num_layers"),
         "attentions": LongcatFlashMLA,
         "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
     }

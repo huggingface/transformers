@@ -733,9 +733,10 @@ class SeamlessM4TConformerEncoder(nn.Module):
 
         for i, layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.speech_encoder_layerdrop
+            skip_the_layer = False
+            if self.training and self.config.speech_encoder_layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.config.speech_encoder_layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 hidden_states = layer(
@@ -1582,7 +1583,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
 
         for idx, encoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     continue
@@ -1721,7 +1722,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue

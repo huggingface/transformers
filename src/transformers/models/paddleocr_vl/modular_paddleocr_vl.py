@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -217,15 +218,6 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         return flatten_patches, grid_h, grid_w
 
 
-class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
-
-
 class PaddleOCRVLProcessor(ProcessorMixin):
     r"""
     [`PaddleOCRVLProcessor`] offers all the functionalities of [`PaddleOCRVLImageProcessor`] and [`LLamaTokenizerFast`]. See the
@@ -241,7 +233,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
-    valid_processor_kwargs = PaddleOCRVLProcessorKwargs
+
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -286,6 +279,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     patch_size: int = 14
     spatial_merge_size: int = 2
     rope_parameters: dict | None = None
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -495,7 +489,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         super().__init__()
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
-        self.interpolation_align_corners = True
+        self.interpolation_align_corners = False
         self.interpolation_mode = "bilinear"
 
     def interpolate_pos_encoding(self, **super_kwargs):
@@ -885,6 +879,8 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             attentions=outputs.attentions,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "PaddleOCRVLForConditionalGeneration",

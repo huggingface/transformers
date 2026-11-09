@@ -27,7 +27,7 @@ from huggingface_hub.utils import httpx
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel, DINOv3ViTImageProcessorFast
+from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel, DINOv3ViTImageProcessor
 
 
 HUB_MODELS = {
@@ -106,7 +106,7 @@ def get_transform(resize_size: int = 224):
 
 
 def get_image_processor(resize_size: int = 224):
-    return DINOv3ViTImageProcessorFast(
+    return DINOv3ViTImageProcessor(
         do_resize=True,
         size={"height": resize_size, "width": resize_size},
         resample=2,  # BILINEAR

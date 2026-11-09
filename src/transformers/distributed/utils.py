@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import math
 import os
 import warnings
 from datetime import timedelta
@@ -174,10 +175,10 @@ class TransformersDeviceMesh:
 
     dense layers and experts are sharded differently, so they need different views of the same ranks.
 
-        dense  : (pp, fsdp, tp)     attention, dense MLPs, embeddings, lm_heads
-        expert : (pp, efsdp, ep)    experts
+        dense  : (pp, dp_replicate, fsdp, tp)     attention, dense MLPs, embeddings, lm_heads
+        expert : (pp, dp_replicate, efsdp, ep)    experts
 
-    Both views cover the same world, so pp * fsdp * tp == pp * efsdp * ep.
+    Both views cover the same world, so pp * dp_replicate * fsdp * tp == pp * dp_replicate * efsdp * ep.
     efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
     efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
     There is no etp (expert tensor parallel) axis: with EP on, experts are never tensor-sharded. (for now)
@@ -294,8 +295,13 @@ def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
 ) -> tuple[torch.device | None, TransformersDeviceMesh | None]:
     """Create a device mesh containing every configured parallel dimension."""
-    mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
-    if mesh_shape == (1, 1, 1):
+    mesh_shape = (
+        distributed_config.pp_size,
+        distributed_config.dp_replicate_size,
+        distributed_config.fsdp_size,
+        distributed_config.tp_size,
+    )
+    if mesh_shape == (1, 1, 1, 1):
         return None, None
 
     device_type = torch._C._get_accelerator().type
@@ -304,7 +310,7 @@ def initialize_distributed_mesh(
 
     _ensure_torch_distributed(device_type)
     world_size = torch.distributed.get_world_size()
-    expected_world_size = distributed_config.pp_size * distributed_config.fsdp_size * distributed_config.tp_size
+    expected_world_size = math.prod(mesh_shape)
     if expected_world_size != world_size:
         raise RuntimeError(
             f"The parallel mesh requires {expected_world_size} processes, but world_size is {world_size}."
@@ -315,12 +321,17 @@ def initialize_distributed_mesh(
     dense_mesh = torch.distributed.init_device_mesh(
         device_type,
         mesh_shape,
-        mesh_dim_names=("pp", "fsdp", "tp"),
+        mesh_dim_names=("pp", "dp_replicate", "fsdp", "tp"),
     )
     expert_mesh = torch.distributed.init_device_mesh(
         device_type,
-        (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
-        mesh_dim_names=("pp", "efsdp", "ep"),
+        (
+            distributed_config.pp_size,
+            distributed_config.dp_replicate_size,
+            distributed_config.efsdp_size,
+            distributed_config.ep_size,
+        ),
+        mesh_dim_names=("pp", "dp_replicate", "efsdp", "ep"),
     )
     return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh)
 

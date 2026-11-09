@@ -386,11 +386,16 @@ def torch_chunk_gated_delta_rule(
         - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
+    batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
     recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
     padded_output_shape = (batch_size, num_v_heads, -1, v_head_dim)  # -1 is the padded sequence length
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if num_k_heads != num_v_heads:
+        query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, decay = [
@@ -508,9 +513,14 @@ def torch_recurrent_gated_delta_rule(
     Same args and return value as torch_chunk_gated_delta_rule, except for `chunk_size` because the sequence dim is not
     chunked."""
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
+    batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if num_k_heads != num_v_heads:
+        query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, decay = [
@@ -690,11 +700,6 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         q = q.view(batch_size, seq_len, -1, self.head_k_dim)
         k = k.view(batch_size, seq_len, -1, self.head_k_dim)
         v = v.view(batch_size, seq_len, -1, self.head_v_dim)
-
-        if self.num_v_heads > self.num_k_heads:
-            expand_ratio = self.num_v_heads // self.num_k_heads
-            q = q.repeat_interleave(expand_ratio, dim=2)
-            k = k.repeat_interleave(expand_ratio, dim=2)
 
         beta = self.b_proj(hidden_states).sigmoid()
         if self.allow_neg_eigval:

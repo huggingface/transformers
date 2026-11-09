@@ -573,7 +573,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue

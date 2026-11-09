@@ -44,7 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_aria import AriaConfig, AriaTextConfig
 
@@ -842,6 +842,7 @@ class AriaModel(AriaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -853,7 +854,6 @@ class AriaModel(AriaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,

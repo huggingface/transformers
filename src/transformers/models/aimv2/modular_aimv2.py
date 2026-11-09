@@ -77,6 +77,7 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     is_native: bool = False
 
     layer_norm_eps = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
