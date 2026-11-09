@@ -368,9 +368,10 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         config = LlamaConfig(attn_implementation="sdpa", attention_chunk_size=3)
 
         batch_size = 1
-        sequence_length = 10
-        # This corresponds to 3 packed sequences, with the 1st and 3rd being of length 4 which is larger than the chunk_size
-        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3]])
+        sequence_length = 11
+        # This corresponds to 3 packed sequences, with the 1st and 3rd being of length 4 which is larger than the chunk_size.
+        # It also makes sure that without correct re-mapping of indices, the offsets of the chunks would be wrong
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3]])
         inputs_embeds = torch.empty((batch_size, sequence_length))
 
         chunked_attention_mask = create_chunked_causal_mask(
@@ -383,16 +384,17 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         # fmt: off
         EXPECTED_CHUNKED_MASK = torch.tensor(
-            [[[[ True, False, False, False, False, False, False, False, False, False],
-               [ True,  True, False, False, False, False, False, False, False, False],
-               [ True,  True,  True, False, False, False, False, False, False, False],
-               [False, False, False,  True, False, False, False, False, False, False],
-               [False, False, False, False,  True, False, False, False, False, False],
-               [False, False, False, False,  True,  True, False, False, False, False],
-               [False, False, False, False, False, False,  True, False, False, False],
-               [False, False, False, False, False, False,  True,  True, False, False],
-               [False, False, False, False, False, False,  True,  True,  True, False],
-               [False, False, False, False, False, False, False, False, False,  True]]]],
+             [[[[ True, False, False, False, False, False, False, False, False, False, False],
+                [ True,  True, False, False, False, False, False, False, False, False, False],
+                [ True,  True,  True, False, False, False, False, False, False, False, False],
+                [False, False, False,  True, False, False, False, False, False, False, False],
+                [False, False, False, False,  True, False, False, False, False, False, False],
+                [False, False, False, False,  True,  True, False, False, False, False, False],
+                [False, False, False, False,  True,  True,  True, False, False, False, False],
+                [False, False, False, False, False, False, False,  True, False, False, False],
+                [False, False, False, False, False, False, False,  True,  True, False, False],
+                [False, False, False, False, False, False, False,  True,  True,  True, False],
+                [False, False, False, False, False, False, False, False, False, False, True]]]],
             dtype=torch.bool)
         # fmt: on
 
