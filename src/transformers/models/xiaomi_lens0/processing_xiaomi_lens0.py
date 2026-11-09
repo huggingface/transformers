@@ -299,6 +299,9 @@ class XiaomiLens0Processor(ProcessorMixin):
                 f"Expected one target size per image. But got {len(target_sizes)} target sizes and {num_images} images"
             )
 
+        if target_sizes is None:
+            target_sizes = [(height * patch_size, width * patch_size) for _, height, width in image_grids]
+
         sequences = input_ids.tolist()
         selected_tokens = (
             get_non_thinking_token_mask(input_ids, self.think_start_token_id, self.think_end_token_id).tolist()
@@ -344,17 +347,13 @@ class XiaomiLens0Processor(ProcessorMixin):
                 raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
 
         results = []
-        for image_index, (image_mask_logits, token_indices) in enumerate(zip(mask_logits, mask_token_indices)):
+        for image_index, (image_mask_logits, token_indices, (height, width)) in enumerate(
+            zip(mask_logits, mask_token_indices, target_sizes)
+        ):
             if len(token_indices) != image_mask_logits.shape[0]:
                 raise ValueError(
                     f"Image {image_index} has {len(token_indices)} mask token indices but received {image_mask_logits.shape[0]} masks."
                 )
-            _, grid_height, grid_width = image_grids[image_index]
-            height, width = (
-                target_sizes[image_index]
-                if target_sizes is not None
-                else (grid_height * patch_size, grid_width * patch_size)
-            )
             if len(token_indices) == 0:
                 image_mask_logits = image_mask_logits.new_empty(0, height, width)
             elif (height, width) != image_mask_logits.shape[-2:]:
