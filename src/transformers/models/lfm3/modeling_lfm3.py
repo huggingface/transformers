@@ -30,7 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -406,7 +406,7 @@ class Lfm3ShortConv(nn.Module):
         return y
 
 
-class Lfm3DecoderLayer(GradientCheckpointingLayer):
+class Lfm3DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Lfm3Config, layer_idx: int):
         super().__init__()
         self.is_attention_layer = config.layer_types[layer_idx] != "conv"
@@ -467,7 +467,7 @@ class Lfm3DecoderLayer(GradientCheckpointingLayer):
 class Lfm3PreTrainedModel(PreTrainedModel):
     config: Lfm3Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Lfm3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
