@@ -499,7 +499,9 @@ def auto_class_update(cls, checkpoint_for_example: str = "google-bert/bert-base-
     cls.from_config = classmethod(from_config)
 
     from_pretrained_docstring = FROM_PRETRAINED_TORCH_DOCSTRING
-    from_pretrained = copy_func(_BaseAutoModelClass.from_pretrained)
+    # A class's own `from_pretrained` (e.g. `AutoModelForDecision`'s) is kept, only re-documented
+    own = cls.__dict__.get("from_pretrained")
+    from_pretrained = copy_func(own.__func__ if own is not None else _BaseAutoModelClass.from_pretrained)
     from_pretrained_docstring = insert_head_doc(from_pretrained_docstring, head_doc=head_doc)
     from_pretrained_docstring = from_pretrained_docstring.replace("BaseAutoModelClass", name)
     from_pretrained_docstring = from_pretrained_docstring.replace("checkpoint_placeholder", checkpoint_for_example)
