@@ -2123,11 +2123,11 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
+# EXPERIMENTAL: besides `jev`, the models whose checkpoints ship a JEV head next to their weights
 MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
-        ("jev", "JevForDecision"),
-        # EXPERIMENTAL: checkpoints of these models that ship a JEV head next to their weights
         ("gemma4", "JevForDecision"),
+        ("jev", "JevForDecision"),
         ("qwen2", "JevForDecision"),
         ("qwen3_5", "JevForDecision"),
         ("qwen3_5_moe", "JevForDecision"),
