@@ -81,9 +81,6 @@ class GradientCheckpointingLayer(nn.Module):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # an inherited `forward` is already wrapped
-        if "forward" not in cls.__dict__:
-            return
         forward = cls.forward
 
         @wraps(forward)
@@ -91,38 +88,36 @@ class GradientCheckpointingLayer(nn.Module):
             # when a subclass calls `super().forward()`, only its own (outermost) `forward` checkpoints
             is_outermost = type(self).forward is forward_with_checkpointing
             if self.gradient_checkpointing and self.training and is_outermost:
-                self._disable_cache_kwargs(kwargs)
+                do_warn = False
+                layer_name = self.__class__.__name__
+                message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
+
+                if "use_cache" in kwargs and kwargs["use_cache"]:
+                    kwargs["use_cache"] = False
+                    message += " `use_cache=False`,"
+                    do_warn = True
+
+                if not self._can_checkpoint_with_cache:
+                    # different names for the same thing in different layers
+                    if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
+                        kwargs["past_key_values"] = None
+                        message += " `past_key_values=None`,"
+                        do_warn = True
+
+                    if "layer_past" in kwargs and kwargs["layer_past"] is not None:
+                        kwargs["layer_past"] = None
+                        message += " `layer_past=None`,"
+                        do_warn = True
+
+                # warn if anything was changed
+                if do_warn:
+                    message = message.rstrip(",") + "."
+                    logger.warning_once(message)
+
                 return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
             return forward(self, *args, **kwargs)
 
         cls.forward = forward_with_checkpointing
-
-    def _disable_cache_kwargs(self, kwargs):
-        do_warn = False
-        layer_name = self.__class__.__name__
-        message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
-
-        if "use_cache" in kwargs and kwargs["use_cache"]:
-            kwargs["use_cache"] = False
-            message += " `use_cache=False`,"
-            do_warn = True
-
-        if not self._can_checkpoint_with_cache:
-            # different names for the same thing in different layers
-            if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                kwargs["past_key_values"] = None
-                message += " `past_key_values=None`,"
-                do_warn = True
-
-            if "layer_past" in kwargs and kwargs["layer_past"] is not None:
-                kwargs["layer_past"] = None
-                message += " `layer_past=None`,"
-                do_warn = True
-
-        # warn if anything was changed
-        if do_warn:
-            message = message.rstrip(",") + "."
-            logger.warning_once(message)
 
 
 @auto_docstring
