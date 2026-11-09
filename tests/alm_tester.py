@@ -248,16 +248,10 @@ class ALMModelTest(MultiModalModelTest):
                 )
             _ = model(**curr_input_dict)
 
-    # TODO: @eustlb, we might want to escalate this to core later.
-    # Core `test_reverse_loading_mapping` misses #45534: no reference layout, only self-consistency.
-    #   - each renaming's source pattern matches some saved key -> `^language_model.model` matches `.model.model.*`
-    #   - save -> load -> save gives the same keys -> load accepts `.model.model.*`, so the round trip holds
-    # Underlying gap: core defines no saved layout for a model built from config.
-    #   - after `from_pretrained`: only rules used at load are reverted -> usually saves what it loaded, but not safe
-    #     by construction: two used rules can still claim the same weight (inkling: shared/routed expert converters,
-    #     right only by order), and nothing tests this path against the loaded layout
-    #   - built from config: all rules are reverted -> when two rules cover the same weights, rule order picks the
-    #     layout (#45534 `.model.model`, nemotron3_5_transcribe per-expert experts, inkling right only by order)
+    # TODO: @eustlb, escalate to core? Core `test_reverse_loading_mapping` only checks self-consistency (no reference
+    # layout), so it misses #45534. No saved layout is enforced: built from config, all rules are reverted and rule
+    # order picks the layout when rules collide (#45534, nemotron3_5_transcribe, inkling); after `from_pretrained`,
+    # used rules can still collide (inkling), untested. Escalating = run this check for every model with a mapping.
     def test_save_pretrained_matches_hub_checkpoint(self):
         """
         Model built from config (no `from_pretrained`) must save under its reference checkpoint's tensor names.
