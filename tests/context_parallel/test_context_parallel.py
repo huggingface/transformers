@@ -457,7 +457,7 @@ def _average_over_data_parallel(tensor, dp_group, dp_size):
     return tensor / dp_size
 
 
-def _compare_with_unsharded(init_dir, batch, distributed_config):
+def _compare_with_unsharded(init_dir, batch, distributed_config, model_class=AutoModelForCausalLM):
     """
     Run the full `batch` through an unsharded model and through the same weights sharded with context parallelism,
     then compare the loss, the logits and every gradient.
@@ -465,7 +465,7 @@ def _compare_with_unsharded(init_dir, batch, distributed_config):
     fsdp_size, dp_replicate_size = distributed_config.fsdp_size, distributed_config.dp_replicate_size
     tokens = batch["input_ids"] if batch.get("input_ids") is not None else batch["inputs_embeds"]
 
-    reference = AutoModelForCausalLM.from_pretrained(init_dir)
+    reference = model_class.from_pretrained(init_dir)
     reference_output = reference(**batch)
     reference_output.loss.backward()
     reference_grads = {
@@ -474,7 +474,7 @@ def _compare_with_unsharded(init_dir, batch, distributed_config):
     reference_loss, reference_logits = reference_output.loss.detach(), reference_output.logits.detach()
     del reference
 
-    model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+    model = model_class.from_pretrained(init_dir, distributed_config=distributed_config)
     batch_size = tokens.shape[0] // (fsdp_size * dp_replicate_size)
     dp_rank, dp_group = _data_parallel_rank_and_group(model, fsdp_size, dp_replicate_size)
     rows = slice(dp_rank * batch_size, (dp_rank + 1) * batch_size)
