@@ -703,8 +703,10 @@ class TrainingArguments:
                 - min_num_params (`int`, *optional*, defaults to `0`):
                     Minimum number of parameters per module for size-based auto-wrapping (used with
                     `auto_wrap_policy="SIZE_BASED_WRAP"`).
-                - ignored_modules (`str` or `list[str]`, *optional*):
-                    Regex or list of module names to ignore during sharding (leaves them unsharded).
+                - ignored_modules (`str` or `Iterable[torch.nn.Module]`, *optional*):
+                    Regex string or iterable of `torch.nn.Module` objects to ignore during sharding
+                    (leaves them unsharded). Note that when configuring via JSON or CLI, regex strings
+                    (e.g., `"lm_head"`) are recommended.
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. Experimental.
                 - xla_fsdp_settings (`dict`, *optional*):

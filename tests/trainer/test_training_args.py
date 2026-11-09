@@ -417,14 +417,15 @@ class TestTrainingArguments(unittest.TestCase):
             )
             self.assertEqual(args.fsdp_plugin_args.get("ignored_modules"), "lm_head")
 
-            # When ignored_modules is specified as a list
+            # When ignored_modules is specified as an iterable of nn.Module
+            dummy_module = torch.nn.Linear(10, 10)
             args = TrainingArguments(
                 output_dir=tmp_dir,
                 fsdp=True,
-                fsdp_config={"ignored_modules": ["layer1", "layer2"]},
+                fsdp_config={"ignored_modules": [dummy_module]},
                 report_to=None,
             )
-            self.assertEqual(args.fsdp_plugin_args.get("ignored_modules"), ["layer1", "layer2"])
+            self.assertEqual(args.fsdp_plugin_args.get("ignored_modules"), [dummy_module])
 
             # When ignored_modules is passed in JSON string format
             args = TrainingArguments(
