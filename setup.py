@@ -142,6 +142,7 @@ _deps = [
     "torch>=2.6",
     "torchaudio",
     "torchvision",
+    "pyarrow<26.0.0",  # pyarrow 26 requires numpy>=2 at runtime, but pyctcdecode caps numpy<2
     "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
     "typer",
@@ -174,7 +175,7 @@ if PYTHON_MINOR_VERSION < 13:
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
-    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "transformers-mlinter"
+    "datasets", "pyarrow", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "transformers-mlinter"
 )
 extras["docs"] = deps_list("hf-doc-builder")
 extras["kernels"] = deps_list("kernels")
@@ -184,7 +185,7 @@ extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
-extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets", "pyarrow")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed", "accelerate")
 extras["optuna"] = deps_list("optuna")
