@@ -195,7 +195,19 @@ class MiniMaxVL01Config(PreTrainedConfig):
     attribute_map = {"image_token_index": "image_token_id"}
     sub_configs_defaults = {
         "text_config": MiniMaxVL01TextConfig,
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="clip_vision_model",
+            init_kwargs={
+                "hidden_act": "gelu",
+                "hidden_size": 1024,
+                "image_size": 336,
+                "intermediate_size": 4096,
+                "num_attention_heads": 16,
+                "num_hidden_layers": 24,
+                "patch_size": 14,
+            },
+        ),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -220,22 +232,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
             vision_config.pop("vocab_size", None)
             vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
             self.vision_config = AutoConfig.for_model(vision_config.pop("model_type"), **vision_config)
-        elif self.vision_config is None:
-            self.vision_config = AutoConfig.for_model(
-                "clip_vision_model",
-                hidden_act="gelu",
-                hidden_size=1024,
-                image_size=336,
-                intermediate_size=4096,
-                num_attention_heads=16,
-                num_hidden_layers=24,
-                patch_size=14,
-            )
-        if (
-            not isinstance(self.vision_config, PreTrainedConfig)
-            or self.vision_config.model_type != "clip_vision_model"
-        ):
-            raise TypeError("`vision_config` must be a dictionary or a native CLIP vision configuration instance.")
 
         if isinstance(self.text_config, dict):
             self.text_config = MiniMaxVL01TextConfig(**self.text_config)
@@ -272,6 +268,12 @@ class MiniMaxVL01Config(PreTrainedConfig):
             raise TypeError("`text_config` must be a dictionary or a native MiniMax-VL-01 text configuration.")
 
         super().__post_init__(**kwargs)
+
+        if (
+            not isinstance(self.vision_config, PreTrainedConfig)
+            or self.vision_config.model_type != "clip_vision_model"
+        ):
+            raise TypeError("`vision_config` must be a dictionary or a native CLIP vision configuration instance.")
 
 
 __all__ = ["MiniMaxVL01Config", "MiniMaxVL01TextConfig"]
