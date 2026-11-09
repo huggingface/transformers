@@ -989,7 +989,7 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 
     def _dequantize(self, qtensor):
         quant_tensor, scale = qtensor
-        return (quant_tensor.float() * scale).to(self.dtype)
+        return (quant_tensor.float() * scale).to(self.keys.dtype)
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
