@@ -25,7 +25,7 @@ from .utils import _get_torch_distributed_rank
 @dataclass
 class DistributedConfig:
     """
-    Configuration for native distributed inference and training with tensor, pipeline, or FSDP2 parallelism.
+    Configuration for native distributed inference and training with tensor, pipeline, context, or FSDP2 parallelism.
 
     Args:
         tp_size (`int`, *optional*):
