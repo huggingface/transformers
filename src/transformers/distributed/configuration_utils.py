@@ -192,6 +192,8 @@ class DistributedConfig:
                 raise ValueError("`ep_size` must divide `fsdp_size * cp_size * tp_size`.")
 
         if self.cp_size > 1:
+            if not is_torch_greater_or_equal("2.10"):
+                raise OSError("Context parallelism requires `torch>=2.10` (`DeviceMesh._unflatten`).")
             unsupported = [name for name in ("pp_size", "ep_size") if getattr(self, name) > 1]
             if unsupported:
                 raise ValueError(
