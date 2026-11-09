@@ -216,7 +216,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
                 "linear_attn_alpha_factor": 3.5565588200778455,
                 "mlp_alpha_factor": 3.5565588200778455,
                 "rope_parameters": {
-                    "rope_type": "default",
                     "rope_theta": 10_000_000,
                     "partial_rotary_factor": 0.5,
                 },
