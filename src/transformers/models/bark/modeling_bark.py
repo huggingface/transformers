@@ -39,6 +39,7 @@ from ...utils import (
     is_accelerate_available,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -54,7 +55,7 @@ from .generation_configuration_bark import (
 )
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
@@ -284,9 +285,10 @@ class BarkBlock(GradientCheckpointingLayer):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](
-            config, is_causal=is_causal, layer_idx=layer_idx
+        attn_implementation = (
+            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
         )
+        self.attn = BARK_ATTENTION_CLASSES[attn_implementation](config, is_causal=is_causal, layer_idx=layer_idx)
 
         self.mlp = BarkMLP(config)
 
@@ -667,9 +669,9 @@ class BarkCoarseModel(BarkCausalModel):
             history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
         Returns:
-            `tuple(torch.FloatTensor)`:
-            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
-            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
+            `tuple(torch.Tensor)`:
+            - **x_semantic_history** (`torch.Tensor` -- Processed semantic speaker prompt.
+            - **x_coarse_history** (`torch.Tensor`) -- Processed coarse speaker prompt.
         """
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)

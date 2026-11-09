@@ -218,7 +218,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
                     "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
                 ],
                 ("cuda", 8): [
-                    "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
                 ],
                 ("rocm", (9, 5)): [
                     "Hello I am doing a project for my school and I need to know how to make a program that will take a number"

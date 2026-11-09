@@ -448,14 +448,14 @@ class Nemotron3DiarizationSpeakerCache:
 @dataclass
 class Nemotron3DiarizationOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, num_frames, config.head_config.num_speakers)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_frames, config.head_config.num_speakers)`):
         Per-frame speaker activity logits at the spectrogram frame rate. `logits.sigmoid()` gives the probability
         that each speaker is active in each frame; speakers are ordered by their first arrival in the audio.
-    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*, returned when `output_hidden_states=True`):
         Encoder hidden states of every chunk, in chunk order: the encoder runs once per chunk, so the tuple holds
         `config.audio_config.num_hidden_layers + 1` tensors per chunk. Their sequence length is the chunk's, cache
         and look-ahead frames included.
-    attentions (`tuple[torch.FloatTensor, ...]`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple[torch.Tensor, ...]`, *optional*, returned when `output_attentions=True`):
         Encoder attention weights of every chunk, in chunk order, `config.audio_config.num_hidden_layers` tensors
         per chunk.
     speaker_cache (`Nemotron3DiarizationSpeakerCache`, *optional*, returned in streaming mode):

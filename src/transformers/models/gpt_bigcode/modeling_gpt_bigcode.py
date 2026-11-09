@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 # Use separate functions for each case because conditionals prevent kernel fusion.
 # TODO: Could have better fused kernels depending on scaling and dropout.
 #  Is it doable without writing 32 functions?
-@torch.jit.script
 def upcast_masked_softmax(
     x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
 ):
@@ -62,7 +61,6 @@ def upcast_masked_softmax(
     return x
 
 
-@torch.jit.script
 def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
     input_dtype = x.dtype
     x = x.to(softmax_dtype) * scale
@@ -70,7 +68,6 @@ def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
     return x
 
 
-@torch.jit.script
 def masked_softmax(x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor):
     x = torch.where(mask, x, mask_value)
     x = torch.nn.functional.softmax(x, dim=-1)
@@ -251,7 +248,7 @@ class GPTBigCodeMLP(nn.Module):
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)

@@ -53,7 +53,6 @@ class DebertaV2SelfOutput(nn.Module):
         return hidden_states
 
 
-@torch.jit.script
 def make_log_bucket_position(relative_pos, bucket_size: int, max_position: int):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -101,27 +100,22 @@ def build_relative_position(query_layer, key_layer, bucket_size: int = -1, max_p
     return rel_pos_ids
 
 
-@torch.jit.script
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
-@torch.jit.script
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
-@torch.jit.script
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-@torch.jit.script
 def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
-@torch.jit.script
 def build_rpos(query_layer, key_layer, relative_pos, position_buckets: int, max_relative_positions: int):
     if key_layer.size(-2) != query_layer.size(-2):
         return build_relative_position(
@@ -201,7 +195,7 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
@@ -213,14 +207,14 @@ class DisentangledSelfAttention(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`torch.FloatTensor`, *optional*):
+            query_states (`torch.Tensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
                 values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (`torch.FloatTensor`):
+            rel_embeddings (`torch.Tensor`):
                 The embedding of relative distances. It's a tensor of shape [\\(2 \\times
                 \\text{max_relative_positions}\\), *hidden_size*].
 

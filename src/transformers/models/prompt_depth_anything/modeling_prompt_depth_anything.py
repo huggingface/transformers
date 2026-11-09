@@ -295,7 +295,7 @@ class PromptDepthAnythingReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -346,7 +346,7 @@ class PromptDepthAnythingNeck(nn.Module):
     ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -387,13 +387,13 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        prompt_depth: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        prompt_depth: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+        prompt_depth (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
             Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
             low-resolution depth sensor. It generally has shape (height, width), where height
             and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth

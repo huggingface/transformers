@@ -442,10 +442,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
+        transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[Qwen3ASRProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
-        Prepare inputs for automatic speech recognition without manually writing the chat template.
+        Prepare inputs for automatic speech recognition without manually writing the chat template, either for
+        inference or, when `transcription` is given, for training.
 
         Args:
             audio (`AudioInput` or `list[AudioInput]`):
@@ -462,13 +465,27 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 Context/hotwords to include as the system prompt, e.g. domain-specific words or
                 phrases to bias the transcription towards. A list must be the same length as the
                 audio batch. When `None`, the system prompt is left empty.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~Qwen3ASRProcessor.__call__`]).
+                With a `language`, the transcript is prefixed with ``language <NAME><asr_text>`` to match the model's
+                output format. Without one, it is written as is, so it should already be in that format to preserve
+                the pretrained behavior.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`]
-                and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`Qwen3ASRForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
+            [`Qwen3ASRForConditionalGeneration.generate`], or to [`Qwen3ASRForConditionalGeneration.forward`] to
+            compute the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
 
@@ -479,6 +496,11 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
+        is_training = transcription is not None
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
             messages = []
@@ -488,15 +510,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
             conversations.append(messages)
 
         # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
-        # so that the model only generates the transcription text in the desired language
-        for messages, lang in zip(conversations, languages):
+        # so that the model only generates the transcription text in the desired language. For training, the
+        # transcript completes the assistant turn, which is then closed.
+        for messages, lang, transcript in zip(conversations, languages, transcriptions):
             prefill = f"language {lang}<asr_text>" if lang is not None else ""
+            if transcript is not None:
+                prefill += transcript
             messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             return_dict=True,
-            continue_final_message=True,
+            continue_final_message=not is_training,
             **kwargs,
         )
 
