@@ -1987,22 +1987,33 @@ class ModelTesterMixin(ExportTesterMixin):
                     generator = torch.Generator().manual_seed(seed)
                     return torch.randint(2, target_shape, generator=generator, dtype=torch.long).to(torch_device)
 
-                def reported_loss(label_seed, shift_label_seed, model_class=model_class, model=model):
+                def forward_with_targets(labels, shift_labels, model_class=model_class, model=model):
                     inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                    inputs["labels"] = targets(label_seed)
-                    inputs["shift_labels"] = targets(shift_label_seed)
-                    # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the three
-                    # forward passes below differ only in the targets they are given.
+                    inputs["labels"] = labels
+                    inputs["shift_labels"] = shift_labels
+                    # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the forward
+                    # passes below differ only in the targets they are given.
                     set_seed(42)
                     with torch.no_grad():
-                        return model(**inputs).loss
+                        return model(**inputs)
 
-                baseline = reported_loss(0, 0)
+                labels = targets(0)
+                # Two random sets of `shift_labels` are not enough to move the loss: the logits of a tiny random
+                # model are nearly flat (Inkling divides them by its muP width multiplier), so each changed target
+                # moves its token loss by a few 1e-3 either way, and these moves can cancel out in the mean below
+                # float32 resolution. Targeting the most and then the least likely token at every position raises
+                # every token loss by the max - min spread of its logits, so the mean has to move.
+                logits = getattr(forward_with_targets(labels, labels), "logits", None)
+                if not isinstance(logits, torch.Tensor) or logits.shape[:2] != target_shape:
+                    self.skipTest(reason="Head does not return logits aligned with the targets")
+                most_likely, least_likely = logits.argmax(dim=-1), logits.argmin(dim=-1)
+
+                baseline = forward_with_targets(labels, most_likely).loss
                 self.assertIsNotNone(
                     baseline, msg=f"{model_class.__name__}: no loss is returned when targets are passed"
                 )
                 self.assertFalse(
-                    torch.equal(baseline, reported_loss(0, 1)),
+                    torch.equal(baseline, forward_with_targets(labels, least_likely).loss),
                     msg=(
                         f"{model_class.__name__}: the training loss does not depend on `shift_labels`. Pre-shifted "
                         f"targets are the only correct ones under sequence/context parallelism, so the loss must "
@@ -2010,7 +2021,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
                 self.assertTrue(
-                    torch.equal(baseline, reported_loss(1, 0)),
+                    torch.equal(baseline, forward_with_targets(targets(1), most_likely).loss),
                     msg=(
                         f"{model_class.__name__}: the training loss still depends on `labels` although "
                         f"`shift_labels` was passed. `shift_labels` holds the targets already aligned with the "
