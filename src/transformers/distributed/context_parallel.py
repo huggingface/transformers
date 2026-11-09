@@ -237,6 +237,13 @@ def _check_context_parallelism(model: nn.Module) -> None:
             "disable context parallelism."
         )
 
+    if model._is_stateful:
+        raise ValueError(
+            f"Context parallelism does not support {model.__class__.__name__}: its recurrent layers carry a state "
+            "along the sequence, so they would run on this rank's slice only and be silently cut at the slice "
+            "boundaries. Use another model, or disable context parallelism."
+        )
+
     text_config = model.config.get_text_config()
     layer_types = set(getattr(text_config, "layer_types", None) or ())
     if unsupported := layer_types - set(SOFTMAX_ATTENTION_LAYER_TYPES):
