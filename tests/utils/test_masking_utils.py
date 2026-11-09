@@ -411,7 +411,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         block_ids = torch.tensor([[0, 0, -1, 0, 0, -1]])
 
         # fmt: off
-        expected = torch.tensor(
+        EXPECTED = torch.tensor(
              [[[[1, 1, 0, 0, 0, 0],
                 [1, 1, 0, 0, 0, 0],
                 [1, 1, 1, 0, 0, 0],
@@ -437,7 +437,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
                     block_sequence_ids=block_ids,
                     allow_is_causal_skip=False,
                 )
-                self.assertTrue(torch.equal(mask, expected))
+                self.assertTrue(torch.equal(mask, EXPECTED))
 
     @staticmethod
     def _run_bidirectional_mask(mask_fn, attn_implementation):
