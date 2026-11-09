@@ -406,6 +406,43 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
 
+    def test_chunked_mask_with_packed_sequences(self):
+        # Make sure we have an attention_chunk_size in the config
+        config = LlamaConfig(attn_implementation="sdpa", attention_chunk_size=3)
+
+        batch_size = 1
+        sequence_length = 11
+        # This corresponds to 3 packed sequences, with the 1st and 3rd being of length 4 which is larger than the chunk_size.
+        # It also makes sure that without correct re-mapping of indices, the offsets of the chunks would be wrong
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3]])
+        inputs_embeds = torch.empty((batch_size, sequence_length))
+
+        chunked_attention_mask = create_chunked_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+
+        # fmt: off
+        EXPECTED_CHUNKED_MASK = torch.tensor(
+             [[[[ True, False, False, False, False, False, False, False, False, False, False],
+                [ True,  True, False, False, False, False, False, False, False, False, False],
+                [ True,  True,  True, False, False, False, False, False, False, False, False],
+                [False, False, False,  True, False, False, False, False, False, False, False],
+                [False, False, False, False,  True, False, False, False, False, False, False],
+                [False, False, False, False,  True,  True, False, False, False, False, False],
+                [False, False, False, False,  True,  True,  True, False, False, False, False],
+                [False, False, False, False, False, False, False,  True, False, False, False],
+                [False, False, False, False, False, False, False,  True,  True, False, False],
+                [False, False, False, False, False, False, False,  True,  True,  True, False],
+                [False, False, False, False, False, False, False, False, False, False, True]]]],
+            dtype=torch.bool)
+        # fmt: on
+
+        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
     @staticmethod
     def _run_bidirectional_mask(mask_fn, attn_implementation):
         def run_mask_creation(mask_fn, config, inputs_embeds, encoder_mask, cross_mask, encoder_hidden_states):
