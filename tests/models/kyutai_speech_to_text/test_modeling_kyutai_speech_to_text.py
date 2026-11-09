@@ -16,6 +16,7 @@
 import gc
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import datasets
 import pytest
@@ -30,6 +31,8 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_accelerate,
+    require_bitsandbytes,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -521,6 +524,28 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @unittest.skip("Model expects inputs to be fixed shape and thus we cannot test scaling with long inputs")
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        """Override for the mask edge case which can lead to device assertions worst case"""
+        original_prepare = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_without_padding():
+            config, inputs_dict = original_prepare()
+            # Kyutai has 3D input_ids but requires a 2D attention mask
+            inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
+            return config, inputs_dict
+
+        with patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=prepare_without_padding,
+        ):
+            super().test_flash_attn_2_fp32_ln()
 
 
 @require_torch

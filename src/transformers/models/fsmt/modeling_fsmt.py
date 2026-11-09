@@ -352,16 +352,16 @@ class FSMTEncoder(nn.Module):
             input_ids (`torch.LongTensor`): tokens in the source language of shape
                 *(batch, src_len)*
             attention_mask (`torch.LongTensor`): indicating which indices are padding tokens
-            inputs_embeds (`torch.FloatTensor`):
+            inputs_embeds (`torch.Tensor`):
                 embedding vectors of shape *(batch, src_len, embed_dim)*
 
         Returns:
             BaseModelOutput or Tuple comprised of:
 
                 - **x** (`torch.Tensor`): the last encoder layer's output of shape *(src_len, batch, embed_dim)*
-                - **encoder_states** (`Tuple(torch.FloatTensor)`): all intermediate hidden states of shape *(src_len,
+                - **encoder_states** (`Tuple(torch.Tensor)`): all intermediate hidden states of shape *(src_len,
                   batch, embed_dim)*. Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (`Tuple(torch.FloatTensor)`): Attention weights for each layer.
+                - **all_attentions** (`Tuple(torch.Tensor)`): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
@@ -813,13 +813,13 @@ class FSMTModel(PretrainedFSMTModel):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
@@ -948,7 +948,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,

@@ -580,7 +580,7 @@ class ZayaModel(LagunaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -661,7 +661,7 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     _tp_plan = AttributeError()
     _pp_plan = AttributeError()
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ZayaConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
 

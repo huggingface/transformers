@@ -154,13 +154,13 @@ class Sam3LiteTextConfig(PreTrainedConfig):
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Full sequence of hidden states from the text encoder.
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, projection_dim)`):
         EOT-pooled output projected to `projection_dim` via the internal CLIP-style projection.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+    hidden_states (`tuple(torch.Tensor)`, *optional*):
         Tuple of hidden states at each layer, returned when `output_hidden_states=True`.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
+    attentions (`tuple(torch.Tensor)`, *optional*):
         Tuple of attention weights at each transformer layer, returned when `output_attentions=True`.
     """
 
@@ -314,7 +314,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
@@ -336,7 +336,7 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,

@@ -24,7 +24,7 @@ def spawn_conversion(token: str, private: bool, model_id: str):
     logger.info("Attempting to convert .bin model on the fly to safetensors.")
 
     safetensors_convert_space_url = "https://safetensors-convert.hf.space"
-    sse_url = f"{safetensors_convert_space_url}/call/run"
+    sse_url = f"{safetensors_convert_space_url}/gradio_api/call/run"
 
     def start(_sse_connection):
         for line in _sse_connection.iter_lines():

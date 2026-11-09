@@ -67,6 +67,8 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     maxDiff = None
 
     image_processor_tester_class = FlavaImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     def test_from_dict_with_codebook_size_overrides(self):
         for image_processing_class in self.image_processing_classes.values():

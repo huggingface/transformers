@@ -92,6 +92,7 @@ class CanaryModelTester:
             subsampling_factor=self.subsampling_factor,
             subsampling_conv_channels=self.subsampling_conv_channels,
             scale_input=False,
+            layerdrop=0.0,  # unlike ParakeetEncoderModelTester, set directly here; move to __init__ if more dropout attrs need zeroing
         )
         decoder_config = CanaryDecoderConfig(
             vocab_size=self.vocab_size,

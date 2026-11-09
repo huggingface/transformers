@@ -77,7 +77,7 @@ class CamembertEmbeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if position_ids is None:
@@ -211,7 +211,7 @@ class CamembertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -277,8 +277,8 @@ class CamembertCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -351,9 +351,9 @@ class CamembertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -421,9 +421,9 @@ class CamembertLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -487,7 +487,7 @@ class CamembertLMHead(nn.Module):
 
 @auto_docstring
 class CamembertPreTrainedModel(PreTrainedModel):
-    config_class = CamembertConfig
+    config: CamembertConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -520,9 +520,9 @@ class CamembertEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -573,7 +573,7 @@ class CamembertPooler(nn.Module):
 class CamembertModel(CamembertPreTrainedModel):
     _no_split_modules = ["CamembertEmbeddings", "CamembertLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CamembertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -704,7 +704,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -730,12 +730,12 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
@@ -808,7 +808,7 @@ class CamembertClassificationHead(nn.Module):
     """
 )
 class CamembertForSequenceClassification(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -824,10 +824,10 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
@@ -889,7 +889,7 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForMultipleChoice(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
@@ -905,10 +905,10 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
@@ -933,7 +933,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -982,7 +982,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForTokenClassification(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         classifier_dropout = (
@@ -1001,10 +1001,10 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
@@ -1051,7 +1051,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForQuestionAnswering(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
@@ -1066,10 +1066,10 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1139,7 +1139,7 @@ class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1162,14 +1162,14 @@ class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
-        past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: tuple[tuple[torch.Tensor]] | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],

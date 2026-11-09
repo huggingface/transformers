@@ -630,7 +630,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -679,7 +679,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
         self.model = RecurrentGemmaModel(config)
         self.vocab_size = config.vocab_size
@@ -696,7 +696,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

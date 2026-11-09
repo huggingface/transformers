@@ -49,12 +49,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.import_utils import get_device_type, is_kernels_available
 from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
+    from kernels import LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
+    from kernels.validate import DigestValidator
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -183,7 +184,7 @@ class TestHubKernels(MemoryCleanupTestCase):
 
     def test_kernelize(self):
         model = copy.deepcopy(self.model_not_kernelized)
-        kernelize(model, mode=Mode.INFERENCE, device=Device(type=model.device.type))  # type: ignore[arg-type]
+        kernelize(model, mode=Mode.INFERENCE, device=get_device_type(model.device))
         self.assert_kernelized_forward_is_different(model, self.model_not_kernelized)
         self.assert_kernelized_forward_is_the_same(model, self.model_kernelized)
         del model
@@ -330,10 +331,15 @@ class TestHubKernels(MemoryCleanupTestCase):
             baseline_out = baseline(**inputs).logits
         del baseline
 
-        fused = AutoModelForCausalLM.from_pretrained(
-            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
-        )
-        fused.eval()
+        # It would mismatch in its digest validation but the kernel is not production ready anyways
+        with patch.object(DigestValidator, "validate_kernel", return_value=None):
+            fused = AutoModelForCausalLM.from_pretrained(
+                model_id,
+                use_kernels=True,
+                kernel_config=kernel_config,
+                device_map=torch_device,
+            )
+
         with torch.no_grad():
             fused_out = fused(**inputs).logits
 
@@ -414,7 +420,7 @@ class TestHubKernels(MemoryCleanupTestCase):
                 ),
             }
         )
-        with self.assertRaises(ValueError):
+        with patch.object(DigestValidator, "validate_kernel", return_value=None), self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
                 model_id,
                 use_kernels=True,

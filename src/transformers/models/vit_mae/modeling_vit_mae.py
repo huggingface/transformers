@@ -45,17 +45,17 @@ from .configuration_vit_mae import ViTMAEConfig
 @dataclass
 class ViTMAEModelOutput(ModelOutput):
     r"""
-    mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+    mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
         Tensor indicating which patches are masked (1) and which are not (0).
     ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
         Tensor containing the original index of the (shuffled) masked patches.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     mask: torch.LongTensor | None = None
     ids_restore: torch.LongTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -66,13 +66,13 @@ class ViTMAEModelOutput(ModelOutput):
 @dataclass
 class ViTMAEDecoderOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
     """
 
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -83,22 +83,22 @@ class ViTMAEDecoderOutput(ModelOutput):
 @dataclass
 class ViTMAEForPreTrainingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`):
+    loss (`torch.Tensor` of shape `(1,)`):
         Pixel reconstruction loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
-    mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+    mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
         Tensor indicating which patches are masked (1) and which are not (0).
     ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
         Tensor containing the original index of the (shuffled) masked patches.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     mask: torch.LongTensor | None = None
     ids_restore: torch.LongTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class ViTMAEPatchEmbeddings(nn.Module):
@@ -303,7 +303,7 @@ class ViTMAEEmbeddings(nn.Module):
 
         Args:
             sequence (`torch.LongTensor` of shape `(batch_size, sequence_length, dim)`)
-            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*) which is
+            noise (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*) which is
                 mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
@@ -637,7 +637,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ViTMAEModelOutput:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        noise (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mainly used for testing purposes to control randomness and maintain the reproducibility
         interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
@@ -701,13 +701,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def patchify(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values.
             interpolate_pos_encoding (`bool`, *optional*, default `False`):
                 interpolation flag passed during the forward pass.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
+            `torch.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
@@ -746,13 +746,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     ) -> torch.Tensor:
         """
         Args:
-            patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`):
+            patchified_pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`):
                 Patchified pixel values.
             original_image_size (`tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`:
+            `torch.Tensor` of shape `(batch_size, num_channels, height, width)`:
                 Pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
@@ -798,7 +798,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ViTMAEForPreTrainingOutput:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        noise (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mainly used for testing purposes to control randomness and maintain the reproducibility
         interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher

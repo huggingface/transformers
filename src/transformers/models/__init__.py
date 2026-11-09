@@ -266,6 +266,7 @@ if TYPE_CHECKING:
     from .lfm2 import *
     from .lfm2_moe import *
     from .lfm2_vl import *
+    from .lfm3 import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
@@ -297,6 +298,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .mimo_v2_flash import *
     from .minicpm3 import *
+    from .minicpm_ocr import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *
@@ -307,6 +309,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mistral4 import *
+    from .mistral_large4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
@@ -340,6 +343,7 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
+    from .nemotron3_5_transcribe import *
     from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *

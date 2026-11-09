@@ -81,31 +81,31 @@ def eager_attention_forward(
 @dataclass
 class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `sample_negative_indices` are passed, `torch.Tensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
         paper](https://huggingface.co/papers/2006.11477).
-    projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+    projected_states (`torch.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
         projected quantized states.
-    projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+    projected_quantized_states (`torch.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
         target vectors for contrastive loss.
-    codevector_perplexity (`torch.FloatTensor` of shape `(1,)`):
+    codevector_perplexity (`torch.Tensor` of shape `(1,)`):
         The perplexity of the codevector distribution, used to measure the diversity of the codebook.
-    contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
+    contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.Tensor` of shape `(1,)`):
         The contrastive loss (L_m) as stated in the [official paper](https://huggingface.co/papers/2006.11477).
-    diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
+    diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.Tensor` of shape `(1,)`):
         The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477).
     """
 
-    loss: torch.FloatTensor | None = None
-    projected_states: torch.FloatTensor | None = None
-    projected_quantized_states: torch.FloatTensor | None = None
-    codevector_perplexity: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    contrastive_loss: torch.FloatTensor | None = None
-    diversity_loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    projected_states: torch.Tensor | None = None
+    projected_quantized_states: torch.Tensor | None = None
+    codevector_perplexity: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    contrastive_loss: torch.Tensor | None = None
+    diversity_loss: torch.Tensor | None = None
 
 
 class Wav2Vec2ConformerPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -602,6 +602,10 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, Wav2Vec2ConformerRelPositionalEmbedding):
             init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
+        elif isinstance(module, Wav2Vec2ConformerModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """
@@ -676,7 +680,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2ConformerConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -693,17 +697,17 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
 
 
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 

@@ -189,9 +189,17 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         )
 
         if self.slice_mode and num_rows > 0 and num_cols > 0:
-            per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
-            slice_placeholder = self.slice_start_token + self.image_token * per_slice_tokens + self.slice_end_token
-            slices = [slice_placeholder * num_cols for _ in range(num_rows)]
+            # Slices do not necessarily share a token count: per-slice adaptive upsampling resizes
+            # each one independently, so read every count instead of reusing the first slice's.
+            slice_tokens = [int(n) for n in num_tokens_per_patch[1:]]
+            if len(slice_tokens) != num_rows * num_cols:
+                raise ValueError(f"Image {image_idx}: got {len(slice_tokens)} slices for a {num_rows}x{num_cols} grid")
+            slices = []
+            for row in range(num_rows):
+                row_tokens = slice_tokens[row * num_cols : (row + 1) * num_cols]
+                slices.append(
+                    "".join(self.slice_start_token + self.image_token * n + self.slice_end_token for n in row_tokens)
+                )
             image_placeholder += "\n".join(slices)
 
         return image_placeholder

@@ -118,6 +118,7 @@ else:
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("minicpmv4_7", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
             ("mistral3", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
+            ("mistral_large4", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("mlcd", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             (
                 "mm-grounding-dino",
