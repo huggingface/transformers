@@ -38,6 +38,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
     images_kwargs = {
         "data_format": "channels_first",
         "return_tensors": "pt",
+        "do_convert_rgb": True,
     }
 
     def __init__(

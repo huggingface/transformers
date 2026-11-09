@@ -241,3 +241,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("ColPaliProcessor can't process text+image inputs at the same time")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         pass
+
+    @unittest.skip(reason="Skip for BC. Some hub configs do not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass
