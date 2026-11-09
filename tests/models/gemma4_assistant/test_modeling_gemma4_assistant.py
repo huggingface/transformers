@@ -14,6 +14,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -23,15 +25,64 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_modeling_common import ids_tensor
 from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
+        Gemma4AssistantConfig,
+        Gemma4AssistantForCausalLM,
+        Gemma4ForCausalLM,
         Gemma4ForConditionalGeneration,
         Gemma4Processor,
+        Gemma4TextConfig,
     )
+
+
+@require_torch
+class Gemma4AssistantTest(unittest.TestCase):
+    @parameterized.expand([0, 2])
+    def test_assisted_decoding_matches_greedy_search(self, num_kv_shared_layers):
+        text_config_kwargs = {
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 16,
+            "global_head_dim": 16,
+            "sliding_window": 8,
+        }
+        model_config = Gemma4TextConfig(
+            num_hidden_layers=4,
+            layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+            num_kv_shared_layers=num_kv_shared_layers,
+            hidden_size_per_layer_input=16,
+            vocab_size_per_layer_input=99,
+            **text_config_kwargs,
+        )
+        assistant_config = Gemma4AssistantConfig(
+            text_config=Gemma4TextConfig(
+                num_hidden_layers=2,
+                layer_types=["sliding_attention", "full_attention"],
+                hidden_size_per_layer_input=0,
+                vocab_size_per_layer_input=0,
+                **text_config_kwargs,
+            ),
+            backbone_hidden_size=32,
+        )
+        model = Gemma4ForCausalLM(model_config).to(torch_device).eval()
+        assistant_model = Gemma4AssistantForCausalLM(assistant_config).to(torch_device).eval()
+        assistant_model.generation_config.num_assistant_tokens = 2
+
+        input_ids = ids_tensor([1, 7], vocab_size=99)
+        output_greedy = model.generate(input_ids, max_new_tokens=5, do_sample=False, eos_token_id=-1)
+        output_assisted = model.generate(
+            input_ids, assistant_model=assistant_model, max_new_tokens=5, do_sample=False, eos_token_id=-1
+        )
+        self.assertListEqual(output_greedy.tolist(), output_assisted.tolist())
 
 
 @slow
