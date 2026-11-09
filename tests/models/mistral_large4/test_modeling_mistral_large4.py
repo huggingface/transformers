@@ -204,6 +204,12 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
         ):
             super().test_cached_decode_matches_cacheless()
 
+    def test_left_padding_compatibility(self):
+        # Left padding shifts the key rows, and CPU `topk` breaks exact indexer score ties (ReLU zeros) differently
+        # for the padded and unpadded inputs. A leaky ReLU keeps the scores distinct
+        with indexer_leaky_relu():
+            super().test_left_padding_compatibility()
+
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
