@@ -19,9 +19,10 @@ from ...audio_utils import (
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -58,21 +59,17 @@ LANGUAGE_CODE_TO_NAME = {
 }
 
 
-class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class CanaryProcessor(ProcessorMixin):
-    valid_processor_kwargs = CanaryProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -83,7 +80,7 @@ class CanaryProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         output_labels: bool = False,
-        **kwargs: Unpack[CanaryProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         text (`str`, `list[str]`, *optional*):
@@ -114,11 +111,13 @@ class CanaryProcessor(ProcessorMixin):
         source_language: str | list[str] = "en",
         target_language: str | list[str] | None = None,
         punctuation: bool = True,
+        transcription: str | list[str] | None = None,
         tokenize: bool = True,
-        **kwargs: Unpack[CanaryProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature | list[str]:
         r"""
-        Prepare inputs for transcription or translation without manually writing the chat template.
+        Prepare inputs for transcription or translation without manually writing the chat template, either for
+        inference or, when `transcription` is given, for training.
 
         Args:
             audio (`AudioInput` or `list[AudioInput]`):
@@ -131,6 +130,10 @@ class CanaryProcessor(ProcessorMixin):
                 (transcription); set it to a different language for speech-to-text translation.
             punctuation (`bool`, *optional*, defaults to `True`):
                 Whether to request punctuation and capitalization in the output.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) (or translations) for training, one per audio. When given, each transcript is
+                written as the assistant turn and `labels` are returned (see `output_labels` in
+                [`~CanaryProcessor.__call__`]).
             tokenize (`bool`, *optional*, defaults to `True`):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
                 the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
@@ -138,11 +141,14 @@ class CanaryProcessor(ProcessorMixin):
                 `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~CanaryProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
             [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
             outputs ready to be passed to
-            [`CanaryForConditionalGeneration.generate`].
+            [`CanaryForConditionalGeneration.generate`], or to [`CanaryForConditionalGeneration.forward`] to compute
+            the loss when `transcription` is given.
         """
         audio_items = make_list_of_audio_chat_template(audio)
         batch_size = len(audio_items)
@@ -155,8 +161,15 @@ class CanaryProcessor(ProcessorMixin):
         else:
             target_languages = prepare_language_inputs(target_language, batch_size, LANGUAGE_CODE_TO_NAME)
 
+        is_training = transcription is not None
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
         conversations = []
-        for source, target, audio_item in zip(source_languages, target_languages, audio_items):
+        for source, target, audio_item, transcript in zip(
+            source_languages, target_languages, audio_items, transcriptions
+        ):
             content = [
                 make_audio_chat_template_content(audio_item),
                 {
@@ -166,12 +179,16 @@ class CanaryProcessor(ProcessorMixin):
                     "punctuation": punctuation,
                 },
             ]
-            conversations.append([{"role": "user", "content": content}])
+            conversation = [{"role": "user", "content": content}]
+            if transcript is not None:
+                # the chat template expects the assistant content as a plain string
+                conversation.append({"role": "assistant", "content": transcript})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
             tokenize=tokenize,
-            add_generation_prompt=True,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )
@@ -181,5 +198,7 @@ class CanaryProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["decoder_input_ids", "labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"CanaryProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["CanaryProcessor"]

@@ -46,13 +46,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class VideoMAEDecoderOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+    logits (`torch.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
     """
 
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -63,16 +63,16 @@ class VideoMAEDecoderOutput(ModelOutput):
 @dataclass
 class VideoMAEForPreTrainingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`):
+    loss (`torch.Tensor` of shape `(1,)`):
         Pixel reconstruction loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+    logits (`torch.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 # sin-cos position encoding
@@ -419,7 +419,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -530,7 +530,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoMAEForPreTrainingOutput:

@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
@@ -30,7 +29,7 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
@@ -81,25 +80,25 @@ class Gemma4ModelOutputWithPast(BaseModelOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    audio_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`dict`, *optional*):
-        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+    shared_kv_states (`KVSharingDict`, *optional*):
+        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
-    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_hidden_states: torch.Tensor | None = None
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    shared_kv_states: KVSharingDict | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -110,39 +109,39 @@ class Gemma4ModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Gemma4CausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    audio_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`dict`, *optional*):
-        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+    shared_kv_states (`KVSharingDict`, *optional*):
+        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
-    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    shared_kv_states: KVSharingDict | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 @dataclass
@@ -151,15 +150,15 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
     Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        shared_kv_states (`KVSharingDict`, *optional*):
+            A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
             Used to pass shared KV states between layers during KV sharing.
-        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
-            Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
+            Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    shared_kv_states: KVSharingDict | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -989,7 +988,7 @@ class Gemma4VisionEncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -1060,8 +1059,8 @@ class Gemma4VisionEncoder(nn.Module):
 class Gemma4TextMLP(nn.Module):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()
-        first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
+        is_kv_shared_layer = kv_sharing_mode == "reuse"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1168,12 +1167,9 @@ class Gemma4TextAttention(nn.Module):
         self.is_causal = config.use_bidirectional_attention != "all"
 
         # Shared kv cache
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        self.store_full_length_kv = not self.is_kv_shared_layer and layer_idx == len(prev_layers) - 1 - prev_layers[
-            ::-1
-        ].index(config.layer_types[layer_idx])
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
+        self.is_kv_shared_layer = kv_sharing_mode == "reuse"
+        self.store_full_length_kv = kv_sharing_mode == "store"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -1205,7 +1201,7 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: KVSharingDict,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -1224,9 +1220,7 @@ class Gemma4TextAttention(nn.Module):
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.layer_type]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
+
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
@@ -1238,8 +1232,9 @@ class Gemma4TextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         if self.store_full_length_kv:
             shared_kv_states[self.layer_type] = key_states, value_states
 
@@ -1373,9 +1368,9 @@ class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        per_layer_input: torch.Tensor = None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
-        position_embeddings: torch.Tensor = None,
+        per_layer_input: torch.Tensor | None = None,
+        shared_kv_states: KVSharingDict | dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        position_embeddings: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1455,7 +1450,7 @@ class Gemma4PreTrainedModel(PreTrainedModel):
         "Gemma4VisionPatchEmbedder",
         "Gemma4AudioLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1571,6 +1566,7 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         self.rotary_emb = Gemma4TextRotaryEmbedding(config)
         self.gradient_checkpointing = False
         self.unique_layer_types = set(self.config.layer_types)
+        self.first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
 
         # Per-Layer Embeddings (PLE): auxiliary embedding that feeds a residual signal
         # into each decoder layer. See `get_per_layer_inputs()` and `project_per_layer_inputs()`
@@ -1612,9 +1608,10 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         per_layer_inputs: torch.Tensor | None = None,
         use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4TextModelOutputWithPast:
         r"""
@@ -1669,13 +1666,28 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
-        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
-        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
-        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
+        # Initialize as empty storage, or reuse past shared states.
+        shared_kv_states = kwargs.pop("shared_kv_states", None)
+        if not isinstance(shared_kv_states, KVSharingDict):
+            shared_kv_states = KVSharingDict(shared_kv_states)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            # Starting at `first_kv_shared_layer_idx`, we will always reuse k/v of previous layers. This means that we can
+            # drop the seq_len dimension according to `logits_to_keep` for all remaining layers since we do not look at the past
+            # anymore, which leads to much faster forward for large seq_len
+            if i == self.first_kv_shared_layer_idx:
+                hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping = (
+                    self._maybe_slice_kv_shared_inputs(
+                        hidden_states,
+                        per_layer_inputs,
+                        position_embeddings,
+                        causal_mask_mapping,
+                        logits_to_keep,
+                        **kwargs,
+                    )
+                )
+
             per_layer_input = per_layer_inputs[:, :, i, :] if per_layer_inputs is not None else None
 
             hidden_states = decoder_layer(
@@ -1778,6 +1790,59 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 
         return (per_layer_projection + per_layer_inputs) * self.per_layer_input_scale
 
+    def _maybe_slice_kv_shared_inputs(
+        self,
+        hidden_states,
+        per_layer_inputs,
+        position_embeddings,
+        causal_mask_mapping,
+        logits_to_keep,
+        **kwargs,
+    ):
+        """
+        Slices sequence-length inputs to the `logits_to_keep` token positions before entering the KV-shared layers. Because KV-shared
+        layers reuse keys and values computed by earlier non-shared layers and do not write to the KV cache, unselected prompt
+        positions do not need to be computed through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
+        `output_attentions`, `output_router_logits`) are requested.
+        Note: to simplify, we only allow this optimization for integer `logits_to_keep`, i.e. what `generate` uses. This avoids a lot
+        of edge cases regarding masks, and it keeps this method simple.
+        """
+        batch_size, seq_len = hidden_states.shape[:2]
+        record_keys = ("output_hidden_states", "output_attentions", "output_router_logits")
+        can_optimize = True
+        # If the seq_len is already 1 (i.e. decoding), or we request any additional output, exit early
+        if seq_len == 1 or any(kwargs.get(k) or getattr(self.config, k, False) for k in record_keys):
+            can_optimize = False
+        # To keep it simple, as it's the usual case
+        elif not isinstance(logits_to_keep, int):
+            can_optimize = False
+        # Flex cannot slice mask
+        elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
+            can_optimize = False
+        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        elif (
+            self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
+            and logits_to_keep > 1
+            and any(mask is None for mask in causal_mask_mapping.values())
+        ):
+            can_optimize = False
+
+        # If we cannot optimize, return untouched inputs will the full seq_len
+        if not can_optimize:
+            return hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping
+
+        logits_to_keep = slice(-logits_to_keep, None)
+        hidden_states = hidden_states[:, logits_to_keep, :]
+        per_layer_inputs = per_layer_inputs[:, logits_to_keep, :, :]
+        position_embeddings = {
+            k: (cos[:, logits_to_keep, :], sin[:, logits_to_keep, :]) for k, (cos, sin) in position_embeddings.items()
+        }
+        causal_mask_mapping = {
+            k: v[:, :, logits_to_keep, :] if v is not None else None for k, v in causal_mask_mapping.items()
+        }
+
+        return hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping
+
 
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
 class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
@@ -1805,7 +1870,7 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1845,11 +1910,14 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             per_layer_inputs=per_layer_inputs,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        # May have been already sliced to logits_to_kep
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
@@ -2005,12 +2073,12 @@ class Gemma4VisionModel(Gemma4PreTrainedModel):
     @auto_docstring(custom_intro="Encodes image pixels to soft tokens from patches.")
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_position_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`):
+        pixel_values (`torch.Tensor` or `list[torch.Tensor]`):
             The images to encode. Either a single `[batch, channels, height, width]` tensor
             (all images same size) or a list of `[1, channels, height, width]` tensors (different sizes).
         pixel_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`):
@@ -2182,7 +2250,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -2208,7 +2276,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.BoolTensor, torch.BoolTensor, torch.BoolTensor]:
         """
         Obtains mask for multimodal placeholders (replaced by soft tokens) and hard text tokens.
@@ -2256,15 +2324,15 @@ class Gemma4Model(Gemma4PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
@@ -2274,7 +2342,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -2454,9 +2522,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma4AudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         if self.audio_tower is None:
@@ -2474,13 +2542,13 @@ class Gemma4Model(Gemma4PreTrainedModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+        pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
             on a separate video axis, so that videos of different lengths can be batched together.
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
@@ -2537,7 +2605,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -2553,9 +2621,9 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -2564,7 +2632,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         num_frames_per_video: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -2573,7 +2641,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -2609,12 +2677,15 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             video_position_ids=video_position_ids,
             num_frames_per_video=num_frames_per_video,
             mm_encoder_outputs=mm_encoder_outputs,
+            logits_to_keep=logits_to_keep,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        # May have been already sliced to logits_to_kep
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
@@ -2678,7 +2749,10 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-        if not (is_first_iteration or not use_cache):
+        if is_first_iteration or not use_cache:
+            # The bidirectional mask reads them by position, so a prefill chunk needs them from the start of the sequence
+            model_inputs["mm_token_type_ids"] = kwargs.get("mm_token_type_ids")
+        else:
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
         # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards

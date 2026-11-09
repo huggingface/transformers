@@ -176,12 +176,12 @@ class DistributedMixin:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
+        if distributed_config.tp_size == 1 and distributed_config.dp_size == 1 and distributed_config.pp_size == 1:
             return distributed_config, device_map, None
 
         if distributed_config.tp_size > 1 and device_map is not None:
             raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
-        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.8"):
+        if distributed_config.dp_size > 1 and not is_torch_greater_or_equal("2.8"):
             raise OSError("FSDP2 requires `torch>=2.8` (distributed checkpoint save/load).")
 
         device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
@@ -251,10 +251,11 @@ class DistributedMixin:
 
         tp_plan = dict(self.tp_plan) if distributed_config.tp_size > 1 else {}
         ep_plan = dict(self.ep_plan) if distributed_config.ep_size > 1 else {}
-        fsdp_plan = dict(self.fsdp_plan) if distributed_config.fsdp_size > 1 else {}
+        # HSDP shards each replica with the FSDP plan.
+        fsdp_plan = dict(self.fsdp_plan) if distributed_config.dp_size > 1 else {}
 
         for kind, plan in (("tp", tp_plan), ("ep", ep_plan), ("fsdp", fsdp_plan)):
-            size = getattr(distributed_config, f"{kind}_size")
+            size = distributed_config.dp_size if kind == "fsdp" else getattr(distributed_config, f"{kind}_size")
             if size > 1 and not plan:
                 raise ValueError(
                     f"`{kind}_size={size}` was requested, but `{type(self).__name__}` has no `{kind}_plan`. Pass "
@@ -332,7 +333,7 @@ class DistributedMixin:
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
-        if distributed_config.fsdp_size > 1:
+        if distributed_config.dp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
 
         return model
@@ -361,7 +362,7 @@ class DistributedMixin:
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.8.")
 
         distributed_config = getattr(model_to_save.config, "distributed_config", None)
-        if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.fsdp_size <= 1):
+        if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.dp_size <= 1):
             raise ValueError(
                 "save_pretrained(..., distributed_checkpoint=True) requires an FSDP- or TP-sharded model."
             )
@@ -409,7 +410,7 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1:
+        if distributed_config.dp_size > 1:
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch with expert replicas: every parameter is
             # FSDP-managed, and the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
@@ -433,7 +434,7 @@ class DistributedMixin:
         """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
         if distributed_config is None:
             return
-        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1 or distributed_config.ep_size > 1:
+        if distributed_config.tp_size > 1 or distributed_config.dp_size > 1 or distributed_config.ep_size > 1:
             _distributed_barrier()
 
     def _load_and_finalize_distributed_pretrained_model(self, distributed_checkpoint_dir, device_map, device_mesh):

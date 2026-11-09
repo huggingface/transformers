@@ -206,7 +206,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model = MusicgenForCausalLM(config)
 
         model.to(torch_device)
-        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
         model.train()
 
         # Contrarily to the initial method, we don't unfreeze freezed parameters.
@@ -600,7 +600,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model = model_class(config)
 
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
 
             # The audio encoder weights are not used during the forward pass (only during the generate pass)
@@ -767,7 +767,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):

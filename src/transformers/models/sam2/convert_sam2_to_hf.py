@@ -30,7 +30,7 @@ from PIL import Image
 from transformers import (
     Sam2Config,
     Sam2HieraDetConfig,
-    Sam2ImageProcessorFast,
+    Sam2ImageProcessor,
     Sam2MaskDecoderConfig,
     Sam2Model,
     Sam2Processor,
@@ -221,7 +221,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     state_dict = replace_keys(state_dict)
 
-    image_processor = Sam2ImageProcessorFast()
+    image_processor = Sam2ImageProcessor()
     processor = Sam2Processor(image_processor=image_processor)
     hf_model = Sam2Model(config)
     hf_model.eval()
