@@ -1937,8 +1937,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
         # avoid moving to gpus at each forward - cache once here
-        self.register_buffer(
-            "special_tokens",
+        self.special_tokens = nn.Buffer(
             torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
             persistent=False,
         )
