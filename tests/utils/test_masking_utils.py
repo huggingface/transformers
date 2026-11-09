@@ -68,6 +68,21 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 # fmt: on
 
 
+# fmt: off
+# Two packed sequences of 2 and 6 tokens with `chunk_size=3`: the chunks of the second one start at index 2 and 5
+EXPECTED_PACKED_CHUNKED_MASK = torch.tensor(
+    [[[[ True, False, False, False, False, False, False, False],
+       [ True,  True, False, False, False, False, False, False],
+       [False, False,  True, False, False, False, False, False],
+       [False, False,  True,  True, False, False, False, False],
+       [False, False,  True,  True,  True, False, False, False],
+       [False, False, False, False, False,  True, False, False],
+       [False, False, False, False, False,  True,  True, False],
+       [False, False, False, False, False,  True,  True,  True]]]],
+    dtype=torch.bool)
+# fmt: on
+
+
 @require_torch
 class MaskTest(MemoryCleanupMixin, unittest.TestCase):
     def test_packed_sequence_mask_sdpa(self):
@@ -316,7 +331,6 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # Make sure we have an attention_chunk_size in the config
         config = LlamaConfig(attention_chunk_size=3, attn_implementation="sdpa")
 
-        # Two packed sequences of 2 and 6 tokens: the chunks of the second one must start at its first token (index 2)
         position_ids = torch.tensor([[0, 1, 0, 1, 2, 3, 4, 5]])
         inputs_embeds = torch.empty((1, 8, 16), dtype=torch.float16)
 
@@ -328,20 +342,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             position_ids=position_ids,
         )
 
-        # fmt: off
-        EXPECTED_CHUNKED_MASK = torch.tensor(
-            [[[[ True, False, False, False, False, False, False, False],
-               [ True,  True, False, False, False, False, False, False],
-               [False, False,  True, False, False, False, False, False],
-               [False, False,  True,  True, False, False, False, False],
-               [False, False,  True,  True,  True, False, False, False],
-               [False, False, False, False, False,  True, False, False],
-               [False, False, False, False, False,  True,  True, False],
-               [False, False, False, False, False,  True,  True,  True]]]],
-            dtype=torch.bool)
-        # fmt: on
-
-        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+        self.assertTrue((chunked_attention_mask == EXPECTED_PACKED_CHUNKED_MASK).all())
 
     def test_chunked_mask_with_left_padding_decoding(self):
         # Make sure we have an attention_chunk_size in the config

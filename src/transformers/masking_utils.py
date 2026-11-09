@@ -1403,20 +1403,23 @@ def create_chunked_causal_mask(
         )
 
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
-    # For chunked attention and batched inputs, we need to take the number of left padding tokens into account
-    # to start the chunk from the actual start of the sequence for the padded sequence
-    if attention_mask is not None:
-        # Only count the left padding tokens, not all of them
-        left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
-    else:
-        left_padding_tokens = torch.zeros(batch_size, device=device, dtype=int)
+
     if packed_sequence_mask is not None:
         # For packed sequences, each chunk must start at the beginning of its own sequence
+        # The position ids are sometimes just unsqueezed, without being expanded
         mask_factory_function = and_masks(
             packed_chunked_overlay(chunk_size, position_ids.expand(batch_size, -1)), causal_mask_function
         )
     else:
+        # For chunked attention and batched inputs, we need to take the number of left padding tokens into account
+        # to start the chunk from the actual start of the sequence for the padded sequence
+        if attention_mask is not None:
+            # Only count the left padding tokens, not all of them
+            left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
+        else:
+            left_padding_tokens = torch.zeros(batch_size, device=device, dtype=int)
         mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
+
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Defaulting to using non-vmap based mask creations except when detecting
