@@ -169,7 +169,7 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "soundfile", "soxr", "phonemizer")
+extras["audio"] = deps_list("torchaudio", "soundfile", "soxr")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
@@ -216,6 +216,7 @@ extras["testing"] = (
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests
         "librosa",  # reference implementation in audio tests
+        "phonemizer",  # Wav2Vec2Phoneme / VITS tokenizer tests (also needs the system `espeak-ng`)
         "nltk",
         "sacremoses",
         "rjieba",

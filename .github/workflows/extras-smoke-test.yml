@@ -122,6 +122,62 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
+  test-audio-extra:
+    permissions:
+      contents: read
+    name: Test standalone `[audio]` on Python ${{ matrix.python-version }}
+    needs: get-python-versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(needs.get-python-versions.outputs.versions) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      # A fresh environment with only `[audio]`: the `test-extras` job installs every extra into the same environment,
+      # so it cannot tell whether `[audio]` works on its own.
+      - name: Install transformers[audio] alone and check the core audio path
+        id: check-audio
+        run: |
+          python -m venv /tmp/audio-extra
+          /tmp/audio-extra/bin/python -m pip install --upgrade pip
+          /tmp/audio-extra/bin/python -m pip install ".[audio]"
+          /tmp/audio-extra/bin/python utils/check_audio_extra.py
+
+      - name: Write failure report
+        if: failure()
+        run: |
+          mkdir -p failure_reports
+          cat > failure_reports/failure-${MATRIX_PYTHON_VERSION}-audio-standalone.json << EOF
+          {
+            "python_version": "${MATRIX_PYTHON_VERSION}",
+            "extra": "audio (standalone)",
+            "job_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+        env:
+          MATRIX_PYTHON_VERSION: ${{ matrix.python-version }}
+
+      - name: Upload failure report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: failure-report-audio-${{ matrix.python-version }}
+          path: failure_reports/
+          retention-days: 1
+          if-no-files-found: ignore
+
   precheck-slack:
     permissions: {}
     name: Check Slack token availability
@@ -143,9 +199,9 @@ jobs:
     permissions:
       contents: read
     name: Notify failures to Slack
-    needs: [test-extras, precheck-slack]
+    needs: [test-extras, test-audio-extra, precheck-slack]
     runs-on: ubuntu-latest
-    if: always() && needs.precheck-slack.outputs.has_slack_token == 'true' && needs.test-extras.result != 'success'
+    if: always() && needs.precheck-slack.outputs.has_slack_token == 'true' && (needs.test-extras.result != 'success' || needs.test-audio-extra.result != 'success')
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2

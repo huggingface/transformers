@@ -2237,7 +2237,9 @@ Please note that you may need to restart your runtime after installation.
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
+`pip install phonemizer`. phonemizer also needs the `espeak-ng` system library, which pip cannot install (e.g.
+`apt install espeak-ng` on Debian/Ubuntu, `brew install espeak-ng` on macOS). Please note that you may need to restart
+your runtime after installation.
 """
 # docstyle-ignore
 UROMAN_IMPORT_ERROR = """
