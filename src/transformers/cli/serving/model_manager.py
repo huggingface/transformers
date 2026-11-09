@@ -292,9 +292,8 @@ class ModelManager:
         # A decision model, or a checkpoint shipping a decision head next to its weights: loaded like the pipeline does
         try:
             return AutoModelForDecision.from_pretrained(model_id, **model_kwargs)
-        except ValueError as error:
-            if "Unrecognized configuration class" not in str(error):
-                raise
+        except ValueError:  # not a decision model, nor a checkpoint with a decision head: as the pipeline does
+            pass
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM

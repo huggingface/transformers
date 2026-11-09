@@ -49,8 +49,11 @@ class DecisionMixin:
         the checkpoint is the `text_config` of the decision model, and the config files of its head
         (`config_class.extra_config_files`) give the rest of its config, in `__post_init__`.
         """
-        if config is None:
-            config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
+        if not isinstance(config, cls.config_class):  # none, or the config of the model the head ships next to
+            head_config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
+            if head_config is None and config is not None:
+                raise ValueError(f"{pretrained_model_name_or_path} has no {cls.__name__} head next to its weights.")
+            config = head_config or config
         model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
         if decision_config is None:  # the decision config of the repo, read now like `generation_config`
             decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **_hub_kwargs(kwargs))

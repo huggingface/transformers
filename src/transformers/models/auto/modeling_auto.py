@@ -2126,6 +2126,12 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
 MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
         ("jev", "JevForDecision"),
+        # EXPERIMENTAL: checkpoints of these models that ship a JEV head next to their weights
+        ("gemma4", "JevForDecision"),
+        ("qwen2", "JevForDecision"),
+        ("qwen3_5", "JevForDecision"),
+        ("qwen3_5_moe", "JevForDecision"),
+        ("qwen3_5_text", "JevForDecision"),
     ]
 )
 
@@ -2633,24 +2639,6 @@ AutoModelForAudioTokenization = auto_class_update(
 
 class AutoModelForDecision(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_DECISION_MAPPING
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        # EXPERIMENTAL: also the checkpoints of another model that ship a decision head next to their weights
-        if kwargs.get("config") is None:
-            kwargs.pop("config", None)
-            for model_class in cls._model_mapping.values():
-                config, decision_config = model_class.checkpoint_config(pretrained_model_name_or_path, **kwargs)
-                if config is not None:
-                    kwargs.pop("code_revision", None)  # only the Auto classes take it, for remote code
-                    return model_class.from_pretrained(
-                        pretrained_model_name_or_path,
-                        *model_args,
-                        config=config,
-                        decision_config=decision_config,
-                        **kwargs,
-                    )
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 AutoModelForDecision = auto_class_update(AutoModelForDecision, head_doc="decision")
