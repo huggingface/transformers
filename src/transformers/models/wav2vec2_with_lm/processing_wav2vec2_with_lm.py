@@ -74,7 +74,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
     )
     _missing_dependencies_message = (
-        "`{name}` needs `pyctcdecode` and `kenlm`. It is deprecated and will be removed in Transformers v6.\n"
+        "`{name}` needs `pyctcdecode` and `kenlm`, which are no longer installed with `transformers[audio]`. It is "
+        "deprecated and will be removed in Transformers v6.\n"
         "- To keep language model decoding, install them with `pip install --no-deps pyctcdecode && pip install "
         "pygtrie kenlm` (pyctcdecode's pinned dependencies would downgrade numpy below 2, and kenlm is built from "
         "source with a C++ toolchain), or call pyctcdecode directly: "

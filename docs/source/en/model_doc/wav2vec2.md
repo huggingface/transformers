@@ -139,7 +139,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 > [!WARNING]
 > [`Wav2Vec2ProcessorWithLM`] and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will be
-> removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with Transformers. To
+> removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with `transformers[audio]`. To
 > keep the same outputs, call pyctcdecode directly: [Migrating to pyctcdecode](#migrating-to-pyctcdecode) shows how, and
 > how to install both without downgrading numpy.
 
