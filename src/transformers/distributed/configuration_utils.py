@@ -63,12 +63,13 @@ class DistributedConfig:
             Number of devices that split each sequence (context parallelism). The ranks of a cp group get the same
             batch, and each keeps a contiguous slice of every sequence, so the sequence length must be divisible by
             `cp_size`. With `cp_size > 1`, FSDP2 shards over `dp_size` ranks: the ranks of a cp group hold parts of
-            the same batch, so their gradients are partial sums of the same batch. Defaults to 1.
+            the same batch, so their gradients are partial sums of the same batch. Can be combined with `tp_size`, in
+            which case the ranks of a tp group hold the same batch and the same slice. Defaults to 1.
         cp_implementation (`str`, *optional*, defaults to `"ulysses"`):
             How attention sees the whole sequence while each rank holds a slice of it. A name in
             `transformers.distributed.context_parallel.cp_implementations`. `"ulysses"`: an all-to-all gives each
-            rank the whole sequence for `num_heads / cp_size` heads, so `cp_size` must divide the number of attention
-            and key/value heads.
+            rank the whole sequence for `num_heads / (cp_size * tp_size)` heads, so `cp_size * tp_size` must divide
+            the number of attention and key/value heads.
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
         ep_size (`int`, *optional*):
@@ -124,7 +125,8 @@ class DistributedConfig:
     def dp_size(self) -> int:
         """
         The number of ranks FSDP2 reduces gradients over: `dp_replicate_size * fsdp_size * cp_size`. The ranks of a
-        cp group share one batch but each processes different tokens of it.
+        cp group share one batch but each processes different tokens of it. The `tp` ranks hold the same batch and the
+        same tokens, so they are not part of it.
         """
         return self.dp_replicate_size * self.fsdp_size * self.cp_size
 
@@ -190,12 +192,12 @@ class DistributedConfig:
                 raise ValueError("`ep_size` must divide `fsdp_size * cp_size * tp_size`.")
 
         if self.cp_size > 1:
-            unsupported = [name for name in ("pp_size", "tp_size", "ep_size") if getattr(self, name) > 1]
+            unsupported = [name for name in ("pp_size", "ep_size") if getattr(self, name) > 1]
             if unsupported:
                 raise ValueError(
                     f"Context parallelism (`cp_size={self.cp_size}`) is not supported yet with "
                     f"{', '.join(f'`{name}={getattr(self, name)}`' for name in unsupported)}. Use "
-                    "`DistributedConfig(fsdp_size=N, cp_size=M)`."
+                    "`DistributedConfig(tp_size=N, cp_size=M)` or `DistributedConfig(fsdp_size=N, cp_size=M)`."
                 )
 
         if self.dp_size > 1 and self.pp_size > 1:

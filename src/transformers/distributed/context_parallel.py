@@ -15,7 +15,8 @@
 
 Attention still has to see the whole sequence. [`UlyssesCP`] gets there with two all-to-all exchanges around every
 attention call: the first gathers the sequence and scatters the heads, so the model's own attention function runs on
-the full sequence with `num_heads / cp_size` heads, and the second reverses it.
+the full sequence with the heads this rank holds divided by `cp_size`, and the second reverses it. Under tensor
+parallelism this rank holds `num_heads / tp_size` of them.
 """
 
 from __future__ import annotations
@@ -125,8 +126,8 @@ def _packed_causal_mask(position_ids: torch.Tensor) -> torch.Tensor | None:
 
 class UlyssesCP(CPImplementation):
     """
-    Attention over the whole sequence with `num_heads / cp_size` heads per rank: two all-to-all exchanges around the
-    model's own attention function.
+    Attention over the whole sequence with `num_heads / (cp_size * tp_size)` heads per rank: two all-to-all exchanges
+    around the model's own attention function.
     """
 
     def check(self, model: nn.Module) -> None:
@@ -168,12 +169,16 @@ class UlyssesCP(CPImplementation):
         num_heads = text_config.num_attention_heads
         num_kv_heads = getattr(text_config, "num_key_value_heads", None) or num_heads
         cp_size = self.cp_mesh.size()
-        if num_heads % cp_size != 0 or num_kv_heads % cp_size != 0:
+        # the tp plan already keeps `num_heads / tp_size` heads on this rank, and those are what cp splits
+        distributed_config = getattr(config, "distributed_config", None)
+        tp_size = 1 if distributed_config is None else distributed_config.tp_size
+        splits = cp_size * tp_size
+        if num_heads % splits != 0 or num_kv_heads % splits != 0:
             raise ValueError(
-                f"Ulysses context parallelism splits the attention heads across the {cp_size} ranks of the `cp` mesh, "
-                f"so `cp_size` must divide both the number of attention heads ({num_heads}) and the number of "
-                f"key/value heads ({num_kv_heads}) of {model.__class__.__name__}. Use another `cp_size`, or disable "
-                "context parallelism."
+                f"Ulysses context parallelism splits the attention heads across the {cp_size} ranks of the `cp` mesh "
+                f"and the {tp_size} ranks of the `tp` mesh, so `cp_size * tp_size` must divide both the number of "
+                f"attention heads ({num_heads}) and the number of key/value heads ({num_kv_heads}) of "
+                f"{model.__class__.__name__}. Use smaller `cp_size` or `tp_size`, or disable context parallelism."
             )
 
     def attention(
