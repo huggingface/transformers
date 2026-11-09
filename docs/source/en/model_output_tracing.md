@@ -107,27 +107,27 @@ class MyModel(MyPreTrainedModel):
 
 Feature extraction methods like `get_image_features` often read one or a few hidden states from a submodel, such as the vision tower. Requesting `output_hidden_states=True` keeps every layer alive to use only a few of them. Decorate the method with `@select_hidden_states` instead. It sets `output_hidden_states` to the indices the method uses, and the `@capture_outputs` of the submodel that receives the kwargs captures only those.
 
-Pass the name of the method argument that holds the indices. The example below is trimmed from [LlavaModel](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llava/modeling_llava.py).
+Pass the name of the method argument that holds the indices. The decorator reads the argument's value, including its default, and forwards it as `output_hidden_states`.
 
 ```python
 from ...utils.output_capturing import select_hidden_states
 
-class LlavaModel(LlavaPreTrainedModel):
+class MyVisionLanguageModel(MyPreTrainedModel):
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] = -2,
         **kwargs: Unpack[TransformersKwargs],
     ):
         # kwargs["output_hidden_states"] is now vision_feature_layer
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
-        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        ...
+        image_features = image_outputs.hidden_states[vision_feature_layer]
+        return self.multi_modal_projector(image_features)
 ```
+
+If the argument defaults to `None` and gets its value from the config, place `@merge_with_config_defaults` above `@select_hidden_states` so the decorator sees the resolved value. [LlavaModel](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llava/modeling_llava.py) does this for `vision_feature_layer`.
 
 If the indices come from the model instead of an argument, pass a function that takes the model and returns them. [CLIPSegForImageSegmentation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/clipseg/modeling_clipseg.py) adds one to each layer in `extract_layers` to skip the embedding output.
 
@@ -135,7 +135,8 @@ If the indices come from the model instead of an argument, pass a function that 
 @select_hidden_states(lambda self: [i + 1 for i in self.extract_layers])
 ```
 
-If the caller passes `output_hidden_states` explicitly, that value takes precedence, so `output_hidden_states=True` still returns every hidden state.
+> [!NOTE]
+> If the caller requests hidden states with `output_hidden_states`, that request takes precedence, so `output_hidden_states=True` still returns every hidden state.
 
 ## Patch layer classes
 
