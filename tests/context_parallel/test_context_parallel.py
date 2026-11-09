@@ -13,6 +13,7 @@
 # limitations under the License.
 import types
 import unittest
+from unittest import mock
 
 import pytest
 import torch
@@ -20,26 +21,31 @@ import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import (
+    AutoModelForCausalLM,
+    DynamicCache,
     LlamaConfig,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaModel,
     MistralConfig,
 )
-from transformers.distributed import context_parallel
+from transformers.distributed import DistributedConfig, context_parallel
 from transformers.distributed.context_parallel import (
     CPImplementation,
     UlyssesCP,
     _gather_heads_scatter_sequence,
     _gather_sequence_scatter_heads,
+    cp_implementations,
     register_context_parallel_attention,
 )
+from transformers.distributed.utils import gather_full_state_dict
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import require_flash_attn, require_torch_multi_accelerator
 
 from ..distributed_testing_utils import run_distributed
+from ..test_fsdp_mixin import _deterministic_init_model_dir, _distributed_tmpdir
 
 
 class _MeshStub:
@@ -389,3 +395,317 @@ class TestContextParallelChecks(unittest.TestCase):
 class TestUlyssesFlashAttention(unittest.TestCase):
     def test_packed_flash_attention(self):
         run_distributed(world_size=2, backend="nccl")(_test_flash_attention)(2)
+
+
+# =============================================================================
+# A model sharded with context parallelism, against the same weights on full sequences
+# =============================================================================
+
+CP_RTOL = 1e-5
+CP_ATOL = 1e-6
+
+
+def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):
+    """A batch every rank builds alike, with `batch_size` rows for each data parallel rank."""
+    generator = torch.Generator().manual_seed(seed)
+    input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len), generator=generator)
+    if not packed:
+        return input_ids, None
+    # two documents back to back, which `position_ids` has to describe for the whole sequence
+    position_ids = torch.cat([torch.arange(seq_len // 2), torch.arange(seq_len // 2)]).expand(batch_size, -1)
+    return input_ids, position_ids
+
+
+def _local(tensor):
+    """The full value of a tensor FSDP2 holds as a `DTensor`, or `tensor` itself."""
+    return tensor.full_tensor() if hasattr(tensor, "full_tensor") else tensor
+
+
+def _data_parallel_rank_and_group(model, fsdp_size, dp_replicate_size):
+    """
+    Which rows of the batch this rank holds, and the group FSDP2 averages its gradients over.
+
+    The tests use one data parallel axis at a time, so that axis is the group.
+    """
+    if fsdp_size == 1 and dp_replicate_size == 1:
+        return 0, None
+    mesh_manager = model._mesh_manager
+    dp_dim = "dp_replicate" if dp_replicate_size > 1 else "fsdp"
+    dp_rank = mesh_manager.get_mesh("dp_replicate").get_local_rank() * fsdp_size
+    dp_rank += mesh_manager.get_mesh("fsdp").get_local_rank()
+    return dp_rank, mesh_manager.get_mesh(dp_dim).get_group()
+
+
+def _average_over_data_parallel(tensor, dp_group, dp_size):
+    """Undo FSDP2's gradient averaging so the value covers the whole batch."""
+    if dp_group is None:
+        return tensor
+    dist.all_reduce(tensor, group=dp_group)
+    return tensor / dp_size
+
+
+def _compare_with_unsharded(init_dir, batch, distributed_config):
+    """
+    Run the full `batch` through an unsharded model and through the same weights sharded with context parallelism,
+    then compare the loss, the logits and every gradient.
+    """
+    fsdp_size, dp_replicate_size = distributed_config.fsdp_size, distributed_config.dp_replicate_size
+    tokens = batch["input_ids"] if batch.get("input_ids") is not None else batch["inputs_embeds"]
+
+    reference = AutoModelForCausalLM.from_pretrained(init_dir)
+    reference_output = reference(**batch)
+    reference_output.loss.backward()
+    reference_grads = {
+        name: param.grad.clone() for name, param in reference.named_parameters() if param.grad is not None
+    }
+    reference_loss, reference_logits = reference_output.loss.detach(), reference_output.logits.detach()
+    del reference
+
+    model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+    batch_size = tokens.shape[0] // (fsdp_size * dp_replicate_size)
+    dp_rank, dp_group = _data_parallel_rank_and_group(model, fsdp_size, dp_replicate_size)
+    rows = slice(dp_rank * batch_size, (dp_rank + 1) * batch_size)
+    # every entry is a full-sequence tensor on its first, batch dimension, apart from the flags
+    local_batch = {name: value[rows] if isinstance(value, torch.Tensor) else value for name, value in batch.items()}
+
+    output = model(**local_batch)
+    output.loss.backward()
+
+    # every rank computed the loss of the full sequences, and its own slice of the logits
+    cp_rank = model._mesh_manager.get_mesh("cp").get_local_rank()
+    expected_logits = reference_logits[rows].chunk(distributed_config.cp_size, dim=1)[cp_rank]
+    torch.testing.assert_close(
+        _local(output.logits), expected_logits, rtol=CP_RTOL, atol=CP_ATOL, msg="Logits mismatch"
+    )
+    loss = _average_over_data_parallel(output.loss.detach(), dp_group, fsdp_size * dp_replicate_size)
+    torch.testing.assert_close(loss, reference_loss, rtol=CP_RTOL, atol=CP_ATOL, msg="Loss mismatch")
+
+    for name, param in model.named_parameters():
+        grad = None if param.grad is None else _local(param.grad).float()
+        expected = reference_grads.get(name)
+        if grad is None or expected is None:
+            assert grad is None and expected is None, f"Only one of the two runs has a gradient for {name}"
+            continue
+        grad = _average_over_data_parallel(grad, dp_group, fsdp_size * dp_replicate_size)
+        torch.testing.assert_close(grad, expected, rtol=CP_RTOL, atol=CP_ATOL, msg=f"Gradient mismatch for {name}")
+
+
+def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed):
+    config = _tiny_config()
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        rows = batch_size * fsdp_size * dp_replicate_size
+        input_ids, position_ids = _tiny_batch(config, rows, seq_len, packed)
+        distributed_config = DistributedConfig(
+            cp_size=cp_size, fsdp_size=fsdp_size, dp_replicate_size=dp_replicate_size
+        )
+        batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
+        if position_ids is not None:
+            batch["position_ids"] = position_ids
+        _compare_with_unsharded(init_dir, batch, distributed_config)
+        # `init_dir` is rank 0's temporary directory: wait for the other ranks before it is removed
+        dist.barrier()
+
+
+def _test_inputs_embeds(rank, cp_size):
+    """`inputs_embeds` is sharded along its sequence dim, not along its last, hidden one."""
+    config = _tiny_config()
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, _ = _tiny_batch(config, batch_size, seq_len)
+        reference = AutoModelForCausalLM.from_pretrained(init_dir)
+        inputs_embeds = reference.get_input_embeddings()(input_ids).detach()
+        del reference
+
+        batch = {"inputs_embeds": inputs_embeds, "labels": input_ids.clone(), "use_cache": False}
+        _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size))
+        dist.barrier()
+
+
+def _test_ignored_labels(rank, cp_size):
+    """`-100` on every shifted label of the first rank's slice: it contributes no loss, the rest is unchanged."""
+    config = _tiny_config()
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, _ = _tiny_batch(config, batch_size, seq_len)
+        labels = input_ids.clone()
+        # one past the slice: the shift pulls in the next token, which would be this rank's only valid target
+        labels[:, : seq_len // cp_size + 1] = -100
+        _compare_with_unsharded(
+            init_dir,
+            {"input_ids": input_ids, "labels": labels, "use_cache": False},
+            DistributedConfig(cp_size=cp_size),
+        )
+        dist.barrier()
+
+
+def _test_keeps_num_items_in_batch(rank, cp_size):
+    """A caller's `num_items_in_batch` scales the summed loss, and is not replaced by the token count."""
+    config = _tiny_config()
+    batch_size, seq_len, num_items_in_batch = 2, 8, 7
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, _ = _tiny_batch(config, batch_size, seq_len)
+        labels = input_ids.clone()
+
+        reference = AutoModelForCausalLM.from_pretrained(init_dir)
+        token_sum = reference(input_ids=input_ids, labels=labels, num_items_in_batch=1, use_cache=False).loss
+        del reference
+
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(cp_size=cp_size))
+        batch = {"input_ids": input_ids, "labels": labels, "num_items_in_batch": num_items_in_batch}
+        loss = model(**batch, use_cache=False).loss
+        expected = token_sum.detach() / num_items_in_batch
+        torch.testing.assert_close(loss.detach(), expected, rtol=CP_RTOL, atol=CP_ATOL, msg="Loss mismatch")
+        dist.barrier()
+
+
+class _CountingUlyssesCP(UlyssesCP):
+    """A `UlyssesCP` that counts the attention calls routed through it."""
+
+    def __init__(self, cp_mesh):
+        super().__init__(cp_mesh)
+        self.attention_calls = 0
+
+    def attention(self, *args, **kwargs):
+        self.attention_calls += 1
+        return super().attention(*args, **kwargs)
+
+
+def _test_custom_implementation(rank, cp_size):
+    """A registered implementation runs the attention, and an unknown name is refused before anything is sharded."""
+    config = _tiny_config()
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        with mock.patch.dict(cp_implementations, {"counting": _CountingUlyssesCP}):
+            distributed_config = DistributedConfig(cp_size=cp_size, cp_implementation="counting")
+            model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+
+        input_ids, _ = _tiny_batch(config, 2, 8)
+        model(input_ids=input_ids, labels=input_ids, use_cache=False)
+        implementation = ALL_ATTENTION_FUNCTIONS["sdpa"].implementations[model.model.layers[0].self_attn]
+        assert isinstance(implementation, _CountingUlyssesCP), type(implementation)
+        assert implementation.attention_calls == config.num_hidden_layers, implementation.attention_calls
+
+        # another function registered under the attention key since is wrapped again by the next forward
+        wrapper = ALL_ATTENTION_FUNCTIONS["sdpa"]
+        try:
+            ALL_ATTENTION_FUNCTIONS.register("sdpa", sdpa_attention_forward)
+            model(input_ids=input_ids, labels=input_ids, use_cache=False)
+        finally:
+            ALL_ATTENTION_FUNCTIONS.register("sdpa", wrapper)
+        assert implementation.attention_calls == 2 * config.num_hidden_layers, implementation.attention_calls
+
+        unknown = DistributedConfig(cp_size=cp_size, cp_implementation="missing")
+        with pytest.raises(ValueError, match="Unknown `cp_implementation=missing`"):
+            AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=unknown)
+        dist.barrier()
+
+
+def _test_forward_refusals(rank, cp_size):
+    """Inputs that context parallelism cannot shard correctly raise instead of being silently recomputed wrong."""
+    config = _tiny_config()
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(cp_size=cp_size))
+        input_ids, _ = _tiny_batch(config, 2, 8)
+
+        with pytest.raises(ValueError, match="does not support attention masks"):
+            model(input_ids=input_ids, attention_mask=torch.tensor([[1] * 8, [1] * 7 + [0]]))
+
+        with pytest.raises(ValueError, match="must be divisible by `cp_size`"):
+            model(input_ids=input_ids[:, :-1])
+
+        with pytest.raises(ValueError, match="`past_key_values` are not allowed"):
+            model(input_ids=input_ids, past_key_values=DynamicCache())
+
+        model.config._attn_implementation = "eager"
+        with pytest.raises(ValueError, match="now uses `eager`"):
+            model(input_ids=input_ids)
+        dist.barrier()
+
+
+def _test_save_pretrained(rank, cp_size):
+    """Weights saved from a context parallel model reload without a distributed config, unchanged."""
+    config = _tiny_config()
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        reference = AutoModelForCausalLM.from_pretrained(init_dir)
+        expected = {name: value.clone() for name, value in reference.state_dict().items()}
+        del reference
+
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(cp_size=cp_size))
+        with _distributed_tmpdir(rank) as save_dir:
+            model.save_pretrained(save_dir, is_main_process=(rank == 0))
+            dist.barrier()
+            reloaded = AutoModelForCausalLM.from_pretrained(save_dir)
+
+        for name, value in reloaded.state_dict().items():
+            torch.testing.assert_close(value, expected[name], rtol=0, atol=0, msg=f"Weight mismatch for {name}")
+        dist.barrier()
+
+
+def _test_save_load_distributed_checkpoint(rank, cp_size):
+    """A rank-local checkpoint written by a context parallel model loads back into the same sharding."""
+    config = _tiny_config()
+    distributed_config = DistributedConfig(cp_size=cp_size)
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+        before = gather_full_state_dict(model)
+        with _distributed_tmpdir(rank) as save_dir:
+            model.save_pretrained(save_dir, is_main_process=(rank == 0), distributed_checkpoint=True)
+            dist.barrier()
+            reloaded = AutoModelForCausalLM.from_pretrained(save_dir, distributed_config=distributed_config)
+            dist.barrier()
+        after = gather_full_state_dict(reloaded)
+
+        for name, value in before.items():
+            torch.testing.assert_close(value, after[name], rtol=0, atol=0, msg=f"Weight mismatch for {name}")
+        dist.barrier()
+
+
+class TestContextParallelConfig(unittest.TestCase):
+    def test_refuses_other_parallelisms(self):
+        for other in ({"pp_size": 2}, {"tp_size": 2}, {"ep_size": 2}):
+            with self.subTest(**other), self.assertRaisesRegex(ValueError, "not supported yet with"):
+                DistributedConfig(cp_size=2, **other)
+
+    def test_refuses_size_below_one(self):
+        with self.assertRaisesRegex(ValueError, "must be >= 1"):
+            DistributedConfig(cp_size=0)
+
+
+class TestContextParallelModel(unittest.TestCase):
+    """A model sharded with context parallelism reproduces the same run on the full sequences."""
+
+    def setUp(self):
+        if torch._C._get_accelerator().type == "mps":
+            self.skipTest("Distributed meshes are built on the default accelerator, which MPS cannot back")
+
+    def test_matches_unsharded(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed)
+
+    def test_matches_unsharded_with_fsdp(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 2, 1, False)
+
+    def test_matches_unsharded_with_hsdp(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 1, 2, False)
+
+    def test_inputs_embeds(self):
+        run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2)
+
+    def test_ignored_labels(self):
+        run_distributed(world_size=2, backend="gloo")(_test_ignored_labels)(2)
+
+    def test_keeps_num_items_in_batch(self):
+        run_distributed(world_size=2, backend="gloo")(_test_keeps_num_items_in_batch)(2)
+
+    def test_custom_implementation(self):
+        run_distributed(world_size=2, backend="gloo")(_test_custom_implementation)(2)
+
+    def test_forward_refusals(self):
+        run_distributed(world_size=2, backend="gloo")(_test_forward_refusals)(2)
+
+    def test_save_pretrained(self):
+        run_distributed(world_size=2, backend="gloo")(_test_save_pretrained)(2)
+
+    def test_save_load_distributed_checkpoint(self):
+        run_distributed(world_size=2, backend="gloo")(_test_save_load_distributed_checkpoint)(2)
