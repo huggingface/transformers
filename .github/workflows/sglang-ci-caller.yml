@@ -1,0 +1,163 @@
+name: SGLang Integration Tests
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - sglang_ci*
+
+env:
+  SGLANG_USE_CPU_ENGINE: "1"
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_HOME: /mnt/cache
+
+permissions: {}
+
+jobs:
+  sglang-inference:
+    permissions:
+      contents: read
+    name: SGLang integration (${{ matrix.suite }})
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      # v0.5.19-xeon supplies the Intel CPU build environment and runtime dependencies.
+      image: lmsysorg/sglang@sha256:dec15decb555242b67471b984e51bd44e3faa44fc5c2b5258d46e5fa926e7cde
+      options: --shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}/sglang
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: loader-compat
+            tests: test/registered/unit/utils/test_hf_transformers_loading.py
+          - suite: model-loading
+            tests: >-
+              test/registered/model_loading/test_external_models.py
+              test/registered/model_loading/test_weight_loader_v2_e2e.py
+          # TODO: model-loading and transformers-backend fail with
+          # "Unsupported TP style 'embedding_rowwise'" because transformers
+          # introduced this style (PR #49570) after the pinned SGLang commit.
+          # Fix needed in SGLang: sglang/srt/models/transformers.py
+          # _normalize_tp_style() should handle embedding_rowwise/colwise.
+          - suite: transformers-backend
+            tests: >-
+              test/registered/e2e/models/test_transformers_backend_eval.py
+              test/registered/e2e/models/test_transformers_models.py::TestTransformersFallbackEngine::test_ci_models
+          - suite: processors-and-mappings
+            tests: >-
+              test/registered/unit/utils/test_hf_transformers.py
+              test/registered/unit/utils/test_patch_tokenizer.py
+              test/registered/unit/model_loader/test_transformers_fallback.py
+          - suite: chat
+            tests: >-
+              test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion
+              test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion_stream
+          # TODO: vision-language fails with "Qwen2_5_VLVisionRotaryEmbedding supports only
+          # axial rope, but requested default" (modeling_qwen2_5_vl.py:134).
+          # This is a regression in transformers' Qwen2.5-VL RoPE initialisation — fix
+          # needed in transformers, not in the workflow.
+          - suite: vision-language
+            tests: test/registered/vlm/test_vlm_input_format.py::TestQwenVLUnderstandsImage
+          - suite: audio
+            tests: >-
+              test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_basic_transcription
+              test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_transcription_content_quality
+    env:
+      SGLANG_IS_IN_CI: "true"
+      VIRTUAL_ENV: /opt/.venv
+      CMAKE_BUILD_PARALLEL_LEVEL: "8"
+      PYTHONPATH: ${{ github.workspace }}/sglang/python
+      REPORT_DIR: ${{ github.workspace }}/reports
+      TRANSFORMERS_SOURCE: ${{ github.workspace }}/transformers
+      TEST_TARGETS: ${{ matrix.tests }}
+
+    steps:
+      - name: Checkout Transformers under test
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+          path: transformers
+
+      - name: Checkout SGLang
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: sgl-project/sglang
+          ref: 55b4f4f19506c5571d7c4b04b1b47e85790b6db3
+          persist-credentials: false
+          path: sglang
+
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends ffmpeg
+          uv pip install setuptools setuptools-scm wheel scikit-build-core ninja cmake
+          uv pip install pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers psutil
+          # Keep the image's PyTorch; compile this revision's CPU kernels against it.
+          cp python/pyproject_cpu.toml python/pyproject.toml
+          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./python
+          cp python/sglang/kernels/aot/pyproject_cpu.toml python/sglang/kernels/aot/pyproject.toml
+          uv pip install --no-deps --no-build-isolation ./python/sglang/kernels/aot
+          uv pip install --no-deps torchcodec==0.12.0
+          # Install the candidate last so the SGLang release pin cannot replace it.
+          uv pip install -e "${TRANSFORMERS_SOURCE}"
+
+      - name: Pip freeze
+        run: uv pip freeze
+
+      - name: System info
+        run: |
+          echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
+          echo "=== Memory ===" && free -h
+          echo "=== Disk ===" && df -h
+
+      - name: Cap SGLang server KV-cache for CPU CI
+        # SGLang's CPU engine reads total NUMA RAM (~126 GB) as "GPU memory" and
+        # pre-allocates ~102 GB of KV cache at server startup, OOM-killing the runner.
+        # Inject --max-total-tokens 4096 into every server launch that doesn't already
+        # cap it.  4096 tokens keeps the KV cache well under 1 GB.
+        # Applied to both sglang.test.test_utils and sglang.test.runners because
+        # SRTRunner imports popen_launch_server directly into its own namespace.
+        run: |
+          cat > test/conftest.py << 'CONFTEST'
+          def pytest_configure(config):
+              try:
+                  import sglang.test.test_utils as _tu
+              except ImportError:
+                  return
+
+              _orig = _tu.popen_launch_server
+
+              def _patched(model, base_url, timeout, *args, other_args=None, **kwargs):
+                  other_args = list(other_args or [])
+                  if "--max-total-tokens" not in other_args:
+                      other_args += ["--max-total-tokens", "4096"]
+                  return _orig(model, base_url, timeout, *args, other_args=other_args, **kwargs)
+
+              _tu.popen_launch_server = _patched
+
+              try:
+                  import sglang.test.runners as _runners
+                  if hasattr(_runners, "popen_launch_server"):
+                      _runners.popen_launch_server = _patched
+              except ImportError:
+                  pass
+          CONFTEST
+
+      - name: Run canonical SGLang integration tests
+        run: |
+          mkdir -p "${REPORT_DIR}"
+          read -r -a targets <<< "${TEST_TARGETS}"
+          python3 -m pytest -v "${targets[@]}" --junitxml="${REPORT_DIR}/results.xml"
+
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: sglang-${{ matrix.suite }}-results
+          path: ${{ github.workspace }}/reports/
+          if-no-files-found: ignore

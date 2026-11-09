@@ -77,6 +77,7 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     is_native: bool = False
 
     layer_norm_eps = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
@@ -480,7 +481,7 @@ class Aimv2Model(CLIPModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Aimv2Output:

@@ -493,7 +493,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithNoAttention:
         r"""

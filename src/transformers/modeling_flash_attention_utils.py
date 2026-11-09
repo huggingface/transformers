@@ -51,11 +51,11 @@ def flash_attn_supports_top_left_mask():
 
 
 # TODO Deprecate when all models have the attention interface
-def is_flash_attn_available():
+def is_flash_attn_available(kernels_fallback_ok=False):
     return (
-        is_flash_attn_4_available()
-        or is_flash_attn_3_available()
-        or is_flash_attn_2_available()
+        is_flash_attn_4_available(kernels_fallback_ok=kernels_fallback_ok)
+        or is_flash_attn_3_available(kernels_fallback_ok=kernels_fallback_ok)
+        or is_flash_attn_2_available(kernels_fallback_ok=kernels_fallback_ok)
         or is_torch_npu_available()
         or is_torch_xpu_available()
     )
@@ -286,11 +286,11 @@ def lazy_import_flash_attention(
     global _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn
     global _process_flash_kwargs_fn, _process_with_kvcache_kwargs_fn
     if implementation is not None and _loaded_implementation != implementation:
-        _loaded_implementation = implementation
-
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
+        # Only mark the implementation as loaded once the import succeeded, so that a failed load is retried
+        _loaded_implementation = implementation
 
         # Paged flash attention is not compatible with torch.compile, so we decorate it here (unless it doesnt exist)
         if _flash_with_kvcache_fn is not None:

@@ -29,24 +29,11 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
-
-
-class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "return_mm_token_type_ids": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 def get_aspect_ratio_preserving_size(
@@ -105,7 +92,11 @@ def get_aspect_ratio_preserving_size(
 
 @auto_docstring
 class Gemma4UnifiedProcessor(ProcessorMixin):
-    valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+    }
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
 
     def __init__(
         self,
@@ -195,7 +186,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
@@ -203,23 +194,13 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         if audio is not None and self.audio_token is None or self.boa_token is None or self.eoa_token is None:
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -273,9 +254,9 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
+        merged_kwargs = self._merge_kwargs(**kwargs)
+        images_kwargs = merged_kwargs["images_kwargs"]
 
-        images_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("images_kwargs", {})
-        images_kwargs.update(kwargs)
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -303,8 +284,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (
                 videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
@@ -368,5 +348,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma4UnifiedProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma4UnifiedProcessor"]

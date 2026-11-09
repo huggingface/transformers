@@ -39,9 +39,9 @@ def sigmoid_focal_loss(
     Loss used in RetinaNet for dense detection: https://huggingface.co/papers/1708.02002.
 
     Args:
-        inputs (`torch.FloatTensor` of arbitrary shape):
+        inputs (`torch.Tensor` of arbitrary shape):
             The predictions for each example.
-        targets (`torch.FloatTensor` with the same shape as `inputs`)
+        targets (`torch.Tensor` with the same shape as `inputs`)
             A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
             and 1 for the positive class).
         num_boxes (`int`):

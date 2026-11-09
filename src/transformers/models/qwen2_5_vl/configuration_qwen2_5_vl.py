@@ -48,7 +48,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     hidden_size: int = 3584

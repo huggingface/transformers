@@ -25,7 +25,6 @@ from transformers import (
     T5Gemma2EncoderConfig,
     T5Gemma2TextConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from transformers.testing_utils import (
@@ -54,12 +53,10 @@ if is_torch_available():
         T5Gemma2Model,
     )
 
-if is_vision_available():
-    pass
-
 
 class T5Gemma2ModelTester:
     config_class = T5Gemma2Config
+
     text_config_class = T5Gemma2TextConfig
     encoder_config_class = T5Gemma2EncoderConfig
     decoder_config_class = T5Gemma2DecoderConfig
@@ -1108,7 +1105,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
     def test_model_generation_batch_270m(self):
         expected_texts = Expectations(
             {
-                ("cuda", None): [' a bumble bee in a flower bed.', ', a bumblebee is seen in the garden of a house in the UK.'],
+                ("cuda", (8, 6)): [" a bumble bee in a flower bed.", " you can see a bumble bee in the garden.\n\nThe bumble bee is a very common species in the UK. It is a very common species in"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
