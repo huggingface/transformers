@@ -40,8 +40,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -80,9 +80,7 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
 
 @auto_docstring
 @dataclass
-class DeepseekOcr2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class DeepseekOcr2ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -94,9 +92,7 @@ class DeepseekOcr2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class DeepseekOcr2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class DeepseekOcr2CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

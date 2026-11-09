@@ -36,8 +36,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -60,9 +60,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class MuseSparkModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MuseSparkModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -74,9 +72,7 @@ class MuseSparkModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class MuseSparkCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MuseSparkCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

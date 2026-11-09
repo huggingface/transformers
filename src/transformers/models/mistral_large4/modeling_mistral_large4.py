@@ -37,8 +37,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -792,22 +792,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
 
 @auto_docstring
 @dataclass
-class MistralLarge4ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
-    """
-
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MistralLarge4ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -1014,9 +999,7 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
 
 @auto_docstring
 @dataclass
-class MistralLarge4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MistralLarge4CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

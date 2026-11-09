@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -36,8 +35,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -779,9 +778,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 @dataclass
-class AriaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class AriaCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -793,9 +790,7 @@ class AriaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
 
 @auto_docstring
 @dataclass
-class AriaModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class AriaModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

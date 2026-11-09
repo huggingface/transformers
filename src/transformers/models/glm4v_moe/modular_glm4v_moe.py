@@ -20,7 +20,12 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -48,8 +53,6 @@ from ..glm4v.modeling_glm4v import (
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
-    Qwen3VLMoeBaseModelOutputWithPast,
-    Qwen3VLMoeCausalLMOutputWithPast,
     load_balancing_loss_func,
 )
 
@@ -132,14 +135,6 @@ class Glm4vMoeConfig(Glm4vConfig):
 
     image_token_id: int = 151363
     video_token_id: int = 151364
-
-
-class Glm4vBaseModelOutputWithPast(Qwen3VLMoeBaseModelOutputWithPast):
-    pass
-
-
-class Glm4vLMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
-    pass
 
 
 class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
@@ -350,7 +345,7 @@ class Glm4vMoeModel(Glm4vModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vBaseModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -405,7 +400,7 @@ class Glm4vMoeModel(Glm4vModel):
             **kwargs,
         )
 
-        return Glm4vBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
@@ -433,7 +428,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vLMoeCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -477,7 +472,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
                     loss.device
                 )  # make sure to reside in the same device
 
-        return Glm4vLMoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,

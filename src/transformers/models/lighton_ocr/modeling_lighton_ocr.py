@@ -28,8 +28,8 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -122,7 +122,7 @@ class LightOnOcrMultiModalProjector(nn.Module):
 
 @auto_docstring
 @dataclass
-class LightOnOcrModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+class LightOnOcrModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -255,7 +255,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
 @auto_docstring
 @dataclass
-class LightOnOcrCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+class LightOnOcrCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

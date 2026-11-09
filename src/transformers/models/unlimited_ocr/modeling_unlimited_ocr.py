@@ -44,8 +44,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -97,9 +97,7 @@ class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPooling):
     """
 )
 @dataclass
-class UnlimitedOcrModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class UnlimitedOcrModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -111,9 +109,7 @@ class UnlimitedOcrModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class UnlimitedOcrCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class UnlimitedOcrCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

@@ -41,9 +41,9 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoConfig, AutoModel
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vVisionRotaryEmbedding
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     Qwen2VLVisionBlock,
@@ -167,12 +167,12 @@ class Kimi_K25Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Kimi_K25ModelOutputWithPast(LlavaModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+class Kimi_K25ModelOutputWithPast(AriaModelOutputWithPast):
+    pass
 
 
-class Kimi_K25CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+class Kimi_K25CausalLMOutputWithPast(AriaCausalLMOutputWithPast):
+    pass
 
 
 class Kimi_K25VisionPositionEmbeddings(nn.Module):

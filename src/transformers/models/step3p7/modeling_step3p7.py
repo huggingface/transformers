@@ -35,8 +35,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -920,9 +920,7 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
 
 @auto_docstring
 @dataclass
-class Step3p7ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class Step3p7ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -1078,9 +1076,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
 @auto_docstring
 @dataclass
-class Step3p7CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
-
+class Step3p7CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

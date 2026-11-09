@@ -35,17 +35,13 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
-from ..llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast,
-    LlavaForConditionalGeneration,
-    LlavaModel,
-    LlavaModelOutputWithPast,
-)
+from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..minimax_m2.configuration_minimax_m2 import MiniMaxM2Config
 from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2Attention,
@@ -920,14 +916,7 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
         return self.merge_linear_2(self.merge_act(self.merge_linear_1(hidden_states)))
 
 
-class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
-    r"""
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-    """
-
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MiniMaxM3VLModelOutputWithPast(AriaModelOutputWithPast):
     @property
     def video_hidden_states(self):
         logger.warning_once(
@@ -937,16 +926,8 @@ class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
         return self.video_pooler_output
 
 
-class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    r"""
-    aux_loss (`torch.Tensor`, *optional*, returned when `output_router_logits=True` is passed):
-        Load-balancing auxiliary loss for the sparse modules.
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-    """
-
-    aux_loss: torch.Tensor | None = None
-    router_logits: tuple[torch.Tensor] | None = None
+class MiniMaxM3VLCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
+    pass
 
     @property
     def video_hidden_states(self):

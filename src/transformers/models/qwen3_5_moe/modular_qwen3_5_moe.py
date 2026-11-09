@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3.5Moe model."""
 
-from dataclasses import dataclass
-
 import torch
 from huggingface_hub.dataclasses import strict
 
@@ -23,10 +21,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast, MultimodalBaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
+from ..aria.modeling_aria import AriaModelOutputWithPast
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -157,10 +156,8 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
     vision_end_token_id: int = 248054
 
 
-@auto_docstring
-@dataclass
-class Qwen3_5MoeBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class Qwen3_5MoeBaseModelOutputWithPast(AriaModelOutputWithPast):
+    pass
 
 
 class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):

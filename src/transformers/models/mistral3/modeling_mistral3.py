@@ -30,8 +30,8 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -134,7 +134,7 @@ class Mistral3MultiModalProjector(nn.Module):
 
 @auto_docstring
 @dataclass
-class Mistral3CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+class Mistral3CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -146,7 +146,7 @@ class Mistral3CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
 
 @auto_docstring
 @dataclass
-class Mistral3ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+class Mistral3ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(

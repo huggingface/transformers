@@ -510,7 +510,48 @@ class Seq2SeqModelOutput(ModelOutput):
 
 
 @dataclass
-class MultimodalBaseModelOutputWithPast(ModelOutput):
+class MultimodalModelOutput(ModelOutput):
+    """
+    Base class for multimodal model outputs. This dataclass has to be subclassed to add model output fields including
+    `modality_outputs` field! The `modality_outputs` cannot be added by default due to dataclass field ordering in subclasses.
+
+    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
+    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
+    that are absent.
+    """
+
+    _ALLOWED_MODALITY_FIELDS = ("pooler_output", "last_hidden_state", "hidden_states", "attentions")
+    _ALLOWED_MODALITIES = ("image", "video", "audio")
+
+    def __getattr__(self, name: str):
+        # called when normal lookup fails to give easy access `out.image_hidden_states`
+        if not name.startswith("_") and name != "modality_outputs":
+            modality, _, field = name.partition("_")
+            if modality in self._ALLOWED_MODALITIES and field in self._ALLOWED_MODALITY_FIELDS:
+                outputs = self.__dict__.get("modality_outputs") or {}
+                encoder_output = outputs.get(modality)
+                return getattr(encoder_output, field) if encoder_output is not None else None
+        raise AttributeError(f"{type(self).__name__} has no attribute '{name}'")
+
+    def to_tuple(self) -> tuple:
+        items = []
+        for k in self.keys():
+            if k == "modality_outputs":
+                # flatten each modality: image -> image_last_hidden_state, image_hidden_states, ...
+                for modality, encoder_output in (self.modality_outputs or {}).items():
+                    if encoder_output is None:
+                        continue
+                    for field in encoder_output.keys():  # keys() skips None fields, like ModelOutput.to_tuple
+                        items.append((f"{modality}_{field}", encoder_output[field]))
+            elif k in ["text_model_output", "vision_model_output"]:
+                items.append((k, getattr(self, k).to_tuple()))
+            else:
+                items.append((k, self[k]))
+        return tuple(v for _, v in items)
+
+
+@dataclass
+class MultimodalBaseModelOutputWithPast(MultimodalModelOutput):
     """
     Base class for multimodal model outputs. Contains the outputs of the language model backbone and, optionally, the
     outputs of each modality encoder that was used.
@@ -547,38 +588,9 @@ class MultimodalBaseModelOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
     modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
-    _ALLOWED_MODALITY_FIELDS = ("pooler_output", "last_hidden_state", "hidden_states", "attentions")
-    _ALLOWED_MODALITIES = ("image", "video", "audio")
-
-    def __getattr__(self, name: str):
-        # called when normal lookup fails to give easy access `out.image_hidden_states`
-        if not name.startswith("_") and name != "modality_outputs":
-            modality, _, field = name.partition("_")
-            if modality in self._ALLOWED_MODALITIES and field in self._ALLOWED_MODALITY_FIELDS:
-                outputs = self.__dict__.get("modality_outputs") or {}
-                encoder_output = outputs.get(modality)
-                return getattr(encoder_output, field) if encoder_output is not None else None
-        raise AttributeError(f"{type(self).__name__} has no attribute '{name}'")
-
-    def to_tuple(self) -> tuple:
-        items = []
-        for k in self.keys():
-            if k == "modality_outputs":
-                # flatten each modality: image -> image_last_hidden_state, image_hidden_states, ...
-                for modality, encoder_output in (self.modality_outputs or {}).items():
-                    if encoder_output is None:
-                        continue
-                    for field in encoder_output.keys():  # keys() skips None fields, like ModelOutput.to_tuple
-                        items.append((f"{modality}_{field}", encoder_output[field]))
-            elif k in ["text_model_output", "vision_model_output"]:
-                items.append((k, getattr(self, k).to_tuple()))
-            else:
-                items.append((k, self[k]))
-        return tuple(v for _, v in items)
-
 
 @dataclass
-class MultimodalCausalLMOutputWithPast(ModelOutput):
+class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
     """
     Base class for multimodal causal language model (or autoregressive) outputs.Contains the outputs of the
     language model backbone and, optionally, the outputs of each modality encoder that was used.
@@ -616,18 +628,99 @@ class MultimodalCausalLMOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
     modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
-    _ALLOWED_MODALITY_FIELDS = ("pooler_output", "last_hidden_state", "hidden_states", "attentions")
-    _ALLOWED_MODALITIES = ("image", "video", "audio")
 
-    def __getattr__(self, name: str):
-        # called when normal lookup fails to give easy access `out.image_hidden_states`
-        if not name.startswith("_") and name != "modality_outputs":
-            modality, _, field = name.partition("_")
-            if modality in self._ALLOWED_MODALITIES and field in self._ALLOWED_MODALITY_FIELDS:
-                outputs = self.__dict__.get("modality_outputs") or {}
-                encoder_output = outputs.get(modality)
-                return getattr(encoder_output, field) if encoder_output is not None else None
-        raise AttributeError(f"{type(self).__name__} has no attribute '{name}'")
+@dataclass
+class MultimodalMoeBaseModelOutputWithPast(MultimodalModelOutput):
+    """
+    Base class for multimodal model with mixture of experts outputs. Contains the outputs of the
+    language model backbone and, optionally, the outputs of each modality encoder that was used.
+
+    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
+    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
+    that are absent.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the language model backbone.
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language model backbone at the output of each layer plus the optional initial
+            embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
+        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`):
+            Tuple of `torch.Tensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
+            Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
+            inspect how tokens are dispatched to experts.
+        modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+            Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
+            encoder. Contains only the modalities that were processed.
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
+    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+
+
+@dataclass
+class MultimodalMoeCausalLMOutputWithPast(MultimodalModelOutput):
+    """
+    Base class for multimodal causal language model (or autoregressive) with mixture of experts outputs.
+    Contains the outputs of the language model backbone and, optionally, the outputs of each modality encoder that was used.
+
+    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
+    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
+    that are absent.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        aux_loss (`torch.Tensor`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`, and the model trains its router with a load-balancing loss):
+            Load-balancing auxiliary loss for the sparse modules. Models that balance their experts with a router bias
+            instead (DeepSeek-V3 and the architectures derived from it) return `None` here while still returning
+            `router_logits`.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language model backbone at the output of each layer plus the optional initial
+            embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
+        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`):
+            Tuple of `torch.Tensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
+            Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
+            inspect how tokens are dispatched to experts.
+        modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+            Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
+            encoder. Contains only the modalities that were processed.
+    """
+
+    loss: torch.Tensor | None = None
+    aux_loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
+    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
 
 @dataclass

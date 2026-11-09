@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3-VL-MOE model."""
 
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,12 +26,12 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
@@ -166,16 +164,12 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
     pass
 
 
-@auto_docstring
-@dataclass
-class Qwen3VLMoeBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class Qwen3VLMoeBaseModelOutputWithPast(AriaModelOutputWithPast):
+    pass
 
 
-@auto_docstring
-@dataclass
-class Qwen3VLMoeCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class Qwen3VLMoeCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
+    pass
 
 
 class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):

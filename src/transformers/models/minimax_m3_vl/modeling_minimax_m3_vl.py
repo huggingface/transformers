@@ -36,8 +36,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -1221,14 +1221,7 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
 
 @auto_docstring
 @dataclass
-class MiniMaxM3VLModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    r"""
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-    """
-
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MiniMaxM3VLModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -1248,17 +1241,7 @@ class MiniMaxM3VLModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class MiniMaxM3VLCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    r"""
-    aux_loss (`torch.Tensor`, *optional*, returned when `output_router_logits=True` is passed):
-        Load-balancing auxiliary loss for the sparse modules.
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-    """
-
-    aux_loss: torch.Tensor | None = None
-    router_logits: tuple[torch.Tensor] | None = None
-
+class MiniMaxM3VLCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
