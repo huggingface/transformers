@@ -75,6 +75,13 @@ class GraniteSpeechPlusForConditionalGenerationModelTest(GraniteSpeechForConditi
     # `test_get_audio_features_output` (which assumes hidden_dim) does not apply.
     skip_test_audio_features_output_shape = True
 
+    # FIXME: @eustlb, re-enable once ibm-granite/granite-speech-4.1-2b-plus is re-uploaded without `.model.model`
+    @unittest.skip(
+        reason="ibm-granite/granite-speech-4.1-2b-plus was saved with the #45534 bug (`language_model.model.model.*`)"
+    )
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
+
     def test_encoder_hidden_layers_concat_shape(self):
         """``encoder_config.cat_hidden_layers`` concatenates selected intermediate hidden states with the final
         hidden state along the feature dim before the projector."""
