@@ -82,6 +82,7 @@ class JanusVisionConfig(SiglipVisionConfig):
     depth: int = 2
     num_image_tokens: int = 576
     intermediate_size = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")

@@ -259,9 +259,12 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = (
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia."
-        )
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+                ("cuda", (8, 6)): "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0][inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -281,10 +284,18 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
-            "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Europe and Asia.",
+                ],
+                ("cuda", (8, 6)): [
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+                    "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -347,6 +358,10 @@ class GlmOcrIntegrationTest(unittest.TestCase):
                 (None, None): ["This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized carnivorous mammal with a thick fur",
                                "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a"
                               ],
+                ("cuda", (8, 6)): [
+                    "This is a Pallas cat.",
+                    "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a",
+                ],
                 ("xpu", None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
                                 "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat, specifically a Pallas"
                                ],

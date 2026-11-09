@@ -446,7 +446,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # That check is id-first, so it cannot see a cache bug that moves the logits without flipping
             # the argmax. This tolerance is loose enough for kernel noise, tight enough for a real one.
             for step, (with_cache, without_cache) in enumerate(zip(cached.logits, cacheless.logits)):
-                torch.testing.assert_close(with_cache, without_cache, rtol=1e-2, atol=1e-2, msg=f"step {step}")
+                max_diff = (with_cache - without_cache).abs().max().item()
+                mean_diff = (with_cache - without_cache).abs().mean().item()
+                torch.testing.assert_close(
+                    with_cache,
+                    without_cache,
+                    rtol=1e-2,
+                    atol=1e-2,
+                    msg=f"step {step} with max_diff={max_diff}; mean_diff={mean_diff}",
+                )
 
     @pytest.mark.generate
     def test_sample_generate(self):
