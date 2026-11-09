@@ -18,7 +18,7 @@ limitations under the License.
 
 ## Contribution rules
 
-There are two ways to open a PR: fix an issue you're allowed to work on, or open a standalone PR that carries its own evidence. New models can also be added with a standalone PR, see [Adding a new model](#adding-a-new-model). Hugging Face staff, maintainers and some long-standing contributors are exempt from these rules.
+There are two ways to open a PR: fix an issue that's open for contributions, or open a standalone PR that carries its own evidence. New models can also be added with a standalone PR, see [Adding a new model](#adding-a-new-model). Hugging Face staff, maintainers and some long-standing contributors are exempt from these rules.
 
 **Fixing an issue.** Link the issue with a closing keyword like `Fixes #123` in the PR description. You can work on:
 
@@ -28,7 +28,9 @@ There are two ways to open a PR: fix an issue you're allowed to work on, or open
 
 Other people's issues aren't open for PRs unless a maintainer has said so. PRs that link an issue you can't work on will be closed.
 
-Before working on a `contributions-welcome` or `New model` issue, check whether someone has already opened a PR for it. If so, don't open another one. If you spot mistakes, leave suggestions on the existing PR instead. Only open a competing PR if the existing one is abandoned or fundamentally flawed, and explain why in the issue first.
+You don't need to ask before working on an issue that qualifies, and we don't assign issues to people. Comments like "can I work on this?" or "please assign this to me" just add noise, so skip them and open your PR. The first PR for an issue gets priority.
+
+Before working on a `contributions-welcome` or `New model` issue, check whether someone has already opened a PR for it. If so, don't open another one. If you spot mistakes, leave suggestions on the existing PR instead. Only open a competing PR if the existing one is fundamentally flawed, or stale: its author hasn't responded to review comments or pushed changes for two weeks. A PR that's waiting on a maintainer review isn't stale. Either way, explain why in the issue before opening yours.
 
 **Standalone PRs.** If nobody has reported the problem yet, you can open a PR without an issue. Standalone PRs are for short changes with real impact, like a bug fix, a performance improvement, or a fix for a broken example in the docs. The PR description needs the same evidence as an issue:
 
