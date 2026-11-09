@@ -81,6 +81,9 @@ class GradientCheckpointingLayer(nn.Module):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
+        # an inherited `forward` is already wrapped
+        if "forward" not in cls.__dict__:
+            return
         forward = cls.forward
 
         @wraps(forward)
