@@ -335,10 +335,23 @@ def _slice_sequence(tensor: torch.Tensor, cp_rank: int, cp_size: int, dim: int =
     return tensor.chunk(cp_size, dim=dim)[cp_rank].contiguous()
 
 
+def _pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
+    """Pad the sequence dimension 1 of `tensor` with `pad_len` copies of `value`."""
+    shape = list(tensor.shape)
+    shape[1] = pad_len
+    return torch.cat([tensor, tensor.new_full(shape, value)], dim=1)
+
+
+def _pad_position_ids(position_ids: torch.Tensor, pad_len: int) -> torch.Tensor:
+    """Continue the positions after the last one of each row, so that the padding joins the last document."""
+    steps = torch.arange(1, pad_len + 1, device=position_ids.device)
+    return torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
+
+
 def _shard_inputs(
     module: nn.Module, args: tuple, kwargs: dict, *, implementation: CPImplementation, attn_implementation: str
 ):
-    """Replace the full-sequence inputs of `module` by this rank's contiguous slice of every sequence."""
+    """Pad the full sequences of `module` to a multiple of `cp_size`, then keep this rank's contiguous slice."""
     if args:
         kwargs.setdefault("input_ids", args[0])
         args = args[1:]
@@ -371,15 +384,31 @@ def _shard_inputs(
     cp_mesh = implementation.cp_mesh
     cp_size, cp_rank = cp_mesh.size(), cp_mesh.get_local_rank()
     seq_len = tokens.shape[1]
-    if seq_len % cp_size:
-        raise ValueError(
-            f"Context parallelism splits every sequence across the {cp_size} ranks of the `cp` mesh, so the sequence "
-            f"length must be divisible by `cp_size`, got {seq_len}. Pad the sequences to a multiple of `cp_size`."
-        )
 
     position_ids = kwargs.get("position_ids")
     if position_ids is None:
         position_ids = torch.arange(seq_len, device=tokens.device).unsqueeze(0)
+
+    labels = kwargs.get("labels")
+    shift_labels = kwargs.get("shift_labels")
+    if labels is not None:
+        if shift_labels is None:
+            shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
+        if kwargs.get("num_items_in_batch") is None:
+            kwargs["num_items_in_batch"] = (shift_labels != -100).sum()
+
+    # The ranks hold the same number of positions: pad the sequences at the end, after the last real token.
+    pad_len = -seq_len % cp_size
+    if pad_len:
+        if tokens_name == "input_ids":
+            pad_token_id = getattr(module.config, "pad_token_id", None)
+            tokens = _pad_sequence(tokens, pad_len, 0 if pad_token_id is None else pad_token_id)
+        else:
+            tokens = _pad_sequence(tokens, pad_len, 0)
+        position_ids = _pad_position_ids(position_ids, pad_len)
+        if labels is not None:
+            labels = _pad_sequence(labels, pad_len, -100)
+            shift_labels = _pad_sequence(shift_labels, pad_len, -100)
     implementation.position_ids = position_ids
 
     attention_mask = kwargs.get("attention_mask")
@@ -392,13 +421,7 @@ def _shard_inputs(
             )
         kwargs["attention_mask"] = None
 
-    labels = kwargs.get("labels")
     if labels is not None:
-        shift_labels = kwargs.get("shift_labels")
-        if shift_labels is None:
-            shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
-        if kwargs.get("num_items_in_batch") is None:
-            kwargs["num_items_in_batch"] = (shift_labels != -100).sum()
         kwargs["shift_labels"] = _slice_sequence(shift_labels, cp_rank, cp_size)
         kwargs["labels"] = _slice_sequence(labels, cp_rank, cp_size)
 
