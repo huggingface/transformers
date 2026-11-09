@@ -205,7 +205,8 @@ class TransformersDeviceMesh:
     parameters over `fsdp` and `cp` together (`fsdp_cp`): the ranks of a cp group hold parts of the same batch, so their
     gradients are partial sums of that batch. `fsdp_cp` is an axis of the dense root mesh because FSDP2 composes the
     mesh it shards over with the mesh the parameters are already sharded on (`tp`), and torch only composes meshes
-    built from the same root.
+    built from the same root. On the expert mesh a cp slice plays the role of a batch: each rank dispatches the tokens
+    of its own slice only, so no token is sent twice and `efsdp * ep` still covers `fsdp * cp * tp`.
     """
 
     def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh, dense_root_mesh: DeviceMesh | None = None):
