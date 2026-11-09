@@ -147,8 +147,6 @@ class MiniMaxVL01Config(LlavaNextConfig):
     image_seq_length = AttributeError()
 
     def __post_init__(self, **kwargs):
-        kwargs.pop("image_seq_length", None)
-
         self.image_grid_pinpoints = (
             self.image_grid_pinpoints
             if self.image_grid_pinpoints is not None

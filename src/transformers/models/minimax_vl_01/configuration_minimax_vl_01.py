@@ -209,8 +209,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
     image_token_id: int = 200025
 
     def __post_init__(self, **kwargs):
-        kwargs.pop("image_seq_length", None)
-
         self.image_grid_pinpoints = (
             self.image_grid_pinpoints
             if self.image_grid_pinpoints is not None
