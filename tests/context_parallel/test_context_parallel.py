@@ -91,14 +91,16 @@ class _SpyImplementation(CPImplementation):
 def _tiny_config(**kwargs):
     """A `LlamaConfig` small enough for CPU tests, in float32 with `sdpa` attention."""
     return LlamaConfig(
-        hidden_size=32,
-        intermediate_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        vocab_size=99,
-        attn_implementation="sdpa",
-        **kwargs,
+        **{
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "vocab_size": 99,
+            "attn_implementation": "sdpa",
+            **kwargs,
+        }
     )
 
 
@@ -356,6 +358,26 @@ class TestUlyssesCheck(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must divide both the number of attention heads"):
             self._check(config, cp_size=4)
 
+    def test_head_divisibility_covers_tensor_parallelism(self):
+        # tensor parallelism keeps `num_heads / tp_size` heads on this rank, and those are what cp splits
+        def config_with_heads(num_heads, num_kv_heads):
+            config = LlamaConfig(
+                hidden_size=32,
+                num_attention_heads=num_heads,
+                num_key_value_heads=num_kv_heads,
+                attn_implementation="sdpa",
+            )
+            config.distributed_config = DistributedConfig(tp_size=2, cp_size=2)
+            return config
+
+        self._check(config_with_heads(8, 4), cp_size=2)
+        # 1 key/value head left on each rank cannot be split across 2 cp ranks
+        with self.assertRaisesRegex(ValueError, r"`cp_size \* tp_size` must divide"):
+            self._check(config_with_heads(8, 2), cp_size=2)
+        # so few attention heads left on each rank that 2 cp ranks cannot split them either
+        with self.assertRaisesRegex(ValueError, r"`cp_size \* tp_size` must divide"):
+            self._check(config_with_heads(8, 4), cp_size=4)
+
     def test_accepts_supported_config(self):
         self._check(LlamaConfig(attn_implementation="sdpa", num_attention_heads=8, num_key_value_heads=4))
         # flash kernels apply the sliding window themselves
@@ -527,6 +549,21 @@ def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed)
         dist.barrier()
 
 
+def _test_matches_unsharded_with_tp(rank, tp_size, cp_size, fsdp_size, packed):
+    """The tp ranks hold the same batch and the same cp slice, and split the heads before cp splits them again."""
+    # 4 attention heads and 4 key/value heads, both divisible by `tp_size * cp_size` = 4
+    config = _tiny_config(num_key_value_heads=4)
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, position_ids = _tiny_batch(config, batch_size * fsdp_size, seq_len, packed)
+        distributed_config = DistributedConfig(tp_size=tp_size, cp_size=cp_size, fsdp_size=fsdp_size)
+        batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
+        if position_ids is not None:
+            batch["position_ids"] = position_ids
+        _compare_with_unsharded(init_dir, batch, distributed_config)
+        dist.barrier()
+
+
 def _test_inputs_embeds(rank, cp_size):
     """`inputs_embeds` is sharded along its sequence dim, not along its last, hidden one."""
     config = _tiny_config()
@@ -642,15 +679,16 @@ def _test_forward_refusals(rank, cp_size):
         dist.barrier()
 
 
-def _test_save_pretrained(rank, cp_size):
+def _test_save_pretrained(rank, cp_size, tp_size=1):
     """Weights saved from a context parallel model reload without a distributed config, unchanged."""
-    config = _tiny_config()
+    config = _tiny_config(num_key_value_heads=4 if tp_size > 1 else 2)
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         reference = AutoModelForCausalLM.from_pretrained(init_dir)
         expected = {name: value.clone() for name, value in reference.state_dict().items()}
         del reference
 
-        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(cp_size=cp_size))
+        distributed_config = DistributedConfig(cp_size=cp_size, tp_size=tp_size)
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
         with _distributed_tmpdir(rank) as save_dir:
             model.save_pretrained(save_dir, is_main_process=(rank == 0))
             dist.barrier()
@@ -684,9 +722,15 @@ def _test_save_load_distributed_checkpoint(rank, cp_size):
 
 class TestContextParallelConfig(unittest.TestCase):
     def test_refuses_other_parallelisms(self):
-        for other in ({"pp_size": 2}, {"tp_size": 2}, {"ep_size": 2}):
+        for other in ({"pp_size": 2}, {"ep_size": 2}):
             with self.subTest(**other), self.assertRaisesRegex(ValueError, "not supported yet with"):
                 DistributedConfig(cp_size=2, **other)
+
+    def test_accepts_tensor_parallelism(self):
+        distributed_config = DistributedConfig(tp_size=2, cp_size=2)
+        self.assertEqual((distributed_config.tp_size, distributed_config.cp_size), (2, 2))
+        # the tp ranks hold the same batch: they are not data parallel ranks
+        self.assertEqual(distributed_config.dp_size, 2)
 
     def test_refuses_size_below_one(self):
         with self.assertRaisesRegex(ValueError, "must be >= 1"):
@@ -711,6 +755,14 @@ class TestContextParallelModel(unittest.TestCase):
     def test_matches_unsharded_with_hsdp(self):
         run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 1, 2, False)
 
+    def test_matches_unsharded_with_tensor_parallelism(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_tp)(2, 2, 1, packed)
+
+    def test_matches_unsharded_with_tensor_parallelism_and_fsdp(self):
+        run_distributed(world_size=8, backend="gloo")(_test_matches_unsharded_with_tp)(2, 2, 2, False)
+
     def test_inputs_embeds(self):
         run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2)
 
@@ -728,6 +780,9 @@ class TestContextParallelModel(unittest.TestCase):
 
     def test_save_pretrained(self):
         run_distributed(world_size=2, backend="gloo")(_test_save_pretrained)(2)
+
+    def test_save_pretrained_with_tensor_parallelism(self):
+        run_distributed(world_size=4, backend="gloo")(_test_save_pretrained)(2, 2)
 
     def test_save_load_distributed_checkpoint(self):
         run_distributed(world_size=2, backend="gloo")(_test_save_load_distributed_checkpoint)(2)
