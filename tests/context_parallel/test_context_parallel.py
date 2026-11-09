@@ -648,6 +648,8 @@ def _test_save_pretrained(rank, cp_size):
             model.save_pretrained(save_dir, is_main_process=(rank == 0))
             dist.barrier()
             reloaded = AutoModelForCausalLM.from_pretrained(save_dir)
+            # rank 0 removes `save_dir` when it leaves this block
+            dist.barrier()
 
         for name, value in reloaded.state_dict().items():
             torch.testing.assert_close(value, expected[name], rtol=0, atol=0, msg=f"Weight mismatch for {name}")
