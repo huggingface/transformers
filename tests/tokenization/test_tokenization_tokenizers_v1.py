@@ -234,6 +234,15 @@ class TokenizersV1BackendTest(unittest.TestCase):
 
         self.assertEqual(ids["input_ids"], [4, 8])
 
+    def test_chat_template_sanitizes_control_tokens(self):
+        self.tokenizer.chat_template = "[SEP]{% for m in messages %}{{ m['content'] }} {% endfor %}"
+
+        ids = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": "hello [SEP]"}], sanitize_control_tokens=True
+        )
+
+        self.assertEqual(ids["input_ids"].count(self.tokenizer.sep_token_id), 1)
+
     def test_pickle_and_deepcopy(self):
         for clone in (pickle.loads(pickle.dumps(self.tokenizer)), copy.deepcopy(self.tokenizer)):
             self.assertEqual(clone("hello world")["input_ids"], [1, 4, 5, 2])
