@@ -17,7 +17,6 @@ Spawning the workers (and importing torch in each of them) takes longer than mos
 them once per (world_size, backend) and pytest(-xdist worker) process, and sends every test function to them.
 """
 
-import multiprocessing
 import os
 import sys
 import time
@@ -54,18 +53,15 @@ def _get_distributed_backend():
 
 def _start_rank_processes(fn, args, nprocs):
     """
-    Run `fn(rank, *args)` on `nprocs` new processes and wait for them, like `torch.multiprocessing.spawn`.
+    Run `fn(rank, *args)` on `nprocs` processes, like `torch.multiprocessing.spawn`.
 
-    On CPU, the ranks are forked from a forkserver which has already imported the module of `fn` (torch, transformers
-    and the testing utils, ~450 MB per rank), so they share those imports instead of redoing them: about half the
-    memory and a few seconds less per test. The ranks are not forked from pytest directly, as its OpenMP thread pool
-    (used by the tests that ran before) deadlocks the first parallel op of a forked child. An accelerator can't be used
-    in a forked child once initialized, and forking is unsafe on macOS, so `spawn` everywhere else.
+    On Linux CPU, the ranks are forked from a forkserver that preloads `fn.__module__`, so they share its imports
+    (~450 MB per rank otherwise). Not plain `fork`: the OpenMP pool of the pytest process deadlocks forked children.
     """
-    if sys.platform == "linux" and torch._C._get_accelerator().type == "cpu":
+    if sys.platform == "linux" and _get_distributed_device_type() == "cpu":
         start_method = "forkserver"
-        # only taken into account when the forkserver starts, i.e. on the first call
-        multiprocessing.get_context(start_method).set_forkserver_preload([fn.__module__])
+        # only used when the forkserver starts, i.e. on the first call
+        mp.set_forkserver_preload([fn.__module__])
     else:
         start_method = "spawn"
     mp.start_processes(fn, args=args, nprocs=nprocs, start_method=start_method)
