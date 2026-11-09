@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
-from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_are_equal
 from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
@@ -72,7 +72,7 @@ from .integrations.accelerate import (
     get_device,
     load_offloaded_parameter,
 )
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, prevent_arange_dtype_change
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
@@ -1284,7 +1284,7 @@ class PreTrainedModel(
                 loss_type = None
         self.loss_type = loss_type
 
-        _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
+        _CAN_RECORD_REGISTRY[self] = self._can_record_outputs  # added for executorch support only
 
     def post_init(self):
         """
@@ -1442,6 +1442,7 @@ class PreTrainedModel(
             init_contexts.extend(
                 [
                     init.no_init_weights(),
+                    prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                     deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                     set_zero3_state(),
                 ]
@@ -2564,7 +2565,7 @@ class PreTrainedModel(
 
                     # If both are present, check if the weights are exactly similar, and only tie in this case
                     # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
-                    if not torch.equal(source_param, target_param):
+                    if not _tied_params_are_equal(source_param, target_param):
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                             f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
@@ -3128,6 +3129,19 @@ class PreTrainedModel(
             activation_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
+        # Subclasses and wrappers of the deprecated `gradient_checkpointing_enable` stay the entry point until v6
+        if self._is_overridden("gradient_checkpointing_enable"):
+            self.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=activation_checkpointing_kwargs,
+                every_n_layers=every_n_layers,
+                offload=offload,
+            )
+        else:
+            self._activation_checkpointing_enable(activation_checkpointing_kwargs, every_n_layers, offload)
+
+    def _activation_checkpointing_enable(
+        self, activation_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
+    ):
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support activation checkpointing.")
 
@@ -3183,7 +3197,17 @@ class PreTrainedModel(
             "`activation_checkpointing_enable` instead.",
             FutureWarning,
         )
-        self.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
+        # Reached from the override itself, which `activation_checkpointing_enable` would call again
+        if self._is_overridden("gradient_checkpointing_enable"):
+            self._activation_checkpointing_enable(gradient_checkpointing_kwargs, **kwargs)
+        else:
+            self.activation_checkpointing_enable(
+                activation_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs
+            )
+
+    def _is_overridden(self, name: str) -> bool:
+        # A subclass override is another function and a wrapper set on the instance is not a bound method
+        return getattr(getattr(self, name), "__func__", None) is not getattr(PreTrainedModel, name)
 
     def _set_gradient_checkpointing(
         self,
@@ -3226,6 +3250,13 @@ class PreTrainedModel(
         """
         Deactivates activation checkpointing for the current model.
         """
+        # Subclasses and wrappers of the deprecated `gradient_checkpointing_disable` stay the entry point until v6
+        if self._is_overridden("gradient_checkpointing_disable"):
+            self.gradient_checkpointing_disable()
+        else:
+            self._activation_checkpointing_disable()
+
+    def _activation_checkpointing_disable(self):
         if self.supports_gradient_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
             # we will fall back to the overwritten `_set_gradient_checkpointing` method
@@ -3251,7 +3282,11 @@ class PreTrainedModel(
             "`activation_checkpointing_disable` instead.",
             FutureWarning,
         )
-        self.activation_checkpointing_disable()
+        # Reached from the override itself, which `activation_checkpointing_disable` would call again
+        if self._is_overridden("gradient_checkpointing_disable"):
+            self._activation_checkpointing_disable()
+        else:
+            self.activation_checkpointing_disable()
 
     @property
     def is_activation_checkpointing(self) -> bool:
@@ -3781,6 +3816,7 @@ class PreTrainedModel(
                 init_contexts.extend(
                     [
                         init.no_init_weights(),
+                        prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                         deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                         set_zero3_state(),
                     ]
@@ -4293,6 +4329,17 @@ class PreTrainedModel(
                 transformers_explicit_filename=getattr(config, "transformers_weights", None),
                 tqdm_class=tqdm_class,
             )
+            # EXPERIMENTAL: community pushed the decision head weights as separate files. We're using `config.extra_files`
+            # as a way to fetch the filename per-class.
+            for filename in type(config).extra_files:  # the class's, which a `config.json` can't change
+                path = cached_file(
+                    pretrained_model_name_or_path,
+                    filename,
+                    _raise_exceptions_for_missing_entries=False,
+                    **download_kwargs,
+                )
+                if path is not None and checkpoint_files is not None and path not in checkpoint_files:
+                    checkpoint_files.append(path)
 
         is_quantized = hf_quantizer is not None
 
@@ -4472,12 +4519,14 @@ class PreTrainedModel(
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             if state_dict is None:
+                # Only rank 0 copies checkpoint values into the model, the other ranks only need the keys and shapes
+                map_location = "cpu" if torch.distributed.get_rank() == 0 else "meta"
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
                     merged_state_dict.update(
                         load_state_dict(
                             ckpt_file,
-                            map_location="cpu",
+                            map_location=map_location,
                             weights_only=load_config.weights_only,
                             disable_mmap=load_config.disable_mmap,
                         )
@@ -5039,22 +5088,24 @@ def is_accelerator_device(device: str | int | torch.device) -> bool:
 def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torch.Tensor) -> torch.Tensor:
     """
     Slice `hidden_states` according to `logits_to_keep`, before the `lm_head` projection, so logits are only
-    computed for the positions that are actually needed. `logits_to_keep` can be:
-        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them), e.g. in `generate`'s prefill.
-        - a 1D tensor: keep these positions for every sample.
-        - a 2D tensor, either:
-            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
-            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
-              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
-        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1` whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the next token.
-        - a 1D tensor: keep these positions for every batch sample.
-        - a 2D tensor, either:
-            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
-            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
-              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
-    Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
+    computed for the positions that are actually needed.
 
-    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions, not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
+    Args:
+        logits_to_keep (`int` or `torch.Tensor`):
+            - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1`
+            whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the
+            next token.
+            - a 1D tensor: keep these positions for every batch sample.
+            - a 2D tensor, either:
+                - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+                - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+                (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
+
+    Returns:
+        Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
+
+    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions,
+    not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
     """
     if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
         if logits_to_keep.dtype == torch.bool:

@@ -70,6 +70,7 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
         Can be set only to "uniform" or "truncate". Applied after FPS-based sampling, and on its
         own when FPS-based sampling is off or not applicable.
     load_audio_from_video (`bool`, *optional*):
+        Deprecated, use [`OmniModalProcessingKwargs.load_audio_from_video`] instead.
         Whether to load the audio track of an input video or not.
     """
 

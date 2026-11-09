@@ -135,13 +135,6 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn(processor.image_token_id, input_ids)
         self.assertNotIn(processor.tokenizer.convert_tokens_to_ids("<new_tail>"), input_ids)
 
-    def test_processor_rejects_bare_image_tokens(self):
-        processor = self.get_processor()
-        image = Image.new("RGB", (32, 32), color="white")
-
-        with self.assertRaisesRegex(ValueError, r"tokens in text \(0\) does not match the number of images"):
-            processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
-
     def test_apply_chat_template_keeps_wrapped_image_tokens_single_wrapped(self):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")

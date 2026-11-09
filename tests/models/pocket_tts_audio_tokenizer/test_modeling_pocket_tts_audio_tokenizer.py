@@ -139,6 +139,11 @@ class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
+    # On CPU (fp32), a few `audio_values` elements differ by up to ~2.3e-5 between batched and single-row runs, which
+    # makes the default `atol=1e-5` flaky.
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="The audio tokenizer has no token embeddings.")
     def test_model_get_set_embeddings(self):
         pass
