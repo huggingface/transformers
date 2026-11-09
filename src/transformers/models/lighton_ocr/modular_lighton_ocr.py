@@ -244,11 +244,11 @@ class LightOnOcrModel(Mistral3Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -299,7 +299,7 @@ class LightOnOcrModel(Mistral3Model):
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 

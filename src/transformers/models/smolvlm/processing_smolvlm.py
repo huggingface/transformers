@@ -152,24 +152,15 @@ class SmolVLMProcessor(ProcessorMixin):
             raise ValueError("You must provide one of `text`, `images` or `videos`.")
         if text is None and ((images is None) ^ (videos is not None)):
             raise ValueError("You must specify exactly one of `images` or `videos`")
-        if text is not None:
-            n_images_in_text = sum(sample.count(self.image_token) for sample in text)
-            if n_images_in_text > 0 and images is None and videos is None:
-                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
-            if images is not None:
-                n_images_per_sample = [sample.count(self.image_token) for sample in text]
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_images != n_images_per_sample:
-                    raise ValueError(
-                        f"The number of images in the text {n_images_per_sample} and images {n_images_in_images} should be the same."
-                    )
-            if videos is not None:
-                n_videos_per_sample = [sample.count(self.video_token) for sample in text]
-                n_videos_in_videos = [len(sublist) for sublist in videos]
-                if n_videos_in_videos != n_videos_per_sample:
-                    raise ValueError(
-                        f"The number of videos in the text {n_videos_per_sample} and videos {n_videos_in_videos} should be the same."
-                    )
+
+        if text is not None and images is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
+                raise ValueError(
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
+                )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         rows = [row for row_list in image_inputs["rows"] for row in row_list]

@@ -28,7 +28,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4VisionMlp,
     Glm4vModel,
-    Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vRMSNorm,
     Glm4vTextAttention,
@@ -140,10 +139,6 @@ class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
 
 class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
-
-
-class GlmOcrModelOutputWithPast(Glm4vModelOutputWithPast):
-    pass
 
 
 class GlmOcrVisionAttention(Glm4vVisionAttention):

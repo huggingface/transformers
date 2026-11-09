@@ -121,7 +121,7 @@ KOSMOS2_5_START_DOCSTRING = r"""
 
 KOSMOS2_5_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+        flattened_patches (`torch.Tensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
             Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
             [`Kosmos2_5ImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
@@ -149,7 +149,7 @@ KOSMOS2_5_TEXT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        image_embeds: (`torch.Tensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
@@ -164,7 +164,7 @@ KOSMOS2_5_TEXT_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -194,13 +194,13 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+        flattened_patches (`torch.Tensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
             Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
             [`Kosmos2_5ImageProcessor.__call__`] for details.
-        width (`torch.FloatTensor` of shape `(batch_size,)`):
+        width (`torch.Tensor` of shape `(batch_size,)`):
             The original width (before resizing) of each image in the batch. This can be obtained using
             [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
-        height (`torch.FloatTensor` of shape `(batch_size,)`):
+        height (`torch.Tensor` of shape `(batch_size,)`):
             The original height (before resizing) of each image in the batch. This can be obtained using
             [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -224,9 +224,9 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        image_embeds: (`torch.Tensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -253,27 +253,27 @@ class Kosmos2_5ModelOutput(ModelOutput):
     Base class for text model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        width (`torch.FloatTensor` of shape `(batch_size,)`):
+        width (`torch.Tensor` of shape `(batch_size,)`):
             The original width (before resizing) of each image in the batch.
-        height (`torch.FloatTensor` of shape `(batch_size,)`):
+        height (`torch.Tensor` of shape `(batch_size,)`):
             The original height (before resizing) of each image in the batch.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        image_embeds (`torch.Tensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        projection_attentions (`tuple(torch.Tensor)`, *optional*):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
@@ -288,14 +288,14 @@ class Kosmos2_5ModelOutput(ModelOutput):
             input) to speed up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    width: torch.FloatTensor | None = None
-    height: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
-    projection_attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    width: torch.Tensor | None = None
+    height: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
+    projection_attentions: tuple[torch.Tensor] | None = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
@@ -308,29 +308,29 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
     Model output class for `Kosmos2_5ForConditionalGeneration`.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        width (`torch.FloatTensor` of shape `(batch_size,)`):
+        width (`torch.Tensor` of shape `(batch_size,)`):
             The original width (before resizing) of each image in the batch.
-        height (`torch.FloatTensor` of shape `(batch_size,)`):
+        height (`torch.Tensor` of shape `(batch_size,)`):
             The original height (before resizing) of each image in the batch.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        image_embeds (`torch.Tensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        projection_attentions (`tuple(torch.Tensor)`, *optional*):
+            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
@@ -345,15 +345,15 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
             input) to speed up sequential decoding.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    width: torch.FloatTensor | None = None
-    height: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
-    projection_attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    width: torch.Tensor | None = None
+    height: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
+    projection_attentions: tuple[torch.Tensor] | None = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
@@ -860,7 +860,7 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.self_attn_layer_norm(hidden_states)

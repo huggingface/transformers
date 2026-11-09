@@ -24,7 +24,6 @@ from transformers import (
     Qwen3VLMoeModel,
     is_torch_available,
 )
-from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -47,8 +46,7 @@ if is_torch_available():
 class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3VLMoeModel
     config_class = Qwen3VLMoeConfig
-    text_config_class = Qwen3VLMoeTextConfig
-    vision_config_class = Qwen3VLMoeVisionConfig
+
     conditional_generation_class = Qwen3VLMoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -117,19 +115,6 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_config(self):
-        # Qwen3VLMoeConfig expects text_config and vision_config as dicts, not config objects
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
 
 
 @require_torch
@@ -411,6 +396,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
                 ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                ],
                 ("xpu", 5): [
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and stepp",
@@ -499,10 +488,18 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
-            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book."
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -562,6 +559,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane",
                     "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the scene:\n-",
                 ],
                 ("xpu", 5): [
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",

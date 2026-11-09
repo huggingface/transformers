@@ -766,6 +766,10 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
 
     concat_along("input_ids", 1)
     concat_along("inputs_embeds", 1)
+    # Continuous Audio Language models (PocketTTS, GradiumPhononTTS) feed one `audio_latents` frame
+    # `[batch, 1, latent_dim]` per decode step, one per placeholder token, so they grow along the same
+    # axis as `input_ids`.
+    concat_along("audio_latents", 1)
     concat_along("cache_position", 0)
     # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
     # last in both, so a negative dim concatenates it correctly either way.

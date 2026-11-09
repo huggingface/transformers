@@ -80,7 +80,7 @@ def eager_attention_forward(
 
 
 SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
-    input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+    input_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_banks)`):
         Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
         [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
     decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -104,7 +104,7 @@ SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
         If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
         and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
         information on the default strategy.
-    inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
+    inputs_embeds (`torch.Tensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
         Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
         is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
         model's internal embedding lookup matrix.
@@ -120,7 +120,7 @@ SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
 @dataclass
 class SeamlessM4TGenerationOutput(ModelOutput):
     r"""
-    waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+    waveform (`torch.Tensor` of shape `(batch_size, sequence_length)`):
         The final audio waveform predicted by the model.
     waveform_lengths (`torch.IntTensor` of shape `(batch_size,)`, *optional*):
         The length in samples of each element in the `waveform` batch.
@@ -134,10 +134,10 @@ class SeamlessM4TGenerationOutput(ModelOutput):
         early due to the `t2u_eos_token_id`.
     """
 
-    waveform: torch.FloatTensor | None = None
+    waveform: torch.Tensor | None = None
     waveform_lengths: torch.IntTensor | None = None
-    sequences: tuple[torch.FloatTensor] | None = None
-    unit_sequences: tuple[torch.FloatTensor] | None = None
+    sequences: tuple[torch.Tensor] | None = None
+    unit_sequences: tuple[torch.Tensor] | None = None
 
 
 ############ UTILS ################
@@ -166,13 +166,13 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     stops at the corresponding element in `seq_lens`.
 
     Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+        hidden_states (`torch.Tensor` of shape `(batch, seq_len, *)`):
             The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
         seq_lens (`torch.Tensor` of shape `(batch)`:
             Each element represents the length of the sequence at the same index in `hidden_states`
 
     Returns:
-        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
+        `torch.Tensor`: The float attention mask of shape `(batch, seq_len)`
     """
     batch_size, mask_seq_len = hidden_states.shape[:2]
 
@@ -1159,9 +1159,9 @@ class SeamlessM4TEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`):
+            attention_mask (`torch.Tensor`):
                 attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very
                 large negative values.
         """
@@ -1237,14 +1237,14 @@ class SeamlessM4TDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`):
+            attention_mask (`torch.Tensor`):
                 attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very
                 large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`):
+            encoder_attention_mask (`torch.Tensor`):
                 encoder attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by
                 very large negative values.
             past_key_values (`Cache`):
@@ -1361,7 +1361,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         Parameters:
             hidden_states (`tuple[tuple[torch.Tensor]]`):
                 The generated hidden states. Tuple (one element for each generated token) of tuples (one element for
-                each layer of the decoder) of torch.FloatTensor of shape (batch_size*num_beams*num_return_sequences,
+                each layer of the decoder) of torch.Tensor of shape (batch_size*num_beams*num_return_sequences,
                 generated_length, hidden_size).
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
@@ -1542,7 +1542,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if input_ids is not None and self.is_t2u_encoder:
@@ -1670,10 +1670,10 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
@@ -1775,10 +1775,10 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
@@ -1880,14 +1880,14 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqLMOutput | tuple[torch.Tensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -2077,20 +2077,20 @@ class SeamlessM4THifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
         waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor`):
+            spectrogram (`torch.Tensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
                 model_in_dim)`, or un-batched and of shape `(sequence_length, model_in_dim)`. Note that `model_in_dim`
                 is the sum of `config.unit_embed_dim`, `config.lang_embed_dim` and `config.spkr_embed_dim`.
 
         Returns:
-            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
+            `torch.Tensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
             shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
         """
 
@@ -2317,14 +2317,14 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqLMOutput | tuple[torch.Tensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -2457,7 +2457,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
 
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`. The possible
+            or when `config.return_dict_in_generate=True`) or a `torch.Tensor`. The possible
             [`~utils.ModelOutput`] types are:
                 - [`~generation.GenerateEncoderDecoderOutput`],
                 - [`~generation.GenerateBeamEncoderDecoderOutput`]
@@ -2549,14 +2549,14 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqLMOutput | tuple[torch.Tensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -2656,7 +2656,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         </Tip>
 
         Parameters:
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            input_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_banks)`):
                 Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
 
@@ -2693,7 +2693,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
 
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`. The possible
+            or when `config.return_dict_in_generate=True`) or a `torch.Tensor`. The possible
             [`~utils.ModelOutput`] types are:
                 - [`~generation.GenerateEncoderDecoderOutput`],
                 - [`~generation.GenerateBeamEncoderDecoderOutput`]
@@ -2797,14 +2797,14 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqLMOutput | tuple[torch.Tensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -3090,14 +3090,14 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqLMOutput | tuple[torch.Tensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -3204,7 +3204,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         </Tip>
 
         Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            input_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_banks)`):
                 Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
             return_intermediate_token_ids (`bool`, *optional*):
@@ -3420,18 +3420,18 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqLMOutput | tuple[torch.Tensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -3582,7 +3582,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
                 [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`, *optional*):
+            input_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_banks)`, *optional*):
                 Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
             return_intermediate_token_ids (`bool`, *optional*):
