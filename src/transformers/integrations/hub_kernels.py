@@ -415,7 +415,7 @@ if is_kernels_available():
                         Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                             repo_id="kernels-community/weathernext2-banded-attention",
                             layer_name=layer_name,
-                            version=3,
+                            version=4,
                         ),
                     }
                     for device in ("cuda", "rocm", "xpu")

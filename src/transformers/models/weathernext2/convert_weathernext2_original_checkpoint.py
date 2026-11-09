@@ -506,6 +506,8 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
     input_duration_hours = int(re.fullmatch(r"(\d+)h", task["input_duration"]).group(1))
     time_step_hours = 6
     loss_kwargs = fiddle["predictor_kwargs"].get("fgn_loss_function_kwargs", {})
+    if loss_kwargs.get("loss_for_nan_targets", 0.0) != 0.0:
+        raise ValueError("Only checkpoints that fill missing targets with zero loss are supported.")
 
     return WeatherNext2Config(
         hidden_size=transformer["d_model"],
@@ -535,7 +537,6 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
         hidden_act="gelu_pytorch_tanh",
         loss_weights=loss_kwargs.get("per_variable_weights", {}),
         vars_with_nan_targets=loss_kwargs.get("vars_with_nan_targets", ()),
-        loss_for_nan_targets=loss_kwargs.get("loss_for_nan_targets", 0.0),
     )
 
 

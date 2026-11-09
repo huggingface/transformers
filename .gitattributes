@@ -619,6 +619,7 @@ src/transformers/models/voxtral_realtime/modeling_*.py linguist-generated=true
 src/transformers/models/wav2vec2_bert/modeling_*.py linguist-generated=true
 src/transformers/models/wav2vec2_conformer/modeling_*.py linguist-generated=true
 src/transformers/models/wavlm/modeling_*.py linguist-generated=true
+src/transformers/models/weathernext2/modeling_*.py linguist-generated=true
 src/transformers/models/x_clip/modeling_*.py linguist-generated=true
 src/transformers/models/xcodec2/configuration_*.py linguist-generated=true
 src/transformers/models/xcodec2/modeling_*.py linguist-generated=true

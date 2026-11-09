@@ -32,7 +32,6 @@ logger = logging.get_logger(__name__)
 
 
 class WeatherNext2GenerationConfig(GenerationConfig):
-    # no-format
     """Configuration for [`WeatherNext2GenerationMixin.generate`].
 
     Args:
@@ -42,14 +41,14 @@ class WeatherNext2GenerationConfig(GenerationConfig):
             Number of ensemble members per initial condition. Defaults to 1 when unset by the model or the user.
     """
 
-    def __init__(self, **kwargs):
-        self.num_steps: int | None = kwargs.pop("num_steps", None)
-        self.num_members: int | None = kwargs.pop("num_members", None)
+    def __init__(self, num_steps: int | None = None, num_members: int | None = None, **kwargs):
+        self.num_steps = num_steps
+        self.num_members = num_members
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self._from_model_config = kwargs.pop("_from_model_config", None)
         self.transformers_version = kwargs.pop("transformers_version", None)
-        if kwargs:
-            raise ValueError(f"Unexpected kwargs: {kwargs.keys()}")
+        for key, value in kwargs.items():
+            setattr(self, key, value)
         self.validate()
 
     def validate(self, **unused_kwargs):
@@ -85,6 +84,25 @@ class WeatherNext2GenerationOutput(ModelOutput):
     forecasts: list[dict[str, torch.Tensor]] | None = None
     state: dict[str, torch.Tensor] | None = None
     valid_time: torch.Tensor | None = None
+
+
+def select_members(state: Mapping[str, Any], static_variables: list[str], rows: slice) -> dict[str, Any]:
+    """Selects ensemble rows of a state. Static fields have no batch axis and are shared by every row."""
+    selected = {}
+    for name, values in state.items():
+        selected[name] = values if name in static_variables else values[rows]
+    return selected
+
+
+def repeat_members(state: Mapping[str, Any], static_variables: list[str], num_members: int) -> dict[str, Any]:
+    """Repeats every initial condition `num_members` times along the batch axis, leaving static fields as is."""
+    repeated = {}
+    for name, values in state.items():
+        if name in static_variables:
+            repeated[name] = values
+        else:
+            repeated[name] = torch.as_tensor(values).repeat_interleave(num_members, dim=0)
+    return repeated
 
 
 class WeatherNext2GenerationMixin:
@@ -155,13 +173,7 @@ class WeatherNext2GenerationMixin:
         if valid_time.ndim != 1:
             raise ValueError(f"`seconds_since_epoch` must have shape (batch_size,), got {tuple(valid_time.shape)}.")
 
-        # Every initial condition becomes `num_members` rows; static fields have no batch axis to repeat.
-        state = {
-            name: values
-            if name in feature_extractor.static_variables
-            else torch.as_tensor(values).repeat_interleave(num_members, dim=0)
-            for name, values in state.items()
-        }
+        state = repeat_members(state, feature_extractor.static_variables, num_members)
         valid_time = valid_time.repeat_interleave(num_members)
         total_batch_size = valid_time.shape[0]
         batch_size = total_batch_size if batch_size is None else batch_size
@@ -173,7 +185,7 @@ class WeatherNext2GenerationMixin:
             if tuple(noise.shape) != expected_shape:
                 raise ValueError(f"`noise` has shape {tuple(noise.shape)}, expected {expected_shape}.")
 
-        current_state = dict(state)
+        current_state = state
         forecasts = []
         step_seconds = feature_extractor.time_step_hours * 3600
         attention_mask = feature_extractor.attention_mask if attention_mask is None else attention_mask
@@ -182,36 +194,29 @@ class WeatherNext2GenerationMixin:
 
         for step in range(num_steps):
             # Draw once per step so splitting the batch does not change the random stream.
-            step_noise = (
-                feature_extractor.sample_noise(total_batch_size, generator=generator, device=self.device)
-                if noise is None
-                else noise[step]
-            )
+            if noise is None:
+                step_noise = feature_extractor.sample_noise(total_batch_size, generator=generator, device=self.device)
+            else:
+                step_noise = noise[step]
+
             batch_forecasts = []
             for start in range(0, total_batch_size, batch_size):
-                batch_state = {
-                    name: values if name in feature_extractor.static_variables else values[start : start + batch_size]
-                    for name, values in current_state.items()
-                }
+                rows = slice(start, start + batch_size)
+                batch_state = select_members(current_state, feature_extractor.static_variables, rows)
                 inputs = feature_extractor(
                     batch_state,
-                    seconds_since_epoch=valid_time[start : start + batch_size],
+                    seconds_since_epoch=valid_time[rows],
                     device=self.device,
                     attention_mask=attention_mask,
-                    noise=step_noise[start : start + batch_size],
-                )
+                    noise=step_noise[rows],
+                ).to(dtype=self.dtype)
                 outputs = self(**inputs, **model_kwargs)
                 batch_forecasts.append(feature_extractor.postprocess(outputs.prediction, batch_state))
                 del outputs, inputs
 
-            forecast = (
-                {
-                    name: torch.cat([batch[name] for batch in batch_forecasts], dim=0)
-                    for name in feature_extractor.target_variables
-                }
-                if len(batch_forecasts) > 1
-                else batch_forecasts[0]
-            )
+            forecast = batch_forecasts[0]
+            if len(batch_forecasts) > 1:
+                forecast = {name: torch.cat([batch[name] for batch in batch_forecasts]) for name in forecast}
             forecasts.append(forecast)
 
             current_state = feature_extractor.advance_state(current_state, forecast, valid_time)

@@ -15,8 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
+from ...utils.type_validators import positive_int_field
 
 
 ATMOSPHERIC_VARIABLES = (
@@ -74,6 +75,62 @@ DEFAULT_FORCING_VARIABLES = ("year_progress_sin", "year_progress_cos", "day_prog
 DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
 
 
+class WeatherNext2ChannelLayoutMixin:
+    """Channel layouts shared by [`WeatherNext2Config`] and [`WeatherNext2FeatureExtractor`].
+
+    Each entry is `(variable, time offset in hours or None, number of levels)`.
+    """
+
+    input_variables: list[str] | tuple[str, ...]
+    target_variables: list[str] | tuple[str, ...]
+    forcing_variables: list[str] | tuple[str, ...]
+    atmospheric_variables: list[str] | tuple[str, ...]
+    static_variables: list[str] | tuple[str, ...]
+    global_variables: list[str] | tuple[str, ...]
+    pressure_levels: list[int] | tuple[int, ...]
+    num_input_timesteps: int
+    time_step_hours: int
+
+    def num_levels(self, variable: str) -> int:
+        return len(self.pressure_levels) if variable in self.atmospheric_variables else 1
+
+    @property
+    def past_time_offsets(self) -> list[int]:
+        """Hours, relative to the initialization time, of each conditioning frame."""
+        return [-(self.num_input_timesteps - 1 - i) * self.time_step_hours for i in range(self.num_input_timesteps)]
+
+    @property
+    def input_channel_layout(self) -> list[tuple[str, int | None, int]]:
+        """Channels the grid encoder consumes, after the three spatial features.
+
+        Dynamic input variables appear once per past time step, static variables once with no time,
+        and forcings once at the predicted time step.
+        """
+        layout = []
+        for variable in self.input_variables:
+            if variable in self.static_variables:
+                layout.append((variable, None, self.num_levels(variable)))
+            else:
+                layout.extend((variable, offset, self.num_levels(variable)) for offset in self.past_time_offsets)
+
+        for variable in self.forcing_variables:
+            layout.append((variable, self.time_step_hours, self.num_levels(variable)))
+
+        return layout
+
+    @property
+    def mesh_channel_layout(self) -> list[tuple[str, int | None, int]]:
+        """Channels the mesh encoder consumes, after the three spatial features.
+
+        Only the variables with no spatial extent reach the mesh encoder directly.
+        """
+        return [entry for entry in self.input_channel_layout if entry[0] in self.global_variables]
+
+    @property
+    def target_channel_layout(self) -> list[tuple[str, int | None, int]]:
+        return [(variable, self.time_step_hours, self.num_levels(variable)) for variable in self.target_variables]
+
+
 @auto_docstring(custom_intro="Configuration for the grid/mesh graph networks and conditioned encoder/decoder MLPs.")
 @strict
 class WeatherNext2GraphConfig(PreTrainedConfig):
@@ -94,7 +151,7 @@ class WeatherNext2GraphConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="kashif/weathernext2")
 @strict
-class WeatherNext2Config(PreTrainedConfig):
+class WeatherNext2Config(WeatherNext2ChannelLayoutMixin, PreTrainedConfig):
     r"""
     graph_config (`WeatherNext2GraphConfig` or `dict`, *optional*):
         Configuration of the graph networks and conditioned encoder/decoder MLPs.
@@ -152,8 +209,6 @@ class WeatherNext2Config(PreTrainedConfig):
         dictionary explicitly requests uniform weights; `None` disables loss computation until weights are supplied.
     vars_with_nan_targets (`list[str]`, *optional*):
         Variables whose missing targets are excluded from both CRPS terms.
-    loss_for_nan_targets (`float`, *optional*, defaults to 0.0):
-        Value substituted for missing targets after latitude and pressure weighting, before variable weighting.
 
     ```python
     >>> from transformers import WeatherNext2Config, WeatherNext2Model
@@ -164,7 +219,15 @@ class WeatherNext2Config(PreTrainedConfig):
     ```"""
 
     model_type = "weathernext2"
-    sub_configs_defaults = {"graph_config": SubConfigSpec(config_class=WeatherNext2GraphConfig)}
+    sub_configs_defaults = {"graph_config": WeatherNext2GraphConfig}
+    base_model_tp_plan = {
+        "mesh_transformer.layers.*.self_attn.q_proj": "colwise",
+        "mesh_transformer.layers.*.self_attn.k_proj": "colwise",
+        "mesh_transformer.layers.*.self_attn.v_proj": "colwise",
+        "mesh_transformer.layers.*.self_attn.o_proj": "rowwise",
+        "mesh_transformer.layers.*.mlp.fc1": "colwise",
+        "mesh_transformer.layers.*.mlp.fc2": "rowwise",
+    }
 
     graph_config: dict | WeatherNext2GraphConfig | None = None
     hidden_size: int = 768
@@ -199,76 +262,37 @@ class WeatherNext2Config(PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
-    chunk_size: int | None = 32768
+    chunk_size: int | None = positive_int_field(default=32768)
     loss_weights: dict[str, float | int] | None = None
     vars_with_nan_targets: list[str] | tuple[str, ...] = ()
-    loss_for_nan_targets: float = 0.0
 
     def __post_init__(self, **kwargs):
         if self.sigmoid_shifted_outputs is None:
-            self.sigmoid_shifted_outputs = (
-                {"cyclone_exists_gaussian_unit_mode": 2.0}
-                if "cyclone_exists_gaussian_unit_mode" in self.target_variables
-                else {}
-            )
+            self.sigmoid_shifted_outputs = {}
+            if "cyclone_exists_gaussian_unit_mode" in self.target_variables:
+                self.sigmoid_shifted_outputs["cyclone_exists_gaussian_unit_mode"] = 2.0
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.chunk_size is not None and self.chunk_size < 1:
-            raise ValueError(f"`chunk_size` must be positive, or None to disable chunking; got {self.chunk_size}.")
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
+
         unknown_static = set(self.static_variables) - set(self.input_variables)
         if unknown_static:
             raise ValueError(f"`static_variables` {sorted(unknown_static)} are not in `input_variables`.")
+
         unknown_shifted = set(self.sigmoid_shifted_outputs or {}) - set(self.target_variables)
         if unknown_shifted:
             raise ValueError(f"`sigmoid_shifted_outputs` {sorted(unknown_shifted)} are not in `target_variables`.")
-        unknown_loss_variables = (set(self.loss_weights or {}) | set(self.vars_with_nan_targets)) - set(
-            self.target_variables
-        )
+
+        loss_variables = set(self.loss_weights or {}) | set(self.vars_with_nan_targets)
+        unknown_loss_variables = loss_variables - set(self.target_variables)
         if unknown_loss_variables:
             raise ValueError(f"Loss variables {sorted(unknown_loss_variables)} are not in `target_variables`.")
-
-    def num_levels(self, variable: str) -> int:
-        return len(self.pressure_levels) if variable in self.atmospheric_variables else 1
-
-    @property
-    def input_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        """Channels the grid encoder consumes, after the three spatial features.
-
-        Dynamic input variables appear once per past time step, static variables once with no time,
-        and forcings once at the predicted time step.
-        """
-        layout: list[tuple[str, int | None, int]] = []
-        past_offsets = [
-            -(self.num_input_timesteps - 1 - i) * self.time_step_hours for i in range(self.num_input_timesteps)
-        ]
-        for variable in self.input_variables:
-            if variable in self.static_variables:
-                layout.append((variable, None, self.num_levels(variable)))
-            else:
-                layout.extend((variable, offset, self.num_levels(variable)) for offset in past_offsets)
-        layout.extend(
-            (variable, self.time_step_hours, self.num_levels(variable)) for variable in self.forcing_variables
-        )
-        return layout
-
-    @property
-    def mesh_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        """Channels the mesh encoder consumes, after the three spatial features.
-
-        Only the variables with no spatial extent reach the mesh encoder directly.
-        """
-        return [entry for entry in self.input_channel_layout if entry[0] in self.global_variables]
-
-    @property
-    def target_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        return [(variable, self.time_step_hours, self.num_levels(variable)) for variable in self.target_variables]
 
     @property
     def num_grid_input_channels(self) -> int:

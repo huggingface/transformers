@@ -33,6 +33,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.hub import cached_file, resolve_revision
 from ...utils.import_utils import requires
+from .configuration_weathernext2 import WeatherNext2ChannelLayoutMixin
 
 
 if is_torch_available():
@@ -63,7 +64,7 @@ def get_day_progress(seconds_since_epoch: "torch.Tensor", longitude: "torch.Tens
 
 
 @requires(backends=("torch",))
-class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
+class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtractionMixin):
     r"""
     Constructs a WeatherNext 2 feature extractor.
 
@@ -198,35 +199,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     def longitudes(self) -> "torch.Tensor":
         return torch.arange(self.grid_longitudes, dtype=torch.float64) * (360.0 / self.grid_longitudes)
 
-    def num_levels(self, variable: str) -> int:
-        return len(self.pressure_levels) if variable in self.atmospheric_variables else 1
-
-    @property
-    def past_time_offsets(self) -> list[int]:
-        """Hours, relative to the initialization time, of each conditioning frame."""
-        return [-(self.num_input_timesteps - 1 - i) * self.time_step_hours for i in range(self.num_input_timesteps)]
-
-    @property
-    def input_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        """`(variable, time offset in hours or None, number of levels)` per input channel group."""
-        layout: list[tuple[str, int | None, int]] = []
-        for variable in self.input_variables:
-            if variable in self.static_variables:
-                layout.append((variable, None, self.num_levels(variable)))
-            else:
-                layout.extend((variable, offset, self.num_levels(variable)) for offset in self.past_time_offsets)
-        layout.extend(
-            (variable, self.time_step_hours, self.num_levels(variable)) for variable in self.forcing_variables
-        )
-        return layout
-
-    @property
-    def mesh_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        return [entry for entry in self.input_channel_layout if entry[0] in self.global_variables]
-
-    @property
-    def target_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        return [(variable, self.time_step_hours, self.num_levels(variable)) for variable in self.target_variables]
+    @staticmethod
+    def _to_tensors(values: Mapping[str, Any]) -> dict[str, "torch.Tensor"]:
+        """Converts every field to a float32 tensor once, without copying tensors that already are."""
+        return {name: torch.as_tensor(field, dtype=torch.float32) for name, field in values.items()}
 
     def _statistic(self, table: Mapping[str, Any], variable: str) -> "torch.Tensor | None":
         """Per-level statistic for a variable, or `None` if it has none.
@@ -249,15 +225,28 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         Missing values are replaced first, in physical units, so that the substituted value lands
         wherever the statistics put it rather than on zero.
         """
-        values = torch.as_tensor(values, dtype=torch.float32)
         if variable in self.nan_fill_values:
             values = torch.nan_to_num(values, nan=self.nan_fill_values[variable])
+
         mean = self._statistic(self.mean_by_level, variable)
+        if mean is not None:
+            values = values - mean.to(values.device)
+
         stddev = self._statistic(self.stddev_by_level, variable)
-        normalized = values if mean is None else values - mean.to(values.device)
         if stddev is not None:
-            normalized = normalized / stddev.to(values.device)
-        return normalized
+            values = values / stddev.to(values.device)
+        return values
+
+    def unnormalize(self, values: "torch.Tensor", variable: str) -> "torch.Tensor":
+        """Inverse of [`~WeatherNext2FeatureExtractor.normalize`], without the NaN filling."""
+        stddev = self._statistic(self.stddev_by_level, variable)
+        if stddev is not None:
+            values = values * stddev.to(values.device)
+
+        mean = self._statistic(self.mean_by_level, variable)
+        if mean is not None:
+            values = values + mean.to(values.device)
+        return values
 
     def compute_forcings(self, seconds_since_epoch: "torch.Tensor") -> dict[str, "torch.Tensor"]:
         """Clock-derived variables at the given times.
@@ -281,12 +270,12 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
 
         Static fields have no batch axis, so they cannot be used; every other input does, and they must agree.
         """
-        sizes = {
-            torch.as_tensor(values).shape[0]
-            for source in (state, forcings)
-            for name, values in source.items()
-            if name not in self.static_variables and torch.as_tensor(values).ndim > 0
-        }
+        sizes = set()
+        for source in (state, forcings):
+            for name, values in source.items():
+                if name not in self.static_variables and values.ndim > 0:
+                    sizes.add(values.shape[0])
+
         if len(sizes) != 1:
             raise ValueError(f"Inconsistent batch sizes across the inputs: {sorted(sizes)}.")
         return sizes.pop()
@@ -295,7 +284,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self, state: Mapping[str, Any], variable: str, time_index: int | None, batch_size: int = 1
     ) -> "torch.Tensor":
         """Extracts `[batch, levels, lat, lon]` for one variable at one conditioning frame."""
-        values = torch.as_tensor(state[variable], dtype=torch.float32)
+        values = state[variable]
         if variable in self.static_variables:
             # Static fields carry no batch axis of their own, so they are shared by every member.
             values = values.reshape(-1, 1, self.grid_latitudes, self.grid_longitudes)
@@ -386,19 +375,18 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 raise ValueError("Pass either `seconds_since_epoch` or `forcings`.")
             forcings = self.compute_forcings(seconds_since_epoch)
 
-        forcings = {name: torch.as_tensor(values, dtype=torch.float32)[:, None] for name, values in forcings.items()}
-
         # The clock forcings and any static fields are built on the host, so every channel is moved to
         # one device before they are concatenated.
         if device is None:
-            device = next(
-                (values.device for values in state.values() if isinstance(values, torch.Tensor)),
-                torch.device("cpu"),
-            )
+            tensors = (values for values in state.values() if isinstance(values, torch.Tensor))
+            device = next((values.device for values in tensors), torch.device("cpu"))
+
+        state = self._to_tensors(state)
+        forcings = {name: values[:, None] for name, values in self._to_tensors(forcings).items()}
         batch_size = self._batch_size(state, forcings)
+
         grid_channels = []
         global_channels = []
-
         for variable, offset, _ in self.input_channel_layout:
             if offset is not None and offset > 0:
                 field = self._field(forcings, variable, 0, batch_size)
@@ -418,14 +406,16 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         }
         if num_members > 1:
             data = {name: values.repeat_interleave(num_members, dim=0) for name, values in data.items()}
-        data["noise"] = (
-            self.sample_noise(batch_size * num_members, generator=generator, device=device)
-            if noise is None
-            else torch.as_tensor(noise, dtype=torch.float32, device=device)
-        )
-        attention_mask = self.attention_mask if attention_mask is None else attention_mask
+
+        if noise is None:
+            noise = self.sample_noise(batch_size * num_members, generator=generator, device=device)
+        data["noise"] = torch.as_tensor(noise, dtype=torch.float32, device=device)
+
+        if attention_mask is None:
+            attention_mask = self.attention_mask
         if attention_mask is not None:
             data["attention_mask"] = attention_mask.to(device=device)
+
         if targets is not None:
             labels = self.preprocess_targets(targets, state).to(device)
             data["labels"] = labels[:, None].expand(-1, num_members, -1, -1, -1)
@@ -438,14 +428,18 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         frames passed to `__call__`. Inputs and targets use the same configured NaN filling before residual
         normalization. The result has shape `[batch, channels, latitudes, longitudes]`.
         """
-        channels = []
+        targets = self._to_tensors(targets)
+        state = self._to_tensors(state)
         batch_size = self._batch_size(state, {})
+
+        channels = []
         for variable, _, levels in self.target_channel_layout:
-            values = torch.as_tensor(targets[variable], dtype=torch.float32)
+            values = targets[variable]
             if values.ndim == 3:
                 values = values[:, None]
             if values.shape != (batch_size, levels, self.grid_latitudes, self.grid_longitudes):
                 raise ValueError(f"Target {variable!r} has an incompatible shape: {tuple(values.shape)}.")
+
             if variable in self.nan_fill_values:
                 values = values.masked_fill(values.isnan(), self.nan_fill_values[variable])
             if variable in self.input_variables and variable not in self.static_variables:
@@ -459,6 +453,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             else:
                 values = self.normalize(values, variable)
             channels.append(values)
+
         return torch.cat(channels, dim=1)
 
     def postprocess(self, prediction: Any, state: Mapping[str, Any] | None = None) -> dict[str, "torch.Tensor"]:
@@ -496,7 +491,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 "`state` is required to decode residual targets: " + ", ".join(sorted(residual_targets)) + "."
             )
 
-        outputs: dict[str, Any] = {}
+        if state is not None:
+            state = self._to_tensors(state)
+
+        outputs = {}
         offset = 0
         for variable, _, levels in self.target_channel_layout:
             values = prediction[:, offset : offset + levels]
@@ -504,29 +502,26 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
 
             if state is not None and variable in state and variable not in self.static_variables:
                 residual_scale = self._statistic(self.diffs_stddev_by_level, variable)
-                last_frame = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device)[:, -1]
+                last_frame = state[variable][:, -1].to(values.device)
                 if last_frame.ndim == 3:
                     last_frame = last_frame[:, None]
                 if residual_scale is not None:
                     values = values * residual_scale.to(values.device)
                 values = values + last_frame
             else:
-                mean = self._statistic(self.mean_by_level, variable)
-                stddev = self._statistic(self.stddev_by_level, variable)
-                if stddev is not None:
-                    values = values * stddev.to(values.device)
-                if mean is not None:
-                    values = values + mean.to(values.device)
+                values = self.unnormalize(values, variable)
 
             if state is not None and variable in self.nan_fill_values and variable in state:
                 # The land mask is constant across the conditioning frames, so any frame will do.
-                missing = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device).isnan().any(dim=1)
+                missing = state[variable].to(values.device).isnan().any(dim=1)
                 if missing.ndim == values.ndim - 1:
                     missing = missing[:, None]
                 values = torch.where(missing, torch.nan, values)
 
-            values = values[:, 0] if levels == 1 else values
+            if levels == 1:
+                values = values[:, 0]
             outputs[variable] = values
+
         return outputs
 
     def advance_state(
@@ -550,19 +545,21 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 appended frame is stamped with it, so advancing the clock before calling this puts the physical
                 fields and the clock variables a step out of sync.
         """
-        next_state: dict[str, Any] = {}
+        state = self._to_tensors(state)
+        forecast = self._to_tensors(forecast)
         forcings = self.compute_forcings(seconds_since_epoch)
+
+        next_state = {}
         for variable in self.input_variables:
-            previous = torch.as_tensor(state[variable], dtype=torch.float32)
+            previous = state[variable]
             if variable in self.static_variables:
-                updated = previous
-            elif variable in forcings:
-                latest = torch.as_tensor(forcings[variable], dtype=torch.float32).to(previous.device)[:, None]
-                updated = torch.cat([previous[:, 1:], latest], dim=1)
-            else:
-                latest = torch.as_tensor(forecast[variable], dtype=torch.float32).to(previous.device)[:, None]
-                updated = torch.cat([previous[:, 1:], latest], dim=1)
-            next_state[variable] = updated
+                next_state[variable] = previous
+                continue
+
+            source = forcings if variable in forcings else forecast
+            latest = source[variable].to(previous.device)[:, None]
+            next_state[variable] = torch.cat([previous[:, 1:], latest], dim=1)
+
         return next_state
 
 

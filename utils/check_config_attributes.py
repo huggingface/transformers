@@ -327,9 +327,11 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
-    # Geometry metadata and variables used by channel-layout properties.
+    # Geometry metadata, variables used by channel-layout properties, and loss settings read by `loss_weathernext2`.
     "WeatherNext2Config": [
         "attention_k_hop",
+        "loss_weights",
+        "vars_with_nan_targets",
         "ball_query_radius_fraction",
         "mesh_splits",
         "atmospheric_variables",

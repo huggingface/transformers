@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-10-21.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-11-09.*
 
 # WeatherNext 2
 
@@ -67,28 +67,36 @@ import torch
 import xarray
 from transformers import WeatherNext2FeatureExtractor, WeatherNext2ForWeatherForecasting
 
+def load_example(processor, resolution):
+    """Downloads an HRES sample and returns the conditioning state and the valid time of the first forecast."""
+    data_path = (
+        "weathernext2/dataset/source-hres_forecast_init-2024-10-07 00:00:00_"
+        f"res-{resolution}_levels-13_steps-01.nc"
+    )
+    data_file = f"weathernext2-example-{resolution}.nc"
+    torch.hub.download_url_to_file("https://storage.googleapis.com/dm_graphcast/" + quote(data_path), data_file)
+    example_batch = xarray.load_dataset(data_file).sortby("lat")
+
+    # Two chronological conditioning frames, with the model's pressure levels and axis order.
+    frames = slice(0, processor.num_input_timesteps)
+    initial = example_batch.isel(time=frames).sel(level=processor.pressure_levels)
+    initial = initial.transpose("batch", "time", "level", "lat", "lon")
+    state = {}
+    for name in processor.input_variables:
+        if name not in processor.forcing_variables:
+            state[name] = initial[name].values.astype(np.float32)
+    conditioning_times = initial.datetime.values.astype("datetime64[s]").astype(np.int64)
+    state.update(processor.compute_forcings(conditioning_times))
+
+    # Forcings use the predicted step's timestamp, not the last input frame's.
+    valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
+    return state, valid_time.astype("datetime64[s]").astype(np.int64)
+
+
 model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini", device_map="auto")
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
+state, valid_time = load_example(processor, resolution="1.0")
 
-data_path = "weathernext2/dataset/source-hres_forecast_init-2024-10-07 00:00:00_res-1.0_levels-13_steps-01.nc"
-data_file = "weathernext2-example.nc"
-torch.hub.download_url_to_file("https://storage.googleapis.com/dm_graphcast/" + quote(data_path), data_file)
-example_batch = xarray.load_dataset(data_file).sortby("lat")
-
-# Two chronological conditioning frames, with the model's pressure levels and axis order.
-initial = example_batch.isel(time=slice(0, processor.num_input_timesteps)).sel(level=processor.pressure_levels)
-initial = initial.transpose("batch", "time", "level", "lat", "lon")
-state = {
-    name: initial[name].values.astype(np.float32)
-    for name in processor.input_variables
-    if name not in processor.forcing_variables
-}
-conditioning_times = initial.datetime.values.astype("datetime64[s]").astype(np.int64)
-state.update(processor.compute_forcings(conditioning_times))
-
-# Forcings use the predicted step's timestamp, not the last input frame's.
-valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
-valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
 inputs = processor(
     state, seconds_since_epoch=valid_time, generator=torch.Generator().manual_seed(0)
 ).to(device=model.device, dtype=model.dtype)
@@ -153,30 +161,15 @@ state = outputs.state
 ### Tropical cyclones
 
 `kashif/weathernext-cyclones` predicts 17 cyclone diagnostics, including existence probability, intensity and wind
-radii, alongside the weather fields. Use the 0.25° HRES sample rather than the 1° Mini sample. With the imports
-from [Usage](#usage), the following generates one 6-hour forecast in physical units:
+radii, alongside the weather fields. It uses the 0.25° HRES sample rather than the 1° Mini sample. With the imports
+and `load_example` from [Usage](#usage), the following generates one 6-hour forecast in physical units:
 
 ```python
 model = WeatherNext2ForWeatherForecasting.from_pretrained(
     "kashif/weathernext-cyclones", device_map="auto", attn_implementation="flex_attention"
 )
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext-cyclones")
-
-data_path = "weathernext2/dataset/source-hres_forecast_init-2024-10-07 00:00:00_res-0.25_levels-13_steps-01.nc"
-data_file = "weathernext-cyclones-example.nc"
-torch.hub.download_url_to_file("https://storage.googleapis.com/dm_graphcast/" + quote(data_path), data_file)
-example_batch = xarray.load_dataset(data_file).sortby("lat")
-initial = example_batch.isel(time=slice(0, processor.num_input_timesteps)).sel(level=processor.pressure_levels)
-initial = initial.transpose("batch", "time", "level", "lat", "lon")
-state = {
-    name: initial[name].values.astype(np.float32)
-    for name in processor.input_variables
-    if name not in processor.forcing_variables
-}
-conditioning_times = initial.datetime.values.astype("datetime64[s]").astype(np.int64)
-state.update(processor.compute_forcings(conditioning_times))
-valid_time = example_batch.datetime.isel(time=processor.num_input_timesteps).values
-valid_time = valid_time.astype("datetime64[s]").astype(np.int64)
+state, valid_time = load_example(processor, resolution="0.25")
 
 inputs = processor(
     state, seconds_since_epoch=valid_time, generator=torch.Generator().manual_seed(0)
@@ -201,8 +194,7 @@ loss.backward()
 
 The processor normalizes targets as residuals where appropriate and groups at least two independent members per
 initial condition. Missing cyclone targets are masked in both CRPS terms. The conversion script preserves
-the checkpoint's `loss_weights`, `vars_with_nan_targets` and `loss_for_nan_targets`.
-Inference without targets is unchanged.
+the checkpoint's `loss_weights` and `vars_with_nan_targets`.
 
 ## Notes
 
@@ -213,13 +205,14 @@ Inference without targets is unchanged.
 - With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
   [Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled;
   `chunk_size=None` disables kernel tiling.
-- Exact mesh geometry and grid-to-mesh and mesh-to-grid graphs are stored as persistent buffers in `model.geometry`.
-  The feature extractor loads the mesh mask from `attention_mask.safetensors` and includes it in the model inputs.
-  Loading needs no geometry library; a model built from a config gets placeholder geometry.
-  The conversion script derives the geometry using `scipy` and `trimesh`.
+- The grid-to-mesh and mesh-to-grid graphs are persistent buffers in `model.geometry`, and the banded mesh mask is
+  `attention_mask.safetensors`, which the feature extractor loads and adds to the model inputs. Building them needs
+  `scipy` and `trimesh` and takes minutes at 0.25°, so the conversion script does it once and loading needs neither.
+  A model built from a config gets placeholder geometry.
 - Attention and graph aggregation accumulate in fp32. Lower-precision inference is not reference-equivalent and
   should be validated against forecast metrics. The released checkpoints use fp32; for optional
-  bf16 inference, load with `dtype=torch.bfloat16` and cast processor outputs to `model.dtype`.
+  bf16 inference, load with `dtype=torch.bfloat16`. `generate` casts its inputs to `model.dtype`; for a direct
+  forward, cast the processor outputs yourself.
 - The 1° Mini checkpoints need substantially less memory than the 0.25° checkpoints. Use `generate(batch_size=1)`
   to bound per-forward working memory. Retaining the full ensemble's state and forecasts still scales with its size.
 - The forecasting head reads only the grid output, so `model.mesh_to_grid.mesh_node_update` receives no gradient,
