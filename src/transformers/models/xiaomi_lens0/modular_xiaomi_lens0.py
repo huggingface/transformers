@@ -193,14 +193,12 @@ class XiaomiLens0TextModel(Qwen3_5TextModel):
 @dataclass
 class XiaomiLens0ModelOutputWithPast(Qwen3_5ModelOutputWithPast):
     r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        The rope index difference between sequence length and multimodal rope. Deprecated in favor of
-        `model.base_model.rope_deltas`; this field will be removed in v5.20.
-    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
+    image_last_hidden_state (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
         Vision patch features before spatial merging, retaining gradients for mask supervision.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_last_hidden_state: torch.FloatTensor | None = None
+    rope_deltas = AttributeError()
 
 
 class XiaomiLens0Model(Qwen3_5Model):
@@ -284,7 +282,7 @@ class XiaomiLens0Model(Qwen3_5Model):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
-            image_hidden_states=(
+            image_last_hidden_state=(
                 mm_encoder_outputs["image"].last_hidden_state if mm_encoder_outputs.get("image") is not None else None
             ),
         )
