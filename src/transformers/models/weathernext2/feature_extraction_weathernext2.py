@@ -167,7 +167,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         return files
 
     @classmethod
-    def get_feature_extractor_dict(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        # Resolve the revision once so the config and the mask come from the same commit.
         kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
             kwargs.get("revision"),
@@ -175,7 +176,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             cache_dir=kwargs.get("cache_dir"),
             local_files_only=kwargs.get("local_files_only", False),
         )
-        config_dict, unused_kwargs = super().get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        output = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        feature_extractor = output[0] if kwargs.get("return_unused_kwargs") else output
         mask_file = cached_file(
             pretrained_model_name_or_path,
             "attention_mask.safetensors",
@@ -184,10 +186,9 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 for key in ("revision", "token", "cache_dir", "subfolder", "local_files_only", "force_download")
                 if key in kwargs
             },
-            _raise_exceptions_for_missing_entries=False,
         )
-        config_dict["attention_mask"] = load_file(mask_file)["attention_mask"] if mask_file else None
-        return config_dict, unused_kwargs
+        feature_extractor.attention_mask = load_file(mask_file)["attention_mask"]
+        return output
 
     @property
     def latitudes(self) -> "torch.Tensor":

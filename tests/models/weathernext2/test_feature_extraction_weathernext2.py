@@ -141,6 +141,19 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
     def test_init_without_params(self):
         pass
 
+    def test_feat_extract_from_and_save_pretrained(self):
+        # The mask is a separate asset, outside the JSON config.
+        import torch
+
+        attention_mask = torch.rand(2, 1, 4, 12, generator=torch.Generator().manual_seed(0)) > 0.5
+        extractor = self.feature_extraction_class(**self.feat_extract_dict, attention_mask=attention_mask)
+        with tempfile.TemporaryDirectory() as directory:
+            extractor.save_pretrained(directory)
+            restored = self.feature_extraction_class.from_pretrained(directory)
+        self.assertEqual(restored.to_dict(), extractor.to_dict())
+        self.assertNotIn("attention_mask", restored.to_dict())
+        torch.testing.assert_close(restored.attention_mask, attention_mask)
+
     def test_call(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -301,9 +314,3 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         inputs = inputs.to(dtype=torch.bfloat16)
         self.assertEqual(inputs["grid_features"].dtype, torch.bfloat16)
         self.assertIs(inputs["attention_mask"], attention_mask)
-        extractor.attention_mask = attention_mask
-        with tempfile.TemporaryDirectory() as directory:
-            extractor.save_pretrained(directory)
-            restored = self.feature_extraction_class.from_pretrained(directory)
-        torch.testing.assert_close(restored.attention_mask, attention_mask)
-        self.assertNotIn("attention_mask", restored.to_dict())
