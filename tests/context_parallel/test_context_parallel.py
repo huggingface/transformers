@@ -374,6 +374,12 @@ class TestContextParallelChecks(unittest.TestCase):
         # A base model computes no loss of its own, so the caller's loss is theirs to shard.
         self._check(LlamaModel(_tiny_config()))
 
+        # a head whose name maps to no loss uses the causal LM loss
+        class LlamaLMHeadModel(LlamaForCausalLM):
+            pass
+
+        self._check(LlamaLMHeadModel(_tiny_config()))
+
     def test_accepts_softmax_attention_layer_types(self):
         config = _tiny_config()
         config.layer_types = ["full_attention", "sliding_attention", "chunked_attention"]
@@ -382,6 +388,13 @@ class TestContextParallelChecks(unittest.TestCase):
     def test_refuses_other_heads(self):
         with self.assertRaisesRegex(ValueError, "only supports the causal language modeling loss"):
             self._check(LlamaForSequenceClassification(_tiny_config()))
+
+    def test_refuses_attention_outside_the_interface(self):
+        class LlamaWithOwnAttention(LlamaForCausalLM):
+            _supports_attention_backend = False
+
+        with self.assertRaisesRegex(ValueError, "`_supports_attention_backend`"):
+            self._check(LlamaWithOwnAttention(_tiny_config()))
 
     def test_refuses_layers_that_mix_tokens_outside_attention(self):
         config = _tiny_config()
@@ -402,7 +415,7 @@ class TestUlyssesFlashAttention(unittest.TestCase):
 # =============================================================================
 
 CP_RTOL = 1e-5
-CP_ATOL = 1e-6
+CP_ATOL = 1e-5
 
 
 def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):

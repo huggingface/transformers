@@ -229,6 +229,14 @@ SOFTMAX_ATTENTION_LAYER_TYPES = ("full_attention", "sliding_attention", "chunked
 
 def _check_context_parallelism(model: nn.Module) -> None:
     """Raise a `ValueError` if context parallelism would silently change the logits or the loss of `model`."""
+    if not model._supports_attention_backend:
+        raise ValueError(
+            f"Context parallelism routes attention through `ALL_ATTENTION_FUNCTIONS`, but {model.__class__.__name__} "
+            "does not declare that all its attention layers go through it with the model's kwargs "
+            "(`_supports_attention_backend`), so they could run on this rank's slice only. Use another model, or "
+            "disable context parallelism."
+        )
+
     text_config = model.config.get_text_config()
     layer_types = set(getattr(text_config, "layer_types", None) or ())
     if unsupported := layer_types - set(SOFTMAX_ATTENTION_LAYER_TYPES):
@@ -238,15 +246,13 @@ def _check_context_parallelism(model: nn.Module) -> None:
             "cut at the slice boundaries. Use another model, or disable context parallelism."
         )
 
-    if model.base_model is model:
-        return
-    if LOSS_MAPPING.get(model.loss_type) is ForCausalLMLoss:
-        return
-    raise ValueError(
-        f"Context parallelism only supports the causal language modeling loss, but {model.__class__.__name__} uses "
-        f"`loss_type={model.loss_type}`. Its loss would be computed from this rank's slice of the shifted labels while "
-        "the logits stay sharded. Use a `*ForCausalLM` model, or disable context parallelism."
-    )
+    # `loss_type=None` (base models, and heads whose name maps to no loss) falls back to the causal LM loss
+    if model.loss_type is not None and LOSS_MAPPING.get(model.loss_type) is not ForCausalLMLoss:
+        raise ValueError(
+            f"Context parallelism only supports the causal language modeling loss, but {model.__class__.__name__} "
+            f"uses `loss_type={model.loss_type}`. Its loss would be computed from this rank's slice of the shifted "
+            "labels while the logits stay sharded. Use a `*ForCausalLM` model, or disable context parallelism."
+        )
 
 
 cp_implementations: dict[str, type[CPImplementation]] = {"ulysses": UlyssesCP}
