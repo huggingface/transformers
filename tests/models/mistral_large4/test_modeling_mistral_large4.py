@@ -37,24 +37,29 @@ if is_torch_available():
     import torch
 
     from transformers import MistralLarge4ForConditionalGeneration, MistralLarge4Model
-    from transformers.models.mistral_large4.modeling_mistral_large4 import MistralLarge4TextIndexer
+    from transformers.models.mistral_large4.modeling_mistral_large4 import (
+        MistralLarge4TextIndexer,
+        MistralLarge4TextNoRopeIndexer,
+    )
 
 
 @contextmanager
 def indexer_leaky_relu():
-    """Swaps `F.relu` for `F.leaky_relu` in the body of the indexer forward (whatever decorators wrap it).
+    """Swaps `F.relu` for `F.leaky_relu` in the body of the indexer forwards (whatever decorators wrap them).
 
     With random weights, the indexer's ReLU zeroes many scores and `topk` breaks those exact ties differently depending
     on tensor shapes (cache type, padding). A leaky ReLU keeps the scores distinct, so tests comparing such code paths
     select the same tokens. The real ReLU is covered by the integration tests, on trained weights.
     """
-    forward = inspect.unwrap(MistralLarge4TextIndexer.forward)
-    code = forward.__code__
-    forward.__code__ = code.replace(co_names=tuple("leaky_relu" if n == "relu" else n for n in code.co_names))
+    forwards = [inspect.unwrap(cls.forward) for cls in (MistralLarge4TextIndexer, MistralLarge4TextNoRopeIndexer)]
+    codes = [forward.__code__ for forward in forwards]
+    for forward, code in zip(forwards, codes):
+        forward.__code__ = code.replace(co_names=tuple("leaky_relu" if n == "relu" else n for n in code.co_names))
     try:
         yield
     finally:
-        forward.__code__ = code
+        for forward, code in zip(forwards, codes):
+            forward.__code__ = code
 
 
 class MistralLarge4VisionText2TextModelTester(VLMModelTester):
@@ -82,11 +87,11 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("index_topk", 4)
         kwargs.setdefault("index_head_dim", 16)
         kwargs.setdefault("index_n_heads", 2)
-        # RoPE, NoPE, RoPE, NoPE. Since KV can only be shared by layers with the same PE, layer 3 reuse layer 1's KV,
-        # and layer 2 reuses layer 0's KV. We also test index sharing in the last two layers.
+        # RoPE, NoPE, RoPE, NoPE. Only NoPE layers share KV, with the most recent NoPE layer: layer 3 reuses layer 1's
+        # KV. We also test index sharing in the last two layers.
         kwargs.setdefault("num_hidden_layers", 4)
         kwargs.setdefault("no_rope_layers", [1, 0, 1, 0])
-        kwargs.setdefault("kv_source_layers", [0, 1, 0, 1])
+        kwargs.setdefault("kv_source_layers", [0, 1, 2, 1])
         kwargs.setdefault("indexer_types", ["full", "full", "shared", "shared"])
         # MoE: layer 0 is dense, the others route to 2 of 8 experts plus a shared expert
         kwargs.setdefault("first_k_dense_replace", 1)
@@ -132,7 +137,7 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
         for layer_idx, layer in enumerate(model.language_model.layers):
             # Test that KV sharing layers have no kv_a projection
             owns_kv = config.text_config.kv_source_layers[layer_idx] == layer_idx
-            self.assertEqual(layer.self_attn.kv_a_proj_with_mqa is not None, owns_kv)
+            self.assertEqual(hasattr(layer.self_attn, "kv_a_proj_with_mqa"), owns_kv)
             # Test that NoPE layers have no rope dimensions
             uses_rope = bool(config.text_config.no_rope_layers[layer_idx])
             expected_rope_dim = config.text_config.qk_rope_head_dim if uses_rope else 0
