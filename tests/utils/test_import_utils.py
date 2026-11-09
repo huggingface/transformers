@@ -1,4 +1,6 @@
+import subprocess
 import sys
+import textwrap
 from contextlib import contextmanager
 from types import ModuleType
 from unittest.mock import DEFAULT, MagicMock, patch
@@ -46,6 +48,28 @@ def test_clear_import_cache():
 
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
+
+
+@require_torch
+@pytest.mark.parametrize("torchao_available", [True, False])
+def test_modeling_utils_does_not_import_torchao(torchao_available):
+    script = textwrap.dedent(
+        f"""
+        import sys
+        from unittest.mock import patch
+
+        import torch
+
+        assert not torch.cuda.is_initialized()
+        with patch("transformers.utils.is_torchao_available", return_value={torchao_available}):
+            import transformers.modeling_utils
+
+        assert not any(name == "torchao" or name.startswith("torchao.") for name in sys.modules)
+        assert not torch.cuda.is_initialized()
+        """
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_is_package_available_edge_cases():
