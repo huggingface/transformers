@@ -1289,7 +1289,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             skip_the_layer = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 skip_the_layer = dropout_probability < self.layerdrop
 
@@ -1549,7 +1549,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             skip_the_layer = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 skip_the_layer = dropout_probability < self.layerdrop
             if skip_the_layer and not synced_gpus:

@@ -1908,10 +1908,10 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            dropout_probability = torch.rand([])
-
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training and self.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             level_index = idx % self.num_feature_levels
 

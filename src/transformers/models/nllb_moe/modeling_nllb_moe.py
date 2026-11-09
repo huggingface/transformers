@@ -728,11 +728,11 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                continue
-            else:
-                hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
+            if self.training and self.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    continue
+            hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         last_hidden_state = self.layer_norm(hidden_states)
         return MoEModelOutput(last_hidden_state=last_hidden_state)
@@ -833,8 +833,10 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-            skip_the_layer = self.training and dropout_probability < self.layerdrop
+            skip_the_layer = False
+            if self.training and self.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.layerdrop
             if not skip_the_layer or synced_gpus:
                 hidden_states = decoder_layer(
                     hidden_states,

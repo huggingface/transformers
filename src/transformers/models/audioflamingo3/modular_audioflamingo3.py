@@ -143,7 +143,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
 
         # Transformer stack
         for layer in self.layers:
-            drop = self.training and torch.rand([]) < self.layerdrop
+            drop = self.training and self.layerdrop > 0.0 and torch.rand([]) < self.layerdrop
             if not drop:
                 hidden_states = layer(hidden_states, attention_mask)
 
