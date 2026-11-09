@@ -999,7 +999,7 @@ def create_causal_mask(
         allow_is_causal_skip = False
         use_vmap = True
 
-    #  If we detected packing format or blockwise overlay
+    # If we detected packing format or blockwise overlay
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
@@ -1231,7 +1231,7 @@ def create_sliding_window_causal_mask(
         allow_is_causal_skip = False
         use_vmap = True
 
-    #  If we detected packing format or blockwise overlay
+    # If we detected packing format or blockwise overlay
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
@@ -1465,7 +1465,7 @@ def create_chunked_causal_mask(
         allow_is_causal_skip = False
         use_vmap = True
 
-    #  If we detected packing format or blockwise overlay
+    # If we detected packing format or blockwise overlay
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
