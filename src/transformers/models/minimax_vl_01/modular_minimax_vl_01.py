@@ -278,15 +278,18 @@ class MiniMaxVL01ImageProcessor(LlavaNextImageProcessor):
     valid_kwargs = MiniMaxVL01ImageProcessorKwargs
     size = {"height": 336, "width": 336}
     crop_size = None
-    do_center_crop = False
-    do_pad = False
+    do_center_crop = AttributeError()
+    do_pad = AttributeError()
     image_grid_pinpoints = MINIMAX_VL_01_IMAGE_GRID_PINPOINTS
     patch_size = 14
 
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
-        if kwargs.get("do_pad", self.do_pad):
+        if kwargs.get("do_pad"):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
         super().__init__(**kwargs)
+
+    def _pad_for_batching(self, pixel_values):
+        raise NotImplementedError("Batch padding is not used by MiniMax-VL-01.")
 
     def _resize_for_patching(
         self,
@@ -325,15 +328,18 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
     valid_kwargs = MiniMaxVL01ImageProcessorKwargs
     size = {"height": 336, "width": 336}
     crop_size = None
-    do_center_crop = False
-    do_pad = False
+    do_center_crop = AttributeError()
+    do_pad = AttributeError()
     image_grid_pinpoints = MINIMAX_VL_01_IMAGE_GRID_PINPOINTS
     patch_size = 14
 
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
-        if kwargs.get("do_pad", self.do_pad):
+        if kwargs.get("do_pad"):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
         super().__init__(**kwargs)
+
+    def _pad_for_batching(self, pixel_values):
+        raise NotImplementedError("Batch padding is not used by MiniMax-VL-01.")
 
     def _resize_for_patching(
         self,

@@ -94,17 +94,15 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
     default_to_square = False
     crop_size = None
     do_resize = True
-    do_center_crop = False
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    do_pad = False
     image_grid_pinpoints = MINIMAX_VL_01_IMAGE_GRID_PINPOINTS
     patch_size = 14
 
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if kwargs.get("do_pad", self.do_pad):
+        if kwargs.get("do_pad"):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
     @auto_docstring
@@ -193,22 +191,6 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
         image_patches = [resized_original_image] + patches
 
         return image_patches
-
-    def _pad_for_batching(
-        self,
-        pixel_values: list[np.ndarray],
-    ) -> list[np.ndarray]:
-        """Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches."""
-        max_patch = max(len(x) for x in pixel_values)
-        # Use np.pad directly for patch dimension padding
-        padded_values = []
-        for image in pixel_values:
-            # Padding format: ((before_dim0, after_dim0), (before_dim1, after_dim1), ...)
-            padding = ((0, max_patch - image.shape[0]), (0, 0), (0, 0), (0, 0))
-            padded_image = np.pad(image, padding, mode="constant", constant_values=0)
-            padded_values.append(padded_image)
-
-        return padded_values
 
     def _preprocess(
         self,
