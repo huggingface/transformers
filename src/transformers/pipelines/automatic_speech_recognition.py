@@ -218,7 +218,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         elif decoder is not None:
             warnings.warn(
                 "Language model decoding with a pyctcdecode `decoder` is deprecated and will be removed in "
-                "Transformers v6. To keep identical outputs, call pyctcdecode directly; see "
+                "Transformers v6. To keep language model decoding, call pyctcdecode directly: "
                 "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode",
                 FutureWarning,
             )
