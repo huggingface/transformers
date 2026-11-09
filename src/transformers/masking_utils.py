@@ -1005,8 +1005,9 @@ def create_causal_mask(
 
     # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
+        # The position ids are sometimes just unsqueezed, without being expanded
         mask_factory_function = packed_sequence_compatibility_function(
-            mask_factory_function, position_ids, packed_sequence_mask
+            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
         )
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
@@ -1236,8 +1237,9 @@ def create_sliding_window_causal_mask(
 
     # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
+        # The position ids are sometimes just unsqueezed, without being expanded
         mask_factory_function = packed_sequence_compatibility_function(
-            mask_factory_function, position_ids, packed_sequence_mask
+            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
         )
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
@@ -1469,8 +1471,9 @@ def create_chunked_causal_mask(
 
     # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
+        # The position ids are sometimes just unsqueezed, without being expanded
         mask_factory_function = packed_sequence_compatibility_function(
-            mask_factory_function, position_ids, packed_sequence_mask
+            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
         )
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
