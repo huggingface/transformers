@@ -684,14 +684,7 @@ class ProcessorMixin(PushToHubMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
-                if key in merged_kwargs["text_kwargs"]:
-                    logger.warning_once(
-                        f"Passing `{key}` in `text_kwargs` is deprecated "
-                        "and will be removed in v5.29.0. "
-                        "Pass it directly to the processor instead."
-                    )
-            # return_mm_token_type_ids/return_text_replacement_offsets in text_kwargs have priority for backwards compatibility
+            # text_kwargs has priority for backwards compatibility. Remove in v5.29.0.
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
                 "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
             )
@@ -1718,12 +1711,18 @@ class ProcessorMixin(PushToHubMixin):
         for modality in map_preprocessor_kwargs:
             output_kwargs[modality].update(common_kwargs)
 
+        # BC: processor kwargs that used to be text kwargs. Remove in v5.29.0.
+        mirrored_text_kwargs = ("return_mm_token_type_ids", "return_text_replacement_offsets")
+
         # kwargs passed by user
         for key, value in kwargs.items():
             if key in modality_valid_kwargs:
                 # 2) key is modality-specific kwarg, e.g. "text_kwargs"
                 modality = key
                 for subkey, subvalue in value.items():
+                    # BC: Remove in v5.29.0
+                    if subkey in mirrored_text_kwargs and kwargs.get(subkey) == subvalue:
+                        continue
                     if subkey in kwargs and subkey in modality_valid_kwargs[modality]:
                         raise ValueError(
                             f"Keyword argument {subkey} was passed two times:\n"
@@ -1741,6 +1740,18 @@ class ProcessorMixin(PushToHubMixin):
                 logger.warning_once(
                     f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                 )
+
+        # BC: Copy legacy kwargs into text_kwargs. Remove in v5.29.0.
+        for key in mirrored_text_kwargs:
+            if key in kwargs.get("text_kwargs", {}) and key not in kwargs:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+            if key in kwargs:
+                output_kwargs["text_kwargs"][key] = output_kwargs[key]
+            elif key in output_kwargs["text_kwargs"]:
+                output_kwargs[key] = output_kwargs["text_kwargs"][key]
 
         # Validate flat processor kwargs
         flat_kwargs = {
@@ -2598,14 +2609,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
-                if key in merged_kwargs["text_kwargs"]:
-                    logger.warning_once(
-                        f"Passing `{key}` in `text_kwargs` is deprecated "
-                        "and will be removed in v5.29.0. "
-                        "Pass it directly to the processor instead."
-                    )
-            # return_mm_token_type_ids/return_text_replacement_offsets in text_kwargs have priority for backwards compatibility
+            # text_kwargs has priority for backwards compatibility. Remove in v5.29.0.
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
                 "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
             )

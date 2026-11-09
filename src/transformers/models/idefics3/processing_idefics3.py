@@ -96,18 +96,10 @@ class Idefics3Processor(ProcessorMixin):
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
-        for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
-            if key in output_kwargs["text_kwargs"]:
-                logger.warning_once(
-                    f"Passing `{key}` in `text_kwargs` is deprecated "
-                    "and will be removed in v5.29.0. "
-                    "Pass it directly to the processor instead."
-                )
-        # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
+        # text_kwargs has priority for backwards compatibility
         return_text_replacement_offsets = output_kwargs["text_kwargs"].pop(
             "return_text_replacement_offsets", output_kwargs["return_text_replacement_offsets"]
         )
-        # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop(
             "return_mm_token_type_ids", output_kwargs["return_mm_token_type_ids"]
         )

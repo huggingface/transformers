@@ -50,8 +50,38 @@ class ProcessorMixinTest(unittest.TestCase):
         self.assertEqual(merged_kwargs["text_kwargs"]["max_length"], 32)
         self.assertEqual(merged_kwargs["images_kwargs"]["do_resize"], False)
         self.assertEqual(merged_kwargs["return_mm_token_type_ids"], True)
-        # return_mm_token_type_ids must not be propagated as it is in ProcessingKwargs
+        # Mirrored into text_kwargs for BC. Remove in v5.29.0.
+        self.assertEqual(merged_kwargs["text_kwargs"]["return_mm_token_type_ids"], True)
+
+    def test_merge_kwargs_legacy_mirrored_text_kwargs_not_set_by_default(self):
+        """Check that legacy flat kwargs are not set by default. Remove in v5.29.0."""
+        processor = DummyProcessor()
+        merged_kwargs = processor._merge_kwargs()
         self.assertNotIn("return_mm_token_type_ids", merged_kwargs["text_kwargs"])
+        self.assertNotIn("return_text_replacement_offsets", merged_kwargs["text_kwargs"])
+
+    def test_merge_kwargs_legacy_mirrored_flat_kwarg_overrides_defaults(self):
+        """Check that legacy flat kwargs with defaults work correctly. Remove in v5.29.0."""
+
+        class LegacyProcessingKwargs(ProcessingKwargs, total=False):
+            _defaults = {"text_kwargs": {"return_mm_token_type_ids": True}}
+
+        processor = DummyProcessor()
+        merged_kwargs = processor._merge_kwargs(LegacyProcessingKwargs, return_mm_token_type_ids=False)
+        self.assertEqual(merged_kwargs["return_mm_token_type_ids"], False)
+        self.assertEqual(merged_kwargs["text_kwargs"]["return_mm_token_type_ids"], False)
+
+        merged_kwargs = processor._merge_kwargs(LegacyProcessingKwargs)
+        self.assertEqual(merged_kwargs["return_mm_token_type_ids"], True)
+        self.assertEqual(merged_kwargs["text_kwargs"]["return_mm_token_type_ids"], True)
+
+    def test_merge_kwargs_legacy_merged_kwargs_can_be_merged_again(self):
+        """Some models call _merge_kwargs and pass result to super().__call__ which calls _merge_kwargs again. Remove in v5.29.0"""
+        processor = DummyProcessor()
+        merged_kwargs = processor._merge_kwargs(return_mm_token_type_ids=True)
+        merged_again = processor._merge_kwargs(**merged_kwargs)
+        self.assertEqual(merged_again["return_mm_token_type_ids"], True)
+        self.assertEqual(merged_again["text_kwargs"]["return_mm_token_type_ids"], True)
 
     def test_merge_kwargs_flat_and_nested_raises(self):
         """Check that flat and nested kwargs with the same name raise if passed twice."""

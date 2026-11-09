@@ -98,13 +98,12 @@ class Lfm2VlProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        for key in ("use_image_special_tokens", "return_mm_token_type_ids", "return_text_replacement_offsets"):
-            if key in merged_kwargs["text_kwargs"]:
-                logger.warning_once(
-                    f"Passing `{key}` in `text_kwargs` is deprecated "
-                    "and will be removed in v5.29.0. "
-                    "Pass it directly to the processor instead."
-                )
+        if "use_image_special_tokens" in merged_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `use_image_special_tokens` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. "
+                "Pass it directly to the processor instead."
+            )
 
         # text_kwargs has priority for backwards compatibility
         use_image_special_tokens = merged_kwargs["text_kwargs"].pop(
@@ -121,11 +120,10 @@ class Lfm2VlProcessor(ProcessorMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            # text_kwargs has priority for backwards compatibility
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
                 "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
             )
-            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
                 "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
