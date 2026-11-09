@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -51,6 +52,8 @@ from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4T
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
+@strict
 class MistralLarge4TextConfig(GlmMoeDsaConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -73,9 +76,6 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         List with at least the same length as the number of layers in the model.
         A `1` at an index position indicates that the corresponding layer will use RoPE,
         while a `0` indicates that it's a NoPE layer.
-    no_rope_layer_interval (`int`, *optional*, defaults to 4):
-        Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
-        indexer). The other layers use RoPE.
     kv_source_layers (`list[int]`, *optional*):
         For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
         index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
@@ -134,7 +134,6 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     index_n_heads: int = 32
     first_k_dense_replace: int = 1
     no_rope_layers: list[int] | None = None
-    no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
     final_logit_softcapping: float = 30.0
 
@@ -156,8 +155,9 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
             }
         # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
         if self.no_rope_layers is None:
+            no_rope_layer_interval = kwargs.pop("no_rope_layer_interval", 4)
             self.no_rope_layers = [
-                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+                int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
             ]
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
@@ -194,6 +194,8 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         return kv_sharing_modes
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
+@strict
 class MistralLarge4Config(Mistral3Config):
     model_type = "mistral_large4"
     sub_configs_defaults = {
@@ -623,6 +625,8 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
 
 
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
+    config: MistralLarge4TextConfig
+
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -636,7 +640,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -701,14 +705,14 @@ class MistralLarge4ModelOutputWithPast(Mistral3ModelOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class MistralLarge4Model(Mistral3Model):
@@ -718,11 +722,11 @@ class MistralLarge4Model(Mistral3Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
@@ -776,7 +780,7 @@ class MistralLarge4Model(Mistral3Model):
 
 
 class MistralLarge4CausalLMOutputWithPast(Mistral3CausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
@@ -790,11 +794,11 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

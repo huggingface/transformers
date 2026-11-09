@@ -23,6 +23,7 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -123,19 +124,17 @@ class Mistral3PreTrainedModel(LlavaPreTrainedModel):
 class Mistral3Model(LlavaModel):
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         image_outputs = self.vision_tower(
             pixel_values,
             image_sizes=image_sizes,
@@ -164,11 +163,11 @@ class Mistral3Model(LlavaModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
@@ -226,7 +225,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -244,11 +243,11 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

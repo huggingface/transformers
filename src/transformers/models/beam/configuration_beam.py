@@ -46,16 +46,15 @@ class BeamConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        # trf-ignore: TRF035
-        # TODO: the attn gate bias needs to be local -> new colwise local style  # noqa: NC001
-        # "layers.*.self_attn.q_proj": "colwise",
-        # "layers.*.self_attn.k_proj": "colwise",
-        # "layers.*.self_attn.v_proj": "colwise",
-        # "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.gate_proj": "colwise",
-        # "layers.*.self_attn.gate_bias": "colwise",
-        # "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.gate_bias": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",

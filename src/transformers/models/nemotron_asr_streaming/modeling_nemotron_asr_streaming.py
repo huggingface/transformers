@@ -995,7 +995,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -1044,8 +1044,8 @@ class NemotronAsrStreamingRNNTOutput(BaseModelOutputWithPooling):
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     decoder_cache: NemotronAsrStreamingRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
