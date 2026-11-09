@@ -98,7 +98,6 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             "do_rescale": False,
             "do_normalize": False,
             "do_convert_rgb": True,
-            "process_image_mode": "anyres",
         }
 
     @staticmethod
@@ -192,17 +191,6 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
                 self.assertEqual(tuple(wide_resized.shape[-2:]), (1, 4))
                 self.assertEqual(tuple(tall_resized.shape[-2:]), (4, 1))
-
-    def test_rejects_unreleased_image_modes(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            with self.subTest(backend=backend_name, stage="construction"):
-                with self.assertRaisesRegex(ValueError, "only.*anyres"):
-                    image_processing_class(process_image_mode="dynamic_res")
-
-            with self.subTest(backend=backend_name, stage="preprocess"):
-                image_processor = image_processing_class(**self._processor_kwargs([[2, 2]]))
-                with self.assertRaisesRegex(ValueError, "only.*anyres"):
-                    image_processor(self._fixture_images()[0], process_image_mode="dynamic_res", return_tensors="pt")
 
 
 if __name__ == "__main__":

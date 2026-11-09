@@ -56,8 +56,6 @@ class MiniMaxVL01Processor(ProcessorMixin):
             Number of non-spatial tokens emitted by CLIP before its CLS token is removed.
         """
         if image_processor is not None:
-            if getattr(image_processor, "process_image_mode", "anyres") != "anyres":
-                raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
             if patch_size is None:
                 patch_size = image_processor.patch_size
         self.patch_size = patch_size

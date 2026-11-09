@@ -73,15 +73,12 @@ class MiniMaxVL01ImageProcessorKwargs(ImagesKwargs, total=False):
     image_grid_pinpoints (`list[list[int]]`, *optional*):
         Candidate `(height, width)` resolutions for any-resolution image processing. Defaults to the 28 resolutions
         released with MiniMax-VL-01.
-    process_image_mode (`str`, *optional*, defaults to `"anyres"`):
-        Image processing mode. The released checkpoint supports only `"anyres"`.
     patch_size (`int`, *optional*, defaults to `14`):
         Patch size of the CLIP vision encoder, used when expanding image placeholders.
     """
 
     image_grid_pinpoints: list[list[int]]
 
-    process_image_mode: str
     patch_size: int
 
 
@@ -103,13 +100,10 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
     do_convert_rgb = True
     do_pad = False
     image_grid_pinpoints = MINIMAX_VL_01_IMAGE_GRID_PINPOINTS
-    process_image_mode = "anyres"
     patch_size = 14
 
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
-            raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
         if kwargs.get("do_pad", self.do_pad):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
@@ -117,8 +111,6 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
     def preprocess(
         self, images: ImageInput | list[ImageInput], *args, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]
     ) -> BatchFeature:
-        if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
-            raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
         if kwargs.get("do_pad", self.do_pad):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
         return_tensors = kwargs.pop("return_tensors", None)
