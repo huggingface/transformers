@@ -54,16 +54,26 @@ class DistributedConfig:
         fsdp_plan (`dict[str, str]`, *optional*):
             FSDP2 sharding plan. Leave as `None` to use the model's predefined `base_model_fsdp_plan` and
             class-level `_fsdp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept.
-            Applied only when `dp_replicate_size * fsdp_size > 1`.
+            Applied only when `dp_size > 1`.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
             Whether to enable mixed precision for FSDP2.
+        cp_size (`int`, *optional*):
+            Number of devices that split each sequence (context parallelism). The ranks of a cp group get the same
+            batch, and each keeps a contiguous slice of every sequence, so the sequence length must be divisible by
+            `cp_size`. With `cp_size > 1`, FSDP2 shards over `dp_size` ranks: the ranks of a cp group hold parts of
+            the same batch, so their gradients are partial sums of the same batch. Defaults to 1.
+        cp_implementation (`str`, *optional*, defaults to `"ulysses"`):
+            How attention sees the whole sequence while each rank holds a slice of it. A name in
+            `transformers.distributed.context_parallel.cp_implementations`. `"ulysses"`: an all-to-all gives each
+            rank the whole sequence for `num_heads / cp_size` heads, so `cp_size` must divide the number of attention
+            and key/value heads.
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
-            a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
+            a multiple of `tp_size` and divide `fsdp_size * cp_size * tp_size`. All-reduce expert plans require
             `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
@@ -81,6 +91,8 @@ class DistributedConfig:
     fsdp_plan: dict[str, str] | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
+    cp_size: int | None = None
+    cp_implementation: str = "ulysses"
     pp_size: int | None = None
     ep_size: int | None = None
     ep_plan: dict[str, str] | None = None
@@ -91,7 +103,7 @@ class DistributedConfig:
         The number of ranks that own the same experts and FSDP-shard them between each other.
         Dense and expert parameters are laid out over the same world size:
 
-            pp x fsdp x tp == pp x efsdp x ep   =>   efsdp = fsdp x tp // ep
+            pp x fsdp x cp x tp == pp x efsdp x ep   =>   efsdp = fsdp x cp x tp // ep
 
         Experts are not tensor-parallel, so EP and expert-FSDP together cover all the ranks that
         dense parameters split between FSDP and TP. Example with 16 ranks, ep=8:
@@ -101,17 +113,20 @@ class DistributedConfig:
             efsdp groups : {0,8} {1,9} ... {7,15}  each pair holds the same experts, FSDP-sharded
                                                    on dim 0 (the expert dim) and all-gathered for compute
 
-        - ep == tp       : efsdp == fsdp
-        - ep == fsdp * tp: efsdp == 1, every expert lives whole on a single rank
+        - ep == tp            : efsdp == fsdp * cp
+        - ep == fsdp * cp * tp: efsdp == 1, every expert lives whole on a single rank
 
         Sharding over `efsdp` is applied by the EP token-dispatch path (`ep_dispatch_experts`).
         """
-        return self.fsdp_size * self.tp_size // self.ep_size
+        return self.fsdp_size * self.cp_size * self.tp_size // self.ep_size
 
     @property
     def dp_size(self) -> int:
-        """The number of ranks that each see a distinct batch: `dp_replicate_size * fsdp_size`."""
-        return self.dp_replicate_size * self.fsdp_size
+        """
+        The number of ranks FSDP2 reduces gradients over: `dp_replicate_size * fsdp_size * cp_size`. The ranks of a
+        cp group share one batch but each processes different tokens of it.
+        """
+        return self.dp_replicate_size * self.fsdp_size * self.cp_size
 
     def __post_init__(self):
         self._resolve_parallelism()
@@ -119,7 +134,7 @@ class DistributedConfig:
 
     def _resolve_parallelism(self):
         """Resolve parallel sizes and legacy EP settings."""
-        for value in (self.tp_size, self.fsdp_size, self.dp_replicate_size, self.pp_size, self.ep_size):
+        for value in (self.tp_size, self.fsdp_size, self.dp_replicate_size, self.cp_size, self.pp_size, self.ep_size):
             if value is not None and value < 1:
                 raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
 
@@ -127,15 +142,17 @@ class DistributedConfig:
             self.fsdp_size = 1
         if self.dp_replicate_size is None:
             self.dp_replicate_size = 1
+        if self.cp_size is None:
+            self.cp_size = 1
         if self.pp_size is None:
             self.pp_size = 1
         if self.tp_size is None and self.tp_plan is not None:
             world_size = int(os.environ.get("WORLD_SIZE", 1))
-            other_parallel_size = self.dp_replicate_size * self.fsdp_size * self.pp_size
+            other_parallel_size = self.dp_replicate_size * self.fsdp_size * self.cp_size * self.pp_size
             if world_size % other_parallel_size != 0:
                 raise ValueError(
-                    f"WORLD_SIZE ({world_size}) must be divisible by dp_replicate_size * fsdp_size * pp_size "
-                    f"({other_parallel_size}) to derive tp_size."
+                    f"WORLD_SIZE ({world_size}) must be divisible by dp_replicate_size * fsdp_size * cp_size * "
+                    f"pp_size ({other_parallel_size}) to derive tp_size."
                 )
             self.tp_size = world_size // other_parallel_size
         elif self.tp_size is None:
@@ -169,8 +186,17 @@ class DistributedConfig:
         if self.ep_size > 1:
             if self.ep_size % self.tp_size:
                 raise ValueError("`ep_size` must be a multiple of `tp_size`.")
-            if (self.fsdp_size * self.tp_size) % self.ep_size:
-                raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
+            if (self.fsdp_size * self.cp_size * self.tp_size) % self.ep_size:
+                raise ValueError("`ep_size` must divide `fsdp_size * cp_size * tp_size`.")
+
+        if self.cp_size > 1:
+            unsupported = [name for name in ("pp_size", "tp_size", "ep_size") if getattr(self, name) > 1]
+            if unsupported:
+                raise ValueError(
+                    f"Context parallelism (`cp_size={self.cp_size}`) is not supported yet with "
+                    f"{', '.join(f'`{name}={getattr(self, name)}`' for name in unsupported)}. Use "
+                    "`DistributedConfig(fsdp_size=N, cp_size=M)`."
+                )
 
         if self.dp_size > 1 and self.pp_size > 1:
             raise ValueError(
