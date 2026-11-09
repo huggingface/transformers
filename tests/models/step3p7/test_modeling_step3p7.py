@@ -37,6 +37,9 @@ if is_torch_available():
     import torch
 
     from transformers import Step3p7ForConditionalGeneration, Step3p7Model
+    from transformers.models.step3p7.configuration_step3p7 import Step3p7VisionConfig
+    from transformers.models.step3p7.modeling_step3p7 import Step3p7VisionRotaryEmbedding
+    from transformers.vision_utils import get_vision_position_ids
 
 
 _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
@@ -94,6 +97,25 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
     # Vision encoder outputs hidden_size*4 channels after the stride-2 conv downsampler,
     # so last_hidden_state.shape[-1] != vision_config.hidden_size
     skip_test_image_features_output_shape = True
+
+    def test_step3p7_vision_rope_axis_order(self):
+        config = Step3p7VisionConfig(
+            hidden_size=4,
+            num_attention_heads=1,
+            num_hidden_layers=1,
+            intermediate_size=8,
+            rope_parameters={"rope_type": "axial", "rope_theta": 10000.0},
+        )
+        rope = Step3p7VisionRotaryEmbedding(config)
+        positions = get_vision_position_ids(torch.tensor([[1, 2, 2]]), 1)
+        _, sin = rope(torch.empty(()), positions)
+        index = ((positions == torch.tensor([0, 1])).all(-1)).nonzero().item()
+
+        # Step3.7 original angles at (h, w) = (0, 1) in W/H order after Q/K half-split permutation
+        order = torch.tensor([0, 2, 1, 3])
+        expected = torch.tensor([1.0, 1.0, 0.0, 0.0])[order].sin()
+
+        torch.testing.assert_close(sin[index], expected, atol=1e-6, rtol=0)
 
     # Training tests: only Step3p7ForConditionalGeneration has a loss head.
     # Step3p7Model is a backbone (returns BaseModelOutputWithPast, no .loss).
