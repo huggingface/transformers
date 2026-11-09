@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -194,7 +196,32 @@ class MiniMaxVL01Config(PreTrainedConfig):
     model_type = "minimax_vl_01"
     attribute_map = {"image_token_index": "image_token_id"}
     sub_configs_defaults = {
-        "text_config": MiniMaxVL01TextConfig,
+        "text_config": SubConfigSpec(
+            config_class=MiniMaxVL01TextConfig,
+            init_kwargs={
+                "vocab_size": 200064,
+                "hidden_size": 6144,
+                "intermediate_size": 9216,
+                "num_hidden_layers": 80,
+                "num_attention_heads": 64,
+                "head_dim": 128,
+                "max_position_embeddings": 8192,
+                "bos_token_id": None,
+                "eos_token_id": None,
+                "num_local_experts": 32,
+                "layer_types": [
+                    "full_attention" if (layer_idx + 1) % 8 == 0 else "linear_attention" for layer_idx in range(80)
+                ],
+                "full_attn_alpha_factor": 3.5565588200778455,
+                "linear_attn_alpha_factor": 3.5565588200778455,
+                "mlp_alpha_factor": 3.5565588200778455,
+                "rope_parameters": {
+                    "rope_type": "default",
+                    "rope_theta": 10_000_000,
+                    "partial_rotary_factor": 0.5,
+                },
+            },
+        ),
         "vision_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="clip_vision_model",
@@ -227,42 +254,16 @@ class MiniMaxVL01Config(PreTrainedConfig):
             else [pinpoint.copy() for pinpoint in MINIMAX_VL_01_IMAGE_GRID_PINPOINTS]
         )
 
-        if isinstance(self.text_config, dict):
-            self.text_config = MiniMaxVL01TextConfig(**self.text_config)
-        elif self.text_config is None:
-            layernorm_factor = 3.5565588200778455
-            self.text_config = MiniMaxVL01TextConfig(
-                vocab_size=200064,
-                hidden_size=6144,
-                intermediate_size=9216,
-                num_hidden_layers=80,
-                num_attention_heads=64,
-                head_dim=128,
-                max_position_embeddings=8192,
-                bos_token_id=None,
-                eos_token_id=None,
-                num_local_experts=32,
-                layer_types=[
-                    "full_attention" if (layer_idx + 1) % 8 == 0 else "linear_attention" for layer_idx in range(80)
-                ],
-                full_attn_alpha_factor=layernorm_factor,
-                linear_attn_alpha_factor=layernorm_factor,
-                mlp_alpha_factor=layernorm_factor,
-                rope_parameters={
-                    "rope_type": "default",
-                    "rope_theta": 10_000_000,
-                    "partial_rotary_factor": 0.5,
-                },
-            )
+        if self.text_config is None:
+            # The spec reuses init_kwargs, so isolate mutable layer and RoPE defaults before initialization.
+            self.text_config = deepcopy(self.sub_configs_defaults["text_config"].init_kwargs)
         elif isinstance(self.text_config, PreTrainedConfig) and self.text_config.model_type == "minimax":
-            native_text_config = self.text_config.to_dict()
-            native_text_config.pop("model_type", None)
-            self.text_config = MiniMaxVL01TextConfig(**native_text_config)
-        if not isinstance(self.text_config, MiniMaxVL01TextConfig):
-            raise TypeError("`text_config` must be a dictionary or a native MiniMax-VL-01 text configuration.")
+            self.text_config = MiniMaxVL01TextConfig(**self.text_config.to_dict())
 
         super().__post_init__(**kwargs)
 
+        if not isinstance(self.text_config, MiniMaxVL01TextConfig):
+            raise TypeError("`text_config` must be a dictionary or a native MiniMax-VL-01 text configuration.")
         if (
             not isinstance(self.vision_config, PreTrainedConfig)
             or self.vision_config.model_type != "clip_vision_model"
