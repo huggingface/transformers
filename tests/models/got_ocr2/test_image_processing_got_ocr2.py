@@ -38,6 +38,8 @@ class GotOcr2ImageProcessingTester(ImageProcessingTester):
 @require_vision
 class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = GotOcr2ImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     def test_backends_equivalence_crop_to_patches(self):
         if len(self.image_processing_classes) < 2:

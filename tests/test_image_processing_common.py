@@ -363,8 +363,10 @@ class ImageProcessingTestMixin:
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
+    def _assert_tensors_equivalence(self, tensor1, tensor2, atol=None, rtol=1e-3, mean_atol=5e-3):
         """Assert that two tensors are equivalent within specified tolerances."""
+        # Default to the class-level tolerance, so that models' own backend equivalence tests also use it
+        atol = self.backend_equivalence_atol if atol is None else atol
         torch.testing.assert_close(tensor1, tensor2, atol=atol, rtol=rtol)
         self.assertLessEqual(torch.mean(torch.abs(tensor1 - tensor2)).item(), mean_atol)
 

@@ -41,6 +41,8 @@ class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
 @require_vision
 class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = DeepseekOcr2ImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
