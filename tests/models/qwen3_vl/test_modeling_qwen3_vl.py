@@ -616,6 +616,7 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 (None, None): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: Golden-yellow coat, which is the classic color for a Yellow Labrador.\n- **Build**: Stocky, muscular, and friendly-looking — typical of the breed',
+                ("cuda", (8, 6)): "user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: Golden-yellow coat, typical of the yellow variety of Labrador Retrievers.\n- **Build**: Stocky, muscular, and friendly-looking — classic Labrador physique.\n",
                 ("rocm", (9, 4)): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: The dog has a classic golden-yellow coat, which is the most common color for the breed.\n- **Build**: It has a sturdy, athletic build with',
             }
         )  # fmt: skip

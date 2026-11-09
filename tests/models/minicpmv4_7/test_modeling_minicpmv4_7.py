@@ -694,7 +694,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
                 ("cuda", (8, 6)): [
-                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- It’s",
                     "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
                 ],
                 ("cuda", (8, 0)): [
