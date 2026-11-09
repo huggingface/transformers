@@ -63,7 +63,9 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         reference_pixel_values = encodings[reference_backend].pixel_values
         reference_pixel_mask = encodings[reference_backend].pixel_mask.float()
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_pixel_values, encodings[backend_name].pixel_values, atol=self.backend_equivalence_atol
+            )
             self._assert_tensors_equivalence(reference_pixel_mask, encodings[backend_name].pixel_mask.float())
 
     @require_vision
@@ -89,5 +91,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         reference_pixel_values = encodings[reference_backend].pixel_values
         reference_pixel_mask = encodings[reference_backend].pixel_mask.float()
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_pixel_values, encodings[backend_name].pixel_values, atol=self.backend_equivalence_atol
+            )
             self._assert_tensors_equivalence(reference_pixel_mask, encodings[backend_name].pixel_mask.float())

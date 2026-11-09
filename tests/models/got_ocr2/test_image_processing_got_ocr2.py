@@ -59,7 +59,9 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         for backend_name in backend_names[1:]:
             torch.testing.assert_close(reference_num_patches, encodings[backend_name].num_patches)
-            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_pixel_values, encodings[backend_name].pixel_values, atol=self.backend_equivalence_atol
+            )
 
     def test_backends_equivalence_batched_crop_to_patches(self):
         if len(self.image_processing_classes) < 2:
@@ -83,7 +85,9 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         for backend_name in backend_names[1:]:
             torch.testing.assert_close(reference_num_patches, encodings[backend_name].num_patches)
-            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_pixel_values, encodings[backend_name].pixel_values, atol=self.backend_equivalence_atol
+            )
 
     def test_crop_to_patches(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():

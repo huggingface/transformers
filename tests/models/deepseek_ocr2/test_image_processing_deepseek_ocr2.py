@@ -108,7 +108,9 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         reference_backend = backend_names[0]
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+                encodings[reference_backend].pixel_values,
+                encodings[backend_name].pixel_values,
+                atol=self.backend_equivalence_atol,
             )
             torch.testing.assert_close(
                 encodings[reference_backend].num_local_patches, encodings[backend_name].num_local_patches
@@ -117,6 +119,7 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
                 self._assert_tensors_equivalence(
                     encodings[reference_backend].pixel_values_local,
                     encodings[backend_name].pixel_values_local,
+                    atol=self.backend_equivalence_atol,
                 )
 
     def test_backends_equivalence_batched(self):
@@ -140,7 +143,9 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             # Global views
             for i in range(len(ref_encoding.pixel_values)):
                 self._assert_tensors_equivalence(
-                    torch.from_numpy(ref_encoding.pixel_values[i]), other_encoding.pixel_values[i]
+                    torch.from_numpy(ref_encoding.pixel_values[i]),
+                    other_encoding.pixel_values[i],
+                    atol=self.backend_equivalence_atol,
                 )
             # num_local_patches
             self.assertEqual(
@@ -153,4 +158,6 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             if ref_local is not None and other_local is not None:
                 self.assertEqual(len(ref_local), len(other_local))
                 for i in range(len(ref_local)):
-                    self._assert_tensors_equivalence(torch.from_numpy(ref_local[i]), other_local[i])
+                    self._assert_tensors_equivalence(
+                        torch.from_numpy(ref_local[i]), other_local[i], atol=self.backend_equivalence_atol
+                    )
