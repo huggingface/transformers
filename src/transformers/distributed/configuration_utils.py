@@ -63,8 +63,9 @@ class DistributedConfig:
             Number of devices that split each sequence (context parallelism). The ranks of a cp group get the same
             batch, and each keeps a contiguous slice of every sequence, so the sequence length must be divisible by
             `cp_size`. With `cp_size > 1`, FSDP2 shards over `dp_size` ranks: the ranks of a cp group hold parts of
-            the same batch, so their gradients are partial sums of the same batch. Can be combined with `tp_size`, in
-            which case the ranks of a tp group hold the same batch and the same slice. Defaults to 1.
+            the same batch, so their gradients are partial sums of the same batch. Can be combined with `tp_size` and
+            `ep_size`, in which case the ranks of a tp group hold the same batch and the same slice, while each rank
+            of an ep group dispatches the tokens of its own slice. Defaults to 1.
         cp_implementation (`str`, *optional*, defaults to `"ulysses"`):
             How attention sees the whole sequence while each rank holds a slice of it. A name in
             `transformers.distributed.context_parallel.cp_implementations`. `"ulysses"`: an all-to-all gives each
@@ -194,12 +195,11 @@ class DistributedConfig:
         if self.cp_size > 1:
             if not is_torch_greater_or_equal("2.10"):
                 raise OSError("Context parallelism requires `torch>=2.10` (`DeviceMesh._unflatten`).")
-            unsupported = [name for name in ("pp_size", "ep_size") if getattr(self, name) > 1]
-            if unsupported:
+            if self.pp_size > 1:
                 raise ValueError(
                     f"Context parallelism (`cp_size={self.cp_size}`) is not supported yet with "
-                    f"{', '.join(f'`{name}={getattr(self, name)}`' for name in unsupported)}. Use "
-                    "`DistributedConfig(tp_size=N, cp_size=M)` or `DistributedConfig(fsdp_size=N, cp_size=M)`."
+                    f"`pp_size={self.pp_size}`. Use `DistributedConfig(tp_size=N, cp_size=M)`, "
+                    "`DistributedConfig(fsdp_size=N, cp_size=M)` or `DistributedConfig(ep_size=N, cp_size=M)`."
                 )
 
         if self.dp_size > 1 and self.pp_size > 1:
