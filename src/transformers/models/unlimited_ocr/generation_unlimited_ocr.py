@@ -45,7 +45,7 @@ class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(NoRepeatNGramLogitsP
         self.window_size = window_size
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         return super().__call__(input_ids[:, -self.window_size :], scores)
 
 

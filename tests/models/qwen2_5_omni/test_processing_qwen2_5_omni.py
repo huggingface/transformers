@@ -86,11 +86,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"expected_dim": 0, "output_length": 3360},
         ]
 
-    def prepare_audio_inputs(self, batch_size: int = 3):
-        """This function prepares a list of numpy audios."""
-        audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
-        return audio_inputs
-
     @parameterized.expand(
         [
             ("text",),
@@ -226,3 +221,23 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Qwen pixel values are flattened, verify length matches video_grid_thw
         expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict["video_grid_thw"])
         self.assertEqual(len(out_dict[self.videos_input_name]), expected_video_tokens)  # 1 video in the conversation
+
+    def test_load_audio_from_video_with_decoded_audio(self):
+        processor = self.get_processor()
+        video = np.random.randint(255, size=(4, 112, 112, 3), dtype=np.uint8)
+        audio = [np.zeros(48000, dtype=np.float32), np.zeros(32000, dtype=np.float32)]
+        text = (
+            f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
+            f"{processor.vision_bos_token}{processor.video_token}{processor.vision_eos_token}"
+        )
+        inputs = processor(
+            text=text, videos=[video], audio=audio, load_audio_from_video=True, audio_from_video_indices=[None, 0]
+        )
+        deprecated_inputs = processor(
+            text=text, videos=[video], audio=audio, use_audio_in_video=True, audio_from_video_indices=[None, 0]
+        )
+        self.assertListEqual(inputs["input_ids"], deprecated_inputs["input_ids"])
+
+        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
+        num_audio_tokens = processor._get_num_multimodal_tokens(audio_lengths=[48000, 32000])["num_audio_tokens"]
+        self.assertEqual(inputs["input_ids"][0].count(audio_token_id), sum(num_audio_tokens))

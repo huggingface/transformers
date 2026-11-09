@@ -77,6 +77,8 @@ class CohereCompassProcessor(ProcessorMixin):
         merge_length = self.video_processor.merge_size**2
         num_frames = video_inputs["video_grid_thw"][video_idx][0]
         frame_seqlen = video_inputs["video_grid_thw"][video_idx][1:].prod() // merge_length
+        if "video_metadata" not in video_inputs:
+            raise ValueError("The frame timestamps need the video metadata, `return_metadata=False` is not supported")
         metadata = video_inputs["video_metadata"][video_idx]
         video_placeholder = ""
 

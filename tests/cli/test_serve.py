@@ -396,6 +396,20 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_config({"max_tokens": 7}, GenerationConfig())
         self.assertEqual(result.max_new_tokens, 7)
 
+    def test_max_completion_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({"max_completion_tokens": 7}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 7)
+
+    def test_max_completion_tokens_overrides_max_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config(
+            {"max_completion_tokens": 7, "max_tokens": 50}, GenerationConfig()
+        )
+        self.assertEqual(result.max_new_tokens, 7)
+
     def test_temperature_zero_disables_sampling(self):
         from transformers import GenerationConfig
 

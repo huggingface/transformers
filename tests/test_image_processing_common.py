@@ -975,7 +975,7 @@ class ImageProcessingTestMixin:
             "aria", "beit", "bit", "blip", "bridgetower", "chameleon", "chinese_clip",
             "clip", "cohere2_vision", "conditional_detr", "convnext", "deepseek_vl",
             "deepseek_vl_hybrid", "deformable_detr", "deit", "depth_pro", "detr",
-            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "eomt",
+            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "emu3", "eomt",
             "flava", "fuyu", "gemma3", "glm4v", "glpn", "got_ocr2", "grounding_dino",
             "idefics", "idefics2", "idefics3", "imagegpt", "janus", "kosmos2_5",
             "layoutlmv2", "layoutlmv3", "levit", "superglue", "lightglue", "llama4",

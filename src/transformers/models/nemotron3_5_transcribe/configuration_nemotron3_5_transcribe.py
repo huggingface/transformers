@@ -178,7 +178,7 @@ class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
     model_type = "nemotron3_5_transcribe_audio"
     base_config_key = "audio_config"
     sub_configs_defaults = {
-        "asr_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_asr_audio"),
+        "asr_config": Nemotron3_5TranscribeAsrAudioConfig,
         "diarization_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="nemotron3_diarization",
@@ -247,7 +247,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
 
     model_type = "nemo_speechlm"
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_audio"),
+        "audio_config": Nemotron3_5TranscribeAudioConfig,
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="nemotron_h",
@@ -265,9 +265,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
                 "routed_scaling_factor": 2.5,
             },
         ),
-        "word_timestamp_config": SubConfigSpec(
-            config_class=AutoConfig, model_type="nemotron3_5_transcribe_word_timestamp"
-        ),
+        "word_timestamp_config": Nemotron3_5TranscribeWordTimestampConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None

@@ -25,7 +25,6 @@
 
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -510,7 +509,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -587,18 +586,18 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
-        self.interpolation_align_corners = True
+        self.interpolation_align_corners = False
         self.interpolation_mode = "bilinear"
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
@@ -822,13 +821,13 @@ class PaddleOCRVisionEncoder(nn.Module):
     @auto_docstring
     def forward(
         self,
-        inputs_embeds: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -888,14 +887,14 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size * patch_size * image_channels)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, patch_size * patch_size * image_channels)`):
                 The tensors corresponding to the input images.
             attention_mask (`torch.Tensor`, *optional*):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
@@ -934,42 +933,18 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
         return self.vision_model(pixel_values=pixel_values, grid_thw=grid_thw, **kwargs)
-
-
-@auto_docstring
-@dataclass
-class PaddleOCRVLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
-@dataclass
-class PaddleOCRVLCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -1150,7 +1125,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1164,7 +1139,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         return vision_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1243,15 +1218,15 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | PaddleOCRVLModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -1290,15 +1265,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             **kwargs,
         )
 
-        output = PaddleOCRVLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
-
-        return output
+        return outputs
 
 
 class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, GenerationMixin):
@@ -1316,12 +1283,12 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
@@ -1334,7 +1301,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -1343,7 +1310,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1381,7 +1348,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         >>> print(output_text)
         ```
         """
-        outputs: PaddleOCRVLModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1405,13 +1372,12 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return PaddleOCRVLCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

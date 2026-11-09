@@ -447,8 +447,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+        "TimesFmModelForPrediction": (
+            "The left-padding patches attend to no key: OpenVINO gives them the uniform average, torch's fused "
+            "kernels zeros. The real patches and the predictions match."
+        ),
     },
     # OpenVINO, generate path only.
     "openvino.generate": {},
@@ -724,11 +729,12 @@ def _run_openvino_model(ov_model, inputs) -> dict:
 
     results = request.infer(feed)
     outputs = {}
+    declared = {name for output in ov_model.outputs for name in output.get_names()}
     for port in compiled.outputs:
-        # Compilation may merge a named output tensor with an intermediate that kept its
-        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
+        # Compilation may merge an output's tensor names with the ones of the intermediates it fused (a numeric id,
+        # `add_4:0`): take the name the exported model gave it.
         names = sorted(port.get_names())
-        name = next((n for n in names if not n.isdigit()), names[0])
+        name = next((n for n in names if n in declared), names[0])
         outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
 
     # Folded state tensors are outputs too — read them back so the returned dict covers the
@@ -989,6 +995,12 @@ class ExportTesterMixin:
         attend to -- so each runtime fills it differently and no caller reads it; comparing those
         positions measures nothing.
         """
+        # exports keep a full cache on sliding-window layers, eager only the window: skip them
+        sliding = tuple(
+            key.removesuffix("_sliding_window_tensor") for key in expected if key.endswith("._sliding_window_tensor")
+        )
+        actual = {key: value for key, value in actual.items() if not key.startswith(sliding)}
+        expected = {key: value for key, value in expected.items() if not key.startswith(sliding)}
         # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
         # only a plain 2D `(batch, seq)` tensor maps onto output positions. NaViT-style vision models
         # (siglip2) mark their valid patches with `pixel_attention_mask` instead.
@@ -1231,11 +1243,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 cache = inputs.get("past_key_values")
                 # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
                 # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
-                if cache is not None and any(
-                    hasattr(layer, "is_initialized")
-                    and not layer.is_initialized
-                    and hasattr(layer, "cumulative_length")
-                    for layer in cache.layers
+                if (
+                    cache is not None
+                    and hasattr(cache, "layers")
+                    and any(
+                        hasattr(layer, "is_initialized")
+                        and not layer.is_initialized
+                        and hasattr(layer, "cumulative_length")
+                        for layer in cache.layers
+                    )
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):

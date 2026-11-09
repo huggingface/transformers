@@ -175,7 +175,7 @@ class EsmModelTester:
     ):
         model = EsmForMaskedLM(config)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         model.to(torch_device)
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))

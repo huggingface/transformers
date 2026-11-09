@@ -210,6 +210,19 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
+    def test_repetition_penalty_with_batched_padding(self):
+        vocab_size = 100
+        ids = torch.randint(1, vocab_size - 1, (3, 15))
+        # Add padding of different length on each batch with ids == vocab_size for the one that are not padding, so they
+        # do not account in the scores
+        padding = torch.tensor([[0, 0, 0], [0, vocab_size, vocab_size], [0, 0, vocab_size]])
+        full_ids = torch.cat([padding, ids], dim=-1)
+        scores = torch.rand(3, vocab_size)
+        processor_with_length = RepetitionPenaltyLogitsProcessor(2.0, prompt_ignore_length=torch.tensor([3, 1, 2]))
+        processor_without_length = RepetitionPenaltyLogitsProcessor(2.0)
+        # Using the processor with ignore length on padded inputs should be the same as processor without on un-padded inputs
+        self.assertTrue((processor_with_length(full_ids, scores) == processor_without_length(ids, scores)).all())
+
     def test_repetition_penalty_dist_process_exclusion_no_new_input_ids(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
         vocab_size = 10

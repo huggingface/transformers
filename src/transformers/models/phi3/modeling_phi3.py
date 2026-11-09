@@ -54,7 +54,7 @@ class Phi3MLP(nn.Module):
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
@@ -363,7 +363,7 @@ class Phi3Model(Phi3PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -434,7 +434,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
