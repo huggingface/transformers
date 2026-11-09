@@ -16,6 +16,7 @@
 import inspect
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -186,8 +187,26 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
             attended = (attentions > 0).sum(dim=-1)
             self.assertLessEqual(attended.max().item(), 2)
 
+    def test_cached_decode_matches_cacheless(self):
+        # Cached decode and full recompute score keys over rows of different lengths, and CPU `topk` breaks exact
+        # score ties differently for each. Avoid ties: no ReLU zeros, and no generated pad token (zero embedding ->
+        # zero indexer query -> all scores tie)
+        get_logits_processor_kwargs = self._get_logits_processor_kwargs
+
+        def get_logits_processor_kwargs_without_pad(do_sample=False, config=None):
+            kwargs = get_logits_processor_kwargs(do_sample=do_sample, config=config)
+            kwargs["bad_words_ids"].append([config.get_text_config().pad_token_id])
+            return kwargs
+
+        with (
+            indexer_leaky_relu(),
+            patch.object(self, "_get_logits_processor_kwargs", get_logits_processor_kwargs_without_pad),
+        ):
+            super().test_cached_decode_matches_cacheless()
+
     def test_left_padding_compatibility(self):
-        # Padded and unpadded inputs score keys of different shapes
+        # Left padding shifts the key rows, and CPU `topk` breaks exact indexer score ties (ReLU zeros) differently
+        # for the padded and unpadded inputs. A leaky ReLU keeps the scores distinct
         with indexer_leaky_relu():
             super().test_left_padding_compatibility()
 

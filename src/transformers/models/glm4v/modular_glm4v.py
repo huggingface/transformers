@@ -87,7 +87,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
     model_type = "glm4v_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 24
     hidden_size: int = 1536
