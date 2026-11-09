@@ -45,12 +45,12 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("vision_start_token_id", 5)
         kwargs.setdefault("vision_end_token_id", 6)
-        # one 2x2 patch grid per image, merged into a single language token
-        kwargs.setdefault("image_size", 4)
+        # one 4x4 patch grid per image, merged into a 2x2 grid of language tokens
+        kwargs.setdefault("image_size", 8)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("temporal_patch_size", 1)
         kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("in_channels", 3)
         # head_dim 16: the FA4 kernels need at least 16
         kwargs.setdefault("num_attention_heads", 2)
@@ -78,8 +78,8 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
         input_ids[:, 0] = self.vision_start_token_id
-        input_ids[:, 1] = self.image_token_id
-        input_ids[:, 2] = self.vision_end_token_id
+        input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
+        input_ids[:, 1 + self.num_image_tokens] = self.vision_end_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
@@ -143,7 +143,8 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
         pixel_values_videos = self._random_patches(config, video_grid_thw)
 
         input_ids = inputs["input_ids"].clone()
-        input_ids[0, 4 : 4 + num_video_tokens] = config.video_token_id
+        video_start = self.model_tester.num_image_tokens + 2
+        input_ids[0, video_start : video_start + num_video_tokens] = config.video_token_id
 
         model = Lfm3VlForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
@@ -154,11 +155,11 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
             )
-        self.assertEqual(outputs.video_hidden_states.shape, (num_video_tokens, config.text_config.hidden_size))
+        self.assertEqual(outputs.video_pooler_output.shape, (num_video_tokens, config.text_config.hidden_size))
         with torch.no_grad():
             embeds = model.get_input_embeddings()(input_ids)
-            embeds[input_ids == config.image_token_id] = outputs.image_hidden_states
-            embeds[input_ids == config.video_token_id] = outputs.video_hidden_states
+            embeds[input_ids == config.image_token_id] = outputs.image_pooler_output
+            embeds[input_ids == config.video_token_id] = outputs.video_pooler_output
             expected = model.lm_head(model.model.language_model(inputs_embeds=embeds).last_hidden_state)
         torch.testing.assert_close(outputs.logits, expected)
 

@@ -22,7 +22,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import is_flash_attention_requested
 from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
@@ -36,11 +36,10 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VisionTransformerPretrainedModel,
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
-    Qwen2VLVisionRotaryEmbedding,
-    VisionAttention,
     apply_rotary_pos_emb_vision,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLVisionConfig
+from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLVisionAttention, Qwen3VLVisionRotaryEmbedding
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 
 
@@ -54,7 +53,7 @@ class Lfm3VlVisionConfig(Qwen3VLVisionConfig):
 
     model_type = "lfm3_vl_vision"
     default_theta = 1_000_000.0
-    attribute_map = {"embed_dim": "hidden_size", "num_heads": "num_attention_heads"}
+    attribute_map = {}
 
     hidden_size: int = 1024
     intermediate_size: int = 2560
@@ -106,15 +105,16 @@ class Lfm3VlVisionMLP(Lfm3MLP):
     pass
 
 
-class Lfm3VlVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
+class Lfm3VlVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
     pass
 
 
-class Lfm3VlVisionAttention(VisionAttention):
+class Lfm3VlVisionAttention(Qwen3VLVisionAttention):
     """Bidirectional grouped-query attention over the patches of one frame, with RMSNorm on the query and key heads."""
 
     def __init__(self, config: Lfm3VlVisionConfig, layer_idx: int):
         super().__init__(config)
+        self.num_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         del self.qkv
@@ -135,11 +135,12 @@ class Lfm3VlVisionAttention(VisionAttention):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
         # diff -> separate grouped-query projections with RMSNorm on the query and key heads instead of a fused qkv
-        query_states = self.q_norm(self.q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim))
-        key_states = self.k_norm(self.k_proj(hidden_states).view(seq_length, self.num_key_value_heads, self.head_dim))
-        value_states = self.v_proj(hidden_states).view(seq_length, self.num_key_value_heads, self.head_dim)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape))
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape))
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
@@ -191,7 +192,7 @@ class Lfm3VlVisionAttention(VisionAttention):
             # frames of different shapes have differently sized maps: one entry per frame, or None under sdpa
             attn_weights = None if attn_weights[0] is None else tuple(attn_weights)
 
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
@@ -214,8 +215,8 @@ class Lfm3VlVisionShortConv(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: list[list[int]], **kwargs):
-        B, C, x = self.in_proj(hidden_states).chunk(3, dim=-1)
-        gated = B * x
+        input_gate, output_gate, conv_input = self.in_proj(hidden_states).chunk(3, dim=-1)
+        gated = input_gate * conv_input
         merge = self.spatial_merge_size
         # patches arrive in merge-block order: raster the frames of each image or video to their grid, convolve them
         # as one batch (the frames of an item share a shape), and go back
@@ -229,7 +230,7 @@ class Lfm3VlVisionShortConv(nn.Module):
             item = item.view(temporal, channels, height // merge, merge, width // merge, merge)
             conv_outputs.append(item.permute(0, 2, 4, 3, 5, 1).reshape(temporal * height * width, channels))
         hidden_states = torch.cat(conv_outputs, dim=0)
-        hidden_states = C * hidden_states
+        hidden_states = output_gate * hidden_states
         return self.out_proj(hidden_states)
 
 
@@ -338,16 +339,16 @@ class Lfm3VlMultiModalProjector(InternVLMultiModalProjector):
 @dataclass
 class Lfm3VlModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
+    image_pooler_output (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.FloatTensor`, *optional*):
+        Image features produced by the vision encoder and projected to the language model hidden size.
+    video_pooler_output (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_tokens, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Video features produced by the vision encoder and projected to the language model hidden size.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
+    image_pooler_output: torch.FloatTensor | None = None
+    video_pooler_output: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -358,16 +359,16 @@ class Lfm3VlModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Lfm3VlCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
+    image_pooler_output (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.FloatTensor`, *optional*):
+        Image features produced by the vision encoder and projected to the language model hidden size.
+    video_pooler_output (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_video_tokens, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+        Video features produced by the vision encoder and projected to the language model hidden size.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
+    image_pooler_output: torch.FloatTensor | None = None
+    video_pooler_output: torch.FloatTensor | None = None
 
 
 class Lfm3VlModel(Qwen2VLModel):
@@ -476,8 +477,8 @@ class Lfm3VlModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
+            image_pooler_output=image_features if mm_encoder_outputs.get("image") is not None else None,
+            video_pooler_output=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
 
 
@@ -581,28 +582,17 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            image_pooler_output=outputs.image_pooler_output,
+            video_pooler_output=outputs.video_pooler_output,
         )
 
     def _prepare_position_ids_for_generation(self):
         raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
 
 
-class Lfm3VlProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 @auto_docstring
 class Lfm3VlProcessor(Qwen3VLProcessor):
-    valid_processor_kwargs = Lfm3VlProcessorKwargs
+    return_mm_token_type_ids = False
 
     def model_input_names(self):
         raise AttributeError("Lfm3Vl doesn't need to override it")
