@@ -34,6 +34,7 @@ from .test_trainer_distributed import SCRIPTS_DIR
 
 PEFT_SAVE_SCRIPT = os.path.join(SCRIPTS_DIR, "peft_save_distributed_config.py")
 GRAD_ACCUM_SCRIPT = os.path.join(SCRIPTS_DIR, "grad_accum_distributed_config.py")
+EVAL_BEFORE_TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "eval_before_train_distributed_config.py")
 
 
 @require_torch_greater_or_equal("2.7")
@@ -82,3 +83,8 @@ class TestTrainerDistributedConfig(TestCasePlus):
         """Gradients of a model sharded at load time are only reduced on the last micro-batch."""
         script_args = ["--output_dir", self.get_auto_remove_tmp_dir(), "--dp_replicate_size", str(dp_replicate_size)]
         execute_subprocess_async(self.get_torchrun_cmd(GRAD_ACCUM_SCRIPT, script_args), env=self.get_env())
+
+    def test_train_after_evaluate(self):
+        """Training after an evaluation updates every parameter of a model sharded at load time."""
+        script_args = ["--output_dir", self.get_auto_remove_tmp_dir()]
+        execute_subprocess_async(self.get_torchrun_cmd(EVAL_BEFORE_TRAIN_SCRIPT, script_args), env=self.get_env())
