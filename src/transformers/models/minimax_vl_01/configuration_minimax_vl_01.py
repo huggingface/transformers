@@ -192,7 +192,7 @@ class MiniMaxVL01Config(PreTrainedConfig):
     """
 
     model_type = "minimax_vl_01"
-    attribute_map = {"image_token_id": "image_token_index"}
+    attribute_map = {"image_token_index": "image_token_id"}
     sub_configs_defaults = {
         "text_config": MiniMaxVL01TextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
@@ -200,13 +200,13 @@ class MiniMaxVL01Config(PreTrainedConfig):
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-
-    image_token_index: int = 200025
     projector_hidden_act: str = "gelu"
     vision_feature_layer: int | list[int] = -1
     multimodal_projector_bias: bool = True
     tie_word_embeddings: bool = False
     image_grid_pinpoints: list | None = None
+
+    image_token_id: int = 200025
 
     def __post_init__(self, **kwargs):
         kwargs.pop("image_seq_length", None)

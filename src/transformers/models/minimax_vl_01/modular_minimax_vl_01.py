@@ -134,12 +134,14 @@ class MiniMaxVL01Config(LlavaNextConfig):
     """
 
     model_type = "minimax_vl_01"
+    attribute_map = {"image_token_index": "image_token_id"}
     sub_configs_defaults = {
         "text_config": MiniMaxVL01TextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
     }
 
-    image_token_index: int = 200025
+    image_token_id: int = 200025
+    image_token_index = AttributeError()
     vision_feature_layer: int | list[int] = -1
     vision_feature_select_strategy = AttributeError()
     image_seq_length = AttributeError()

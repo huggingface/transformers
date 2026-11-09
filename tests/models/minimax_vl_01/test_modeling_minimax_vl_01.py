@@ -443,7 +443,7 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 patch_size=4,
                 hidden_act="gelu",
             ),
-            image_token_index=3,
+            image_token_id=3,
             image_grid_pinpoints=[[8, 8]],
             pad_token_id=0,
         )
