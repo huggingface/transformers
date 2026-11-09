@@ -16,7 +16,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from torch import nn
@@ -33,14 +32,16 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
     logging,
@@ -247,117 +248,72 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
 """
 
 
+@auto_docstring
 @dataclass
-class Kosmos2_5ModelOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        width (`torch.Tensor` of shape `(batch_size,)`):
-            The original width (before resizing) of each image in the batch.
-        height (`torch.Tensor` of shape `(batch_size,)`):
-            The original height (before resizing) of each image in the batch.
-        image_embeds (`torch.Tensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.Tensor)`, *optional*):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
-        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
-            The output of the [`Kosmos2VisionModel`].
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
+    r"""
+    width (`torch.Tensor` of shape `(batch_size,)`):
+        The original width (before resizing) of each image in the batch.
+    height (`torch.Tensor` of shape `(batch_size,)`):
+        The original height (before resizing) of each image in the batch.
+    projection_attentions (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
     """
 
-    last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
     width: torch.Tensor | None = None
     height: torch.Tensor | None = None
-    image_embeds: torch.Tensor | None = None
     projection_attentions: tuple[torch.Tensor] | None = None
-    vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> tuple[Any]:
-        return tuple((self[k] if k != "vision_model_output" else getattr(self, k).to_tuple()) for k in self.keys())
+    @property
+    def vision_model_output(self):
+        logger.warning_once(
+            "`vision_model_output` is deprecated and will be removed in v5.30; Use `modality_outputs['image']` to obtain pooled features."
+        )
+        return self.modality_outputs["image"]
+
+    @property
+    def image_embeds(self):
+        logger.warning_once(
+            "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
+@auto_docstring
 @dataclass
-class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
+class Kosmos2_5ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithPast):
     """
-    Model output class for `Kosmos2_5ForConditionalGeneration`.
-
-    Args:
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        width (`torch.Tensor` of shape `(batch_size,)`):
-            The original width (before resizing) of each image in the batch.
-        height (`torch.Tensor` of shape `(batch_size,)`):
-            The original height (before resizing) of each image in the batch.
-        image_embeds (`torch.Tensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.Tensor)`, *optional*):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
-        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
-            The output of the [`Kosmos2VisionModel`].
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+    width (`torch.Tensor` of shape `(batch_size,)`):
+        The original width (before resizing) of each image in the batch.
+    height (`torch.Tensor` of shape `(batch_size,)`):
+        The original height (before resizing) of each image in the batch.
+    projection_attentions (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
     width: torch.Tensor | None = None
     height: torch.Tensor | None = None
-    image_embeds: torch.Tensor | None = None
     projection_attentions: tuple[torch.Tensor] | None = None
-    vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> tuple[Any]:
-        return tuple((self[k] if k != "vision_model_output" else getattr(self, k).to_tuple()) for k in self.keys())
+    @property
+    def vision_model_output(self):
+        logger.warning_once(
+            "`vision_model_output` is deprecated and will be removed in v5.30; Use `modality_outputs['image']` to obtain pooled features."
+        )
+        return self.modality_outputs["image"]
+
+    @property
+    def image_embeds(self):
+        logger.warning_once(
+            "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm with Pix2Struct->Kosmos2_5
@@ -1242,15 +1198,11 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         )
 
         return Kosmos2_5ModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            **outputs,
             width=width,
             height=height,
-            image_embeds=image_embeds,
             projection_attentions=projection_attentions,
-            vision_model_output=vision_model_output,
+            modality_outputs={"image": vision_model_output},
         )
 
 
@@ -1526,9 +1478,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             attentions=lm_outputs.attentions,
             width=width,
             height=height,
-            image_embeds=image_embeds,
             projection_attentions=projection_attentions,
-            vision_model_output=vision_model_output,
+            modality_outputs={"image": vision_model_output},
         )
 
     def prepare_inputs_for_generation(

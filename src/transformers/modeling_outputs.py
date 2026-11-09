@@ -560,6 +560,22 @@ class MultimodalBaseModelOutputWithPast(ModelOutput):
                 return getattr(encoder_output, field) if encoder_output is not None else None
         raise AttributeError(f"{type(self).__name__} has no attribute '{name}'")
 
+    def to_tuple(self) -> tuple:
+        items = []
+        for k in self.keys():
+            if k == "modality_outputs":
+                # flatten each modality: image -> image_last_hidden_state, image_hidden_states, ...
+                for modality, encoder_output in (self.modality_outputs or {}).items():
+                    if encoder_output is None:
+                        continue
+                    for field in encoder_output.keys():  # keys() skips None fields, like ModelOutput.to_tuple
+                        items.append((f"{modality}_{field}", encoder_output[field]))
+            elif k in ["text_model_output", "vision_model_output"]:
+                items.append((k, getattr(self, k).to_tuple()))
+            else:
+                items.append((k, self[k]))
+        return tuple(v for _, v in items)
+
 
 @dataclass
 class MultimodalCausalLMOutputWithPast(ModelOutput):

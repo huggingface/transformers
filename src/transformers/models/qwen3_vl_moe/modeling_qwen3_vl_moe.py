@@ -62,6 +62,12 @@ from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, 
 
 @auto_docstring
 @dataclass
+class Qwen3VLMoeBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    router_logits: tuple[torch.Tensor] | None = None
+
+
+@auto_docstring
+@dataclass
 class Qwen3VLMoeCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
 
@@ -1338,7 +1344,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Qwen3VLMoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 def load_balancing_loss_func(

@@ -30,9 +30,8 @@ from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
     MultimodalCausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep

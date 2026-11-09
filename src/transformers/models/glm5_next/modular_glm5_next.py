@@ -47,7 +47,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -86,6 +85,7 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
+from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeBaseModelOutputWithPast, Qwen3_5MoeCausalLMOutputWithPast
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
 
 
@@ -311,6 +311,14 @@ class Glm5NextConfig(PreTrainedConfig):
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = kwargs
         super().__post_init__(**kwargs)
+
+
+class Glm5NextBaseModelOutputWithPast(Qwen3_5MoeBaseModelOutputWithPast):
+    pass
+
+
+class Glm5NextCausalLMOutputWithPast(Qwen3_5MoeCausalLMOutputWithPast):
+    pass
 
 
 class Glm5NextTextRMSNorm(LlamaRMSNorm):
@@ -1513,7 +1521,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | Glm5NextBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1565,13 +1573,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         )
 
         # Only change is the output type to Moe
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+        return Glm5NextBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -1608,7 +1610,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | Glm5NextCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1682,13 +1684,14 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return Glm5NextCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 

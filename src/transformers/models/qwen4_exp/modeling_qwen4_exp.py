@@ -21,6 +21,7 @@
 import itertools
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -44,6 +45,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -69,6 +72,12 @@ from ...vision_utils import (
 )
 from ..auto import AutoModel
 from .configuration_qwen4_exp import Qwen4ExpConfig, Qwen4ExpTextConfig, Qwen4ExpVisionConfig
+
+
+@auto_docstring
+@dataclass
+class Qwen4ExpBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class Qwen4ExpTextRotaryEmbedding(nn.Module):
@@ -2285,7 +2294,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | Qwen4ExpBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -2355,7 +2364,13 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
             **kwargs,
         )
 
-        return outputs
+        return Qwen4ExpBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+
+
+@auto_docstring
+@dataclass
+class Qwen4ExpCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -2420,7 +2435,7 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | Qwen4ExpCausalLMOutputWithPast:
         r"""
         Example:
         ```python
@@ -2505,13 +2520,14 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
                     loss.device
                 )  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return Qwen4ExpCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 
