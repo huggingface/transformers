@@ -1105,6 +1105,16 @@ class LinearAttentionCacheLayerMixin(ABC):
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        """Only keep the `indices` in the batch dimension of the cache."""
+        for i in range(self.number_of_states):
+            if self.is_conv_states_initialized[i]:
+                idx = indices.to(self.conv_states[i].device) if isinstance(indices, torch.Tensor) else indices
+                self.conv_states[i] = self.conv_states[i][idx, ...]
+            if self.is_recurrent_states_initialized[i]:
+                idx = indices.to(self.recurrent_states[i].device) if isinstance(indices, torch.Tensor) else indices
+                self.recurrent_states[i] = self.recurrent_states[i][idx, ...]
+
     @property
     def is_croppable(self) -> bool:
         """
@@ -1286,6 +1296,10 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicLayer.crop(self, tokens_to_remove)
 
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        LinearAttentionLayer.batch_select_indices(self, indices)
+        DynamicLayer.batch_select_indices(self, indices)
+
 
 class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
     # The dynamic sliding attention part makes it non-compilable
@@ -1316,6 +1330,10 @@ class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, Dynami
     def crop(self, tokens_to_remove: int) -> None:
         LinearAttentionLayer.crop(self, tokens_to_remove)
         DynamicSlidingWindowLayer.crop(self, tokens_to_remove)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        LinearAttentionLayer.batch_select_indices(self, indices)
+        DynamicSlidingWindowLayer.batch_select_indices(self, indices)
 
 
 class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLayer):
