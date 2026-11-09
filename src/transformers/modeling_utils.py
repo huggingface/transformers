@@ -4329,6 +4329,17 @@ class PreTrainedModel(
                 transformers_explicit_filename=getattr(config, "transformers_weights", None),
                 tqdm_class=tqdm_class,
             )
+            # EXPERIMENTAL: community pushed the decision head weights as separate files. We're using `config.extra_files`
+            # as a way to fetch the filename per-class.
+            for filename in type(config).extra_files:  # the class's, which a `config.json` can't change
+                path = cached_file(
+                    pretrained_model_name_or_path,
+                    filename,
+                    _raise_exceptions_for_missing_entries=False,
+                    **download_kwargs,
+                )
+                if path is not None and checkpoint_files is not None and path not in checkpoint_files:
+                    checkpoint_files.append(path)
 
         is_quantized = hf_quantizer is not None
 
