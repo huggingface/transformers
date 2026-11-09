@@ -95,10 +95,10 @@ class Llama4TextMLP(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
         self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.activation_fn(self.gate_proj(x)) * self.up_proj(x)
+    def forward(self, hidden_states):
+        down_proj = self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states)
         return self.down_proj(down_proj)
 
 
@@ -820,14 +820,14 @@ class Llama4VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = nn.GELU()  # ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=True)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
+        self.act_fn = nn.GELU()  # ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

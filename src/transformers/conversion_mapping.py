@@ -262,9 +262,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
         ],
-        "GPTNeoXForCausalLM": [
-            WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
-        ],
         "axk2": [
             # The A.X-K2 hub checkpoints store the routed experts as individual `experts.{i}` projections
             # (DeepSeek-V3 layout); the model packs them into the stacked expert tensors.
@@ -2123,6 +2120,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.mlp\.dense_h_to_4h\.", ".mlp.up_proj."),
         WeightRenaming(r"\.mlp\.dense_4h_to_h\.", ".mlp.down_proj."),
     ]
+    mapping["gpt_neox"] = gpt_neox_mlp_renames
+    mapping["persimmon"] = gpt_neox_mlp_renames.copy()
     mapping["gpt_neox_japanese"] = gpt_neox_mlp_renames.copy()
     for key in ["bark", "semantic", "coarse_acoustics", "fine_acoustics"]:
         mapping[key] = [
@@ -2132,6 +2131,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["perceiver"] = [
         WeightRenaming(r"\.mlp\.dense1\.", ".mlp.up_proj."),
         WeightRenaming(r"\.mlp\.dense2\.", ".mlp.down_proj."),
+    ]
+    mapping["GPTNeoXForCausalLM"] = [
+        WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
+        *gpt_neox_mlp_renames,
     ]
     mapping["Qwen3OmniMoeTalkerForConditionalGeneration"] = [
         WeightRenaming(r"text_projection\.linear_fc1\.", "text_projection.up_proj."),
@@ -2664,6 +2667,9 @@ def _build_checkpoint_conversion_mapping():
         + ungated_mlp_renames(
             r"sequence_compressor_resampler\.layers\.(\d+)\.1\.", r"sequence_compressor_resampler.layers.\1.1."
         )
+    )
+    mapping["llama4_vision_model"] = mapping.get("llama4_vision_model", []) + ungated_mlp_renames(
+        r"model\.layers\.(\d+)\.mlp\.", r"model.layers.\1.mlp."
     )
     mapping["oneformer"] = mapping.get("oneformer", []) + ungated_mlp_renames(
         r"text_encoder\.transformer\.layers\.(\d+)\.mlp\.", r"text_encoder.transformer.layers.\1.mlp."

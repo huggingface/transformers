@@ -37,15 +37,16 @@ logger = logging.get_logger(__name__)
 class GPTNeoXMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
-    def forward(self, hidden_states):
-        hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dense_4h_to_h(hidden_states)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class GPTNeoXRotaryEmbedding(nn.Module):

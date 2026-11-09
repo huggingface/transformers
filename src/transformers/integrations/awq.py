@@ -30,7 +30,7 @@ AWQ_SCALES_MAPPINGS = {
     "falcon": {"act": "act_fn", "layer_before_act": "dense_h_to_4h", "checkpoint_act": "act"},
     "mpt": {"act": "act_fn", "layer_before_act": "up_proj", "checkpoint_act": "act"},
     "gptj": {"act": "act", "layer_before_act": "fc_in"},
-    "gpt_neox": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "gpt_neox": {"act": "act_fn", "layer_before_act": "up_proj", "checkpoint_act": "act"},
     "gpt_bigcode": {"act": "act_fn", "layer_before_act": "c_fc", "checkpoint_act": "act"},
     "bloom": {"act": "gelu_impl", "layer_before_act": "dense_h_to_4h"},
 }
