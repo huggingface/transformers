@@ -2402,6 +2402,9 @@ class ModelForArgs:
     The labels are **shifted internally** so that `labels[..., 1:]` are used to predict `logits[..., :-1, :]`.
     Pass unshifted labels matching `input_ids` (i.e. `labels = input_ids`). Do **not** shift the labels
     yourself before passing them.
+
+    If the labels are already shifted (for example with sequence parallelism), pass them as the `shift_labels`
+    keyword argument and they are used as is. `labels` must still be passed for the loss to be computed.
     """,
             "shape": "of shape `(batch_size, sequence_length)`",
             "type": "torch.LongTensor",
