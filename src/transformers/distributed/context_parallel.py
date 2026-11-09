@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import weakref
 from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING
 
 from ..loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
@@ -309,3 +310,120 @@ def register_context_parallel_attention(model: nn.Module, implementation: CPImpl
     attention = _install_context_parallel_attention(model.config._attn_implementation)
     for module in model.modules():
         attention.register_module(module, implementation)
+
+
+def _slice_sequence(tensor: torch.Tensor, cp_rank: int, cp_size: int, dim: int = 1) -> torch.Tensor:
+    """This rank's contiguous slice of `tensor` along its sequence dimension `dim`."""
+    return tensor.chunk(cp_size, dim=dim)[cp_rank].contiguous()
+
+
+def _shard_inputs(
+    module: nn.Module, args: tuple, kwargs: dict, *, implementation: CPImplementation, attn_implementation: str
+):
+    """Replace the full-sequence inputs of `module` by this rank's contiguous slice of every sequence."""
+    if args:
+        kwargs.setdefault("input_ids", args[0])
+        args = args[1:]
+
+    if kwargs.get("past_key_values") is not None:
+        raise ValueError(
+            "Context parallelism only supports training: `past_key_values` are not allowed. Run the model on full "
+            "sequences without a cache, or disable context parallelism."
+        )
+    kwargs["use_cache"] = False
+
+    if module.config._attn_implementation != attn_implementation:
+        raise ValueError(
+            f"Context parallelism was set up for `attn_implementation='{attn_implementation}'`, but "
+            f"{module.__class__.__name__} now uses `{module.config._attn_implementation}`, so its attention no longer "
+            "sees the whole sequence. Reload the model with the attention implementation you want, or disable context "
+            "parallelism."
+        )
+    # a kernel loaded after the model may have registered another function under the key
+    _install_context_parallel_attention(attn_implementation)
+
+    tokens_name = "input_ids" if kwargs.get("input_ids") is not None else "inputs_embeds"
+    tokens = kwargs.get(tokens_name)
+    if tokens is None:
+        raise ValueError(
+            f"Context parallelism splits the `input_ids` or `inputs_embeds` of {module.__class__.__name__} across the "
+            "ranks of the `cp` mesh, and neither was given to `forward`."
+        )
+
+    cp_mesh = implementation.cp_mesh
+    cp_size, cp_rank = cp_mesh.size(), cp_mesh.get_local_rank()
+    seq_len = tokens.shape[1]
+    if seq_len % cp_size:
+        raise ValueError(
+            f"Context parallelism splits every sequence across the {cp_size} ranks of the `cp` mesh, so the sequence "
+            f"length must be divisible by `cp_size`, got {seq_len}. Pad the sequences to a multiple of `cp_size`."
+        )
+
+    position_ids = kwargs.get("position_ids")
+    if position_ids is None:
+        position_ids = torch.arange(seq_len, device=tokens.device).unsqueeze(0)
+    implementation.position_ids = position_ids
+
+    attention_mask = kwargs.get("attention_mask")
+    if attention_mask is not None:
+        if not torch.all(attention_mask == 1):
+            raise ValueError(
+                "Context parallelism does not support attention masks yet: the ranks of a `cp` mesh already hold "
+                "different slices of the same sequences. Pack the sequences together and pass `position_ids` that "
+                "restart at each document boundary."
+            )
+        kwargs["attention_mask"] = None
+
+    labels = kwargs.get("labels")
+    if labels is not None:
+        shift_labels = kwargs.get("shift_labels")
+        if shift_labels is None:
+            shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
+        if kwargs.get("num_items_in_batch") is None:
+            kwargs["num_items_in_batch"] = (shift_labels != -100).sum()
+        kwargs["shift_labels"] = _slice_sequence(shift_labels, cp_rank, cp_size)
+        kwargs["labels"] = _slice_sequence(labels, cp_rank, cp_size)
+
+    kwargs[tokens_name] = _slice_sequence(tokens, cp_rank, cp_size)
+    # rotary positions can be `[3, batch, seq]`, so their sequence axis is the last one
+    kwargs["position_ids"] = _slice_sequence(position_ids, cp_rank, cp_size, dim=-1)
+    return args, kwargs
+
+
+def _sum_loss_over_cp_group(module: nn.Module, args: tuple, output, *, cp_mesh: DeviceMesh):
+    """
+    Replace the loss by the loss of the full sequences, which every rank reports. Its gradient stays this rank's,
+    multiplied by `cp_size`, so that FSDP2's average over the cp ranks gives the gradient of the full-sequence loss.
+    """
+    loss = getattr(output, "loss", None)
+    if loss is None:
+        return output
+    total = loss.detach().clone()
+    dist.all_reduce(total, group=cp_mesh.get_group())
+    output.loss = total + (loss - loss.detach()) * cp_mesh.size()
+    return output
+
+
+def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_implementation: str) -> nn.Module:
+    """
+    Shard the inputs of `model` across the ranks of `cp_mesh` and let its attention see the whole sequence.
+
+    `model` still takes the full sequences, as in an unsharded run: a forward pre-hook splits them, and a forward hook
+    sums the loss back over the `cp` group.
+    """
+    if cp_implementation not in cp_implementations:
+        raise ValueError(
+            f"Unknown `cp_implementation={cp_implementation}`: registered implementations are "
+            f"{list(cp_implementations)}."
+        )
+    implementation = cp_implementations[cp_implementation](cp_mesh)
+    _check_context_parallelism(model)
+    implementation.check(model)
+    register_context_parallel_attention(model, implementation)
+
+    model.register_forward_pre_hook(
+        partial(_shard_inputs, implementation=implementation, attn_implementation=model.config._attn_implementation),
+        with_kwargs=True,
+    )
+    model.register_forward_hook(partial(_sum_loss_over_cp_group, cp_mesh=cp_mesh))
+    return model

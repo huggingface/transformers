@@ -32,6 +32,7 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
+from .context_parallel import apply_context_parallelism
 from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
 from .parallel_utils import ALL_PARALLEL_STYLES, _get_parameter_plan, replace_layer_number_by_wildcard
@@ -301,7 +302,9 @@ class DistributedMixin:
         distributed_config: DistributedConfig | None,
         mesh_manager: TransformersDeviceMesh | None,
     ):
-        """Apply pipeline, tensor and expert parallelism, then FSDP2, after model init and before weight loading."""
+        """
+        Apply pipeline, tensor, expert and context parallelism, then FSDP2, after model init and before weight loading.
+        """
         if mesh_manager is None:
             return model
 
@@ -332,6 +335,9 @@ class DistributedMixin:
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
+
+        if distributed_config.cp_size > 1:
+            model = apply_context_parallelism(model, mesh_manager.get_mesh("cp"), distributed_config.cp_implementation)
 
         if distributed_config.dp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
