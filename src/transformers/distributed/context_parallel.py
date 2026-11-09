@@ -27,7 +27,16 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from ..loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
-from ..masking_utils import find_packed_sequence_indices
+from ..masking_utils import (
+    and_masks,
+    bidirectional_mask_function,
+    causal_mask_function,
+    chunked_overlay,
+    find_packed_sequence_indices,
+    packed_sequence_mask_function,
+    sdpa_mask,
+    sliding_window_overlay,
+)
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
@@ -49,6 +58,8 @@ class CPImplementation:
         self.cp_mesh = cp_mesh
         # positions of the full sequence for the forward being run, set by the model's forward pre-hook
         self.position_ids: torch.Tensor | None = None
+        # 2D mask of the full sequence (1 for a real token), or `None` when every token is real
+        self.padding_mask: torch.Tensor | None = None
 
     def check(self, model: nn.Module) -> None:
         """Raise a `ValueError` if this implementation cannot compute the attention of `model`."""
@@ -111,17 +122,65 @@ def _gather_heads_scatter_sequence(tensor: torch.Tensor, group) -> torch.Tensor:
     return _AllToAll.apply(group, tensor, 1, 2)
 
 
-def _packed_causal_mask(position_ids: torch.Tensor) -> torch.Tensor | None:
-    """
-    Boolean `[batch, 1, seq, seq]` mask that is causal within each packed document and blocks attention across
-    documents. Returns `None` when nothing is packed, so the caller can rely on `is_causal` instead.
-    """
-    sequence_ids = find_packed_sequence_indices(position_ids)
-    if sequence_ids is None:
-        return None
-    seq_len = position_ids.shape[1]
-    causal = torch.ones(seq_len, seq_len, dtype=torch.bool, device=position_ids.device).tril()
-    return causal & (sequence_ids[:, None, :, None] == sequence_ids[:, None, None, :])
+def _attention_pattern(module: nn.Module, kwargs: dict) -> tuple[int | None, int | None]:
+    """The sliding window and the chunk size of `module`, when it has one."""
+    config = module.config
+    layer_types = getattr(config, "layer_types", None)
+    layer_idx = getattr(module, "layer_idx", None)
+    layer_type = layer_types[layer_idx] if layer_types is not None and layer_idx is not None else None
+    if layer_type == "chunked_attention":
+        return None, getattr(config, "attention_chunk_size", None)
+    if layer_type == "full_attention":
+        return None, None
+    # Models that predate `layer_types` (Mistral, for one) pass their window to the attention call when they use it.
+    window = kwargs.get("sliding_window")
+    if window is None:
+        window = getattr(module, "sliding_window", None)
+    if window is None and layer_type == "sliding_attention":
+        window = getattr(config, "sliding_window", None)
+    return window, None
+
+
+def _sdpa_mask(
+    module: nn.Module,
+    query: torch.Tensor,
+    position_ids: torch.Tensor,
+    padding_mask: torch.Tensor | None,
+    kwargs: dict,
+) -> torch.Tensor | None:
+    """Boolean `[batch, 1, seq, seq]` mask of the whole sequence, as the model builds it when it is not split."""
+    is_causal = getattr(module, "is_causal", True)
+    mask_function = causal_mask_function if is_causal else bidirectional_mask_function
+    batch_size, seq_len = query.shape[0], query.shape[2]
+    # A plain causal mask is left to the kernel's `is_causal`, as on an unsharded run; anything else is materialized
+    can_skip = True
+    # The model only looks for packed documents when it has no 2D mask telling it where the padding is
+    if padding_mask is None:
+        if position_ids.shape[0] != batch_size:
+            position_ids = position_ids.expand(batch_size, -1)
+        sequence_ids = find_packed_sequence_indices(position_ids)
+        if sequence_ids is not None:
+            mask_function = and_masks(mask_function, packed_sequence_mask_function(sequence_ids))
+            can_skip = False
+    sliding_window, chunk_size = _attention_pattern(module, kwargs)
+    if sliding_window is not None:
+        mask_function = and_masks(mask_function, sliding_window_overlay(sliding_window))
+    if chunk_size is not None:
+        left_padding = torch.zeros(batch_size, dtype=torch.int64, device=query.device)
+        if padding_mask is not None:
+            left_padding = (padding_mask.cumsum(dim=-1) == 0).sum(dim=-1)
+        mask_function = and_masks(mask_function, chunked_overlay(chunk_size, left_padding))
+    return sdpa_mask(
+        batch_size=batch_size,
+        q_length=seq_len,
+        kv_length=seq_len,
+        mask_function=mask_function,
+        attention_mask=padding_mask,
+        local_size=sliding_window if sliding_window is not None else chunk_size,
+        allow_is_causal_skip=is_causal and can_skip,
+        allow_is_bidirectional_skip=not is_causal and can_skip,
+        device=query.device,
+    )
 
 
 class UlyssesCP(CPImplementation):
@@ -147,24 +206,20 @@ class UlyssesCP(CPImplementation):
 
         text_config = config.get_text_config()
         layer_types = getattr(text_config, "layer_types", None)
-        if layer_types is not None and "chunked_attention" in layer_types:
+        if "chunked_attention" in (layer_types or []) and attn_implementation != "sdpa":
             raise ValueError(
-                f"Ulysses context parallelism does not support `chunked_attention` layers of {model.__class__.__name__}: "
-                "their mask cannot be rebuilt for the full sequence. Use another model, or disable context "
-                "parallelism."
+                f"Ulysses context parallelism with `{attn_implementation}` does not support the `chunked_attention` "
+                f"layers of {model.__class__.__name__}: a flash kernel cannot restrict attention to the chunk of each "
+                "query. Load the model with `sdpa`, or disable context parallelism."
             )
-        # Models that predate `layer_types` (Mistral, for one) apply a sliding window to every layer whenever
-        # `sliding_window` is set.
-        has_sliding_window = "sliding_attention" in (layer_types or []) or (
-            layer_types is None and getattr(text_config, "sliding_window", None) is not None
-        )
-        if has_sliding_window and attn_implementation == "sdpa":
-            raise ValueError(
-                f"Ulysses context parallelism with `sdpa` does not support the sliding-window attention of "
-                f"{model.__class__.__name__}: the local mask is dropped, so those layers would silently attend over "
-                "the whole window. Load the model with `flash_attention_2`, `flash_attention_3` or a hub flash "
-                "kernel, which apply `sliding_window` themselves, or disable context parallelism."
-            )
+        if "sliding_attention" in (layer_types or []) and getattr(text_config, "sliding_window", None) is None:
+            if not any(getattr(module, "sliding_window", None) is not None for module in model.modules()):
+                raise ValueError(
+                    f"Ulysses context parallelism rebuilds the mask of the sliding-window layers of "
+                    f"{model.__class__.__name__} for the whole sequence, but it cannot find their window: none of the "
+                    "attention call, the attention modules or the config reports a `sliding_window`. Set it in the "
+                    "config, or disable context parallelism."
+                )
 
         num_heads = text_config.num_attention_heads
         num_kv_heads = getattr(text_config, "num_key_value_heads", None) or num_heads
@@ -216,12 +271,15 @@ class UlyssesCP(CPImplementation):
         if isinstance(s_aux, torch.Tensor) and s_aux.ndim == 1:
             kwargs["s_aux"] = s_aux.chunk(self.cp_mesh.size())[self.cp_mesh.get_local_rank()]
 
-        # `attention_mask` was built for the local slice. Flash kernels rebuild the document boundaries from
-        # `position_ids`; sdpa gets a mask over the full sequence, or `is_causal` when nothing is packed.
+        # `attention_mask` was built for this rank's slice. Flash kernels unpad and rebuild the document boundaries
+        # from the full 2D mask; sdpa gets the mask of the whole sequence, or `is_causal` when it is plain causal.
+        padding_mask = self.padding_mask
+        if padding_mask is not None:
+            padding_mask = padding_mask.to(query.device)
         if module.config._attn_implementation == "sdpa":
-            attention_mask = _packed_causal_mask(position_ids)
+            attention_mask = _sdpa_mask(module, query, position_ids, padding_mask, kwargs)
         else:
-            attention_mask = None
+            attention_mask = padding_mask
 
         attn_output, attn_weights = attention_function(module, query, key, value, attention_mask, **kwargs)
         return _gather_heads_scatter_sequence(attn_output, group), attn_weights
@@ -413,13 +471,20 @@ def _shard_inputs(
 
     attention_mask = kwargs.get("attention_mask")
     if attention_mask is not None:
-        if not torch.all(attention_mask == 1):
+        if attention_mask.ndim != 2:
             raise ValueError(
-                "Context parallelism does not support attention masks yet: the ranks of a `cp` mesh already hold "
-                "different slices of the same sequences. Pack the sequences together and pass `position_ids` that "
-                "restart at each document boundary."
+                "Context parallelism only supports a 2D attention mask, with 1 for a real token and 0 for padding, "
+                f"but {module.__class__.__name__} was given a mask of shape {tuple(attention_mask.shape)}. Pass a 2D "
+                "mask, or disable context parallelism."
             )
-        kwargs["attention_mask"] = None
+        attention_mask = attention_mask.to(dtype=torch.bool)
+        if pad_len:
+            attention_mask = _pad_sequence(attention_mask, pad_len, 0)
+        if torch.all(attention_mask):
+            attention_mask = None
+    # the full mask, from which the attention functions rebuild the mask of the whole sequence
+    implementation.padding_mask = attention_mask
+    kwargs["attention_mask"] = None
 
     if labels is not None:
         kwargs["shift_labels"] = _slice_sequence(shift_labels, cp_rank, cp_size)
