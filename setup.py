@@ -87,7 +87,7 @@ _deps = [
     "hf-doc-builder",
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
-    "jinja2>=3.1.0",
+    "jinja2>=3.1.6",
     "kenlm",
     "kernels>=0.18.0,<0.19",
     "librosa",

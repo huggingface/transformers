@@ -581,6 +581,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         self.rotary_emb = Gemma4UnifiedTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.unique_layer_types = set(self.config.layer_types)
+        self.first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -596,6 +597,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedTextModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -641,6 +643,18 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            # Starting at `first_kv_shared_layer_idx`, we will always reuse k/v of previous layers. This means that we can
+            # drop the seq_len dimension according to `logits_to_keep` for all remaining layers since we do not look at the past
+            # anymore, which leads to much faster forward for large seq_len
+            if i == self.first_kv_shared_layer_idx:
+                hidden_states, position_embeddings, causal_mask_mapping = self._maybe_slice_kv_shared_inputs(
+                    hidden_states,
+                    position_embeddings,
+                    causal_mask_mapping,
+                    logits_to_keep,
+                    **kwargs,
+                )
+
             hidden_states = decoder_layer(
                 hidden_states,
                 shared_kv_states=shared_kv_states,
@@ -658,6 +672,57 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
             past_key_values=past_key_values,
             shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
         )
+
+    def _maybe_slice_kv_shared_inputs(
+        self,
+        hidden_states,
+        position_embeddings,
+        causal_mask_mapping,
+        logits_to_keep,
+        **kwargs,
+    ):
+        """
+        Slices sequence-length inputs to the `logits_to_keep` token positions before entering the KV-shared layers. Because KV-shared
+        layers reuse keys and values computed by earlier non-shared layers and do not write to the KV cache, unselected prompt
+        positions do not need to be computed through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
+        `output_attentions`, `output_router_logits`) are requested.
+        Note: to simplify, we only allow this optimization for integer `logits_to_keep`, i.e. what `generate` uses. This avoids a lot
+        of edge cases regarding masks, and it keeps this method simple.
+        """
+        batch_size, seq_len = hidden_states.shape[:2]
+        record_keys = ("output_hidden_states", "output_attentions", "output_router_logits")
+        can_optimize = True
+        # If the seq_len is already 1 (i.e. decoding), or we request any additional output, exit early
+        if seq_len == 1 or any(kwargs.get(k) or getattr(self.config, k, False) for k in record_keys):
+            can_optimize = False
+        # To keep it simple, as it's the usual case
+        elif not isinstance(logits_to_keep, int):
+            can_optimize = False
+        # Flex cannot slice mask
+        elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
+            can_optimize = False
+        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        elif (
+            self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
+            and logits_to_keep > 1
+            and any(mask is None for mask in causal_mask_mapping.values())
+        ):
+            can_optimize = False
+
+        # If we cannot optimize, return untouched inputs will the full seq_len
+        if not can_optimize:
+            return hidden_states, position_embeddings, causal_mask_mapping
+
+        logits_to_keep = slice(-logits_to_keep, None)
+        hidden_states = hidden_states[:, logits_to_keep, :]
+        position_embeddings = {
+            k: (cos[:, logits_to_keep, :], sin[:, logits_to_keep, :]) for k, (cos, sin) in position_embeddings.items()
+        }
+        causal_mask_mapping = {
+            k: v[:, :, logits_to_keep, :] if v is not None else None for k, v in causal_mask_mapping.items()
+        }
+
+        return hidden_states, position_embeddings, causal_mask_mapping
 
 
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
@@ -717,11 +782,14 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        # May have been already sliced to logits_to_kep
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
@@ -1350,12 +1418,15 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             video_position_ids=video_position_ids,
             num_frames_per_video=num_frames_per_video,
             mm_encoder_outputs=mm_encoder_outputs,
+            logits_to_keep=logits_to_keep,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        # May have been already sliced to logits_to_kep
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping

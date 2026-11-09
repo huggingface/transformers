@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoModel
 from .configuration_video_llava import VideoLlavaConfig
 
@@ -164,10 +165,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def get_image_features(
         self,
         pixel_values: torch.Tensor | None = None,
@@ -183,7 +185,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`
         """
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         image_outputs = self.image_tower(
             pixel_values,
             return_dict=True,
@@ -210,6 +211,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
@@ -222,7 +224,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         video_outputs = self.video_tower(
             pixel_values,
             return_dict=True,
