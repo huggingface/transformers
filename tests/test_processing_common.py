@@ -2004,23 +2004,38 @@ class ProcessorTesterMixin:
                 else:
                     processor_inputs[modality] = prepare_method()
 
+        # The offsets index the text after replacement, so capture the text the processor tokenizes
+        expanded_texts = []
+        get_text_with_replacements = processor.get_text_with_replacements
+
+        def capture_text_with_replacements(*args, **kwargs):
+            text, offsets = get_text_with_replacements(*args, **kwargs)
+            expanded_texts.append(text)
+            return text, offsets
+
         # Test combined processing
-        model_inputs = processor(
-            **processor_inputs,
-            add_special_tokens=False,
-            padding=False,
-            truncation=False,
-            max_length=None,
-            return_text_replacement_offsets=True,
-            **processing_kwargs,
-        )
-        detokenized_text = processor.tokenizer.batch_decode(
-            model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
-        )
+        with patch.object(processor, "get_text_with_replacements", side_effect=capture_text_with_replacements):
+            model_inputs = processor(
+                **processor_inputs,
+                add_special_tokens=False,
+                padding=False,
+                truncation=False,
+                max_length=None,
+                return_text_replacement_offsets=True,
+                **processing_kwargs,
+            )
+        if expanded_texts:
+            expanded_text = expanded_texts[-1]
+            expanded_text = [expanded_text] if isinstance(expanded_text, str) else expanded_text
+        else:
+            # Processors that don't expand the text with `get_text_with_replacements`
+            expanded_text = processor.tokenizer.batch_decode(
+                model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
+            )
         self.assertIn("text_replacement_offsets", model_inputs)
 
         for i, sample_offsets in enumerate(model_inputs["text_replacement_offsets"]):
             for curr_dict in sample_offsets:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
-                self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+                self.assertEqual(expanded_text[i][start:end], curr_dict["replacement"])

@@ -87,12 +87,12 @@ class SentencePieceModelConversionTest(unittest.TestCase):
     ]
 
     def _train(self, tmp_dir, **kwargs):
+        kwargs.setdefault("byte_fallback", True)
+        kwargs.setdefault("vocab_size", 400)
         spm.SentencePieceTrainer.train(
             sentence_iterator=iter(self.corpus),
             model_prefix=f"{tmp_dir}/tokenizer",
-            vocab_size=400,
             model_type="bpe",
-            byte_fallback=True,
             normalization_rule_name="identity",
             minloglevel=2,
             **kwargs,
@@ -115,6 +115,8 @@ class SentencePieceModelConversionTest(unittest.TestCase):
                 "user_defined_symbols": ["__", "<reserve_0>", "\n"],
             },
             "remove_extra_whitespaces": {"add_dummy_prefix": True, "remove_extra_whitespaces": True},
+            # Without byte fallback the decoder has no `Fuse`, so only the start of the text may lose its space
+            "no_byte_fallback": {"add_dummy_prefix": True, "byte_fallback": False, "vocab_size": 200},
         }
         for name, kwargs in configs.items():
             with self.subTest(name), tempfile.TemporaryDirectory() as tmp_dir:
@@ -122,6 +124,8 @@ class SentencePieceModelConversionTest(unittest.TestCase):
                 tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
                 for text in self.texts:
                     ids = sp.encode(text)
+                    if sp.unk_id() in ids:  # unseen characters without byte fallback decode differently
+                        continue
                     self.assertEqual(tokenizer.encode(text, add_special_tokens=False), ids, text)
                     self.assertEqual(tokenizer.decode(ids), sp.decode(ids), text)
 
