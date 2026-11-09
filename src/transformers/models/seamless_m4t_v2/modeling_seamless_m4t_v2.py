@@ -306,14 +306,14 @@ class SeamlessM4Tv2ConformerMLP(nn.Module):
 
         self.intermediate_dropout = nn.Dropout(dropout)
         self.intermediate_dense = nn.Linear(config.hidden_size, config.speech_encoder_intermediate_size)
-        self.intermediate_act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
+        self.act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
 
         self.output_dense = nn.Linear(config.speech_encoder_intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
 
         hidden_states = self.output_dense(hidden_states)
@@ -985,8 +985,8 @@ class SeamlessM4Tv2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4Tv2,DenseActDense->FeedForwardNetwork, d_model->hidden_size
-class SeamlessM4Tv2FeedForwardNetwork(nn.Module):
+# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4Tv2,DenseActDense->MLP, d_model->hidden_size
+class SeamlessM4Tv2MLP(nn.Module):
     def __init__(self, config: SeamlessM4Tv2Config, ffn_dim: int):
         super().__init__()
         self.fc1 = nn.Linear(config.hidden_size, ffn_dim)
@@ -1027,7 +1027,7 @@ class SeamlessM4Tv2EncoderLayer(GradientCheckpointingLayer):
         self.attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.ffn = SeamlessM4Tv2FeedForwardNetwork(config, ffn_dim=encoder_ffn_dim)
+        self.ffn = SeamlessM4Tv2MLP(config, ffn_dim=encoder_ffn_dim)
 
         self.ffn_layer_norm = nn.LayerNorm(config.hidden_size)
         self.ffn_dropout = nn.Dropout(config.activation_dropout)
@@ -1104,7 +1104,7 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.ffn = SeamlessM4Tv2FeedForwardNetwork(config, ffn_dim=decoder_ffn_dim)
+        self.ffn = SeamlessM4Tv2MLP(config, ffn_dim=decoder_ffn_dim)
 
         self.ffn_layer_norm = nn.LayerNorm(config.hidden_size)
         self.ffn_dropout = nn.Dropout(config.activation_dropout)

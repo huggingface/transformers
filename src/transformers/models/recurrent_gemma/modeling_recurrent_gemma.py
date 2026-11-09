@@ -468,7 +468,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
 
 
-class RecurrentGemmaMlp(nn.Module):
+class RecurrentGemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -492,7 +492,7 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
         self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.layers_block_type[layer_idx]](config, layer_idx)
         self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp_block = RecurrentGemmaMlp(config)
+        self.mlp_block = RecurrentGemmaMLP(config)
 
     def forward(
         self,

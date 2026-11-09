@@ -19,7 +19,7 @@ import os
 import torch
 
 from transformers import FunnelBaseModel, FunnelConfig, FunnelModel
-from transformers.models.funnel.modeling_funnel import FunnelPositionwiseFFN, FunnelRelMultiheadAttention
+from transformers.models.funnel.modeling_funnel import FunnelPositionwiseMLP, FunnelRelMultiheadAttention
 from transformers.utils import logging
 
 
@@ -84,7 +84,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
         pointer = model
         skipped = False
         for m_name in name[1:]:
-            if not isinstance(pointer, FunnelPositionwiseFFN) and re.fullmatch(r"layer_\d+", m_name):
+            if not isinstance(pointer, FunnelPositionwiseMLP) and re.fullmatch(r"layer_\d+", m_name):
                 layer_index = int(re.search(r"layer_(\d+)", m_name).groups()[0])
                 if layer_index < config.num_hidden_layers:
                     block_idx = 0

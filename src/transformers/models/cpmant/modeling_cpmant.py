@@ -233,7 +233,7 @@ class CpmAntDenseGatedACT(nn.Module):
         return hidden_states
 
 
-class CpmAntFeedForward(nn.Module):
+class CpmAntMLP(nn.Module):
     def __init__(self, config: CpmAntConfig):
         super().__init__()
         self.w_in = CpmAntDenseGatedACT(config)
@@ -263,7 +263,7 @@ class CpmAntFFNBlock(nn.Module):
     def __init__(self, config: CpmAntConfig):
         super().__init__()
         self.layernorm_before_ffn = CpmAntLayerNorm(config)
-        self.ffn = CpmAntFeedForward(config)
+        self.ffn = CpmAntMLP(config)
         if config.dropout_p:
             self.dropout = torch.nn.Dropout(config.dropout_p)
         else:

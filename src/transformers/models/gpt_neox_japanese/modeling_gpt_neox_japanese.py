@@ -295,16 +295,14 @@ class GPTNeoXJapaneseMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         intermediate_size = int(config.hidden_size * config.intermediate_multiple_size)
-        self.dense_h_to_4h = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
         # Project back to h.
-        self.dense_4h_to_h = nn.Linear(intermediate_size, config.hidden_size, bias=False)
-        self.act = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
-        intermediate = self.dense_h_to_4h(hidden_states)
-        intermediate = self.act(intermediate)
-        output = self.dense_4h_to_h(intermediate)
-        return output
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class GPTNeoXJapaneseLayer(nn.Module):

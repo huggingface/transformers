@@ -191,16 +191,16 @@ class GLPNMixFFN(nn.Module):
         self.dense1 = nn.Linear(in_features, hidden_features)
         self.dwconv = GLPNDepthWiseConv(hidden_features)
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+            self.act_fn = ACT2FN[config.hidden_act]
         else:
-            self.intermediate_act_fn = config.hidden_act
+            self.act_fn = config.hidden_act
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, height, width):
         hidden_states = self.dense1(hidden_states)
         hidden_states = self.dwconv(hidden_states, height, width)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense2(hidden_states)
         hidden_states = self.dropout(hidden_states)

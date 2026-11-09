@@ -500,14 +500,14 @@ class ProphetNetAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class ProphetNetFeedForward(nn.Module):
+class ProphetNetMLP(nn.Module):
     """
     This is the residual two feed-forward layer block based on the original Transformer implementation.
     """
 
     def __init__(self, config: ProphetNetConfig, ffn_dim: int):
         super().__init__()
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.intermediate = nn.Linear(config.hidden_size, ffn_dim)
         self.output = nn.Linear(ffn_dim, config.hidden_size)
         self.activation_dropout = config.activation_dropout
@@ -515,7 +515,7 @@ class ProphetNetFeedForward(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.output(hidden_states)
@@ -839,7 +839,7 @@ class ProphetNetEncoderLayer(GradientCheckpointingLayer):
         self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
-        self.feed_forward = ProphetNetFeedForward(config, config.encoder_ffn_dim)
+        self.feed_forward = ProphetNetMLP(config, config.encoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(
@@ -885,7 +885,7 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
             self.cross_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 3rd residual block
-        self.feed_forward = ProphetNetFeedForward(config, config.decoder_ffn_dim)
+        self.feed_forward = ProphetNetMLP(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(

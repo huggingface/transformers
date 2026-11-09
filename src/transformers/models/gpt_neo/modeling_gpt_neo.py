@@ -295,17 +295,17 @@ class GPTNeoAttention(nn.Module):
 
 
 class GPTNeoMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
+    def __init__(self, config, intermediate_size):  # in MLP: intermediate_size= 4 * hidden_size
         super().__init__()
         embed_dim = config.hidden_size
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(float(config.resid_dropout))
 
     def forward(self, hidden_states):
         hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.c_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -319,7 +319,7 @@ class GPTNeoBlock(GradientCheckpointingLayer):
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTNeoAttention(config, layer_id)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.mlp = GPTNeoMLP(inner_dim, config)
+        self.mlp = GPTNeoMLP(config, inner_dim)
 
     def forward(
         self,

@@ -282,7 +282,7 @@ class XLNetRelativeAttention(nn.Module):
         return outputs
 
 
-class XLNetFeedForward(nn.Module):
+class XLNetMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
@@ -309,7 +309,7 @@ class XLNetLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.rel_attn = XLNetRelativeAttention(config)
-        self.ff = XLNetFeedForward(config)
+        self.ff = XLNetMLP(config)
         self.dropout = nn.Dropout(config.dropout)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1

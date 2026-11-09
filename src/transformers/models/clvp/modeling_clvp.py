@@ -407,14 +407,14 @@ class ClvpEncoderMLP(nn.Module):
         super().__init__()
         self.config = config
 
-        self.fc1 = ClvpGatedLinearUnit(config)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = ClvpGatedLinearUnit(config)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout_layer = nn.Dropout(config.dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.dropout_layer(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -559,17 +559,17 @@ class ClvpSequenceSummary(nn.Module):
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->ClvpDecoderMLP
 class ClvpDecoderMLP(nn.Module):
-    def __init__(self, intermediate_size, config):
+    def __init__(self, config, intermediate_size):
         super().__init__()
         embed_dim = config.hidden_size
         self.c_fc = Conv1D(intermediate_size, embed_dim)
         self.c_proj = Conv1D(embed_dim, intermediate_size)
-        self.act = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.c_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -585,7 +585,7 @@ class ClvpDecoderLayer(nn.Module):
         self.attn = ClvpSelfAttention(config, layer_idx=layer_idx)
         self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mlp = ClvpDecoderMLP(inner_dim, config)
+        self.mlp = ClvpDecoderMLP(config, inner_dim)
 
     def forward(
         self,
@@ -781,8 +781,10 @@ class ClvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ClvpEncoderMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(
+                module.up_proj.proj.weight if getattr(module.up_proj, "proj") else module.up_proj.weight, std=fc_std
+            )
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
             config = self.config.get_text_config()
             factor = config.initializer_factor

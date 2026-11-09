@@ -289,8 +289,8 @@ class Idefics2MLP(nn.Module):
         self.down_proj = nn.Linear(intermediate_size, output_size, bias=False)
         self.act_fn = ACT2FN[hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
 
 # Copied from transformers.models.siglip.modeling_siglip.SiglipMultiheadAttentionPoolingHead with Siglip->Idefics2

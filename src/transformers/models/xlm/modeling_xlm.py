@@ -570,13 +570,13 @@ class MultiHeadAttention(nn.Module):
         return outputs
 
 
-class TransformerFFN(nn.Module):
+class TransformerMLP(nn.Module):
     def __init__(self, in_dim, dim_hidden, out_dim, config):
         super().__init__()
         self.dropout = config.dropout
         self.lin1 = nn.Linear(in_dim, dim_hidden)
         self.lin2 = nn.Linear(dim_hidden, out_dim)
-        self.act = gelu if config.gelu_activation else nn.functional.relu
+        self.act_fn = gelu if config.gelu_activation else nn.functional.relu
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
@@ -585,7 +585,7 @@ class TransformerFFN(nn.Module):
 
     def ff_chunk(self, input):
         x = self.lin1(input)
-        x = self.act(x)
+        x = self.act_fn(x)
         x = self.lin2(x)
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         return x
@@ -719,7 +719,7 @@ class XLMModel(XLMPreTrainedModel):
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
-            self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
+            self.ffns.append(TransformerMLP(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
         # Initialize weights and apply final processing

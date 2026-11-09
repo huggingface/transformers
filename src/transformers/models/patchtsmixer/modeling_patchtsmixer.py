@@ -170,9 +170,9 @@ class PatchTSMixerMLP(nn.Module):
     def __init__(self, in_features, out_features, config):
         super().__init__()
         num_hidden = in_features * config.expansion_factor
-        self.fc1 = nn.Linear(in_features, num_hidden)
+        self.up_proj = nn.Linear(in_features, num_hidden)
         self.dropout1 = nn.Dropout(config.dropout)
-        self.fc2 = nn.Linear(num_hidden, out_features)
+        self.down_proj = nn.Linear(num_hidden, out_features)
         self.dropout2 = nn.Dropout(config.dropout)
 
     def forward(self, inputs: torch.Tensor):
@@ -183,8 +183,8 @@ class PatchTSMixerMLP(nn.Module):
         Returns:
             `torch.Tensor` of the same shape as `inputs`
         """
-        inputs = self.dropout1(nn.functional.gelu(self.fc1(inputs)))
-        inputs = self.fc2(inputs)
+        inputs = self.dropout1(nn.functional.gelu(self.up_proj(inputs)))
+        inputs = self.down_proj(inputs)
         inputs = self.dropout2(inputs)
         return inputs
 

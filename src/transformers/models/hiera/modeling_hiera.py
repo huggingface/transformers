@@ -382,17 +382,17 @@ class HieraMaskUnitAttention(nn.Module):
         return (attn_output, attn_weights) if output_attentions else (attn_output, None)
 
 
-class HieraMlp(nn.Module):
+class HieraMLP(nn.Module):
     def __init__(self, config, dim: int) -> None:
         super().__init__()
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(dim, int(dim * config.mlp_ratio))
-        self.fc2 = nn.Linear(int(dim * config.mlp_ratio), dim)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(dim, int(dim * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(dim * config.mlp_ratio), dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -450,7 +450,7 @@ class HieraLayer(nn.Module):
         )
 
         self.layernorm_after = nn.LayerNorm(hidden_size_output, eps=config.layer_norm_eps)
-        self.mlp = HieraMlp(config, hidden_size_output)
+        self.mlp = HieraMLP(config, hidden_size_output)
 
         self.drop_path = HieraDropPath(drop_path) if drop_path > 0 else nn.Identity()
         if hidden_size != hidden_size_output:

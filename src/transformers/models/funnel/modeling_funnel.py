@@ -484,11 +484,11 @@ class FunnelRelMultiheadAttention(nn.Module):
         return (output, attn_prob) if output_attentions else (output,)
 
 
-class FunnelPositionwiseFFN(nn.Module):
+class FunnelPositionwiseMLP(nn.Module):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__()
         self.linear_1 = nn.Linear(config.d_model, config.d_inner)
-        self.activation_function = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.activation_dropout = nn.Dropout(config.activation_dropout)
         self.linear_2 = nn.Linear(config.d_inner, config.d_model)
         self.dropout = nn.Dropout(config.hidden_dropout)
@@ -496,7 +496,7 @@ class FunnelPositionwiseFFN(nn.Module):
 
     def forward(self, hidden: torch.Tensor) -> torch.Tensor:
         h = self.linear_1(hidden)
-        h = self.activation_function(h)
+        h = self.act_fn(h)
         h = self.activation_dropout(h)
         h = self.linear_2(h)
         h = self.dropout(h)
@@ -507,7 +507,7 @@ class FunnelLayer(nn.Module):
     def __init__(self, config: FunnelConfig, block_index: int) -> None:
         super().__init__()
         self.attention = FunnelRelMultiheadAttention(config, block_index)
-        self.ffn = FunnelPositionwiseFFN(config)
+        self.ffn = FunnelPositionwiseMLP(config)
 
     def forward(
         self,

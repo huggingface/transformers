@@ -102,23 +102,23 @@ class MgpstrEmbeddings(nn.Module):
         return embedding_output
 
 
-class MgpstrMlp(nn.Module):
+class MgpstrMLP(nn.Module):
     """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
 
     def __init__(self, config: MgpstrConfig, hidden_features):
         super().__init__()
         hidden_features = hidden_features or config.hidden_size
-        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
-        self.act = nn.GELU()
-        self.fc2 = nn.Linear(hidden_features, config.hidden_size)
-        self.drop = nn.Dropout(config.drop_rate)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features)
+        self.act_fn = nn.GELU()
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size)
+        self.dropout = nn.Dropout(config.drop_rate)
 
     def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.drop(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.drop(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         return hidden_states
 
 
@@ -187,7 +187,7 @@ class MgpstrLayer(nn.Module):
         self.drop_path = MgpStrDropPath(drop_path) if drop_path is not None else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_dim = int(config.hidden_size * config.mlp_ratio)
-        self.mlp = MgpstrMlp(config, mlp_hidden_dim)
+        self.mlp = MgpstrMLP(config, mlp_hidden_dim)
 
     def forward(self, hidden_states):
         self_attention_outputs = self.attn(self.norm1(hidden_states))

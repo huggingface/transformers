@@ -994,7 +994,7 @@ class VitsAttention(nn.Module):
         return x_final
 
 
-class VitsFeedForward(nn.Module):
+class VitsMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv_1 = nn.Conv1d(config.hidden_size, config.ffn_dim, config.ffn_kernel_size)
@@ -1042,7 +1042,7 @@ class VitsEncoderLayer(GradientCheckpointingLayer):
         self.attention = VitsAttention(config)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = VitsFeedForward(config)
+        self.feed_forward = VitsMLP(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(

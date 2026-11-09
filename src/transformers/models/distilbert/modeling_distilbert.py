@@ -210,14 +210,14 @@ class FFN(nn.Module):
         self.seq_len_dim = 1
         self.lin1 = nn.Linear(in_features=config.dim, out_features=config.hidden_dim)
         self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
-        self.activation = get_activation(config.activation)
+        self.act_fn = get_activation(config.activation)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, input)
 
     def ff_chunk(self, input: torch.Tensor) -> torch.Tensor:
         x = self.lin1(input)
-        x = self.activation(x)
+        x = self.act_fn(x)
         x = self.lin2(x)
         x = self.dropout(x)
         return x

@@ -348,8 +348,8 @@ class SegGptAttention(nn.Module):
         return (attn_output, attn_weights_reshaped)
 
 
-# Copied from transformers.models.sam.modeling_sam.SamMLP with SamMLP->SegGptMlp
-class SegGptMlp(nn.Module):
+# Copied from transformers.models.sam.modeling_sam.SamMLP with SamMLP->SegGptMLP
+class SegGptMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.up_proj = nn.Linear(config.hidden_size, config.mlp_dim)
@@ -392,7 +392,7 @@ class SegGptLayer(GradientCheckpointingLayer):
     def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
         super().__init__()
         self.attention = SegGptAttention(config)
-        self.mlp = SegGptMlp(config)
+        self.mlp = SegGptMLP(config)
         self.drop_path = SegGptDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

@@ -58,8 +58,8 @@ intersection:
 stuff.py::Beit3MLP:
 embedding:
     efficientloftr::EfficientLoFTRMLP (0.9718)
-    seggpt::SegGptMlp (0.9650)
-    mgp_str::MgpstrMlp (0.9646)
+    seggpt::SegGptMLP (0.9650)
+    mgp_str::MgpstrMLP (0.9646)
     vitpose_backbone::VitPoseBackboneMLP (0.9640)
     granitemoeshared::GraniteMoeSharedMLP (0.9633)
 jaccard:
@@ -72,11 +72,11 @@ intersection:
 
 stuff.py::Beit3FeedForwardNetwork:
 embedding:
-    prophetnet::ProphetNetFeedForward (0.9766)
-    dab_detr::DabDetrDecoderLayerFFN (0.9730)
-    kosmos2::Kosmos2TextFFN (0.9697)
-    kosmos2_5::Kosmos2_5TextFFN (0.9697)
-    parakeet::ParakeetEncoderFeedForward (0.9678)
+    prophetnet::ProphetNetMLP (0.9766)
+    dab_detr::DabDetrDecoderLayerMLP (0.9730)
+    kosmos2::Kosmos2TextMLP (0.9697)
+    kosmos2_5::Kosmos2_5TextMLP (0.9697)
+    parakeet::ParakeetEncoderMLP (0.9678)
 jaccard:
     groupvit::GroupViTMLP (0.4898)
     convbert::ConvBertOutput (0.4600)

@@ -171,8 +171,8 @@ class Pix2StructVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
-class Pix2StructVisionMlp(nn.Module):
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMLP,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
+class Pix2StructVisionMLP(nn.Module):
     def __init__(self, config: Pix2StructVisionConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
@@ -207,7 +207,7 @@ class Pix2StructVisionLayer(GradientCheckpointingLayer):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = Pix2StructVisionAttention(config)
-        self.mlp = Pix2StructVisionMlp(config)
+        self.mlp = Pix2StructVisionMLP(config)
         self.pre_mlp_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

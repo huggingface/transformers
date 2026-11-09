@@ -239,18 +239,18 @@ class GPTBigCodeAttention(nn.Module):
 
 
 class GPTBigCodeMLP(nn.Module):
-    def __init__(self, intermediate_size, config):
+    def __init__(self, config, intermediate_size):
         super().__init__()
         embed_dim = config.hidden_size
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
-        self.act = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
     def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.c_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -276,7 +276,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
 
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mlp = GPTBigCodeMLP(self.inner_dim, config)
+        self.mlp = GPTBigCodeMLP(config, self.inner_dim)
 
     def forward(
         self,

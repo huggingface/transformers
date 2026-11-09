@@ -219,7 +219,7 @@ class PvtAttention(nn.Module):
         return outputs
 
 
-class PvtFFN(nn.Module):
+class PvtMLP(nn.Module):
     def __init__(
         self,
         config: PvtConfig,
@@ -231,15 +231,15 @@ class PvtFFN(nn.Module):
         out_features = out_features if out_features is not None else in_features
         self.dense1 = nn.Linear(in_features, hidden_features)
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+            self.act_fn = ACT2FN[config.hidden_act]
         else:
-            self.intermediate_act_fn = config.hidden_act
+            self.act_fn = config.hidden_act
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense1(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense2(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -292,7 +292,7 @@ class PvtLayer(nn.Module):
         self.drop_path = PvtDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = PvtFFN(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = PvtMLP(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False):
         self_attention_outputs = self.attention(

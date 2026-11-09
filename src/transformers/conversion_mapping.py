@@ -1144,6 +1144,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
+        "dab-detr": [WeightRenaming(r"mlp\.activation_fn\.weight", r"mlp.act_fn.weight")],
         "yolos": [
             WeightRenaming(r"encoder.mid_position_embeddings", r"encoder.interpolation.mid_position_embeddings")
         ],
@@ -2118,6 +2119,20 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.mlp\.linear_fc1\.", ".mlp.up_proj."),
         WeightRenaming(r"\.mlp\.linear_fc2\.", ".mlp.down_proj."),
     ]
+    gpt_neox_mlp_renames = [
+        WeightRenaming(r"\.mlp\.dense_h_to_4h\.", ".mlp.up_proj."),
+        WeightRenaming(r"\.mlp\.dense_4h_to_h\.", ".mlp.down_proj."),
+    ]
+    mapping["gpt_neox_japanese"] = gpt_neox_mlp_renames.copy()
+    for key in ["bark", "semantic", "coarse_acoustics", "fine_acoustics"]:
+        mapping[key] = [
+            WeightRenaming(r"\.mlp\.in_proj\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.out_proj\.", ".mlp.down_proj."),
+        ]
+    mapping["perceiver"] = [
+        WeightRenaming(r"\.mlp\.dense1\.", ".mlp.up_proj."),
+        WeightRenaming(r"\.mlp\.dense2\.", ".mlp.down_proj."),
+    ]
     mapping["Qwen3OmniMoeTalkerForConditionalGeneration"] = [
         WeightRenaming(r"text_projection\.linear_fc1\.", "text_projection.up_proj."),
         WeightRenaming(r"text_projection\.linear_fc2\.", "text_projection.down_proj."),
@@ -2545,6 +2560,7 @@ def _build_checkpoint_conversion_mapping():
         "blip_2_vision_model",
         "instructblip_vision_model",
         "instructblipvideo_vision_model",
+        "git_vision_model",
         "idefics2_vision",
         "idefics3_vision",
         "smolvlm_vision",
@@ -2554,17 +2570,25 @@ def _build_checkpoint_conversion_mapping():
         "owlv2_text_model",
         "owlv2_vision_model",
         "mimi",
+        "dab-detr",
         "vitdet",
         "focalnet",
         "pp_ocrv5_server_rec",
         "pp_ocrv5_mobile_rec",
         "pp_ocrv6_small_rec",
+        "mgp-str",
+        "clvp_encoder",
+        "patchtsmixer",
         "sam3_vit_model",
         "sam3_detr_encoder",
         "sam3_detr_decoder",
         "sam3_lite_text_detr_encoder",
         "sam3_lite_text_detr_decoder",
         "efficientloftr",
+        "hiera",
+        "vitpose_backbone",
+        "vjepa2",
+        "groupvit_text_model",
         "ernie4_5_vl_moe_vision",
         "minicpmv4_6_vision",
         "minicpmv4_7_vision",
@@ -2611,6 +2635,7 @@ def _build_checkpoint_conversion_mapping():
             ]
             + ungated_mlp_renames()
         )
+    mapping["kosmos_2_text_model"] = mapping.get("kosmos_2_text_model", []) + ungated_mlp_renames(r"\.ffn\.", ".ffn.")
     mapping["idefics"] = mapping.get("idefics", []) + ungated_mlp_renames(
         r"vision_model\.encoder\.layers\.(\d+)\.mlp\.", r"vision_model.encoder.layers.\1.mlp."
     )
@@ -2620,16 +2645,28 @@ def _build_checkpoint_conversion_mapping():
     mapping["lw_detr_vit"] = mapping.get("lw_detr_vit", []) + ungated_mlp_renames(
         r"\.intermediate\.", ".intermediate."
     )
+    mapping["swiftformer"] = mapping.get("swiftformer", []) + ungated_mlp_renames(r"\.linear\.", ".linear.")
+    mapping["kosmos_2_5_text_model"] = mapping.get("kosmos_2_5_text_model", []) + ungated_mlp_renames(
+        r"\.ffn\.", ".ffn."
+    )
     for key in ["sam3", "sam3_lite_text"]:
         mapping[key] = mapping.get(key, []) + ungated_mlp_renames(
             r"geometry_encoder\.layers\.(\d+)\.mlp\.", r"geometry_encoder.layers.\1.mlp."
         )
+    groupvit_vision_renames = []
+    for attr in [r"mlp", r"mlp_channels", r"mlp_inter", r"group_projector\.\d+"]:
+        groupvit_vision_renames += ungated_mlp_renames(rf"(vision_model\..*\.{attr})\.", r"\1.")
+    for key in ["groupvit", "groupvit_vision_model"]:
+        mapping[key] = mapping.get(key, []) + groupvit_vision_renames
     mapping["evolla"] = (
         mapping.get("evolla", [])
         + ungated_mlp_renames(r"\.adapter\.ff\.", ".adapter.ff.")
         + ungated_mlp_renames(
             r"sequence_compressor_resampler\.layers\.(\d+)\.1\.", r"sequence_compressor_resampler.layers.\1.1."
         )
+    )
+    mapping["oneformer"] = mapping.get("oneformer", []) + ungated_mlp_renames(
+        r"text_encoder\.transformer\.layers\.(\d+)\.mlp\.", r"text_encoder.transformer.layers.\1.mlp."
     )
     mimi_lookbehind = r"(?<!_transformer\.layers\.\d)(?<!_transformer\.layers\.\d\d)"
     for key in ["moshi", "kyutai_speech_to_text"]:

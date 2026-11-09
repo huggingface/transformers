@@ -140,12 +140,12 @@ class MptMLP(nn.Module):
         hidden_size = config.hidden_size
 
         self.up_proj = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
-        self.act = nn.GELU(approximate="none")
+        self.act_fn = nn.GELU(approximate="none")
         self.down_proj = nn.Linear(4 * hidden_size, hidden_size, bias=False)
         self.hidden_dropout = config.attn_config.attn_pdrop
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.act(self.up_proj(hidden_states))
+        hidden_states = self.act_fn(self.up_proj(hidden_states))
 
         intermediate_output = self.down_proj(hidden_states)
 

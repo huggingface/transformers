@@ -402,7 +402,7 @@ intersection:
 stuff.py::Beit3MLP:
 embedding:
     efficientloftr::EfficientLoFTRMLP (0.9718)
-    seggpt::SegGptMlp (0.9650)
+    seggpt::SegGptMLP (0.9650)
 jaccard:
     chinese_clip::ChineseCLIPTextSelfOutput (0.5294)
     bert::BertSelfOutput (0.5294)

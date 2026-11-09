@@ -622,23 +622,23 @@ class DabDetrDecoderLayerCrossAttention(nn.Module):
         return hidden_states, cross_attn_weights
 
 
-class DabDetrDecoderLayerFFN(nn.Module):
+class DabDetrDecoderLayerMLP(nn.Module):
     def __init__(self, config: DabDetrConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.final_layer_norm = nn.LayerNorm(hidden_size)
-        self.fc1 = nn.Linear(hidden_size, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, hidden_size)
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.up_proj = nn.Linear(hidden_size, config.decoder_ffn_dim)
+        self.down_proj = nn.Linear(config.decoder_ffn_dim, hidden_size)
+        self.act_fn = ACT2FN[config.activation_function]
         self.dropout = config.dropout
         self.activation_dropout = config.activation_dropout
         self.keep_query_pos = config.keep_query_pos
 
     def forward(self, hidden_states: torch.Tensor):
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.act_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -714,7 +714,7 @@ class DabDetrDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.self_attn = DabDetrDecoderLayerSelfAttention(config)
         self.cross_attn = DabDetrDecoderLayerCrossAttention(config, is_first)
-        self.mlp = DabDetrDecoderLayerFFN(config)
+        self.mlp = DabDetrDecoderLayerMLP(config)
 
     def forward(
         self,

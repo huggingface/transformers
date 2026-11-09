@@ -419,8 +419,8 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMlp,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
-class Kosmos2_5VisionMlp(nn.Module):
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5DenseGatedActDense->Pix2StructVisionMLP,T5Config->Pix2StructVisionConfig,config.d_model->config.hidden_size,dropout_rate->dropout_rate
+class Kosmos2_5VisionMLP(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -538,7 +538,7 @@ class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
         self.config = config
 
         self.attention = Kosmos2_5VisionAttention(config)
-        self.mlp = Kosmos2_5VisionMlp(config)
+        self.mlp = Kosmos2_5VisionMLP(config)
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -725,25 +725,25 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextFFN with Kosmos2->Kosmos2_5
-class Kosmos2_5TextFFN(nn.Module):
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextMLP with Kosmos2->Kosmos2_5
+class Kosmos2_5TextMLP(nn.Module):
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__()
 
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
+        self.up_proj = nn.Linear(config.embed_dim, config.ffn_dim)
+        self.down_proj = nn.Linear(config.ffn_dim, config.embed_dim)
 
         self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.act_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.ffn_layernorm(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         return hidden_states
@@ -849,7 +849,7 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.ffn = Kosmos2_5TextFFN(config)
+        self.ffn = Kosmos2_5TextMLP(config)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextBlock.forward
