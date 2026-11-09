@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Literal
 
 import numpy as np
 import torch
@@ -31,7 +30,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -141,8 +140,8 @@ class MiniMaxVL01Config(LlavaNextConfig):
     }
 
     image_token_index: int = 200025
-    vision_feature_select_strategy: Literal["default"] = "default"
     vision_feature_layer: int | list[int] = -1
+    vision_feature_select_strategy = AttributeError()
     image_seq_length = AttributeError()
 
     def __post_init__(self, **kwargs):
@@ -403,7 +402,6 @@ class MiniMaxVL01Processor(LlavaNextProcessor):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
-        vision_feature_select_strategy="default",
         chat_template=None,
         image_token="<image>",
         num_additional_image_tokens=1,
@@ -412,15 +410,11 @@ class MiniMaxVL01Processor(LlavaNextProcessor):
         r"""
         patch_size (`int`, *optional*):
             Patch size from the vision tower. Defaults to the image processor's `patch_size`.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Vision feature selection strategy used by the released MiniMax-VL-01 checkpoint.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote an image location.
         num_additional_image_tokens (`int`, *optional*, defaults to `1`):
-            Number of non-spatial tokens emitted by CLIP before the `"default"` strategy removes its CLS token.
+            Number of non-spatial tokens emitted by CLIP before its CLS token is removed.
         """
-        if vision_feature_select_strategy != "default":
-            raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
         if image_processor is not None:
             if getattr(image_processor, "process_image_mode", "anyres") != "anyres":
                 raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
@@ -430,12 +424,54 @@ class MiniMaxVL01Processor(LlavaNextProcessor):
             image_processor=image_processor,
             tokenizer=tokenizer,
             patch_size=patch_size,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             chat_template=chat_template,
             image_token=image_token,
             num_additional_image_tokens=num_additional_image_tokens,
             **kwargs,
         )
+        del self.vision_feature_select_strategy
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_size = image_inputs["image_sizes"][image_idx]
+        if not isinstance(image_size, (list, tuple)):
+            image_size = image_size.tolist()
+        orig_height, orig_width = image_size
+        height, width = image_inputs["pixel_values"][0][0].shape[-2:]
+        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width) - 1
+        return self.image_token * num_image_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = MiniMaxVL01ProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            if isinstance(size, SizeDict):
+                size = (
+                    (size.shortest_edge, size.shortest_edge)
+                    if size.shortest_edge is not None
+                    else (min(size.height, size.width), min(size.height, size.width))
+                )
+            else:
+                size = (
+                    (size["shortest_edge"], size["shortest_edge"])
+                    if "shortest_edge" in size
+                    else (min(size["height"], size["width"]), min(size["height"], size["width"]))
+                )
+            processed_height, processed_width = size
+
+            batch_num_image_tokens = []
+            num_image_patches = [1] * len(image_sizes)
+            for image_size in image_sizes:
+                orig_height, orig_width = image_size
+                num_image_tokens = (
+                    self._get_number_of_features(orig_height, orig_width, processed_height, processed_width) - 1
+                )
+                batch_num_image_tokens.append(num_image_tokens)
+            vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
         current_height = patches_height * scale_height
@@ -554,7 +590,22 @@ class MiniMaxVL01Model(LlavaNextModel):
             return torch.cat(list(pixel_values), dim=0)
         raise ValueError("List-form `pixel_values` must contain only 3D patches or only 4D patch batches.")
 
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+    def pack_image_features(self, image_features, image_sizes, image_newline=None):
+        """
+        Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
+
+        Args:
+            image_features (`list[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
+                List of image feature tensor, each contains all the visual feature of all patches.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+                Actual image size of each images (H, W).
+            image_newline (`torch.Tensor` of shape `(embed_dim)`)
+                New line embedding vector.
+        Returns:
+            image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
+            feature_lens (`list[int]`)
+                token length of each image in image_features
+        """
         new_image_features = []
         feature_lens = []
         for image_idx, image_feature in enumerate(image_features):
@@ -605,7 +656,6 @@ class MiniMaxVL01Model(LlavaNextModel):
         pixel_values: torch.FloatTensor | list[torch.FloatTensor],
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -613,11 +663,7 @@ class MiniMaxVL01Model(LlavaNextModel):
             A flat 4D patch tensor, a padded 5D patch tensor, or a list of 3D/4D patch tensors.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
-        if vision_feature_select_strategy != "default":
-            raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
         pixel_values = self._flatten_pixel_values(pixel_values)
         image_num_patches = [
             image_size_to_num_patches(
@@ -642,15 +688,14 @@ class MiniMaxVL01Model(LlavaNextModel):
             selected_image_feature = torch.cat(
                 [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer], dim=-1
             )
-        if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
+
+        selected_image_feature = selected_image_feature[:, 1:]
 
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
         image_features, _ = self.pack_image_features(
             image_features,
             image_sizes,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=self.image_newline,
         )
         image_outputs.pooler_output = image_features
@@ -669,7 +714,6 @@ class MiniMaxVL01Model(LlavaNextModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -680,11 +724,7 @@ class MiniMaxVL01Model(LlavaNextModel):
             3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
-        if vision_feature_select_strategy != "default":
-            raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
         pixel_values = self._flatten_pixel_values(pixel_values)
         if pixel_values is not None and pixel_values.numel() == 0:
             pixel_values = None
@@ -703,7 +743,6 @@ class MiniMaxVL01Model(LlavaNextModel):
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
-                vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             )
 
@@ -739,6 +778,13 @@ class MiniMaxVL01Model(LlavaNextModel):
     custom_intro="MiniMax-VL-01 with a causal language modeling head for image-conditioned text generation."
 )
 class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
+    def pack_image_features(self, image_features, image_sizes, image_newline=None):
+        return self.model.pack_image_features(
+            image_features=image_features,
+            image_sizes=image_sizes,
+            image_newline=image_newline,
+        )
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
@@ -747,7 +793,6 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
         pixel_values: torch.FloatTensor | list[torch.FloatTensor],
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -755,14 +800,11 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             A flat 4D patch tensor, a padded 5D patch tensor, or a list of 3D/4D patch tensors.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             image_sizes=image_sizes,
             vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
 
@@ -779,7 +821,6 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -792,8 +833,6 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for causal language modeling. Padding positions excluded by `attention_mask` and labels equal to
             `-100` are ignored.
@@ -803,7 +842,6 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             pixel_values=pixel_values,
             image_sizes=image_sizes,
             vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,

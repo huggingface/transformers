@@ -42,7 +42,6 @@ class MiniMaxVL01Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
-        vision_feature_select_strategy="default",
         chat_template=None,
         image_token="<image>",
         num_additional_image_tokens=1,
@@ -51,15 +50,11 @@ class MiniMaxVL01Processor(ProcessorMixin):
         r"""
         patch_size (`int`, *optional*):
             Patch size from the vision tower. Defaults to the image processor's `patch_size`.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Vision feature selection strategy used by the released MiniMax-VL-01 checkpoint.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote an image location.
         num_additional_image_tokens (`int`, *optional*, defaults to `1`):
-            Number of non-spatial tokens emitted by CLIP before the `"default"` strategy removes its CLS token.
+            Number of non-spatial tokens emitted by CLIP before its CLS token is removed.
         """
-        if vision_feature_select_strategy != "default":
-            raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
         if image_processor is not None:
             if getattr(image_processor, "process_image_mode", "anyres") != "anyres":
                 raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
@@ -67,7 +62,6 @@ class MiniMaxVL01Processor(ProcessorMixin):
                 patch_size = image_processor.patch_size
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.image_token_id = (
             tokenizer.image_token_id
@@ -82,9 +76,7 @@ class MiniMaxVL01Processor(ProcessorMixin):
             image_size = image_size.tolist()
         orig_height, orig_width = image_size
         height, width = image_inputs["pixel_values"][0][0].shape[-2:]
-        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-        if self.vision_feature_select_strategy == "default":
-            num_image_tokens -= 1
+        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width) - 1
         return self.image_token * num_image_tokens
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
@@ -160,14 +152,12 @@ class MiniMaxVL01Processor(ProcessorMixin):
             processed_height, processed_width = size
 
             batch_num_image_tokens = []
-            num_image_patches = [1] * len(image_sizes)  # llava-next doesn't batch pixels as Idefics, thus `1` patch`
+            num_image_patches = [1] * len(image_sizes)
             for image_size in image_sizes:
                 orig_height, orig_width = image_size
-                num_image_tokens = self._get_number_of_features(
-                    orig_height, orig_width, processed_height, processed_width
+                num_image_tokens = (
+                    self._get_number_of_features(orig_height, orig_width, processed_height, processed_width) - 1
                 )
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
 

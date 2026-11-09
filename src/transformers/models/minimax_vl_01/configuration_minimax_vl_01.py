@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -205,7 +203,6 @@ class MiniMaxVL01Config(PreTrainedConfig):
 
     image_token_index: int = 200025
     projector_hidden_act: str = "gelu"
-    vision_feature_select_strategy: Literal["default"] = "default"
     vision_feature_layer: int | list[int] = -1
     multimodal_projector_bias: bool = True
     tie_word_embeddings: bool = False

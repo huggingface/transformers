@@ -941,7 +941,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         self.language_model = MiniMaxVL01TextModel(config.text_config)
         self.post_init()
 
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+    def pack_image_features(self, image_features, image_sizes, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -950,8 +950,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
                 List of image feature tensor, each contains all the visual feature of all patches.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
-            vision_feature_select_strategy (`str`)
-                The feature selection strategy used to select the vision feature from the vision backbone.
             image_newline (`torch.Tensor` of shape `(embed_dim)`)
                 New line embedding vector.
         Returns:
@@ -1009,7 +1007,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         pixel_values: torch.FloatTensor | list[torch.FloatTensor],
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1017,11 +1014,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
             A flat 4D patch tensor, a padded 5D patch tensor, or a list of 3D/4D patch tensors.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
-        if vision_feature_select_strategy != "default":
-            raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
         pixel_values = self._flatten_pixel_values(pixel_values)
         image_num_patches = [
             image_size_to_num_patches(
@@ -1046,15 +1039,14 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
             selected_image_feature = torch.cat(
                 [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer], dim=-1
             )
-        if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
+
+        selected_image_feature = selected_image_feature[:, 1:]
 
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
         image_features, _ = self.pack_image_features(
             image_features,
             image_sizes,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=self.image_newline,
         )
         image_outputs.pooler_output = image_features
@@ -1096,7 +1088,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1107,11 +1098,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
             3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
-        if vision_feature_select_strategy != "default":
-            raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
         pixel_values = self._flatten_pixel_values(pixel_values)
         if pixel_values is not None and pixel_values.numel() == 0:
             pixel_values = None
@@ -1130,7 +1117,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
-                vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             )
 
@@ -1192,11 +1178,10 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+    def pack_image_features(self, image_features, image_sizes, image_newline=None):
         return self.model.pack_image_features(
             image_features=image_features,
             image_sizes=image_sizes,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
         )
 
@@ -1208,7 +1193,6 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         pixel_values: torch.FloatTensor | list[torch.FloatTensor],
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1216,14 +1200,11 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
             A flat 4D patch tensor, a padded 5D patch tensor, or a list of 3D/4D patch tensors.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             image_sizes=image_sizes,
             vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
 
@@ -1240,7 +1221,6 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1253,8 +1233,6 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
             3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for causal language modeling. Padding positions excluded by `attention_mask` and labels equal to
             `-100` are ignored.
@@ -1264,7 +1242,6 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
             pixel_values=pixel_values,
             image_sizes=image_sizes,
             vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
