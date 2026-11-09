@@ -429,3 +429,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
+
+    @unittest.skip(reason="Cannot remove image_seq_len argument from __call__ without breaking BC.")
+    def test_call_arguments_not_in_attributes(self):
+        pass
