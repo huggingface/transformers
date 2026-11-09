@@ -33,11 +33,11 @@ from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
     Wav2Vec2FeatureEncoder,
-    Wav2Vec2FeedForward,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2GroupNormConvLayer,
     Wav2Vec2LayerNormConvLayer,
+    Wav2Vec2MLP,
     Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2SamePadLayer,
     _compute_mask_indices,
@@ -137,7 +137,7 @@ class SEWAttention(Wav2Vec2Attention):
     pass
 
 
-class SEWFeedForward(Wav2Vec2FeedForward):
+class SEWMLP(Wav2Vec2MLP):
     pass
 
 

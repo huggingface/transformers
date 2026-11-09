@@ -74,17 +74,22 @@ class ModernBertDecoderMLP(nn.Module):
     and :class:`~transformers.model.bert.modeling_bert.SelfOutput` with a single module that has similar functionality.
     """
 
-    def __init__(self, config: ModernBertDecoderConfig):
+    def __init__(self, config):
         super().__init__()
+
         self.config = config
-        self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
-        self.act = ACT2FN[config.hidden_activation]
-        self.drop = nn.Dropout(config.mlp_dropout)
-        self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.dropout = nn.Dropout(config.mlp_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
-        return self.Wo(self.drop(self.act(input) * gate))
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.act_fn(gate)
+
+        return self.down_proj(self.dropout(up_states))
 
 
 class ModernBertDecoderRotaryEmbedding(nn.Module):
@@ -393,8 +398,8 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         if isinstance(module, ModernBertDecoderEmbeddings):
             init_weight(module.tok_embeddings, stds["embedding"])
         elif isinstance(module, ModernBertDecoderMLP):
-            init_weight(module.Wi, stds["in"])
-            init_weight(module.Wo, stds["out"])
+            init_weight(module.gate_up_proj, stds["in"])
+            init_weight(module.down_proj, stds["out"])
         elif isinstance(module, ModernBertDecoderAttention):
             init_weight(module.q_proj, stds["in"])
             init_weight(module.k_proj, stds["in"])

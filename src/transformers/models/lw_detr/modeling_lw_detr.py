@@ -131,22 +131,22 @@ class LwDetrViTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class LwDetrViTMlp(nn.Module):
+class LwDetrViTMLP(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, in_features)
-        self.drop = nn.Dropout(config.dropout_prob)
+        self.up_proj = nn.Linear(in_features, hidden_features)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(hidden_features, in_features)
+        self.dropout = nn.Dropout(config.dropout_prob)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        return x
+        return hidden_states
 
 
 class LwDetrViTLayer(GradientCheckpointingLayer):
@@ -159,7 +159,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
 
         dim = config.hidden_size
         self.attention = LwDetrViTAttention(config)
-        self.intermediate = LwDetrViTMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+        self.intermediate = LwDetrViTMLP(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -859,16 +859,16 @@ class LwDetrMLP(nn.Module):
     def __init__(self, config: LwDetrConfig):
         super().__init__()
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.act_fn = ACT2FN[config.decoder_activation_function]
+        self.up_proj = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.down_proj = nn.Linear(config.decoder_ffn_dim, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         return hidden_states

@@ -77,8 +77,8 @@ class SeedOssMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.residual_dropout = config.residual_dropout
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         down_proj = nn.functional.dropout(down_proj, p=self.residual_dropout, training=self.training)
         return down_proj
 

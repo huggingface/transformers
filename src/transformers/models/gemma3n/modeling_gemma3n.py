@@ -819,7 +819,7 @@ class Gemma3nAudioConformerAttention(nn.Module):
         return audio_encodings_input_to_attn + self.post_norm(audio_encodings)
 
 
-class Gemma3nAudioConformerFeedForward(nn.Module):
+class Gemma3nAudioConformerMLP(nn.Module):
     def __init__(self, config: Gemma3nAudioConfig):
         super().__init__()
         self.config = config
@@ -892,10 +892,10 @@ class Gemma3nAudioConformerBlock(nn.Module):
         super().__init__()
         self.config = config
 
-        self.ffw_layer_start = Gemma3nAudioConformerFeedForward(self.config)
+        self.ffw_layer_start = Gemma3nAudioConformerMLP(self.config)
         self.attention = Gemma3nAudioConformerAttention(self.config)
         self.lconv1d = Gemma3nAudioConformerLightConv1d(self.config)
-        self.ffw_layer_end = Gemma3nAudioConformerFeedForward(self.config)
+        self.ffw_layer_end = Gemma3nAudioConformerMLP(self.config)
         self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.norm = Gemma3nRMSNorm(self.config.hidden_size)
 
@@ -955,16 +955,14 @@ class Gemma3nTextMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.activation_sparsity = config.activation_sparsity_pattern[layer_idx]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        gate_proj = self.gate_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
         if self.activation_sparsity > 0.0:
-            gate_proj = self._gaussian_topk(gate_proj)
-        activations = self.act_fn(gate_proj)
-        up_proj = self.up_proj(hidden_states)
-        down_proj = self.down_proj(activations * up_proj)
+            gate = self._gaussian_topk(gate)
+        down_proj = self.down_proj(self.act_fn(gate) * self.up_proj(hidden_states))
         return down_proj
 
     def _gaussian_topk(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -1269,7 +1267,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.post_feedforward_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
         self.altup = Gemma3nTextAltUp(config)
         self.laurel = Gemma3nTextLaurelBlock(config)

@@ -379,23 +379,23 @@ class UniSpeechAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class UniSpeechFeedForward(nn.Module):
+class UniSpeechMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+            self.act_fn = ACT2FN[config.hidden_act]
         else:
-            self.intermediate_act_fn = config.hidden_act
+            self.act_fn = config.hidden_act
 
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
 
         hidden_states = self.output_dense(hidden_states)
@@ -416,7 +416,7 @@ class UniSpeechEncoderLayer(GradientCheckpointingLayer):
 
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = UniSpeechFeedForward(config)
+        self.feed_forward = UniSpeechMLP(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -520,7 +520,7 @@ class UniSpeechEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
         )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = UniSpeechFeedForward(config)
+        self.feed_forward = UniSpeechMLP(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if getattr(config, "adapter_attn_dim", None) is not None:

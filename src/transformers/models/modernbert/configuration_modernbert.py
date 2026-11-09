@@ -73,6 +73,7 @@ class ModernBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
@@ -81,7 +82,7 @@ class ModernBertConfig(PreTrainedConfig):
     intermediate_size: int = 1152
     num_hidden_layers: int = 22
     num_attention_heads: int = 12
-    hidden_activation: str = "gelu"
+    hidden_act: str = "gelu"
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     initializer_cutoff_factor: float = 2.0

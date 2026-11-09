@@ -297,8 +297,8 @@ class SeamlessM4Tv2ConformerFeatureProjection(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerFeedForward with SeamlessM4T->SeamlessM4Tv2
-class SeamlessM4Tv2ConformerFeedForward(nn.Module):
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerMLP with SeamlessM4T->SeamlessM4Tv2
+class SeamlessM4Tv2ConformerMLP(nn.Module):
     def __init__(self, config, act_fn=None, dropout=None):
         super().__init__()
         dropout = dropout if dropout is not None else config.speech_encoder_dropout
@@ -492,7 +492,7 @@ class SeamlessM4Tv2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn1 = SeamlessM4Tv2ConformerFeedForward(config)
+        self.ffn1 = SeamlessM4Tv2ConformerMLP(config)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
@@ -504,7 +504,7 @@ class SeamlessM4Tv2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 2
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn2 = SeamlessM4Tv2ConformerFeedForward(config)
+        self.ffn2 = SeamlessM4Tv2ConformerMLP(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(
@@ -668,7 +668,7 @@ class SeamlessM4Tv2ConformerAdapterLayer(nn.Module):
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn = SeamlessM4Tv2ConformerFeedForward(config, act_fn="relu", dropout=dropout)
+        self.ffn = SeamlessM4Tv2ConformerMLP(config, act_fn="relu", dropout=dropout)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         pad = self.kernel_size // 2
@@ -1506,7 +1506,7 @@ class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
 
         self.feature_projection = SeamlessM4Tv2ConformerFeatureProjection(config)
         self.encoder = SeamlessM4Tv2ConformerEncoder(config)
-        self.intermediate_ffn = SeamlessM4Tv2ConformerFeedForward(config, act_fn="relu", dropout=0.0)
+        self.intermediate_ffn = SeamlessM4Tv2ConformerMLP(config, act_fn="relu", dropout=0.0)
         self.adapter = SeamlessM4Tv2ConformerAdapter(config) if config.add_adapter else None
         self.inner_layer_norm = nn.LayerNorm(config.hidden_size)
 

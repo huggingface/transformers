@@ -322,22 +322,22 @@ class VitDetResBottleneckBlock(nn.Module):
         return out
 
 
-class VitDetMlp(nn.Module):
+class VitDetMLP(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, in_features)
-        self.drop = nn.Dropout(config.dropout_prob)
+        self.up_proj = nn.Linear(in_features, hidden_features)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(hidden_features, in_features)
+        self.dropout = nn.Dropout(config.dropout_prob)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        return x
+        return hidden_states
 
 
 def window_partition(hidden_state, window_size):
@@ -449,7 +449,7 @@ class VitDetLayer(GradientCheckpointingLayer):
 
         self.drop_path = VitDetDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.mlp = VitDetMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+        self.mlp = VitDetMLP(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
 
         self.window_size = window_size
 

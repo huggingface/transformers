@@ -326,12 +326,11 @@ class BeamMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
+    def forward(self, hidden_states):
+        gate = self.gate_proj(hidden_states)
         # Beam evaluates the SwiGLU activation and product in FP32.
-        activated = (self.act_fn(gate.float()) * up.float()).to(gate.dtype)
-        return self.down_proj(activated)
+        down_proj = self.down_proj((self.act_fn(gate.float()) * self.up_proj(hidden_states).float()).to(gate.dtype))
+        return down_proj
 
 
 class BeamTopKRouter(nn.Module):

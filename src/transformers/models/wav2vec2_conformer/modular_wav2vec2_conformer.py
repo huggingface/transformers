@@ -21,13 +21,13 @@ from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2AdapterLayer,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
-    Wav2Vec2FeedForward,
     Wav2Vec2ForAudioFrameClassification,
     Wav2Vec2ForCTC,
     Wav2Vec2ForPreTraining,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2ForXVector,
     Wav2Vec2GumbelVectorQuantizer,
+    Wav2Vec2MLP,
     Wav2Vec2Model,
     Wav2Vec2PositionalConvEmbedding,
 )
@@ -203,7 +203,7 @@ class Wav2Vec2ConformerFeatureProjection(Wav2Vec2FeatureProjection):
     pass
 
 
-class Wav2Vec2ConformerFeedForward(Wav2Vec2FeedForward):
+class Wav2Vec2ConformerMLP(Wav2Vec2MLP):
     pass
 
 
@@ -417,7 +417,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn1 = Wav2Vec2ConformerFeedForward(config)
+        self.ffn1 = Wav2Vec2ConformerMLP(config)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
@@ -429,7 +429,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 2
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn2 = Wav2Vec2ConformerFeedForward(config)
+        self.ffn2 = Wav2Vec2ConformerMLP(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(

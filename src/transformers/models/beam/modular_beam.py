@@ -242,12 +242,11 @@ class BeamExperts(DeepseekV4Experts):
 
 
 class BeamMLP(Qwen3MoeMLP):
-    def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
+    def forward(self, hidden_states):
+        gate = self.gate_proj(hidden_states)
         # Beam evaluates the SwiGLU activation and product in FP32.
-        activated = (self.act_fn(gate.float()) * up.float()).to(gate.dtype)
-        return self.down_proj(activated)
+        down_proj = self.down_proj((self.act_fn(gate.float()) * self.up_proj(hidden_states).float()).to(gate.dtype))
+        return down_proj
 
 
 class BeamTopKRouter(DeepseekV3TopkRouter):

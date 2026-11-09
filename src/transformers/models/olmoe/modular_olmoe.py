@@ -25,7 +25,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
-from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -34,6 +33,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 from .configuration_olmoe import OlmoeConfig
@@ -51,7 +51,7 @@ class OlmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class OlmoeMLP(GemmaMLP):
+class OlmoeMLP(MistralMLP):
     pass
 
 

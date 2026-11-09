@@ -1103,17 +1103,19 @@ class Qwen2_5OmniRMSNorm(nn.Module):
 
 
 class Qwen2_5OmniMLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        return down_proj
 
 
 class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
@@ -1122,7 +1124,7 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
         self.norm1 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5OmniVisionAttention(config=config)
-        self.mlp = Qwen2_5OmniMLP(config, bias=True)
+        self.mlp = Qwen2_5OmniMLP(config)
 
     @auto_docstring
     def forward(
@@ -1463,17 +1465,19 @@ class Qwen2_5OmniAttention(nn.Module):
 
 
 class Qwen2MLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        return down_proj
 
 
 class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
@@ -2919,25 +2923,18 @@ class Qwen2_5_OmniAdaLayerNormZero_Final(nn.Module):
         return hidden_states
 
 
-# FeedForward
 class DiTMLP(nn.Module):
     def __init__(self, dim, mult=4, dropout=0.0):
         super().__init__()
         inner_dim = int(dim * mult)
+        self.up_proj = nn.Linear(dim, inner_dim)
+        self.act_fn = nn.GELU(approximate="tanh")
+        self.dropout = nn.Dropout(dropout)
+        self.down_proj = nn.Linear(inner_dim, dim)
 
-        self.ff = nn.ModuleList(
-            [
-                nn.Linear(dim, inner_dim),
-                nn.GELU(approximate="tanh"),
-                nn.Dropout(dropout),
-                nn.Linear(inner_dim, dim),
-            ]
-        )
-
-    def forward(self, hidden_states):
-        for layer in self.ff:
-            hidden_states = layer(hidden_states)
-        return hidden_states
+    def forward(self, hidden_states) -> torch.Tensor:
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.up_proj(hidden_states))))
+        return down_proj
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:

@@ -247,15 +247,12 @@ class LightGlueAttention(LlamaAttention):
 class LightGlueMLP(CLIPMLP):
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-        self.fc1 = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.up_proj = nn.Linear(config.intermediate_size, config.intermediate_size)
         self.layer_norm = nn.LayerNorm(config.intermediate_size, elementwise_affine=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.layer_norm(self.up_proj(hidden_states))))
+        return down_proj
 
 
 class LightGlueTransformerLayer(nn.Module):

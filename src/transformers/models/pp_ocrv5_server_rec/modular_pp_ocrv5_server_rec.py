@@ -48,7 +48,7 @@ from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..blip_2.modeling_blip_2 import Blip2Attention
 from ..clip.modeling_clip import CLIPEncoderLayer
-from ..focalnet.modeling_focalnet import FocalNetMlp
+from ..focalnet.modeling_focalnet import FocalNetMLP
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVLPreTrainedModel
 from ..resnet.modeling_resnet import ResNetConvLayer
 
@@ -330,7 +330,7 @@ class PPOCRV5ServerRecHead(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
 
-class PPOCRV5ServerRecMLP(FocalNetMlp):
+class PPOCRV5ServerRecMLP(FocalNetMLP):
     pass
 
 

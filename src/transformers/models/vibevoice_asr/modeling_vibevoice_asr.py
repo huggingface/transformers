@@ -85,15 +85,16 @@ class VibeVoiceAsrMultiModalProjector(nn.Module):
         return acoustic_features + semantic_features
 
 
-class VibeVoiceAsrFeedForward(nn.Module):
+class VibeVoiceAsrMLP(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
-        self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
-        self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
+        self.up_proj = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
 
-    def forward(self, hidden_states):
-        return self.linear2(self.activation(self.linear1(hidden_states)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class VibeVoiceAsrConv1dCacheLayer:
@@ -203,7 +204,7 @@ class VibeVoiceAsrConvNext1dLayer(nn.Module):
 
         self.norm = VibeVoiceAsrRMSNorm(hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = VibeVoiceAsrRMSNorm(hidden_size, eps=config.rms_norm_eps)
-        self.ffn = VibeVoiceAsrFeedForward(config, hidden_size)
+        self.ffn = VibeVoiceAsrMLP(config, hidden_size)
         self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
         self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
         self.mixer = VibeVoiceAsrCausalConv1d(

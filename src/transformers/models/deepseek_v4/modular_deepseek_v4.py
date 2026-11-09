@@ -932,10 +932,11 @@ class DeepseekV4MLP(LlamaMLP):
         super().__init__(config)
         self.limit = config.swiglu_limit
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(x).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
-        return self.down_proj(self.act_fn(gate) * up)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        gate = self.gate_proj(hidden_states).clamp(max=self.limit)
+        up = self.up_proj(hidden_states).clamp(min=-self.limit, max=self.limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 @use_experts_implementation

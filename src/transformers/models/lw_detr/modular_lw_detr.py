@@ -47,7 +47,7 @@ from ..vitdet.configuration_vitdet import VitDetConfig
 from ..vitdet.modeling_vitdet import (
     VitDetBackbone,
     VitDetEmbeddings,
-    VitDetMlp,
+    VitDetMLP,
     VitDetPreTrainedModel,
 )
 
@@ -241,7 +241,7 @@ class LwDetrViTAttention(ViTAttention):
         self.num_key_value_groups = 1
 
 
-class LwDetrViTMlp(VitDetMlp):
+class LwDetrViTMLP(VitDetMLP):
     pass
 
 
@@ -255,7 +255,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
 
         dim = config.hidden_size
         self.attention = LwDetrViTAttention(config)
-        self.intermediate = LwDetrViTMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+        self.intermediate = LwDetrViTMLP(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -664,16 +664,16 @@ class LwDetrMLP(nn.Module):
     def __init__(self, config: LwDetrConfig):
         super().__init__()
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.act_fn = ACT2FN[config.decoder_activation_function]
+        self.up_proj = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.down_proj = nn.Linear(config.decoder_ffn_dim, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         return hidden_states

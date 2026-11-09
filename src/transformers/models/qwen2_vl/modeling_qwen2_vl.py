@@ -292,15 +292,15 @@ class PatchMerger(nn.Module):
         return x
 
 
-class VisionMlp(nn.Module):
+class VisionMLP(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.up_proj = nn.Linear(dim, hidden_dim)
+        self.act_fn = ACT2FN[hidden_act]
+        self.down_proj = nn.Linear(hidden_dim, dim)
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def forward(self, hidden_states) -> torch.Tensor:
+        return self.down_proj(self.act_fn(self.up_proj(hidden_states)))
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -432,7 +432,7 @@ class Qwen2VLVisionBlock(GradientCheckpointingLayer):
         mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
         self.attn = VisionAttention(config=config)
-        self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
+        self.mlp = VisionMLP(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
     def forward(
         self,
@@ -463,8 +463,8 @@ class Qwen2MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         return down_proj
 
 
@@ -670,10 +670,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self.post_init()
 
     def get_dtype(self) -> torch.dtype:
-        return self.blocks[0].mlp.fc2.weight.dtype
+        return self.blocks[0].mlp.down_proj.weight.dtype
 
     def get_device(self) -> torch.device:
-        return self.blocks[0].mlp.fc2.weight.device
+        return self.blocks[0].mlp.down_proj.weight.device
 
     @merge_with_config_defaults
     @capture_outputs

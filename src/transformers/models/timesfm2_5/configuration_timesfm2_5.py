@@ -78,6 +78,8 @@ class TimesFm2_5Config(PreTrainedConfig):
     quantiles: list[float] | tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
+
+    attribute_map = {"hidden_act": "activation", "mlp_bias": "use_bias"}
     num_key_value_heads: int = 16
     attention_bias: bool = False
     output_quantile_len: int = 1024

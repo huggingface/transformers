@@ -72,8 +72,10 @@ class BitNetMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(
+            self.ffn_sub_norm(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        )
         return down_proj
 
 

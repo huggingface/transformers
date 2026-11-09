@@ -70,18 +70,20 @@ class GlmOcrRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class GlmOcrVisionMlp(nn.Module):
-    def __init__(self, config, bias: bool = True):
+class GlmOcrVisionMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -240,13 +242,13 @@ class GlmOcrTextMLP(nn.Module):
         self.config = config
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
+        up_states = up_states * self.act_fn(gate)
 
         return self.down_proj(up_states)
 
@@ -432,7 +434,7 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.norm1 = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = GlmOcrRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = GlmOcrVisionAttention(config)
-        self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
+        self.mlp = GlmOcrVisionMLP(config)
 
     @auto_docstring
     def forward(

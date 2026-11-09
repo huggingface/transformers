@@ -219,7 +219,7 @@ class Deimv2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Deimv2SwiGLUFFN(LlamaMLP):
+class Deimv2SwiGLUMLP(LlamaMLP):
     def __init__(self, config: Deimv2Config):
         nn.Module.__init__(self)
         hidden_features = config.decoder_ffn_dim // 2
@@ -363,7 +363,7 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
         self.encoder_attn = Deimv2MultiscaleDeformableAttention(config=config)
         self.self_attn_layer_norm = Deimv2RMSNorm(config.d_model)
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)
-        self.mlp = Deimv2SwiGLUFFN(config)
+        self.mlp = Deimv2SwiGLUMLP(config)
         self.use_gateway = config.use_gateway
         self.gateway = Deimv2Gate(config.d_model) if config.use_gateway else None
         self.encoder_attn_layer_norm = None if config.use_gateway else Deimv2RMSNorm(config.d_model)
@@ -428,7 +428,7 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
 
-        if isinstance(module, Deimv2SwiGLUFFN):
+        if isinstance(module, Deimv2SwiGLUMLP):
             init.xavier_uniform_(module.gate_proj.weight)
             init.constant_(module.gate_proj.bias, 0)
             init.xavier_uniform_(module.up_proj.weight)

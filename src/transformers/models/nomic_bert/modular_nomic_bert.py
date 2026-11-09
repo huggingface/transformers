@@ -39,7 +39,6 @@ from ..bert.modeling_bert import (
     BertPredictionHeadTransform,
     BertPreTrainedModel,
 )
-from ..gemma.modeling_gemma import GemmaMLP
 from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Attention,
     JinaEmbeddingsV3Embeddings,
@@ -47,6 +46,7 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Model,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 
 
 @auto_docstring(checkpoint="nomic-ai/nomic-embed-text-v1.5")
@@ -117,7 +117,7 @@ class NomicBertAttention(JinaEmbeddingsV3Attention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class NomicBertMLP(GemmaMLP):
+class NomicBertMLP(MistralMLP):
     pass
 
 

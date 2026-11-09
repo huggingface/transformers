@@ -70,18 +70,20 @@ class Glm4vRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Glm4VisionMlp(nn.Module):
-    def __init__(self, config, bias: bool = False):
+class Glm4VisionMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.out_hidden_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        return down_proj
 
 
 class Glm4vVisionPatchEmbed(nn.Module):
@@ -401,7 +403,7 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
-        self.mlp = Glm4VisionMlp(config, bias=False)
+        self.mlp = Glm4VisionMLP(config)
 
     @auto_docstring
     def forward(
@@ -606,13 +608,13 @@ class Glm4vTextMLP(nn.Module):
         self.config = config
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
+        up_states = up_states * self.act_fn(gate)
 
         return self.down_proj(up_states)
 

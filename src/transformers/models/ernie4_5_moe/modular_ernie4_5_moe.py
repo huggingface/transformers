@@ -26,14 +26,19 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
+from ..ernie4_5.modeling_ernie4_5 import (  # noqa: F401
+    Ernie4_5RotaryEmbedding,
+    apply_rotary_pos_emb,
+    rotate_half,
+)
+from ..hy_v3.modeling_hy_v3 import HYV3MLP
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralPreTrainedModel,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
@@ -44,13 +49,8 @@ class Ernie4_5_MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Ernie4_5_MoeMLP(Qwen3MoeMLP):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__(config, intermediate_size)
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+class Ernie4_5_MoeMLP(HYV3MLP):
+    pass
 
 
 class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):

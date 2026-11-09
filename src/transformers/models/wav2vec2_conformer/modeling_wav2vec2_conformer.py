@@ -339,23 +339,23 @@ class Wav2Vec2ConformerFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-class Wav2Vec2ConformerFeedForward(nn.Module):
+class Wav2Vec2ConformerMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+            self.act_fn = ACT2FN[config.hidden_act]
         else:
-            self.intermediate_act_fn = config.hidden_act
+            self.act_fn = config.hidden_act
 
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = self.intermediate_dropout(hidden_states)
 
         hidden_states = self.output_dense(hidden_states)
@@ -607,7 +607,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn1 = Wav2Vec2ConformerFeedForward(config)
+        self.ffn1 = Wav2Vec2ConformerMLP(config)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
@@ -619,7 +619,7 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 2
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn2 = Wav2Vec2ConformerFeedForward(config)
+        self.ffn2 = Wav2Vec2ConformerMLP(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(

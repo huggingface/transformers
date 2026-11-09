@@ -720,16 +720,16 @@ class NemotronAsrStreamingEncoderSubsamplingConv2D(nn.Module):
         return hidden_states
 
 
-class NemotronAsrStreamingEncoderFeedForward(nn.Module):
+class NemotronAsrStreamingEncoderMLP(nn.Module):
     def __init__(self, config: NemotronAsrStreamingEncoderConfig):
         super().__init__()
         self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.attention_bias)
-        self.activation = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.attention_bias)
         self.activation_dropout = config.activation_dropout
 
     def forward(self, hidden_states):
-        hidden_states = self.activation(self.linear1(hidden_states))
+        hidden_states = self.act_fn(self.linear1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.linear2(hidden_states)
         return hidden_states
@@ -740,10 +740,10 @@ class NemotronAsrStreamingEncoderBlock(GradientCheckpointingLayer):
         super().__init__()
         self.gradient_checkpointing = False
 
-        self.feed_forward1 = NemotronAsrStreamingEncoderFeedForward(config)
+        self.feed_forward1 = NemotronAsrStreamingEncoderMLP(config)
         self.self_attn = NemotronAsrStreamingEncoderAttention(config, layer_idx)
         self.conv = NemotronAsrStreamingEncoderConvolutionModule(config, layer_idx=layer_idx)
-        self.feed_forward2 = NemotronAsrStreamingEncoderFeedForward(config)
+        self.feed_forward2 = NemotronAsrStreamingEncoderMLP(config)
 
         self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)
         self.norm_self_att = nn.LayerNorm(config.hidden_size)

@@ -26,7 +26,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2FeedForward, Wav2Vec2ForSequenceClassification, Wav2Vec2Model
+from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForSequenceClassification, Wav2Vec2MLP, Wav2Vec2Model
 from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerForAudioFrameClassification,
     Wav2Vec2ConformerForCTC,
@@ -104,7 +104,7 @@ class Wav2Vec2BertFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-class Wav2Vec2BertFeedForward(Wav2Vec2FeedForward):
+class Wav2Vec2BertMLP(Wav2Vec2MLP):
     def __init__(self, config, act_fn=None, hidden_size=None):
         nn.Module.__init__(self)
         act_fn = act_fn if act_fn is not None else config.hidden_act
@@ -112,7 +112,7 @@ class Wav2Vec2BertFeedForward(Wav2Vec2FeedForward):
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
+        self.act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
 
         self.output_dense = nn.Linear(config.intermediate_size, hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
@@ -311,7 +311,7 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.ffn1 = Wav2Vec2BertFeedForward(config)
+        self.ffn1 = Wav2Vec2BertMLP(config)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -323,7 +323,7 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
 
         # Feed-forward 2
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.ffn2 = Wav2Vec2BertFeedForward(config)
+        self.ffn2 = Wav2Vec2BertMLP(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -508,7 +508,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.ffn = Wav2Vec2BertFeedForward(config, act_fn=config.adapter_act, hidden_size=embed_dim)
+        self.ffn = Wav2Vec2BertMLP(config, act_fn=config.adapter_act, hidden_size=embed_dim)
 
     def forward(
         self,
@@ -677,7 +677,7 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
 
         self.intermediate_ffn = None
         if config.use_intermediate_ffn_before_adapter:
-            self.intermediate_ffn = Wav2Vec2BertFeedForward(config, act_fn="relu")
+            self.intermediate_ffn = Wav2Vec2BertMLP(config, act_fn="relu")
 
         # Initialize weights and apply final processing
         self.post_init()

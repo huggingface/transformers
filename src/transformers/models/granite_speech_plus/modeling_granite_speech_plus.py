@@ -269,21 +269,21 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
 
 
 ### Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
-class GraniteSpeechPlusConformerFeedForward(nn.Module):
+class GraniteSpeechPlusConformerMLP(nn.Module):
     """Feedforward module for conformer encoder blocks."""
 
     def __init__(self, config: GraniteSpeechPlusEncoderConfig):
         super().__init__()
         self.pre_norm = nn.LayerNorm(config.hidden_dim)
         self.up_proj = nn.Linear(config.hidden_dim, config.hidden_dim * config.feedforward_mult)
-        self.silu = nn.SiLU()
+        self.act_fn = nn.SiLU()
         self.dropout = nn.Dropout(config.dropout)
         self.down_proj = nn.Linear(config.hidden_dim * config.feedforward_mult, config.hidden_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.pre_norm(hidden_states)
         hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.dropout(self.silu(hidden_states))
+        hidden_states = self.dropout(self.act_fn(hidden_states))
         hidden_states = self.down_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -409,10 +409,10 @@ class GraniteSpeechPlusConformerBlock(nn.Module):
 
     def __init__(self, config: GraniteSpeechPlusEncoderConfig):
         super().__init__()
-        self.ff1 = GraniteSpeechPlusConformerFeedForward(config)
+        self.ff1 = GraniteSpeechPlusConformerMLP(config)
         self.attn = GraniteSpeechPlusConformerAttention(config)
         self.conv = GraniteSpeechPlusConformerConvModule(config)
-        self.ff2 = GraniteSpeechPlusConformerFeedForward(config)
+        self.ff2 = GraniteSpeechPlusConformerMLP(config)
         self.post_norm = nn.LayerNorm(config.hidden_dim)
 
     def forward(self, hidden_states: torch.Tensor, attention_dists: torch.Tensor) -> torch.Tensor:

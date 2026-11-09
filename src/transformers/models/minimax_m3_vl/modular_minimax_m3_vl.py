@@ -318,9 +318,9 @@ class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
 
 
 class MiniMaxM3VLDenseMLP(nn.Module):
-    def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size: int | None = None):
+    def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size=None):
         super().__init__()
-        inter = intermediate_size if intermediate_size is not None else config.dense_intermediate_size
+        inter = config.dense_intermediate_size if intermediate_size is None else intermediate_size
         self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * inter, bias=False)

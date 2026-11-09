@@ -676,12 +676,12 @@ class EvollaFeedForward(nn.Module):
         inner_dim = int(dim * mult)
 
         self.norm = nn.LayerNorm(dim)
-        self.fc1 = nn.Linear(dim, inner_dim, bias=False)
-        self.activation = nn.GELU()
-        self.fc2 = nn.Linear(inner_dim, dim, bias=False)
+        self.up_proj = nn.Linear(dim, inner_dim, bias=False)
+        self.act_fn = nn.GELU()
+        self.down_proj = nn.Linear(inner_dim, dim, bias=False)
 
-    def forward(self, x):
-        return self.fc2(self.activation(self.fc1(self.norm(x))))
+    def forward(self, hidden_states):
+        return self.down_proj(self.act_fn(self.up_proj(self.norm(hidden_states))))
 
 
 class EvollaSequenceCompressorResampler(nn.Module):
@@ -1076,8 +1076,8 @@ class EvollaMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         return down_proj
 
 

@@ -313,22 +313,22 @@ class FocalNetModulation(nn.Module):
         return x_out
 
 
-class FocalNetMlp(nn.Module):
+class FocalNetMLP(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.up_proj = nn.Linear(in_features, hidden_features)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(hidden_features, out_features)
+        self.dropout = nn.Dropout(drop)
 
     def forward(self, hidden_state):
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.drop(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        hidden_state = self.drop(hidden_state)
+        hidden_state = self.up_proj(hidden_state)
+        hidden_state = self.act_fn(hidden_state)
+        hidden_state = self.dropout(hidden_state)
+        hidden_state = self.down_proj(hidden_state)
+        hidden_state = self.dropout(hidden_state)
         return hidden_state
 
 
@@ -397,7 +397,7 @@ class FocalNetLayer(nn.Module):
         self.drop_path = FocalNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         mlp_hidden_dim = int(dim * config.mlp_ratio)
-        self.mlp = FocalNetMlp(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=self.drop)
+        self.mlp = FocalNetMLP(config=config, in_features=dim, hidden_features=mlp_hidden_dim, drop=self.drop)
 
         self.gamma_1 = 1.0
         self.gamma_2 = 1.0

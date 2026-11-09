@@ -31,11 +31,11 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaMLP, eager_attention_forward
 from ..moonshine.modeling_moonshine import (
     MoonshineDecoder,
     MoonshineEncoderLayer,
-    MoonshineEncoderMLP,
     MoonshineForConditionalGeneration,
     MoonshineModel,
     MoonshinePreTrainedModel,
@@ -142,7 +142,7 @@ class MoonshineStreamingLayerNorm(nn.Module):
         return normed * gamma
 
 
-class MoonshineStreamingEncoderMLP(MoonshineEncoderMLP): ...
+class MoonshineStreamingEncoderMLP(CLIPMLP): ...
 
 
 class MoonshineStreamingEncoderAttention(nn.Module):
@@ -206,7 +206,7 @@ class MoonshineStreamingEncoderLayer(MoonshineEncoderLayer):
     def __init__(self, config: MoonshineStreamingConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = MoonshineStreamingEncoderAttention(config, layer_idx)
-        self.mlp = MoonshineStreamingEncoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineStreamingEncoderMLP(config)
         self.input_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
         self.post_attention_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
 

@@ -23,10 +23,10 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.modeling_qwen2 import (
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
@@ -49,7 +49,7 @@ class Qwen3RMSNorm(Qwen2RMSNorm):
     pass
 
 
-class Qwen3MLP(GemmaMLP):
+class Qwen3MLP(MistralMLP):
     pass
 
 

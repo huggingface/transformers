@@ -121,7 +121,7 @@ class SLANetAttentionGRUCell(nn.Module):
         return hidden_states, attn_weights
 
 
-class SLANetMLP(nn.Module):
+class SLANetStructureHead(nn.Module):
     def __init__(self, hidden_size, out_channels, activation=None):
         super().__init__()
         self.fc1 = nn.Linear(hidden_size, hidden_size)
@@ -150,7 +150,7 @@ class SLANetSLAHead(SLANetPreTrainedModel):
         self.structure_attention_cell = SLANetAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
         )
-        self.structure_generator = SLANetMLP(config.hidden_size, config.out_channels)
+        self.structure_generator = SLANetStructureHead(config.hidden_size, config.out_channels)
 
         self.post_init()
 

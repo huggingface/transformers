@@ -339,15 +339,15 @@ class Siglip2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class Siglip2EncoderLayer(GradientCheckpointingLayer):
@@ -433,10 +433,10 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             init.zeros_(module.v_proj.bias)
             init.zeros_(module.out_proj.bias)
         elif isinstance(module, Siglip2MLP):
-            init.xavier_uniform_(module.fc1.weight)
-            init.xavier_uniform_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
+            init.xavier_uniform_(module.up_proj.weight)
+            init.xavier_uniform_(module.down_proj.weight)
+            init.normal_(module.up_proj.bias, std=1e-6)
+            init.normal_(module.down_proj.bias, std=1e-6)
         elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
             init.xavier_uniform_(module.probe)
             init.xavier_uniform_(module.attention.in_proj_weight)

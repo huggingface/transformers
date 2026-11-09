@@ -321,16 +321,16 @@ class LasrEncoderConvolutionModule(nn.Module):
         return hidden_states.transpose(1, 2)
 
 
-class LasrEncoderFeedForward(nn.Module):
+class LasrEncoderMLP(nn.Module):
     def __init__(self, config: LasrEncoderConfig):
         super().__init__()
         self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.attention_bias)
-        self.activation = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.attention_bias)
         self.activation_dropout = config.activation_dropout
 
     def forward(self, hidden_states):
-        hidden_states = self.activation(self.linear1(hidden_states))
+        hidden_states = self.act_fn(self.linear1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.linear2(hidden_states)
         return hidden_states
@@ -341,10 +341,10 @@ class LasrEncoderBlock(GradientCheckpointingLayer):
         super().__init__()
         self.gradient_checkpointing = False
 
-        self.feed_forward1 = LasrEncoderFeedForward(config)
+        self.feed_forward1 = LasrEncoderMLP(config)
         self.self_attn = LasrEncoderAttention(config, layer_idx)
         self.conv = LasrEncoderConvolutionModule(config)
-        self.feed_forward2 = LasrEncoderFeedForward(config)
+        self.feed_forward2 = LasrEncoderMLP(config)
 
         self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_self_att = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)

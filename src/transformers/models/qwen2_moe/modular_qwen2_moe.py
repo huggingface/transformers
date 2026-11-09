@@ -22,7 +22,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -36,9 +35,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..gemma.modeling_gemma import GemmaMLP
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
@@ -56,16 +55,10 @@ class Qwen2MoeRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class Qwen2MoeMLP(GemmaMLP):
+class Qwen2MoeMLP(MistralMLP):
     def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
+        super().__init__(config)
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
 
 
 class Qwen2MoeAttention(LlamaAttention):

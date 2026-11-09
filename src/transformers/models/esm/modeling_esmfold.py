@@ -1094,8 +1094,8 @@ class EsmFoldResidueMLP(nn.Module):
             nn.Dropout(dropout),
         )
 
-    def forward(self, x):
-        return x + self.mlp(x)
+    def forward(self, hidden_states):
+        return hidden_states + self.mlp(hidden_states)
 
 
 class EsmFoldTriangularSelfAttentionBlock(nn.Module):

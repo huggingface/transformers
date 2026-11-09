@@ -245,17 +245,16 @@ class LightGlueMLP(nn.Module):
     def __init__(self, config: LightGlueConfig):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.intermediate_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
         self.layer_norm = nn.LayerNorm(config.intermediate_size, elementwise_affine=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.layer_norm(self.up_proj(hidden_states))))
+        return down_proj
 
 
 class LightGlueTransformerLayer(nn.Module):

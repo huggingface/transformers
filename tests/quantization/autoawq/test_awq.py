@@ -297,7 +297,7 @@ class AwqScaleTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             "TechxGenus/starcoder2-3b-AWQ", dtype=torch.float16, device_map=torch_device
         )
-        self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
+        self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act_fn, ScaledActivation))
 
 
 @slow

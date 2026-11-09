@@ -383,8 +383,8 @@ class Glm4vMoeTextMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         return down_proj
 
 
@@ -567,18 +567,20 @@ class Glm4vMoeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Glm4vMoeisionMlp(nn.Module):
-    def __init__(self, config, bias: bool = False):
+class Glm4vMoeisionMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.out_hidden_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        return down_proj
 
 
 class Glm4vMoeVisionPatchEmbed(nn.Module):
@@ -795,7 +797,7 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
         self.norm1 = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vMoeVisionAttention(config)
-        self.mlp = Glm4vMoeisionMlp(config, bias=False)
+        self.mlp = Glm4vMoeisionMLP(config)
 
     @auto_docstring
     def forward(

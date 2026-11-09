@@ -33,7 +33,6 @@ from ..cohere2.modeling_cohere2 import (
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
     Cohere2LayerNorm,
-    Cohere2MLP,
     Cohere2Model,
     Cohere2PreTrainedModel,
     Cohere2RotaryEmbedding,
@@ -42,6 +41,7 @@ from ..cohere2.modeling_cohere2 import (
 )
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
@@ -53,10 +53,8 @@ class Cohere2MoeLayerNorm(Cohere2LayerNorm):
     pass
 
 
-class Cohere2MoeMLP(Cohere2MLP):
-    def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
-        super().__init__(config)
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+class Cohere2MoeMLP(Qwen2MoeMLP):
+    pass
 
 
 class Cohere2MoeExperts(MixtralExperts):

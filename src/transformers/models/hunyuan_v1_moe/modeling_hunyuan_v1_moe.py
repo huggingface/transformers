@@ -63,7 +63,7 @@ class HunYuanMoEV1RMSNorm(nn.Module):
 
 
 class HunYuanMoEV1MLP(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -73,8 +73,8 @@ class HunYuanMoEV1MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         return down_proj
 
 

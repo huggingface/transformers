@@ -33,10 +33,10 @@ from ...utils import (
 )
 from ...utils.output_capturing import OutputRecorder
 from ..apertus.modeling_apertus import ApertusAttention
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2MLP
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
-    LlamaMLP,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -149,10 +149,8 @@ class HYV3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class HYV3MLP(LlamaMLP):
-    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
-        super().__init__(config)
-        self.intermediate_size = intermediate_size or config.intermediate_size
+class HYV3MLP(DeepseekV2MLP):
+    pass
 
 
 class HYV3Attention(ApertusAttention):

@@ -834,10 +834,12 @@ class FalconH1MLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.gate_multiplier, self.down_multiplier = config.mlp_multipliers
 
-    def forward(self, x):
-        y = self.up_proj(x) * self.act_fn(self.gate_proj(x) * self.gate_multiplier)
-        y = self.down_proj(y) * self.down_multiplier
-        return y
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(
+            self.act_fn(self.gate_proj(hidden_states) * self.gate_multiplier) * self.up_proj(hidden_states)
+        )
+        down_proj = down_proj * self.down_multiplier
+        return down_proj
 
 
 @use_kernel_forward_from_hub("RMSNorm")

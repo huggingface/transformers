@@ -179,8 +179,8 @@ class ChameleonMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     # Ignore copy
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         return down_proj
 
 

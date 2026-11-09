@@ -94,6 +94,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
 
     model_type = "paddleocr_vl_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"mlp_bias": "use_bias"}
     default_theta = 500000.0
     # Default tensor parallel plan for base model `PaddleOCRTextModel`
     base_model_tp_plan = {

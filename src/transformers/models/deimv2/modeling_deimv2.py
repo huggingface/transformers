@@ -178,7 +178,7 @@ class Deimv2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Deimv2SwiGLUFFN(nn.Module):
+class Deimv2SwiGLUMLP(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
         hidden_features = config.decoder_ffn_dim // 2
@@ -187,8 +187,8 @@ class Deimv2SwiGLUFFN(nn.Module):
         self.down_proj = nn.Linear(hidden_features, config.d_model, bias=True)
         self.act_fn = nn.SiLU()
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         return down_proj
 
 
@@ -214,11 +214,11 @@ class Deimv2MLP(nn.Module):
         input_dims = [input_dim] + hidden_dims
         output_dims = hidden_dims + [output_dim]
         self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-        self.act = ACT2CLS[act]()
+        self.act_fn = ACT2CLS[act]()
 
     def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
-            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
+            stat_features = self.act_fn(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
         return stat_features
 
 
@@ -904,7 +904,7 @@ class Deimv2DecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.self_attn_layer_norm = Deimv2RMSNorm(config.d_model)
         self.encoder_attn = Deimv2MultiscaleDeformableAttention(config=config)
-        self.mlp = Deimv2SwiGLUFFN(config)
+        self.mlp = Deimv2SwiGLUMLP(config)
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)
         self.gateway = Deimv2Gate(config.d_model) if config.use_gateway else None
         self.use_gateway = config.use_gateway
@@ -1056,7 +1056,7 @@ class Deimv2PreTrainedModel(PreTrainedModel):
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             init.xavier_uniform_(module.denoising_class_embed.weight)
 
-        if isinstance(module, Deimv2SwiGLUFFN):
+        if isinstance(module, Deimv2SwiGLUMLP):
             init.xavier_uniform_(module.gate_proj.weight)
             init.constant_(module.gate_proj.bias, 0)
             init.xavier_uniform_(module.up_proj.weight)

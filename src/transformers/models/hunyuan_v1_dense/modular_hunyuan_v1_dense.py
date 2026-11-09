@@ -32,7 +32,6 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -40,6 +39,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 
 
@@ -50,13 +50,8 @@ class HunYuanDenseV1RMSNorm(LlamaRMSNorm):
     pass
 
 
-class HunYuanDenseV1MLP(LlamaMLP):
-    def __init__(self, config: HunYuanDenseV1Config, layer_idx=None, is_shared_mlp=False):
-        super().__init__(config)
-        self.layer_idx = layer_idx
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class HunYuanDenseV1MLP(MistralMLP):
+    pass
 
 
 class HunYuanDenseV1Attention(LlamaAttention):

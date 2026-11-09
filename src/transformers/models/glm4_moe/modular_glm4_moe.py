@@ -24,7 +24,6 @@ from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
-    DeepseekV3MLP,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
@@ -32,6 +31,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -169,7 +169,7 @@ class Glm4MoeAttention(CohereAttention):
             self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
 
-class Glm4MoeMLP(DeepseekV3MLP):
+class Glm4MoeMLP(Qwen2MoeMLP):
     pass
 
 

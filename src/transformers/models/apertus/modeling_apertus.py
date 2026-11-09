@@ -51,8 +51,9 @@ class ApertusMLP(nn.Module):
         if config.hidden_act == "xielu":
             self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
+    def forward(self, hidden_states):
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 @use_kernel_forward_from_hub("RMSNorm")
