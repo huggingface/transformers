@@ -4329,9 +4329,8 @@ class PreTrainedModel(
                 transformers_explicit_filename=getattr(config, "transformers_weights", None),
                 tqdm_class=tqdm_class,
             )
-            # A model reading the checkpoint of another one (a decision head) finds its own weights next to them, e.g.
-            # `readout.safetensors`: only the safetensors files its config class names, in the same repo. From the class,
-            # so that no `config.json` can add files to load
+            # EXPERIMENTAL: community pushed the decision head weights as separate files. We're using `config.extra_files`
+            # as a way to fetch the filename per-class.
             for filename in getattr(type(config), "extra_files", ()):
                 if not filename.endswith(".safetensors") or os.path.basename(filename) != filename:
                     raise ValueError(f"`extra_files` are safetensors file names in the repo, got {filename!r}.")
