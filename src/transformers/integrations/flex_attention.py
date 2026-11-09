@@ -306,8 +306,15 @@ def flex_attention_forward(
 
     kernel_options = kwargs.get("kernel_options")
     # The default block sizes fault at head_dim 512 on B300 (pytorch/pytorch#200348) and are 1.7x slower than 32-row
-    # blocks on H100 (e.g. Gemma 4 global layers)
-    if kernel_options is None and query.shape[-1] > 256 and query.device.type == "cuda":
+    # blocks on H100 (e.g. Gemma 4 global layers). In fp32, 32-row blocks need ~200 KB of shared memory, which only
+    # Hopper and datacenter Blackwell have, so other GPUs keep the default blocks
+    if (
+        kernel_options is None
+        and query.shape[-1] > 256
+        and query.device.type == "cuda"
+        and torch.version.hip is None
+        and torch.cuda.get_device_capability(query.device)[0] in (9, 10)
+    ):
         kernel_options = {"BLOCK_M": 32, "BLOCK_N": 32, "num_stages": 2, "num_warps": 4}
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
