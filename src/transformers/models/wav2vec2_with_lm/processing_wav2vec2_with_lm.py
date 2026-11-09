@@ -92,9 +92,9 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
         """
+        warnings.warn(self._deprecation_message, FutureWarning)
         from pyctcdecode import BeamSearchDecoderCTC
 
-        warnings.warn(self._deprecation_message, FutureWarning)
         super().__init__(feature_extractor, tokenizer)
         if not isinstance(decoder, BeamSearchDecoderCTC):
             raise TypeError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
