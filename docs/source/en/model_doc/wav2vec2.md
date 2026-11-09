@@ -139,9 +139,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 > [!WARNING]
 > [`Wav2Vec2ProcessorWithLM`] and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will be
-> removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with `transformers[audio]`. To
-> keep the same outputs, call pyctcdecode directly: [Migrating to pyctcdecode](#migrating-to-pyctcdecode) shows how, and
-> how to install both without downgrading numpy.
+> removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with
+> `transformers[audio]`. To keep the same outputs, call pyctcdecode directly, see
+> [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
 
 [[autodoc]] Wav2Vec2ProcessorWithLM
     - __call__
@@ -259,12 +259,7 @@ To decode without the language model, take the most likely token at each frame:
 transcription = processor.batch_decode(logits.argmax(-1))
 ```
 
-pyctcdecode pins `numpy<2`, but it works with numpy 2. To keep numpy 2, install it without its dependencies:
-
-```bash
-pip install --no-deps pyctcdecode
-pip install pygtrie kenlm
-```
+This requires [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode) and [kenlm](https://github.com/kpu/kenlm), which are not installed with Transformers.
 
 ## Wav2Vec2 specific outputs
 
