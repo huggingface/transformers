@@ -84,7 +84,7 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder",
+    "hf-doc-builder>=0.6.0",
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
