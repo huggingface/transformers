@@ -43,6 +43,7 @@ from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import require_flash_attn, require_torch_multi_accelerator
+from transformers.utils import is_torch_greater_or_equal
 
 from ..distributed_testing_utils import run_distributed
 from ..test_fsdp_mixin import _deterministic_init_model_dir, _distributed_tmpdir
@@ -721,6 +722,10 @@ def _test_save_load_distributed_checkpoint(rank, cp_size):
 
 
 class TestContextParallelConfig(unittest.TestCase):
+    def setUp(self):
+        if not is_torch_greater_or_equal("2.10"):
+            self.skipTest("Context parallelism requires torch>=2.10")
+
     def test_refuses_other_parallelisms(self):
         for other in ({"pp_size": 2}, {"ep_size": 2}):
             with self.subTest(**other), self.assertRaisesRegex(ValueError, "not supported yet with"):
@@ -743,6 +748,8 @@ class TestContextParallelModel(unittest.TestCase):
     def setUp(self):
         if torch._C._get_accelerator().type == "mps":
             self.skipTest("Distributed meshes are built on the default accelerator, which MPS cannot back")
+        if not is_torch_greater_or_equal("2.10"):
+            self.skipTest("Context parallelism requires torch>=2.10")
 
     def test_matches_unsharded(self):
         for packed in (False, True):

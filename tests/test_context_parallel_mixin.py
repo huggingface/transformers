@@ -24,6 +24,7 @@ from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.distributed import DistributedConfig
 from transformers.testing_utils import SINGLE_PROCESS_DEVICES, backend_device_count, torch_device
+from transformers.utils import is_torch_greater_or_equal
 
 from .distributed_testing_utils import _get_distributed_device_type, run_distributed
 from .test_fsdp_mixin import _deterministic_init_model_dir
@@ -146,6 +147,8 @@ class ContextParallelTesterMixin(ABC):
         ...
 
     def _skip_if_context_parallel_not_supported(self):
+        if not is_torch_greater_or_equal("2.10"):
+            self.skipTest("Context parallelism requires torch>=2.10")
         if torch._C._get_accelerator().type == "mps":
             self.skipTest("The device mesh is built on the default accelerator, which MPS cannot back")
         if torch_device in SINGLE_PROCESS_DEVICES:
