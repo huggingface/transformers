@@ -459,7 +459,8 @@ def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):
     if not packed:
         return input_ids, None
     # two documents back to back, which `position_ids` has to describe for the whole sequence
-    position_ids = torch.cat([torch.arange(seq_len // 2), torch.arange(seq_len // 2)]).expand(batch_size, -1)
+    first = seq_len // 2
+    position_ids = torch.cat([torch.arange(first), torch.arange(seq_len - first)]).expand(batch_size, -1)
     return input_ids, position_ids
 
 
@@ -518,11 +519,16 @@ def _compare_with_unsharded(init_dir, batch, distributed_config):
     output = model(**local_batch)
     output.loss.backward()
 
-    # every rank computed the loss of the full sequences, and its own slice of the logits
+    # every rank computed the loss of the full sequences, and its own slice of the logits of the padded sequence: the
+    # padding at the end of the last rank's slice has no counterpart in the unsharded run
     cp_rank = model._mesh_manager.get_mesh("cp").get_local_rank()
-    expected_logits = reference_logits[rows].chunk(distributed_config.cp_size, dim=1)[cp_rank]
+    local_seq = output.logits.shape[1]
+    start = cp_rank * local_seq
+    # the real positions of this rank's slice, which can be none of them when the padding fills it
+    real = max(0, min(local_seq, reference_logits.shape[1] - start))
+    expected_logits = reference_logits[rows][:, start : start + real]
     torch.testing.assert_close(
-        _local(output.logits), expected_logits, rtol=CP_RTOL, atol=CP_ATOL, msg="Logits mismatch"
+        _local(output.logits)[:, :real], expected_logits, rtol=CP_RTOL, atol=CP_ATOL, msg="Logits mismatch"
     )
     loss = _average_over_data_parallel(output.loss.detach(), dp_group, fsdp_size * dp_replicate_size)
     torch.testing.assert_close(loss, reference_loss, rtol=CP_RTOL, atol=CP_ATOL, msg="Loss mismatch")
@@ -538,9 +544,10 @@ def _compare_with_unsharded(init_dir, batch, distributed_config):
     return model
 
 
-def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed):
-    config = _tiny_config()
-    batch_size, seq_len = 2, 8
+def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed, seq_len=8):
+    # Ulysses splits the heads over the ranks, so four ranks need four key/value heads
+    config = _tiny_config(num_key_value_heads=4) if cp_size > 2 else _tiny_config()
+    batch_size = 2
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         rows = batch_size * fsdp_size * dp_replicate_size
         input_ids, position_ids = _tiny_batch(config, rows, seq_len, packed)
@@ -628,10 +635,10 @@ def _test_matches_unsharded_with_all_reduce_ep(rank, cp_size, ep_size, tp_size):
         dist.barrier()
 
 
-def _test_inputs_embeds(rank, cp_size):
+def _test_inputs_embeds(rank, cp_size, seq_len=8):
     """`inputs_embeds` is sharded along its sequence dim, not along its last, hidden one."""
-    config = _tiny_config()
-    batch_size, seq_len = 2, 8
+    config = _tiny_config(num_key_value_heads=4) if cp_size > 2 else _tiny_config()
+    batch_size = 2
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         input_ids, _ = _tiny_batch(config, batch_size, seq_len)
         reference = AutoModelForCausalLM.from_pretrained(init_dir)
@@ -641,6 +648,55 @@ def _test_inputs_embeds(rank, cp_size):
         batch = {"inputs_embeds": inputs_embeds, "labels": input_ids.clone(), "use_cache": False}
         _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size))
         dist.barrier()
+
+
+def _test_shard_inputs_padding(rank, cp_size):
+    """A sequence that is not a multiple of `cp_size` is padded at its end, and only its real tokens count."""
+    mesh = _init_cp_mesh("cpu")
+    implementation = UlyssesCP(mesh)
+    # two packed documents, whose last position the padding continues
+    input_ids = torch.tensor([[1, 2, 3, 4, 5]])
+    position_ids = torch.tensor([[0, 1, 2, 0, 1]])
+    labels = input_ids.clone()
+    forward_inputs = {"input_ids": input_ids, "position_ids": position_ids, "labels": labels}
+    pad_token_id = 7
+
+    def module(pad_token_id):
+        config = types.SimpleNamespace(_attn_implementation="sdpa", pad_token_id=pad_token_id)
+        return types.SimpleNamespace(config=config)
+
+    def shard(module):
+        _, sharded = context_parallel._shard_inputs(
+            module, (), dict(forward_inputs), implementation=implementation, attn_implementation="sdpa"
+        )
+        return sharded
+
+    seq_len = input_ids.shape[1]
+    pad_len = -seq_len % cp_size
+    local_len = (seq_len + pad_len) // cp_size
+    rows = slice(rank * local_len, (rank + 1) * local_len)
+    padded_positions = torch.cat([position_ids, torch.arange(2, 2 + pad_len).expand(1, -1)], dim=1)
+    padded_shift_labels = torch.cat([labels[:, 1:], labels.new_full((1, pad_len + 1), -100)], dim=1)
+
+    original = ALL_ATTENTION_FUNCTIONS["sdpa"]
+    try:
+        sharded = shard(module(pad_token_id))
+        torch.testing.assert_close(implementation.position_ids, padded_positions)
+        padded_ids = torch.cat([input_ids, input_ids.new_full((1, pad_len), pad_token_id)], dim=1)
+        torch.testing.assert_close(sharded["input_ids"], padded_ids[:, rows])
+        torch.testing.assert_close(sharded["position_ids"], padded_positions[:, rows])
+        padded_labels = torch.cat([labels, labels.new_full((1, pad_len), -100)], dim=1)
+        torch.testing.assert_close(sharded["labels"], padded_labels[:, rows])
+        torch.testing.assert_close(sharded["shift_labels"], padded_shift_labels[:, rows])
+        # the last real token of the row predicts nothing, and neither does the padding
+        assert sharded["num_items_in_batch"].item() == seq_len - 1, sharded["num_items_in_batch"]
+
+        # without a `pad_token_id` the padding token is 0
+        without_pad_token = torch.cat([input_ids, input_ids.new_zeros((1, pad_len))], dim=1)
+        torch.testing.assert_close(shard(module(None))["input_ids"], without_pad_token[:, rows])
+    finally:
+        ALL_ATTENTION_FUNCTIONS.register("sdpa", original)
+        context_parallel._context_parallel_attention_functions.clear()
 
 
 def _test_ignored_labels(rank, cp_size):
@@ -730,9 +786,6 @@ def _test_forward_refusals(rank, cp_size):
 
         with pytest.raises(ValueError, match="does not support attention masks"):
             model(input_ids=input_ids, attention_mask=torch.tensor([[1] * 8, [1] * 7 + [0]]))
-
-        with pytest.raises(ValueError, match="must be divisible by `cp_size`"):
-            model(input_ids=input_ids[:, :-1])
 
         with pytest.raises(ValueError, match="`past_key_values` are not allowed"):
             model(input_ids=input_ids, past_key_values=DynamicCache())
@@ -867,6 +920,20 @@ class TestContextParallelModel(unittest.TestCase):
 
     def test_inputs_embeds(self):
         run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2)
+
+    def test_padded_sequences(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed, 7)
+
+    def test_padded_sequences_with_four_ranks(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(4, 1, 1, False, 5)
+
+    def test_padded_inputs_embeds(self):
+        run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2, 7)
+
+    def test_shard_inputs_padding(self):
+        run_distributed(world_size=2, backend="gloo")(_test_shard_inputs_padding)(2)
 
     def test_ignored_labels(self):
         run_distributed(world_size=2, backend="gloo")(_test_ignored_labels)(2)

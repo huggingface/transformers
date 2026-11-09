@@ -61,7 +61,7 @@ class DistributedConfig:
             Whether to enable mixed precision for FSDP2.
         cp_size (`int`, *optional*):
             Number of devices that split each sequence (context parallelism). The ranks of a cp group get the same
-            batch, and each keeps a contiguous slice of every sequence, so the sequence length must be divisible by
+            batch, and each keeps a contiguous slice of every sequence, which is padded at its end to a multiple of
             `cp_size`. With `cp_size > 1`, FSDP2 shards over `dp_size` ranks: the ranks of a cp group hold parts of
             the same batch, so their gradients are partial sums of the same batch. Can be combined with `tp_size` and
             `ep_size`, in which case the ranks of a tp group hold the same batch and the same slice, while each rank
