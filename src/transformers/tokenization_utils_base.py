@@ -3137,12 +3137,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        # Normalize: drop `content` from assistant messages when it is None.
-        # Some APIs (e.g. OpenAI) return content=None for tool-call-only messages, but many chat templates
-        # crash or produce wrong output (e.g. rendering literal "None") when they encounter it.
+        # Normalize: drop the keys whose value is None.
+        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
+        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
         conversations = [
-            [{k: v for k, v in msg.items() if k != "content" or v is not None} for msg in conversation]
-            for conversation in conversations
+            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
         ]
 
         if continue_final_message:

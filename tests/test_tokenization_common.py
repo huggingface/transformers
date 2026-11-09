@@ -1088,17 +1088,19 @@ Hey how are you doing"""  # noqa: W293
         )  # Check that no error raised
 
     @require_jinja
-    def test_chat_template_content_none(self):
-        """Regression test: content=None (e.g. OpenAI tool-call messages) should be treated the same as missing content."""
+    def test_chat_template_none_values(self):
+        """Regression test: a None value (e.g. `content=None` or `tool_calls=None` from OpenAI) should be treated the
+        same as a missing key."""
         dummy_template = (
             "{% for message in messages %}"
             "{{ message['role'] }}"
             "{% if message.content is defined %}: {{ message['content'] }}{% endif %}"
+            "{% if message.tool_calls is defined %} ({{ message.tool_calls | length }} tool calls){% endif %}"
             "\n"
             "{% endfor %}"
         )
         messages_with_none = [
-            {"role": "user", "content": "What is the weather?"},
+            {"role": "user", "content": "What is the weather?", "tool_calls": None},
             {"role": "assistant", "content": None},
         ]
         messages_without_content = [
