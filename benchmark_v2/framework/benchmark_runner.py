@@ -30,6 +30,7 @@ from transformers.utils import is_torch_accelerator_available
 from .benchmark_config import BenchmarkConfig
 from .data_classes import BenchmarkMetadata, BenchmarkResult, GPURawMetrics, pretty_print_dict
 from .hardware_metrics import GPUMonitor
+from .validation import validate_generation_outputs
 
 
 try:
@@ -304,27 +305,30 @@ class BenchmarkRunner:
             gpu_monitor = None
 
         # Generate and time
-        if config.continuous_batching:
-            inputs = self.inputs["input_ids"].tolist()
-            wall_time_0 = time.perf_counter()
-            outputs = self.model.generate_batch(
-                inputs,
-                continuous_batching_config=self.continuous_batching_config,
-                record_timestamps=True,
-                persistent_manager=False,
-                warmup=True,
-            )
-        else:
-            streamer = BenchmarkStreamer()
-            wall_time_0 = time.perf_counter()
-            outputs = self.model.generate(**self.inputs, streamer=streamer)
+        try:
+            if config.continuous_batching:
+                inputs = self.inputs["input_ids"].tolist()
+                wall_time_0 = time.perf_counter()
+                outputs = self.model.generate_batch(
+                    inputs,
+                    continuous_batching_config=self.continuous_batching_config,
+                    record_timestamps=True,
+                    persistent_manager=False,
+                    warmup=True,
+                )
+            else:
+                streamer = BenchmarkStreamer()
+                wall_time_0 = time.perf_counter()
+                outputs = self.model.generate(**self.inputs, streamer=streamer)
 
-        wall_time_1 = time.perf_counter()
-        gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
+            wall_time_1 = time.perf_counter()
+        finally:
+            gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
 
         # Retrieve timestamps and results in a way that allows similar post-processing
         input_tokens = self.inputs["input_ids"].size(-1)
         if config.continuous_batching:
+            validate_generation_outputs(outputs, inputs)
             timestamps = [output.timestamps[:] for output in outputs.values()]
             results = torch.tensor([output.generated_tokens[:] for output in outputs.values()])
         else:
@@ -334,6 +338,8 @@ class BenchmarkRunner:
         flush_memory(flush_compile=False)
 
         # Check if generation had the right number of tokens
+        if results.size(0) != config.batch_size:
+            raise RuntimeError(f"Generated {results.size(0)} sequences, expected {config.batch_size}")
         if results.size(-1) != config.num_tokens_to_generate:
             raise RuntimeError(f"Generated {results.size(-1)} tokens, expected {config.num_tokens_to_generate}")
 
@@ -394,17 +400,21 @@ class BenchmarkRunner:
                 continue
 
             # Otherwise, run the benchmark
-            self.setup_benchmark(model_id, config)
             self.logger.info(
                 f"Running benchmark of model {model_id} with scenario: {config.name} ({i + 1}/{n_configs})"
             )
 
             # Launch benchmark in a try/except block to avoid stopping the whole run if one benchmark fails
+            error = None
             try:
+                self.setup_benchmark(model_id, config)
                 result = self.run_benchmark(config, num_tokens_to_profile)
+                if result is None or not result.e2e_latency:
+                    raise RuntimeError("Scenario produced no measurements")
             except Exception as e:
                 self.logger.error(f"Error running with scenario: {config.name}:\n{repr(e)}")
                 result = None
+                error = repr(e)
 
             # Memoize
             all_results[config.hash] = {
@@ -414,6 +424,7 @@ class BenchmarkRunner:
                     commit_id=self.commit_id,
                     commit_message=self.commit_message,
                     success=result is not None,
+                    error=error,
                 ),
                 "measurements": result if result is not None else BenchmarkResult(),
                 "config": config,
@@ -423,7 +434,7 @@ class BenchmarkRunner:
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp, summarized=summarized)
 
-        if len(all_results) < 1:
+        if not any(result["metadata"].success for result in all_results.values()):
             raise RuntimeError("No benchmark was run successfully")
 
         if pretty_print_summary:
@@ -441,6 +452,9 @@ class BenchmarkRunner:
             for result in all_results.values():
                 print("=" * 100)
                 print(f"Config: {result['config'].infer_name(compact=False)}\n")
+                if not result["metadata"].success:
+                    print(f"FAILED: {result['metadata'].error}")
+                    continue
                 result["measurements"].pprint(
                     batch_size=result["config"].batch_size,
                     num_generated_tokens=result["config"].num_tokens_to_generate,

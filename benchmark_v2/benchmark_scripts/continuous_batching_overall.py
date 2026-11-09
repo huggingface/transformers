@@ -13,6 +13,7 @@ import argparse
 import gc
 import json
 import os
+import sys
 import time
 import types
 from collections.abc import Callable
@@ -32,6 +33,11 @@ from tabulate import tabulate
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig, GenerationConfig
 from transformers.distributed import DistributedConfig
 from transformers.utils.logging import disable_progress_bar
+
+
+# Support launching this file directly as well as importing it as a module.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from framework.validation import validate_generation_outputs  # noqa: E402
 
 
 # Defaults
@@ -105,8 +111,10 @@ def _build_lighteval_inputs_scorer(
     inputs = tokenizer(prompts, add_special_tokens=not use_chat_template)["input_ids"]
 
     def score(outputs) -> float:
+        validate_generation_outputs(outputs, inputs)
         scores = []
-        for doc, (_, out) in zip(docs, outputs.items()):
+        for index, doc in enumerate(docs):
+            out = outputs[f"req_{index}"]
             text = tokenizer.decode(out.generated_tokens, skip_special_tokens=True)  # type: ignore
             for s in stop_sequences:
                 text = text.split(s, 1)[0]
@@ -242,10 +250,10 @@ class BenchmarkResults:
         details = f"samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}"
         print(f"\n{tag} [{entry.label}] Starting with {details}")
 
-        model = self._get_model()
-        self.cleanup()
-
+        model = None
         try:
+            model = self._get_model()
+            self.cleanup()
             # No override means natural generation, including the model's EOS token(s).
             gen_config = deepcopy(model.generation_config if gen_config is None else gen_config)
             gen_config.max_new_tokens = max_new_tokens
@@ -256,21 +264,24 @@ class BenchmarkResults:
                 generation_config=gen_config,
                 continuous_batching_config=cb_config,
                 progress_bar=self.dp_size == 1,
+                persistent_manager=False,
             )
-            entry.e2e_time_seconds = time.perf_counter() - e2e_start
+            e2e_time = time.perf_counter() - e2e_start
+            validate_generation_outputs(outputs, data, gen_config.num_return_sequences or 1)
             # Generation time spans first request created to last request finished: excludes setup and warmup
             gen_start = min(out.created_time for out in outputs.values())
             gen_end = max(out.lifespan[1] for out in outputs.values())
             gen_time = gen_end - gen_start
             num_tokens = sum(len(out.generated_tokens) for out in outputs.values())
 
+            accuracy = score_fn(outputs) if score_fn is not None else None
+            entry.e2e_time_seconds = e2e_time
             entry.time_seconds = gen_time
             entry.num_tokens = num_tokens
             tps = num_tokens / gen_time if gen_time > 0 else 0.0
             entry.throughput_tok_per_sec = tps
             entry.peak_memory_gb = torch.cuda.max_memory_allocated() / (1024**3)
-            if score_fn is not None:
-                entry.accuracy = score_fn(outputs)
+            entry.accuracy = accuracy
             details = f"time={gen_time:.2f}s e2e={entry.e2e_time_seconds:.2f}s tokens={num_tokens} tok/s={tps:.2f}"
             details += f" GB={entry.peak_memory_gb:.2f}"
             details += f", acc={entry.accuracy:.3f}" if entry.accuracy is not None else ""
@@ -279,9 +290,11 @@ class BenchmarkResults:
             entry.error = str(e)
             print(f"{tag} [{entry.label}] ERROR: {e}")
 
+        finally:
+            model = None
+            self.cleanup()
+
         self.entries.append(entry)
-        model = None
-        self.cleanup()
 
     def gather_entries(self) -> None:
         """In DP, merge each rank's owned entries onto all ranks (entry i is owned by rank i % dp_size)."""
@@ -324,6 +337,7 @@ class BenchmarkResults:
         rows = [
             {
                 "label": e.label,
+                "status": e.error or "OK",
                 "samples": e.num_samples,
                 "avg_in": f"{e.avg_input_tokens:.1f}",
                 "max_new": e.max_new_tokens,

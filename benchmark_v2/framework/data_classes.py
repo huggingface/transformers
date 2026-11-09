@@ -65,9 +65,16 @@ class BenchmarkMetadata:
     commit_message: str
     hardware_info: HardwareInfo
     success: bool
+    error: str | None
 
     def __init__(
-        self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "", success: bool = True
+        self,
+        model_id: str,
+        commit_id: str,
+        branch_name: str = "main",
+        commit_message: str = "",
+        success: bool = True,
+        error: str | None = None,
     ) -> None:
         self.model_id = model_id
         self.timestamp = datetime.now(UTC).isoformat()
@@ -76,6 +83,7 @@ class BenchmarkMetadata:
         self.commit_message = commit_message
         self.hardware_info = HardwareInfo()
         self.success = success
+        self.error = error
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -86,6 +94,7 @@ class BenchmarkMetadata:
             "commit_message": self.commit_message,
             "hardware_info": self.hardware_info.to_dict(),
             "success": self.success,
+            "error": self.error,
         }
 
 
@@ -169,6 +178,9 @@ class BenchmarkResult:
         return [total_generated_tokens / e2e_latency for e2e_latency in self.e2e_latency]
 
     def pprint(self, batch_size: int = 0, num_generated_tokens: int = 0, tabs: int = 0) -> None:
+        if not self.e2e_latency:
+            print("\t" * tabs + "No measurements available")
+            return
         measurements = {
             "E2E Latency": add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
             "Time to First Token": add_unit_to_duration(compute_basic_statistics(self.time_to_first_token)),

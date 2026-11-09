@@ -13,6 +13,12 @@ Saved measurements include `execution_settings`: actual input token lengths, att
 
 The separate continuous-batching suite inherits the model's generation configuration when no override is supplied (including IFEval), preserving natural EOS stopping. Fixed-length workloads explicitly use `eos_token_id=-1`. Saved configuration summaries retain EOS lists and nested settings.
 
+## Failed workloads
+
+Both runners reject incomplete or failed continuous-batching results before computing measurements or accuracy. Validation checks the request IDs assigned by a fresh manager (including sampled children), prompt tokens, and terminal success status. Accuracy scoring pairs documents with request IDs, independently of dictionary order.
+
+The main runner records setup and generation errors in `metadata.error`, continues with the remaining scenarios, and saves results before raising if none succeeded. Failed scenarios print `FAILED` with the error; empty measurements do not print zero-valued statistics. The continuous-batching suite records setup failures in each entry and includes error status in its summary.
+
 ## Quick Start
 
 ### Running All Benchmarks
