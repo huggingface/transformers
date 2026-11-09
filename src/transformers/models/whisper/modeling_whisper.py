@@ -386,8 +386,8 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
@@ -459,12 +459,12 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
         """
@@ -588,7 +588,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
     @capture_outputs
     def forward(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -600,7 +600,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+                and conversion into a tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
                 Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -712,16 +712,16 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.Tensor))`, *optional*):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of
+            inputs_embeds (`torch.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
@@ -847,7 +847,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
     def _mask_input_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -892,13 +892,13 @@ class WhisperModel(WhisperPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
         **kwargs,
@@ -1035,13 +1035,13 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1200,15 +1200,15 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        encoder_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_outputs (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             if the model is configured as a decoder.
 
@@ -1308,7 +1308,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
     def forward(
         self,
         input_features: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:

@@ -209,20 +209,18 @@ class OpenAIGPTSequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: torch.LongTensor | None = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -277,22 +275,22 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
 @dataclass
 class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss.
-    mc_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
+    mc_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
         Multiple choice classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    mc_logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
+    mc_logits (`torch.Tensor` of shape `(batch_size, num_choices)`):
         Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    mc_loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    mc_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    mc_loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    mc_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -319,10 +317,10 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -426,10 +424,10 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -513,10 +511,10 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         mc_token_ids: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         mc_labels: torch.LongTensor | None = None,
@@ -626,10 +624,10 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,

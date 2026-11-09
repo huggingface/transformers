@@ -44,7 +44,7 @@ class ConvNextV2GRN(nn.Module):
         self.weight = nn.Parameter(torch.zeros(1, 1, 1, dim))
         self.bias = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Compute and normalize global spatial feature maps
         global_features = torch.linalg.vector_norm(hidden_states, ord=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
@@ -94,7 +94,7 @@ class ConvNextV2Embeddings(nn.Module):
         self.layernorm = ConvNextV2LayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
             raise ValueError(
@@ -287,7 +287,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -334,7 +334,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
+        self, pixel_values: torch.Tensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.convnextv2(pixel_values, **kwargs)
         pooled_output = outputs.pooler_output

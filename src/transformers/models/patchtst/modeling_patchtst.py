@@ -748,29 +748,29 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 @dataclass
 class PatchTSTModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, num_channels, height, width)`. Hidden-states of
         the model at the output of each layer plus the optional initial embedding outputs.
-    mask (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*):
+    mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`, *optional*):
         Bool masked tensor indicating which patches are masked
-    loc (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*):
+    loc (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*):
         Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-    scale (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*):
+    scale (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*):
         Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-    patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+    patch_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
         Patched input to the Transformer
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    mask: torch.FloatTensor | None = None
-    loc: torch.FloatTensor | None = None
-    scale: torch.FloatTensor | None = None
-    patch_input: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    mask: torch.Tensor | None = None
+    loc: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
+    patch_input: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -781,16 +781,16 @@ class PatchTSTModelOutput(ModelOutput):
 @dataclass
 class PatchTSTForPretrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         MSE loss.
-    prediction_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    prediction_output (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction outputs of the time series modeling heads.
     """
 
-    loss: torch.FloatTensor | None = None
-    prediction_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    prediction_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -801,16 +801,16 @@ class PatchTSTForPretrainingOutput(ModelOutput):
 @dataclass
 class PatchTSTForRegressionOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         MSE loss.
-    regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+    regression_outputs (`torch.Tensor` of shape `(batch_size, num_targets)`):
         Regression outputs of the time series modeling heads.
     """
 
-    loss: torch.FloatTensor | None = None
-    regression_outputs: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    regression_outputs: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -821,28 +821,28 @@ class PatchTSTForRegressionOutput(ModelOutput):
 @dataclass
 class PatchTSTForPredictionOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         MSE loss.
-    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, -1)`):
+    prediction_outputs (`torch.Tensor` of shape `(batch_size, prediction_length, -1)`):
         Prediction outputs of the time series modeling heads.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`.
 
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
-    loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+    loc: (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*)
         Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-    scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+    scale: (`torch.Tensor` of shape `(batch_size, 1, num_channels)`, *optional*)
         Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     """
 
-    loss: torch.FloatTensor | None = None
-    prediction_outputs: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    loc: torch.FloatTensor | None = None
-    scale: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    prediction_outputs: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    loc: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -853,17 +853,17 @@ class PatchTSTForPredictionOutput(ModelOutput):
 @dataclass
 class PatchTSTForClassificationOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         Total loss as the sum of the masked language modeling loss and the next sequence prediction
         (classification) loss.
-    prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+    prediction_logits (`torch.Tensor` of shape `(batch_size, num_targets)`):
         Prediction scores of the PatchTST modeling head (scores before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    prediction_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    prediction_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -875,11 +875,11 @@ class PatchTSTForClassificationOutput(ModelOutput):
 @dataclass
 class SamplePatchTSTOutput(ModelOutput):
     r"""
-    sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, num_targets)`):
+    sequences (`torch.Tensor` of shape `(batch_size, num_samples, prediction_length, num_targets)`):
         Sampled values from the chosen distribution.
     """
 
-    sequences: torch.FloatTensor | None = None
+    sequences: torch.Tensor | None = None
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
@@ -897,15 +897,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: torch.Tensor | None = 
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
 
     Args:
-        input_tensor (`torch.FloatTensor`):
+        input_tensor (`torch.Tensor`):
             Input tensor, of which the average must be computed.
-        weights (`torch.FloatTensor`, *optional*):
+        weights (`torch.Tensor`, *optional*):
             Weights tensor, of the same shape as `input_tensor`.
         dim (`int`, *optional*):
             The dim along which to average `input_tensor`.
 
     Returns:
-        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+        `torch.Tensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
         weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
@@ -1707,7 +1707,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         Generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
@@ -1918,7 +1918,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         Generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected

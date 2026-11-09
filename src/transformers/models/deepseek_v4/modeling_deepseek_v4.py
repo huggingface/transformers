@@ -236,6 +236,13 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.buffer_kv, self.buffer_gate, self.compressed_kv):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
     def reset(self) -> None:
         super().reset()
         # Dropped rather than zeroed, as they grow by concatenation, like the main states
@@ -290,6 +297,13 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.overlap_kv, self.overlap_gate):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
 
     def reset(self) -> None:
         super().reset()
@@ -1320,7 +1334,7 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -1464,7 +1478,7 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,

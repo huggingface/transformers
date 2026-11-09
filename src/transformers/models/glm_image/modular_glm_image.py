@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -41,9 +41,7 @@ from ...vision_utils import get_vision_attention_seqlens, get_vision_position_id
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
-    Glm4vCausalLMOutputWithPast,
     Glm4vModel,
-    Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vTextModel,
     Glm4vVisionAttention,
@@ -326,10 +324,6 @@ class GlmImageTextAttention(Glm4vMoeTextAttention):
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
-
-
-class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
-    pass
 
 
 class GlmImageVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
@@ -646,14 +640,14 @@ class GlmImageModel(Glm4vModel):
 
     def get_image_tokens(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
     ) -> torch.LongTensor:
         """
         Tokenizes image features into discrete tokens with VQVAE module.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(total_patches, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(total_patches, hidden_size)`):
                 The packed image features from vision encoder.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
                 The temporal, height and width of feature shape of each image.
@@ -673,7 +667,7 @@ class GlmImageModel(Glm4vModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -798,13 +792,13 @@ class GlmImageModel(Glm4vModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
@@ -850,17 +844,7 @@ class GlmImageModel(Glm4vModel):
             **kwargs,
         )
 
-        return GlmImageModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-class GlmImageCausalLMOutputWithPast(Glm4vCausalLMOutputWithPast):
-    pass
+        return outputs
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
@@ -882,7 +866,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -893,7 +877,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, images_per_sample, **kwargs)
 
-    def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
+    def get_image_tokens(self, hidden_states: torch.Tensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
 
     def forward(
@@ -902,7 +886,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -910,7 +894,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
@@ -971,13 +955,12 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return GlmImageCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):

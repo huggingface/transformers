@@ -134,7 +134,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,

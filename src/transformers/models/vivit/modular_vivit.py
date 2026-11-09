@@ -164,7 +164,7 @@ class VivitModel(ViTModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -290,7 +290,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
