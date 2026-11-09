@@ -112,6 +112,7 @@ from .trainer_pt_utils import (
     is_attention_mask_causal,
     nested_detach,
     nested_gather,
+    nested_truncate,
     reissue_pt_warnings,
     remove_dummy_checkpoint,
     safe_globals,
@@ -3067,6 +3068,20 @@ class Trainer:
                 num_samples = observed_num_examples
         if num_samples == 0 and observed_num_examples > 0:
             num_samples = observed_num_examples
+
+        # Exclude padding / repeated samples added by the distributed eval sampler (or by
+        # `gather_for_metrics` all_gather shape alignment) so every eval sample is counted
+        # exactly once. `num_samples` is the true dataset length only when the dataset has a
+        # length, which is exactly when truncation is safe (see huggingface/transformers#49979).
+        if has_length(eval_dataset) and num_samples > 0:
+            if all_losses is not None:
+                all_losses = nested_truncate(all_losses, num_samples)
+            if all_preds is not None:
+                all_preds = nested_truncate(all_preds, num_samples)
+            if all_labels is not None:
+                all_labels = nested_truncate(all_labels, num_samples)
+            if all_inputs is not None:
+                all_inputs = nested_truncate(all_inputs, num_samples)
 
         # Metrics!
         if (
