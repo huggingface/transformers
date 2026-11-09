@@ -19,6 +19,7 @@ import contextlib
 from typing import TYPE_CHECKING, NamedTuple
 
 from ..utils import logging
+from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 from .parallel_utils import ALL_PARALLEL_STYLES, _use_local_dtensor_params
 
@@ -38,7 +39,7 @@ if is_torch_distributed_available():
     from torch.distributed._functional_collectives import all_to_all_single_autograd
     from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
 
-    from .parallel_utils import _all_reduce_backward, _AllReduceForward, _WaitTensor
+    from .parallel_utils import _AllReduceBackward, _AllReduceForward, _WaitTensor
 
 
 class ExpertParallelLayer:
@@ -172,7 +173,7 @@ class EpRouterParallel(ExpertParallelLayer):
         # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
         # before the mask (each slot has exactly one owning rank, so the sum is exact).
         process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        router_scores = _all_reduce_backward(router_scores, process_group)
+        router_scores = _AllReduceBackward.apply(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -371,8 +372,8 @@ class AllReduceEP(EPImplementation):
         ep_group = self.ep_mesh.get_group()
         # Each rank backpropagates through its own experts only, so the gradients of the shared inputs it computes are
         # partial: sum them over the group (the forward all-reduce has an identity backward).
-        hidden_states = _all_reduce_backward(hidden_states, ep_group)
-        top_k_weights = _all_reduce_backward(top_k_weights, ep_group)
+        hidden_states = _AllReduceBackward.apply(hidden_states, ep_group)
+        top_k_weights = _AllReduceBackward.apply(top_k_weights, ep_group)
         off_rank = (top_k_index // self.num_local_experts) != self.ep_mesh.get_local_rank()
         local_index = torch.where(off_rank, self.num_local_experts, top_k_index % self.num_local_experts)
         expert_output = self.run_experts(hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0.0))
@@ -398,24 +399,30 @@ class AutoEP(EPImplementation):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
+class EPImplementationInterface(GeneralInterface):
+    """Registry of the `EPImplementation`s `DistributedConfig.ep_implementation` names. Add one with
+    `EPImplementationInterface.register(name, cls)`."""
+
+    _global_mapping = {"auto": AutoEP, "all_to_all": AllToAllEP, "all_reduce": AllReduceEP}
+
+
 class EpDispatchExpertsParallel(ExpertParallelLayer):
     """Whole experts per rank (`Shard(0)` on the EP mesh), reached through the `EPImplementation` that
-    `DistributedConfig.ep_implementation` names in `ep_implementations`. Add an entry there to register one."""
-
-    ep_implementations = {"auto": AutoEP, "all_to_all": AllToAllEP, "all_reduce": AllReduceEP}
+    `DistributedConfig.ep_implementation` names in `EPImplementationInterface`."""
 
     def should_use_local_tensors(self, module):
         return True
 
     def install_forward(self, module, ep_mesh, *, tp_mesh, ep_implementation="auto"):
         """`tp_mesh` is the group of ranks holding the same batch (size 1 without TP)."""
-        if ep_implementation not in self.ep_implementations:
+        ep_implementations = EPImplementationInterface()
+        if ep_implementation not in ep_implementations:
             raise ValueError(
                 f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "
-                f"{', '.join(repr(name) for name in self.ep_implementations)}, or add an `EPImplementation` to "
-                "`EpDispatchExpertsParallel.ep_implementations`."
+                f"{', '.join(repr(name) for name in ep_implementations)}, or register an `EPImplementation` with "
+                "`EPImplementationInterface.register`."
             )
-        implementation = self.ep_implementations[ep_implementation](module, ep_mesh, tp_mesh)
+        implementation = ep_implementations[ep_implementation](module, ep_mesh, tp_mesh)
 
         def ep_forward(hidden_states, top_k_index, top_k_weights):
             if isinstance(hidden_states, DTensor):
@@ -461,7 +468,7 @@ def apply_expert_parallelism(
 ):
     """
     Shard experts on EP; `ep_dispatch_experts` modules reach them through the `ep_implementation` registered in
-    `EpDispatchExpertsParallel.ep_implementations`.
+    `EPImplementationInterface`.
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())

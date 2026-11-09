@@ -52,22 +52,23 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 
 ### Choosing an implementation
 
-`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `EpDispatchExpertsParallel.ep_implementations`, selected with `ep_implementation` in [`DistributedConfig`]:
+`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from the implementations registered in `EPImplementationInterface`, selected with `ep_implementation` in [`DistributedConfig`]:
 
 | `ep_implementation` | advantages | disadvantages |
 | :--- | :--- | :--- |
 | `"all_to_all"`, see [token dispatch](#token-dispatch) | Works for any layout, including `ep_size > tp_size`. Only the routed tokens move. | Two all-to-all collectives and one host sync per layer, so it does not capture in a CUDA graph. |
 | `"all_reduce"` | No tokens move and no host sync, so decode captures in a CUDA graph. | Requires `ep_size=tp_size`. Every rank runs its experts over the whole batch, so its cost grows with the batch. |
-| `"auto"`, the default | Runs `"all_reduce"` at inference when the ranks of an expert group share one batch, and `"all_to_all"` otherwise. | |
+| `"auto"`, the default | Runs `"all_reduce"` at inference when the ranks of an expert group share one batch, and `"all_to_all"` otherwise. | Not always the fastest choice: a workload can benefit from a custom implementation, see [Adding an implementation](#adding-an-implementation). |
 
-`ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only implementation that applies.
+> [!NOTE]
+> `ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only implementation that applies.
 
 ### Adding an implementation
 
 An implementation subclasses `EPImplementation` and registers under the name `ep_implementation` selects. It is built once per experts module, so it can keep state such as communication buffers. Calling it with the batch this rank holds, with global expert ids, returns the weighted expert output for each of its tokens. It runs this rank's experts with `run_experts`, on the rows, local expert ids and weights it brought them.
 
 ```py
-from transformers.distributed.expert_parallel import EpDispatchExpertsParallel, EPImplementation
+from transformers.distributed.expert_parallel import EPImplementation, EPImplementationInterface
 
 class MyEP(EPImplementation):
     def __call__(self, hidden_states, top_k_index, top_k_weights):
@@ -75,11 +76,12 @@ class MyEP(EPImplementation):
         expert_output = self.run_experts(tokens, expert_ids, weights)
         return ...  # the weighted expert output for each token of the batch this rank holds
 
-EpDispatchExpertsParallel.ep_implementations["my_ep"] = MyEP
+EPImplementationInterface.register("my_ep", MyEP)
 distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="my_ep")
 ```
 
-Gradients must reach every rank that holds a token, routing weights included, so wrap a collective that autograd does not differentiate in a `torch.autograd.Function`.
+> [!NOTE]
+> Gradients must reach every rank that holds a token, routing weights included, so wrap a collective that autograd does not differentiate in a `torch.autograd.Function`.
 
 > [!TIP]
 > `enable_expert_parallel=True` without `ep_size` is deprecated and emits a `FutureWarning`. It shards only the experts, like `ep_size=tp_size, tp_plan={}`.

@@ -118,8 +118,15 @@ if is_torch_distributed_available():
         its expert shard). We need to sum the partial gradients without dividing by
         world_size, which is what DTensor's Replicate backward does incorrectly.
 
-        Apply it through `_all_reduce_backward`, which skips it when no gradient can flow.
+        `apply` returns `x` as is when no gradient can flow: at inference the per-call overhead of an
+        `autograd.Function` compounds across layers, e.g. in eager decode.
         """
+
+        @classmethod
+        def apply(cls, x, process_group):
+            if torch.is_grad_enabled() and x.requires_grad:
+                return super().apply(x, process_group)
+            return x
 
         @staticmethod
         def forward(ctx, x, process_group):
@@ -131,13 +138,6 @@ if is_torch_distributed_available():
             grad = grad.contiguous()
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
-
-    def _all_reduce_backward(x, process_group):
-        """Sum `x`'s gradient over `process_group` in backward. A no-op when no gradient can flow: at inference the
-        per-call overhead of an `autograd.Function` compounds across layers, e.g. in eager decode."""
-        if torch.is_grad_enabled() and x.requires_grad:
-            return _AllReduceBackward.apply(x, process_group)
-        return x
 
     class _WaitTensor(torch.autograd.Function):
         """Wait on a functional collective's result, identity backward (`wait_tensor` has no autograd kernel before

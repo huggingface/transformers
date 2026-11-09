@@ -63,8 +63,8 @@ class DistributedConfig:
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
-            a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
-            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, with all-to-all token dispatch.
+            a multiple of `tp_size` and divide `fsdp_size * tp_size`. `ep_size > tp_size` needs an
+            `"ep_dispatch_experts"` rule with an `ep_implementation` that exchanges tokens, such as `"all_to_all"`.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
@@ -72,7 +72,7 @@ class DistributedConfig:
             `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
         ep_implementation (`str`, *optional*, defaults to `"auto"`):
             How an `"ep_dispatch_experts"` rule brings the experts their tokens. It names an `EPImplementation`
-            registered in `EpDispatchExpertsParallel.ep_implementations`:
+            registered in `EPImplementationInterface`:
 
             - `"all_to_all"` exchanges the routed tokens with all-to-all collectives.
             - `"all_reduce"` runs each rank's experts on the batch the EP group shares, and sums the outputs. It

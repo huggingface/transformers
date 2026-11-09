@@ -26,6 +26,7 @@ from transformers.distributed.expert_parallel import (
     AutoEP,
     EpDispatchExpertsParallel,
     EPImplementation,
+    EPImplementationInterface,
 )
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
@@ -151,7 +152,7 @@ def _install_forward_checks_ep_implementation(rank):
         def __call__(self, hidden_states, top_k_index, top_k_weights):
             return hidden_states + 1
 
-    with patch.dict(EpDispatchExpertsParallel.ep_implementations, {"custom": Custom}):
+    with patch.dict(EPImplementationInterface._global_mapping, {"custom": Custom}):
         experts = EpDispatchExpertsParallel().install_forward(
             _DummyExperts(), ep_mesh, tp_mesh=tp_mesh, ep_implementation="custom"
         )
