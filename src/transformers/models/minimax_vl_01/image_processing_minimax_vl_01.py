@@ -110,12 +110,7 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
     def preprocess(
         self, images: ImageInput | list[ImageInput], *args, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]
     ) -> BatchFeature:
-        if kwargs.get("do_pad", self.do_pad):
-            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
-        return_tensors = kwargs.pop("return_tensors", None)
-        image_inputs = super().preprocess(images, *args, return_tensors=None, **kwargs)
-        image_inputs["pixel_values"] = torch.cat(image_inputs["pixel_values"], dim=0)
-        return image_inputs.convert_to_tensors(return_tensors)
+        return super().preprocess(images, *args, **kwargs)
 
     def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
         """Get padding size for patching (returns list format for tvF.pad)."""
@@ -210,17 +205,16 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for LLaVA-NeXT with patch processing."""
+        if do_pad:
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
         processed_images = []
         image_sizes = []
 
-        # Backend's resize method handles resample conversion, so we can pass it directly
-        # Determine the size tuple
         if size and size.height and size.width:
             size_tuple = (size.height, size.width)
         else:
             size_tuple = (size.shortest_edge, size.shortest_edge)
 
-        # Determine the patch size
         if crop_size and crop_size.height:
             patch_size = crop_size.height
         elif size and size.height:
@@ -237,22 +231,15 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
                 resample=resample,
             )
 
-            # Group images by size for batched processing
             processed_image_patches_grouped = {}
             grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
                 image_patches, disable_grouping=disable_grouping
             )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
-                    stacked_image_patches = self.resize(
-                        image=stacked_image_patches,
-                        size=size,
-                        resample=resample,
-                    )
+                    stacked_image_patches = self.resize(image=stacked_image_patches, size=size, resample=resample)
                 if do_center_crop:
                     stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
-                # Fused rescale and normalize
-                # Convert lists to tuples for lru_cache compatibility
                 image_mean_tuple = tuple(image_mean) if isinstance(image_mean, list) else image_mean
                 image_std_tuple = tuple(image_std) if isinstance(image_std, list) else image_std
                 stacked_image_patches = self.rescale_and_normalize(
@@ -260,15 +247,12 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = torch.stack(processed_image_patches, dim=0)
-            processed_images.append(processed_image_patches)
+            processed_images.append(torch.stack(processed_image_patches, dim=0))
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
-        if do_pad:
-            processed_images = self._pad_for_batching(processed_images)
-
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": torch.cat(processed_images, dim=0), "image_sizes": image_sizes},
+            tensor_type=return_tensors,
         )
 
 

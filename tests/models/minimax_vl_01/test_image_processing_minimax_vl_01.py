@@ -150,13 +150,16 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         grid_pinpoints = [[2, 2], [4, 2], [2, 4]]
 
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            with self.subTest(backend=backend_name):
-                image_processor = image_processing_class(**self._processor_kwargs(grid_pinpoints))
-                output = image_processor(list(images), input_data_format=ChannelDimension.LAST, return_tensors="pt")
+            image_processor = image_processing_class(**self._processor_kwargs(grid_pinpoints))
+            for return_tensors in (None, "np", "pt"):
+                with self.subTest(backend=backend_name, return_tensors=return_tensors):
+                    output = image_processor(
+                        list(images), input_data_format=ChannelDimension.LAST, return_tensors=return_tensors
+                    )
 
-                self.assertEqual(tuple(output.pixel_values.shape), (8, 3, 2, 2))
-                self.assertEqual(output.image_sizes.tolist(), [[2, 2], [4, 2], [2, 4]])
-                np.testing.assert_array_equal(output.pixel_values.cpu().numpy(), expected)
+                    self.assertEqual(tuple(output.pixel_values.shape), (8, 3, 2, 2))
+                    np.testing.assert_array_equal(output.image_sizes, [[2, 2], [4, 2], [2, 4]])
+                    np.testing.assert_array_equal(output.pixel_values, expected)
 
     def test_resize_for_patching_floors_aspect_ratio(self):
         # LLaVA-NeXT rounds the resized side up; the released MiniMax-VL-01 processor floors it.
