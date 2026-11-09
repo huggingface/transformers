@@ -31,10 +31,6 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     model_id = "hf-internal-testing/tiny-gemma3"
 
     @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.boi_token
-
-    @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         gemma3_image_processor_kwargs = {

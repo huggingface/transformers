@@ -65,6 +65,43 @@ class CanaryProcessorTest(unittest.TestCase):
         inputs = processor.apply_transcription_request(audio=self._audio(), source_language="en", target_language="de")
         self.assertEqual(self._decode_prompt(processor, inputs), _get_prompt("en", "de"))
 
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self.get_processor()
+        audio = [self._audio(), self._audio(24000)]
+        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
+
+        helper_outputs = processor.apply_transcription_request(
+            audio=audio, source_language="en", transcription=transcriptions
+        )
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "audio": audio_el},
+                        {"type": "text", "source_language": "en", "target_language": "en", "punctuation": True},
+                    ],
+                },
+                {"role": "assistant", "content": text},
+            ]
+            for audio_el, text in zip(audio, transcriptions)
+        ]
+        manual_outputs = processor.apply_chat_template(
+            conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
+        )
+
+        self.assertIn("labels", helper_outputs)
+        self.assertEqual(set(helper_outputs.keys()), set(manual_outputs.keys()))
+        for key in helper_outputs:
+            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
+        # each target ends with EOS, and the shorter one is padded with -100
+        labels = helper_outputs["labels"]
+        self.assertTrue((labels[0] == -100).any())
+        self.assertEqual(
+            processor.tokenizer.decode(labels[1][labels[1] != -100])[-len("<|endoftext|>") :], "<|endoftext|>"
+        )
+
     def test_punctuation_flag(self):
         processor = self.get_processor()
         inputs = processor.apply_transcription_request(audio=self._audio(), source_language="en", punctuation=False)

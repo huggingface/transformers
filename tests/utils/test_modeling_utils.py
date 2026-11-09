@@ -2741,6 +2741,30 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
 
+    def test_mismatched_keys_with_quantizer(self):
+        from transformers import FineGrainedFP8Config
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaForCausalLM(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = model.state_dict()
+            # Overwrite with mismatched shape
+            state_dict["model.layers.0.self_attn.q_proj.weight"] = torch.rand(2, 2)
+            model.save_pretrained(tmpdirname, state_dict=state_dict)
+
+            quant_config = FineGrainedFP8Config(modules_to_not_convert=["self_attn.q_proj"])
+            # Skip the GPU check, we won't run any forward anyway
+            with patch(
+                "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+                lambda *arg, **kwargs: None,
+            ):
+                # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
+                with self.assertRaisesRegex(
+                    RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
+                ):
+                    _ = LlamaForCausalLM.from_pretrained(tmpdirname, quantization_config=quant_config)
+
 
 @slow
 @require_torch
@@ -3259,6 +3283,36 @@ class TestAttentionImplementation(unittest.TestCase):
         with sdpa_kernel([backends[expected_backend]]):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    @parameterized.expand([(False,), (True,)])
+    def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(2, 8, 1, 64, device=torch_device)
+        key = torch.randn(2, 2, 16, 64, device=torch_device)
+        value = torch.randn(2, 2, 16, 64, device=torch_device)
+        attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
+        attention_mask[1, ..., :5] = False  # left padding
+        # makes the mask per-head
+        position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if use_position_bias else None
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(),
+            query,
+            repeat_kv(key, 4),
+            repeat_kv(value, 4),
+            attention_mask,
+            position_bias=position_bias,
+        )
+        with patch(
+            "transformers.integrations.sdpa_attention.repeat_kv", side_effect=AssertionError("K/V were repeated")
+        ):
+            attn_output, _ = sdpa_attention_forward(
+                module, query, key, value, attention_mask, position_bias=position_bias
+            )
+        torch.testing.assert_close(attn_output, expected)
 
     @parameterized.expand(
         [
@@ -4248,9 +4302,68 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
         self.assertFalse(model.is_remote_code())
 
 
+class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
+    """The `gradient_checkpointing*` methods are deprecated aliases of `activation_checkpointing*`."""
+
+    def test_aliases_warn_and_forward(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaModel(config)
+        with self.assertWarns(FutureWarning):
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        self.assertTrue(model.is_activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            self.assertTrue(model.is_gradient_checkpointing)
+        with self.assertWarns(FutureWarning):
+            model.gradient_checkpointing_disable()
+        self.assertFalse(model.is_activation_checkpointing)
+
+    def test_subclass_overrides_of_the_aliases_are_called(self):
+        from transformers import LlamaModel
+
+        class LegacyLlamaModel(LlamaModel):
+            def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, **kwargs):
+                self.calls.append("enable")
+                super().gradient_checkpointing_enable(gradient_checkpointing_kwargs, **kwargs)
+
+            def gradient_checkpointing_disable(self):
+                self.calls.append("disable")
+                super().gradient_checkpointing_disable()
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LegacyLlamaModel(config)
+        model.calls = []
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_enable()
+        self.assertTrue(model.is_activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_disable()
+        self.assertFalse(model.is_activation_checkpointing)
+        self.assertEqual(model.calls, ["enable", "disable"])
+
+    def test_wrappers_of_the_aliases_are_called(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaModel(config)
+        original_enable = model.gradient_checkpointing_enable
+        received_kwargs = []
+
+        def gradient_checkpointing_enable(gradient_checkpointing_kwargs=None, **kwargs):
+            received_kwargs.append(gradient_checkpointing_kwargs)
+            original_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
+
+        model.gradient_checkpointing_enable = gradient_checkpointing_enable
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_enable({"use_reentrant": False}, every_n_layers=2)
+        self.assertEqual(received_kwargs, [{"use_reentrant": False}])
+        self.assertEqual([layer.gradient_checkpointing for layer in model.layers], [True, False])
+
+
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):
-    """`gradient_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
+    """`activation_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
 
     def _model(self, num_hidden_layers=8, hidden_size=256):
         from transformers import LlamaModel, set_seed
@@ -4273,12 +4386,12 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         model = self._model()
         input_ids = torch.randint(0, 128, (1, 64), device=torch_device)
 
-        model.gradient_checkpointing_enable()
+        model.activation_checkpointing_enable()
         self._backward(model, input_ids)
         expected = [p.grad.clone() for p in model.parameters()]
 
         model.zero_grad(set_to_none=True)
-        model.gradient_checkpointing_enable(offload=True)
+        model.activation_checkpointing_enable(offload=True)
         self._backward(model, input_ids)
 
         for expected_grad, param in zip(expected, model.parameters()):
@@ -4292,7 +4405,7 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         resident = []
         for offload in (False, True):
             model = self._model(num_hidden_layers, hidden_size)
-            model.gradient_checkpointing_enable(offload=offload)
+            model.activation_checkpointing_enable(offload=offload)
             input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
             self._backward(model, input_ids)  # warm the allocator
             model.zero_grad(set_to_none=True)

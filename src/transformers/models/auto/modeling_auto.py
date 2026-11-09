@@ -308,6 +308,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("lfm2", "Lfm2Model"),
         ("lfm2_moe", "Lfm2MoeModel"),
         ("lfm2_vl", "Lfm2VlModel"),
+        ("lfm3", "Lfm3Model"),
         ("lightglue", "LightGlueForKeypointMatching"),
         ("lighton_ocr", "LightOnOcrModel"),
         ("lilt", "LiltModel"),
@@ -846,6 +847,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("laguna", "LagunaForCausalLM"),
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
+        ("lfm3", "Lfm3ForCausalLM"),
         ("llama", "LlamaForCausalLM"),
         ("llama4", "Llama4ForCausalLM"),
         ("llama4_text", "Llama4ForCausalLM"),
@@ -2121,6 +2123,18 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
+# EXPERIMENTAL: besides `jev`, the models whose checkpoints ship a JEV head next to their weights
+MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
+    [
+        ("gemma4", "JevForDecision"),
+        ("jev", "JevForDecision"),
+        ("qwen2", "JevForDecision"),
+        ("qwen3_5", "JevForDecision"),
+        ("qwen3_5_moe", "JevForDecision"),
+        ("qwen3_5_text", "JevForDecision"),
+    ]
+)
+
 MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES = OrderedDict(
     [
         ("sapiens2", "Sapiens2ForImageMatting"),
@@ -2263,6 +2277,8 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
 MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
+
+MODEL_FOR_DECISION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DECISION_MAPPING_NAMES)
 
 MODEL_FOR_IMAGE_MATTING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES)
 MODEL_FOR_NORMAL_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES)
@@ -2621,6 +2637,13 @@ AutoModelForAudioTokenization = auto_class_update(
 )
 
 
+class AutoModelForDecision(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DECISION_MAPPING
+
+
+AutoModelForDecision = auto_class_update(AutoModelForDecision, head_doc="decision")
+
+
 class AutoModelForImageMatting(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_MATTING_MAPPING
 
@@ -2658,6 +2681,7 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
+    "MODEL_FOR_DECISION_MAPPING",
     "MODEL_FOR_RNNT_MAPPING",
     "MODEL_FOR_TDT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
@@ -2712,6 +2736,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForDecision",
     "AutoModelForRNNT",
     "AutoModelForTDT",
     "AutoModelForDepthEstimation",

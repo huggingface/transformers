@@ -50,17 +50,17 @@ logger = logging.get_logger(__name__)
 @dataclass
 class ChameleonVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
-    quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+    quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
-    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):
+    image_tokens (`torch.Tensor` of shape `(batch_size, config.vocab_size`):
         Indices of the image tokens predicted by the VQ-VAE model.
-    embedding_loss (`torch.FloatTensor`):
+    embedding_loss (`torch.Tensor`):
         The embedding loss computed during quantization.
     """
 
-    quantized_last_hidden_state: torch.FloatTensor | None = None
-    image_tokens: torch.FloatTensor | None = None
-    embedding_loss: torch.FloatTensor | None = None
+    quantized_last_hidden_state: torch.Tensor | None = None
+    image_tokens: torch.Tensor | None = None
+    embedding_loss: torch.Tensor | None = None
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Chameleon
@@ -356,11 +356,11 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
             output_attentions (`bool`, *optional*):
@@ -426,12 +426,12 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
+            attention_mask (`torch.Tensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -842,14 +842,14 @@ class ChameleonModel(ChameleonPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+    def get_image_tokens(self, pixel_values: torch.Tensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
         special tokens.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
         """
         batch_size = pixel_values.shape[0]
@@ -863,10 +863,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
         custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer."
     )
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         batch_size = pixel_values.shape[0]
@@ -876,7 +876,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         return vqmodel_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -905,11 +905,11 @@ class ChameleonModel(ChameleonPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -999,7 +999,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
 
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values, **kwargs)
 
@@ -1008,11 +1008,11 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

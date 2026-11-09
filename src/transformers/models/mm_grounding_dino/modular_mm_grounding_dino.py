@@ -158,10 +158,10 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
     def forward(
         self,
-        vision_hidden_state: torch.FloatTensor,
-        text_hidden_state: torch.FloatTensor,
+        vision_hidden_state: torch.Tensor,
+        text_hidden_state: torch.Tensor,
         text_token_mask: torch.BoolTensor,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         res = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         res = res / math.sqrt(vision_hidden_state.shape[-1])
         res = res + self.bias
