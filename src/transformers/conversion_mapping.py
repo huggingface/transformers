@@ -1105,6 +1105,7 @@ def _build_checkpoint_conversion_mapping():
         "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
+            PrefixChange(prefix_to_remove="model"),
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
             WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
             WeightRenaming(
@@ -1261,6 +1262,9 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=".experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "lfm3": [
+            WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],
         "lfm2_moe": [
             WeightConverter(

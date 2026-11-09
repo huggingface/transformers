@@ -37,20 +37,20 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TvpVideoGroundingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Temporal-Distance IoU loss for video grounding.
-    logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+    logits (`torch.Tensor` of shape `(batch_size, 2)`):
         Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
         input texts.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class TvpLoss(nn.Module):
@@ -115,9 +115,9 @@ class TvpLoss(nn.Module):
         This performs the loss computation.
 
         Args:
-            logits (`torch.FloatTensor`):
+            logits (`torch.Tensor`):
                 The output logits of head module.
-            labels (`list[torch.FloatTensor]`):
+            labels (`list[torch.Tensor]`):
                 List of tensors ([start, end, duration]), which contains start time, end time of the video corresponding to the text, and also the duration.
         """
         duration, start_time, end_time = labels
@@ -708,7 +708,7 @@ class TvpModel(TvpPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -811,7 +811,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         labels: tuple[torch.Tensor] | None = None,
         output_attentions: bool | None = None,
@@ -821,7 +821,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         **kwargs,
     ) -> tuple | TvpVideoGroundingOutput:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.
 
         Examples:

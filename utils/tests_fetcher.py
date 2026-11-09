@@ -608,6 +608,23 @@ def create_backbone_edges() -> list[tuple[str, str]]:
     ]
 
 
+def _file_exists_case_sensitive(path: Path) -> bool:
+    """Return True only if *path* exists and the filename casing matches exactly.
+
+    ``Path.is_file()`` on case-insensitive filesystems (Windows, macOS) returns
+    ``True`` even when the requested name differs in case from the on-disk name.
+    This matters for the fetcher's heuristic that distinguishes submodule files
+    from plain symbols: ``from .pkg import UPPER_NAME`` should NOT be treated as
+    a reference to ``pkg/upper_name.py`` just because the file happens to exist.
+
+    ``os.listdir()`` always returns the actual on-disk filenames, so a membership
+    check against it enforces case-sensitivity on every platform.
+    """
+    if not path.is_file():
+        return False
+    return path.name in os.listdir(path.parent)
+
+
 def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Get the imports a given module makes.
@@ -676,14 +693,15 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     result = []
     # Double check we get proper modules (either a python file or a folder with an init).
     for module_file, imports in imported_modules:
-        if (PATH_TO_REPO / f"{module_file}.py").is_file():
+        if _file_exists_case_sensitive(PATH_TO_REPO / f"{module_file}.py"):
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
             module_file = f"{module_file}/__init__.py"
         else:
             # Some supported imports, such as deprecated module aliases, have no file on disk.
             continue
-        imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
+        imports = [imp.split(" as ")[0].strip() for imp in imports]
+        imports = [imp for imp in imports if imp and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
 
@@ -726,7 +744,12 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = dict(extract_imports(module, cache=cache))
+                new_imported_modules = {}
+                for _mod, _names in extract_imports(module, cache=cache):
+                    if _mod not in new_imported_modules:
+                        new_imported_modules[_mod] = list(_names)
+                    else:
+                        new_imported_modules[_mod].extend(n for n in _names if n not in new_imported_modules[_mod])
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
@@ -753,16 +776,20 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                         imports = [i for i in imports if i not in new_imports]
 
                 if len(imports) > 0:
-                    # If there are any objects lefts, they may be a submodule
+                    # If there are any objects lefts, they may be a submodule.
+                    # Read the directory listing once; set-membership checks are O(1) and
+                    # exact-case, so a single listdir() replaces two _file_exists_case_sensitive
+                    # calls per import (which each called listdir internally).
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
+                    try:
+                        disk_files = set(os.listdir(path_to_module))
+                    except OSError:
+                        disk_files = set()
+                    submodule_names = {i for i in imports if f"{i}.py" in disk_files}
                     dependencies.extend(
-                        [
-                            f"{module.replace('__init__.py', '')}{i}.py"
-                            for i in imports
-                            if (path_to_module / f"{i}.py").is_file()
-                        ]
+                        f"{module.replace('__init__.py', '')}{i}.py" for i in imports if i in submodule_names
                     )
-                    imports = [i for i in imports if not (path_to_module / f"{i}.py").is_file()]
+                    imports = [i for i in imports if i not in submodule_names]
                     if len(imports) > 0:
                         # Then if there are still objects left, they are fully defined in the init, so we keep it as a
                         # dependency.

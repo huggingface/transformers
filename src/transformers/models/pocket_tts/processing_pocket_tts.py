@@ -206,7 +206,10 @@ class PocketTTSProcessor(ProcessorMixin):
         labels: "list[torch.Tensor] | None" = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(text=text, audio=audio, **kwargs)
+        # Do not call super and check that number of placeholders in text is same as number of audio
+        # Model is custom and uses audio-latents
+        if audio is None and text is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
         if text is None or any(self.audio_bos_token not in prompt for prompt in text):
             raise ValueError(
