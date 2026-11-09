@@ -35,7 +35,12 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import AudioInput, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
+from .image_utils import (
+    ChannelDimension,
+    ImageInput,
+    is_vision_available,
+    make_flat_list_of_images,
+)
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -57,13 +62,18 @@ from .utils import (
     direct_transformers_import,
     hf_api,
     is_torch_available,
-    is_torchcodec_available,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     list_repo_templates,
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import (
+    _CONTROL_TOKEN_END,
+    _CONTROL_TOKEN_START,
+    _get_template_variables,
+    render_jinja_template,
+)
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -78,9 +88,6 @@ from .utils.type_validators import (
 from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
 
 
-if is_torchcodec_available():
-    import torchcodec
-
 if is_torch_available():
     import torch
 
@@ -90,6 +97,10 @@ if is_vision_available():
     from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
+
+# Matches where a mm placeholder isn't one that `mark_control_tokens` marked in user input
+_UNMARKED = f"(?<!{_CONTROL_TOKEN_START})"
+_MARKED_RE = re.compile(f"{_CONTROL_TOKEN_START}.*?{_CONTROL_TOKEN_END}")
 
 # type hinting: specifying the type of processor class that inherits from ProcessorMixin
 SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
@@ -204,6 +215,9 @@ class TextKwargs(TypedDict, total=False):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
         return_text_replacement_offsets (`bool`, *optional*):
             Whether to return character offsets for each mm placeholder and its replacement.
+        sanitize_control_tokens (`bool`, *optional*):
+            Whether the text was marked by `mark_control_tokens`: its marked control tokens are encoded as plain text,
+            and aren't expanded as mm placeholders. Set by `apply_chat_template(..., sanitize_control_tokens=True)`.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -230,6 +244,7 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
+    sanitize_control_tokens: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -666,7 +681,11 @@ class ProcessorMixin(PushToHubMixin):
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        # Marked control tokens are user text: they don't count as mm placeholders
+        unmarked_text = text
+        if kwargs.get("sanitize_control_tokens") and text is not None:
+            unmarked_text = [_MARKED_RE.sub("", sample) for sample in (text if isinstance(text, list) else [text])]
+        self.validate_inputs(images=images, text=unmarked_text, videos=videos, audio=audio, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
@@ -763,6 +782,57 @@ class ProcessorMixin(PushToHubMixin):
 
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        # Check that number of placeholders in text is same as number of mm-data for models
+        # that have a special multimodal placeholder token defined
+        if text is not None:
+            if not (
+                isinstance(text, str) or (isinstance(text, list) and all(isinstance(sample, str) for sample in text))
+            ):
+                raise ValueError("`text` must be a string or list of strings.")
+
+            if getattr(self, "image_token", None) is not None:
+                n_images_in_text = [sample.count(self.image_token) for sample in text]
+                if images is not None:
+                    images = make_flat_list_of_images(images)
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found total {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
+                        )
+                elif any(n_images_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    )
+
+            if getattr(self, "video_token", None) is not None:
+                n_videos_in_text = [sample.count(self.video_token) for sample in text]
+                if videos is not None:
+                    videos = make_batched_videos(videos)
+                    if sum(n_videos_in_text) != len(videos):
+                        raise ValueError(
+                            f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
+                            f" Found total {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
+                        )
+                elif any(n_videos_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_videos_in_text)} {self.video_token} tokens in the text but no videos were passed."
+                    )
+
+            if getattr(self, "audio_token", None) is not None:
+                # by this point audio is a flat list because `prepare_inputs` has applied `make_list`
+                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
+                if audio is not None:
+                    n_audio_passed = len(audio) if isinstance(audio, (list, tuple)) else 1
+                    if sum(n_audio_in_text) != n_audio_passed:
+                        raise ValueError(
+                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
+                            f" Found total {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
+                        )
+                elif any(n_audio_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio inputs were passed."
+                    )
 
     # Simple preprocessing includes calling the `subprocessor` and optionally
     # building placeholder strings. Each processor can override and add their
@@ -876,11 +946,11 @@ class ProcessorMixin(PushToHubMixin):
         # Plan: update all models and contrib to vllm, they might benefit largely from `replacement_offsets`
         token_groups = []
         if len(images_replacements) > 0 and (image_token := getattr(self, "image_token", None)) is not None:
-            token_groups.append(f"(?P<image>{re.escape(image_token)})")
+            token_groups.append(f"(?P<image>{_UNMARKED}{re.escape(image_token)})")
         if len(videos_replacements) > 0 and (video_token := getattr(self, "video_token", None)) is not None:
-            token_groups.append(f"(?P<video>{re.escape(video_token)})")
+            token_groups.append(f"(?P<video>{_UNMARKED}{re.escape(video_token)})")
         if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
-            token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
+            token_groups.append(f"(?P<audio>{_UNMARKED}{re.escape(audio_token)})")
 
         regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
         replacements_iters = {
@@ -2204,10 +2274,11 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None = "auto",
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
+        sanitize_control_tokens: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -2234,6 +2305,11 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                Whether to encode the control tokens found in the conversation, tools, documents and the template
+                variables passed as `**kwargs` as plain text, so that user input can't write them, nor mm placeholders.
+                See the tokenizer's `apply_chat_template`.
+                Requires `tokenize=True`.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2255,6 +2331,12 @@ class ProcessorMixin(PushToHubMixin):
             )
 
         # `kwargs` overwrite special tokens if both are present
+        if sanitize_control_tokens:
+            conversations, tools, documents, kwargs = self.tokenizer._mark_chat_inputs(
+                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
+            )
+            processor_kwargs["sanitize_control_tokens"] = True
+
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -2287,9 +2369,13 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 processor_kwargs["do_sample_frames"] = True
 
-            # Set only if user passes a non-None value. Otherwise we want to use each processor's own defaults
-            if return_tensors:
+            # We want to use each processor's own defaults by default when users don't pass anything
+            # NOTE: in `elif` branch we need to use processor default for `assistant_masks` to be
+            # same type as other keys but fine for now as it has been broken for a while
+            if return_tensors != "auto":
                 processor_kwargs["return_tensors"] = return_tensors
+            else:
+                return_tensors = None
 
             # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
             # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
@@ -2303,6 +2389,9 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     processor_kwargs["sampling_rate"] = audio_loading_params["sampling_rate"]
 
+            # Images can also come in `processor_kwargs`, for templates that place them from other variables
+            if images := processor_kwargs.pop("images", None):
+                batch_images = [images] if not is_batched else images
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
@@ -2417,7 +2506,7 @@ class ProcessorMixin(PushToHubMixin):
             token_id = getattr(self, f"{modality}_token_id", None)
             if token_str is not None and token_id is not None:
                 ids_count = [list(ids).count(token_id) for ids in input_ids]
-                text_count = [sample.count(token_str) for sample in text]
+                text_count = [len(re.findall(_UNMARKED + re.escape(token_str), sample)) for sample in text]
 
                 if ids_count != text_count:
                     raise ValueError(
@@ -2451,12 +2540,11 @@ class OmniModalProcessorMixin(ProcessorMixin):
             A list that describes the source of each audio slot where
                 - `None` -> standalone audio associated with no video track
                 - `i`    -> audio extracted from videos[i]
+            If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
         """
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
         merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
@@ -2464,7 +2552,15 @@ class OmniModalProcessorMixin(ProcessorMixin):
         )
 
         # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
-        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video")
+        # Without videos there is no audio track to load, so `audio` is processed as usual
+        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
+
+        # Audio of a video has no placeholder in text, so only standalone slots are counted against it
+        standalone_audio = audio
+        if load_audio_from_video and audio and len(audio) == len(audio_from_video_indices or []):
+            standalone_audio = [sample for sample, idx in zip(audio, audio_from_video_indices) if idx is None]
+        self.validate_inputs(images=images, text=text, videos=videos, audio=standalone_audio, **kwargs)
+
         if load_audio_from_video:
             audio, video_to_audio_indices = self._resolve_audio_from_video(
                 videos,
@@ -2541,6 +2637,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         `audio_from_video_indices` describes the source of each audio slot:
             - `None` -> standalone audio associated with no video track
             - `i`    -> audio extracted from videos[i]
+        If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
 
         Returns:
             `audio (list[str | np.ndarray | torch.Tensor])`:
@@ -2561,13 +2658,25 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 )
             audio_from_video_indices = list(range(len(videos)))  # videos only: one audio per video
 
+        # Callers that already decoded the audio track of each video (e.g. vLLM) pass one audio per slot
+        if len(audio) == len(audio_from_video_indices):
+            video_to_audio = [None] * len(videos)
+            for audio_idx, video_idx in enumerate(audio_from_video_indices):
+                if video_idx is not None:
+                    video_to_audio[video_idx] = audio_idx
+            return audio if audio else None, video_to_audio
+
         if audio_from_video_indices.count(None) != len(audio):
             raise ValueError(
                 f"`audio_from_video_indices` has {audio_from_video_indices.count(None)} standalone slots but {len(audio)} audio inputs."
             )
 
-        if not is_torchcodec_greater_or_equal("0.17"):
-            raise ValueError("Loading audio track from video file requires torchcodec>=0.17 installed!")
+        if not (is_torchcodec_greater_or_equal("0.17") and is_torchcodec_usable(decode="audio")):
+            raise ImportError(
+                "`load_audio_from_video=True` requires torchcodec>=0.17 with FFmpeg. See "
+                "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+            )
+        from torchcodec.decoders import get_container_metadata
 
         standalone_audio = iter(audio)
         audio_resolved = []
@@ -2580,7 +2689,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
             # Only `torchcodec` can decode audio track from all types of video file formats
             # Don't raise a load-error if video is silent and instead skip it
-            cont_metadata = torchcodec.decoders.get_container_metadata(videos[video_idx])
+            cont_metadata = get_container_metadata(videos[video_idx])
             if not any(stream.media_type == "audio" for stream in cont_metadata.streams):
                 continue
 
@@ -2710,6 +2819,7 @@ def prepare_prompt_input(
     inputs: str | list[str] | None,
     batch_size: int,
     input_name: str = "inputs",
+    broadcast: bool = True,
 ) -> list[str | None]:
     """
     Normalize a string, list of strings, or ``None`` into a list of length ``batch_size``.
@@ -2722,6 +2832,9 @@ def prepare_prompt_input(
             Expected length of the output list.
         input_name (`str`, *optional*, defaults to `"inputs"`):
             Name used in error messages to identify the argument.
+        broadcast (`bool`, *optional*, defaults to `True`):
+            Whether a single string is broadcast to all batch items. If `False`, it is treated as a list of one item,
+            so it is only valid for a batch of one (e.g. a target transcription, which is specific to each audio).
 
     Returns:
         `list[str | None]`: A list of length ``batch_size``.
@@ -2729,7 +2842,9 @@ def prepare_prompt_input(
     if inputs is None:
         return [None] * batch_size
     if isinstance(inputs, str):
-        return [inputs] * batch_size
+        if broadcast:
+            return [inputs] * batch_size
+        inputs = [inputs]
     if isinstance(inputs, (list, tuple)):
         if len(inputs) != batch_size:
             raise ValueError(

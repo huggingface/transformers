@@ -56,23 +56,23 @@ logger = logging.get_logger(__name__)
 @dataclass
 class IdeficsBaseModelOutputWithPast(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
 
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -83,28 +83,28 @@ class IdeficsBaseModelOutputWithPast(ModelOutput):
 @dataclass
 class IdeficsCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
 
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: tuple[torch.Tensor] | None = None
 
 
 def expand_inputs_for_generation(
@@ -659,7 +659,7 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -762,14 +762,14 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         cross_attention_gate: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
-        image_hidden_states (`torch.FloatTensor`):
+        image_hidden_states (`torch.Tensor`):
             Input to the layer of shape `(batch, seq_len, embed_dim)`
-        image_attention_mask (`torch.FloatTensor`, *optional*):
+        image_attention_mask (`torch.Tensor`, *optional*):
             image attention mask of size
             `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-        cross_attention_gate (`torch.FloatTensor`, *optional*):
+        cross_attention_gate (`torch.Tensor`, *optional*):
             gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no images.
         """
         if image_hidden_states is None:
@@ -938,19 +938,19 @@ class IdeficsModel(IdeficsPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_encoder_embeddings: torch.FloatTensor | None = None,
-        perceiver_embeddings: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_encoder_embeddings: torch.Tensor | None = None,
+        perceiver_embeddings: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsBaseModelOutputWithPast:
         r"""
-        image_encoder_embeddings (`torch.FloatTensor`, *optional*):
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
             The output of the image encoder.
-        perceiver_embeddings (`torch.FloatTensor`, *optional*):
+        perceiver_embeddings (`torch.Tensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
@@ -1113,10 +1113,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_encoder_embeddings: torch.FloatTensor | None = None,
-        perceiver_embeddings: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_encoder_embeddings: torch.Tensor | None = None,
+        perceiver_embeddings: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1125,9 +1125,9 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsCausalLMOutputWithPast:
         r"""
-        image_encoder_embeddings (`torch.FloatTensor`, *optional*):
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
             The output of the image encoder.
-        perceiver_embeddings (`torch.FloatTensor`, *optional*):
+        perceiver_embeddings (`torch.Tensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.

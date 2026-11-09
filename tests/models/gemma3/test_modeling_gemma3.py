@@ -26,7 +26,6 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -173,26 +172,21 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
 class Gemma3Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma3Model
     config_class = Gemma3Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
+
     conditional_generation_class = Gemma3ForConditionalGeneration
     sequence_classification_class = Gemma3ForSequenceClassification
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("mm_tokens_per_image", 2)
+        kwargs.setdefault("mm_tokens_per_image", 4)
         tokens_per_side = int(kwargs["mm_tokens_per_image"] ** 0.5)
         kwargs.setdefault("num_image_tokens", tokens_per_side * tokens_per_side)
-        kwargs.setdefault("image_size", 20)
+        kwargs.setdefault("image_size", 80)
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("image_token_index", 4)
+        kwargs.setdefault("image_token_id", 4)
         kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
-
-    def create_attention_mask(self, input_ids):
-        # Gemma3 uses padding mask for bidirectional attention on image tokens
-        return input_ids.ne(self.pad_token_id).to(torch_device)
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
@@ -561,8 +555,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
                         ],
                 ("cuda", (8,6)):
                     [
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
-                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown"
+                        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like",
+                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown",
                     ],
                 ("rocm", (9, 4)):
                     [
@@ -734,7 +728,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a city with"],
-                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Chinese Arch"],
+                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt appears to be a street scene in a city"],
                 ("cuda", (9, 0)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Location:**"],
                 ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"],
                 ("rocm", (9, 5)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],

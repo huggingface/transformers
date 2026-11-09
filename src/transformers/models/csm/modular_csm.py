@@ -54,44 +54,44 @@ logger = logging.get_logger(__name__)
 @dataclass
 class CsmOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    depth_decoder_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    depth_decoder_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction) of the depth decoder model.
-    depth_decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    depth_decoder_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the depth decoder (scores for each vocabulary token before SoftMax).
     depth_decoder_past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-    depth_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    depth_decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    depth_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    depth_decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`.
-    backbone_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    backbone_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction) of the backbone model.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    depth_decoder_loss: torch.FloatTensor | None = None
-    depth_decoder_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    depth_decoder_loss: torch.Tensor | None = None
+    depth_decoder_logits: torch.Tensor | None = None
     depth_decoder_past_key_values: Cache | None = None
-    depth_decoder_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    depth_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
-    backbone_loss: torch.FloatTensor | None = None
+    depth_decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
+    depth_decoder_attentions: tuple[torch.Tensor, ...] | None = None
+    backbone_loss: torch.Tensor | None = None
 
 
 # manually specify names for correct naming when converting from modular
@@ -166,16 +166,16 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        backbone_last_hidden_state: torch.FloatTensor | None = None,
+        backbone_last_hidden_state: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        backbone_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, backbone_hidden_size)`, *optional*):
+        backbone_last_hidden_state (`torch.Tensor` of shape `(batch_size, backbone_hidden_size)`, *optional*):
             The last hidden state of the backbone model. Such input is required when the first codebook token (the one generated by the backbone model)
             is provided in the `input_ids` argument.
         """
@@ -289,7 +289,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
@@ -310,18 +310,18 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        backbone_last_hidden_state: torch.FloatTensor | None = None,
+        backbone_last_hidden_state: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        backbone_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, backbone_hidden_size)`, *optional*):
+        backbone_last_hidden_state (`torch.Tensor` of shape `(batch_size, backbone_hidden_size)`, *optional*):
             The last hidden state of the backbone model. Such input is required when the first codebook token (the one generated by the backbone model)
             is provided in the `input_ids` argument.
         """
@@ -564,7 +564,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -599,7 +599,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         input_values_cutoffs: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

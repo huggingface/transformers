@@ -38,11 +38,11 @@ from .configuration_gemma4_unified_assistant import Gemma4UnifiedAssistantConfig
 @dataclass
 class Gemma4UnifiedAssistantOutput(BaseModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     """
 
-    logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
 
 
 class Gemma4UnifiedAssistantMaskedEmbedder(nn.Module):
@@ -97,7 +97,6 @@ class Gemma4UnifiedAssistantPreTrainedModel(PreTrainedModel):
     config: Gemma4UnifiedAssistantConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
