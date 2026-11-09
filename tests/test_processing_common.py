@@ -2043,6 +2043,29 @@ class ProcessorTesterMixin:
         """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
         already has the same default.
         """
+        # Processors whose defaults cannot be removed without breaking BC.
+        # Do not add new processors to this list: remove redundant defaults from the processor instead.
+        skipped_processors = {
+            "AriaProcessor",  # Hub config doesn't match processor defaults
+            "BridgeTowerProcessor",  # Hub config doesn't match processor defaults
+            "ColPaliProcessor",  # Hub config doesn't match processor defaults
+            "DeepseekOcr2Processor",  # Hub config doesn't match processor defaults
+            "Gemma3Processor",  # Hub config doesn't match processor defaults
+            "GotOcr2Processor",  # Hub config doesn't match processor defaults
+            "Granite4VisionProcessor",  # Hub config doesn't match processor defaults
+            "IdeficsProcessor",  # Hub config doesn't match processor defaults
+            "Kosmos2Processor",  # __call__ relies on add_special_tokens default
+            "Kosmos2_5Processor",  # Hub config doesn't match processor defaults
+            "LlavaNextProcessor",  # Hub config doesn't match processor defaults
+            "Pix2StructProcessor",  # __call__ relies on add_special_tokens default
+            "ShieldGemma2Processor",  # Hub config doesn't match processor defaults
+            "VideoLlama3Processor",  # Hub config doesn't match processor defaults
+        }
+        if self.processor_class.__name__ in skipped_processors:
+            self.skipTest(
+                f"Cannot remove redundant defaults from `{self.processor_class.__name__}` without breaking BC."
+            )
+
         processor = self.get_processor()
         processor_class = processor.__class__
         processor_class_name = processor_class.__name__
@@ -2162,7 +2185,15 @@ class ProcessorTesterMixin:
         modified at runtime through a __call__ argument. Image and video processors support
         this use case.
         """
+        # Processors whose `__init__` arguments cannot be removed without breaking BC.
+        # Do not add new processors to this list: update the processor instead.
+        skipped_processors = {
+            "IdeficsProcessor",  # add_end_of_utterance_token
+        }
         processor_class = self.processor_class
+        if processor_class.__name__ in skipped_processors:
+            self.skipTest(f"Cannot remove `{processor_class.__name__}.__init__` arguments without breaking BC.")
+
         init_arguments = self._get_explicit_arguments(processor_class.__init__)
         overlapping_arguments = init_arguments & self._get_valid_processor_kwargs_names()
         # Ignore image_seq_length for BC. It is in ImagesKwargs but is only used by the

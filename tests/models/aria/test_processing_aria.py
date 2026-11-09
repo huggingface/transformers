@@ -299,7 +299,3 @@ And who is that?<|im_end|>
                 padding=True,
                 max_length=3,
             )
-
-    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
-    def test_no_redundant_default_kwargs(self):
-        pass
