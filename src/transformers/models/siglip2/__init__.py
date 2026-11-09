@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -33,5 +32,40 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_siglip2": {
+                "Siglip2Config",
+                "Siglip2TextConfig",
+                "Siglip2VisionConfig",
+            },
+            "processing_siglip2": {
+                "Siglip2Processor",
+            },
+            "tokenization_siglip2": {
+                "Siglip2Tokenizer",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_siglip2": {
+                "Siglip2ForImageClassification",
+                "Siglip2Model",
+                "Siglip2PreTrainedModel",
+                "Siglip2TextModel",
+                "Siglip2VisionModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_siglip2": {
+                "Siglip2ImageProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_siglip2": {
+                "Siglip2ImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

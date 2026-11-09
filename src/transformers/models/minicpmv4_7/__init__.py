@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,26 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_minicpmv4_7": {
+                "MiniCPMV4_7Config",
+                "MiniCPMV4_7VisionConfig",
+            },
+            "processing_minicpmv4_7": {
+                "MiniCPMV4_7Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_minicpmv4_7": {
+                "MiniCPMV4_7ForConditionalGeneration",
+                "MiniCPMV4_7Model",
+                "MiniCPMV4_7PreTrainedModel",
+                "MiniCPMV4_7VisionModel",
+                "MiniCPMV4_7VisionPreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

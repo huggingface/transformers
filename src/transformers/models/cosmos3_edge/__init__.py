@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -33,5 +32,40 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_cosmos3_edge": {
+                "Cosmos3EdgeConfig",
+                "Cosmos3EdgeTextConfig",
+                "Cosmos3EdgeVisionConfig",
+            },
+            "processing_cosmos3_edge": {
+                "Cosmos3EdgeProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_cosmos3_edge": {
+                "Cosmos3EdgeForConditionalGeneration",
+                "Cosmos3EdgeModel",
+                "Cosmos3EdgePreTrainedModel",
+                "Cosmos3EdgeTextModel",
+                "Cosmos3EdgeVisionModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_cosmos3_edge": {
+                "Cosmos3EdgeImageProcessor",
+            },
+            "video_processing_cosmos3_edge": {
+                "Cosmos3EdgeVideoProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_cosmos3_edge": {
+                "Cosmos3EdgeImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
