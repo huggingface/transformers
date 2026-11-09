@@ -203,22 +203,20 @@ class CodeGenAttention(nn.Module):
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJMLP with GPTJ->CodeGen
 class CodeGenMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * embed_dim
+    def __init__(self, config, intermediate_size):  # in MLP: intermediate_size= 4 * embed_dim
         super().__init__()
         embed_dim = config.n_embd
 
-        self.fc_in = nn.Linear(embed_dim, intermediate_size)
-        self.fc_out = nn.Linear(intermediate_size, embed_dim)
+        self.up_proj = nn.Linear(embed_dim, intermediate_size)
+        self.down_proj = nn.Linear(intermediate_size, embed_dim)
 
-        self.act = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states: torch.Tensor | None) -> torch.Tensor:
-        hidden_states = self.fc_in(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.fc_out(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = self.dropout(down_proj)
+        return down_proj
 
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
@@ -229,7 +227,7 @@ class CodeGenBlock(GradientCheckpointingLayer):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
         self.attn = CodeGenAttention(config, layer_idx)
-        self.mlp = CodeGenMLP(inner_dim, config)
+        self.mlp = CodeGenMLP(config, inner_dim)
 
     def forward(
         self,

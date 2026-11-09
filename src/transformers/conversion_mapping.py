@@ -2123,6 +2123,12 @@ def _build_checkpoint_conversion_mapping():
     mapping["gpt_neox"] = gpt_neox_mlp_renames
     mapping["persimmon"] = gpt_neox_mlp_renames.copy()
     mapping["gpt_neox_japanese"] = gpt_neox_mlp_renames.copy()
+    mapping["bloom"] = gpt_neox_mlp_renames.copy()
+    for key in ["gptj", "codegen"]:
+        mapping[key] = [
+            WeightRenaming(r"\.mlp\.fc_in\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.fc_out\.", ".mlp.down_proj."),
+        ]
     for key in ["bark", "semantic", "coarse_acoustics", "fine_acoustics"]:
         mapping[key] = [
             WeightRenaming(r"\.mlp\.in_proj\.", ".mlp.up_proj."),
