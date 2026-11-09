@@ -32,10 +32,11 @@ class AXK1Config(PreTrainedConfig):
         Number of groups for routed experts.
     topk_group (`int`, *optional*, defaults to 4):
         Number of selected groups per token (each token's experts are drawn from these groups).
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of leading layers that use a dense MLP; the rest use the MoE block.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to use the interleaved rotary position embedding layout.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
+        `first_k_dense_replace` / `moe_layer_freq` when not provided.
 
     ```python
     >>> from transformers import AXK1Config, AXK1Model
@@ -96,7 +97,6 @@ class AXK1Config(PreTrainedConfig):
     n_group: int = 8
     topk_group: int = 4
     num_experts_per_tok: int = 8
-    first_k_dense_replace: int = 1
     norm_topk_prob: bool | None = True
     hidden_act: str = "silu"
     max_position_embeddings: int = 32768
@@ -112,6 +112,7 @@ class AXK1Config(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -119,6 +120,16 @@ class AXK1Config(PreTrainedConfig):
 
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
+
+        # Convert from legacy args to mlp layer types
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
+            self.mlp_layer_types = [
+                "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
+                for i in range(self.num_hidden_layers)
+            ]
+
         super().__post_init__(**kwargs)
 
 

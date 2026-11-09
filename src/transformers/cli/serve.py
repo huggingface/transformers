@@ -144,6 +144,7 @@ class Serve:
             dtype=dtype,
             trust_remote_code=trust_remote_code,
             attn_implementation=attn_implementation,
+            continuous_batching=continuous_batching,
             quantization=quantization,
             model_timeout=model_timeout,
             force_model=force_model,

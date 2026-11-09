@@ -98,16 +98,16 @@ class ParakeetRNNTGenerateOutput(ModelOutput):
             Per-step durations in frames. Combined with `sequences`, this is sufficient
             to reconstruct full timestamp information (frame indices are the cumulative sum
             of durations).
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*):
             Encoder attention weights per layer.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*):
             Encoder hidden states per layer.
     """
 
     sequences: torch.LongTensor
     durations: torch.LongTensor | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
 
 
 class EncoderExhaustedCriteria(StoppingCriteria):

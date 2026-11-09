@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 使用しているDeep Learningライブラリに対して、🤗 Transformersをインストールしてキャッシュを設定、そしてオプションでオフラインで実行できるように 🤗 Transformersを設定します。
 
-🤗 TransformersはPython 3.10+とPyTorch 2.4+で動作確認しています。 使用しているDeep Learningライブラリに合わせて、以下のインストール方法に従ってください:
+🤗 TransformersはPython 3.11+とPyTorch 2.4+で動作確認しています。 使用しているDeep Learningライブラリに合わせて、以下のインストール方法に従ってください:
 
 * [PyTorch](https://pytorch.org/get-started/locally/)のインストール手順。
 
@@ -102,7 +102,7 @@ cd transformers
 pip install -e .
 ```
 
-上記のコマンドは、レポジトリをクローンしたフォルダとPythonのライブラリをパスをリンクします。Pythonは通常のライブラリパスに加えて、あなたがクローンしたフォルダの中も見るようになります。例えば、Pythonパッケージが通常、`~/anaconda3/envs/main/lib/python3.10/site-packages/`にインストールされている場合、Pythonはクローンしたフォルダも検索するようになります: `~/transformers/`.
+上記のコマンドは、レポジトリをクローンしたフォルダとPythonのライブラリをパスをリンクします。Pythonは通常のライブラリパスに加えて、あなたがクローンしたフォルダの中も見るようになります。例えば、Pythonパッケージが通常、`~/anaconda3/envs/main/lib/python3.11/site-packages/`にインストールされている場合、Pythonはクローンしたフォルダも検索するようになります: `~/transformers/`.
 
 <Tip warning={true}>
 

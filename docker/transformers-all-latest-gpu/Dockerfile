@@ -9,17 +9,26 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.14.0'
+ARG PYTORCH='2.15.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu130'
+ARG CUDA='cu132'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.16.0'
+ARG TORCHCODEC='0.17.0'
 
 ARG FLASH_ATTN='false'
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng ffmpeg git-lfs curl
+
+# Python comes from uv, at the version in the repo's `.python-version` (passed as the `PYTHON_VERSION` build arg by the
+# build workflow), instead of Ubuntu 22.04's 3.10.
+ARG PYTHON_VERSION
+ENV VIRTUAL_ENV="/opt/venv" UV_PYTHON_INSTALL_DIR="/opt/uv/python"
+ENV PATH="$VIRTUAL_ENV/bin:/root/.local/bin:$PATH"
+COPY --from=gpu-common install-python.sh /opt/ci/
+RUN sh /opt/ci/install-python.sh "$PYTHON_VERSION"
+
 RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
@@ -32,8 +41,8 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
-# 4. Warning: torchaudio only publishes wheels for the CUDA version it was released with (e.g. 2.11.0
-#    only has a cu130 build). If torch is installed with a different CUDA suffix (e.g. cu132), pip
+# 4. Warning: torchaudio only publishes wheels for the CUDA versions it was released with (e.g. 2.11.0
+#    has no cu132 build, 2.11.1 does). If torch is installed with a different CUDA suffix, pip
 #    will keep the torchaudio installed in the previous step and torchaudio will raise a RuntimeError on import due to the
 #    CUDA version mismatch. When upgrading CUDA, make sure torchaudio has a wheel for the new version.
 RUN set -e; \
@@ -42,9 +51,10 @@ RUN set -e; \
         VERSION="torch==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
         # torchaudio is in maintenance mode: 2.11 is the final release, compatible with torch 2.11+
-        # (no need to upgrade it with torch; it does not pin torch to a specific version)
+        # (no need to upgrade it with torch; it does not pin torch to a specific version). Use `2.11.*` to get the
+        # latest patch release, which has the newer CUDA builds (see note 4 above).
         if printf '%s\n' "2.11.0" "${PYTORCH}" | sort -V | head -1 | grep -qx "2.11.0"; then \
-            TORCHAUDIO_VERSION="torchaudio==2.11.0"; \
+            TORCHAUDIO_VERSION="torchaudio==2.11.*"; \
         else \
             TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         fi; \
@@ -184,22 +194,9 @@ RUN python3 -m pip install --no-cache-dir einops
 # For `VibeVoice` (added in PR #40546)
 RUN python3 -m pip install --no-cache-dir diffusers
 
-# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
-RUN python3 -m pip uninstall -y kernels
+COPY --from=gpu-common finish-transformers-install.sh /opt/ci/
+RUN sh /opt/ci/finish-transformers-install.sh
 
-# When installing in editable mode, `transformers` is not recognized as a package.
-# this line must be added in order for python to be aware of transformers.
-RUN cd transformers && python3 setup.py develop
-
-# Smoke test: fail the image build immediately if a later `pip install` replaced or broke the pinned
-# CUDA torch stack (e.g. a dep that drags in a different torch/CUDA/NCCL — which surfaces as
-# `undefined symbol: ncclCommResume` at `import torch`; see run 28991812987). We import torch (which
-# eagerly loads `libtorch_cuda.so`) AND assert the version still matches the `${PYTORCH}` pin, since
-# transformers only requires `torch>=2.4` — a silent swap to a newer torch otherwise passes every
-# version check and reaches the GPU test jobs. No GPU is present at build time, so we only exercise
-# the import + CUDA runtime load, not device availability.
-RUN set -e; \
-    python3 -c "import torch; print('torch version:', torch.__version__); torch.cuda.is_available()"; \
-    if [ "$PYTORCH" != "pre" ]; then \
-        python3 -c "import torch, sys; v = torch.__version__.split('+')[0]; sys.exit(0 if v.startswith('${PYTORCH}') else 'ERROR: torch is ' + torch.__version__ + ', expected ${PYTORCH}.* - the pinned CUDA build was clobbered')"; \
-    fi
+# Smoke test of the pinned torch stack, see the script.
+COPY --from=gpu-common check-torch.sh /opt/ci/
+RUN sh /opt/ci/check-torch.sh "$PYTORCH"

@@ -35,23 +35,20 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        HyperCLOVAXConfig,
         HyperCLOVAXVisionV2Config,
         HyperCLOVAXVisionV2ForConditionalGeneration,
         HyperCLOVAXVisionV2Model,
-        Qwen2_5_VLVisionConfig,
     )
 
 
 class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
     base_model_class = HyperCLOVAXVisionV2Model
     config_class = HyperCLOVAXVisionV2Config
-    text_config_class = HyperCLOVAXConfig
-    vision_config_class = Qwen2_5_VLVisionConfig
+
     conditional_generation_class = HyperCLOVAXVisionV2ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_size", 14)
+        kwargs.setdefault("image_size", 28)
         kwargs.setdefault("patch_size", 14)
         kwargs.setdefault("num_heads", 4)
         kwargs.setdefault("depth", 2)
@@ -62,30 +59,6 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
 
         super().__init__(parent, **kwargs)
-
-    def get_vision_config(self):
-        config = super().get_vision_config()
-        return self.vision_config_class(
-            **{
-                **config.to_dict(),
-                "patch_size": self.patch_size,
-                "num_heads": self.num_heads,
-                "depth": self.depth,
-                "spatial_merge_size": self.spatial_merge_size,
-                "out_hidden_size": self.out_hidden_size,
-                "tokens_per_second": self.tokens_per_second,
-                "temporal_patch_size": self.temporal_patch_size,
-            }
-        )
-
-    def get_config(self):
-        config = super().get_config()
-        return self.config_class(
-            **{
-                **config.to_dict(),
-                "video_token_id": self.video_token_id,
-            }
-        )
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -99,7 +72,7 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        image_grid_thw = torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)
+        image_grid_thw = torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)
         return {"image_grid_thw": image_grid_thw}
 
 
@@ -117,8 +90,9 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
         C = config.vision_config.in_channels
         T = config.vision_config.temporal_patch_size
         P = config.vision_config.patch_size
+        seq_length = 15
 
-        input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
+        input_ids = ids_tensor([B, seq_length], self.model_tester.vocab_size)
 
         F = 4
         patch_H = self.model_tester.image_size // P
@@ -146,7 +120,7 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 
         insertion_point = self.model_tester.num_image_tokens
 
-        self.assertLessEqual((B * patches_per_video) + insertion_point, self.model_tester.seq_length)
+        self.assertLessEqual(patches_per_video + insertion_point, seq_length)
         for b in range(B):
             input_ids[b, insertion_point : insertion_point + patches_per_video] = self.model_tester.video_token_id
 
@@ -308,6 +282,9 @@ class HyperCLOVAXVisionV2TinyModelIntegrationTest(MemoryCleanupMixin, unittest.T
                 ("cuda", (8, 6)): [
                     "user\nWhat is the capital of South Korea?\nassistant\n<think>\n globally,www locally,www locally,www locally,www locally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www"
                 ],
+                ("xpu", 5): [
+                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\n globally,www locally,www locally,www locally,www locally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www"
+                ],
             }
         )
         expected = EXPECTED_TEXTS.get_expectation()
@@ -344,6 +321,9 @@ class HyperCLOVAXVisionV2TinyModelIntegrationTest(MemoryCleanupMixin, unittest.T
                 ("cuda", (8, 6)): [
                     'user\n{"id": "image_00", "type": "image/jpeg", "filename": "a.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\n globally,www locally([@ globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www'
                 ],
+                ("xpu", 5): [
+                    'user\n{"id": "image_00", "type": "image/jpeg", "filename": "a.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\n globally,www locally([@ globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www'
+                ],
             }
         )
         expected = EXPECTED_TEXTS.get_expectation()
@@ -378,6 +358,9 @@ class HyperCLOVAXVisionV2TinyModelIntegrationTest(MemoryCleanupMixin, unittest.T
             {
                 ("cuda", ("cuda", (8, 6))): [
                     'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\n globally신지차도 globally신지파괴의장 globally신지예원 sometimes globally신지신분 =================================================================================([@ globally신지접이 globally신지과이 globally신지 globally신지 globally신지 globally신지'
+                ],
+                ("xpu", 5): [
+                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\n globally신지차도 globally신지파괴의장 globally신지예원 sometimes globally신지신분 =================================================================================([@ globally신지과이 globally신지접이 globally신지 globally신지 globally신지 globally신지'
                 ],
             }
         )

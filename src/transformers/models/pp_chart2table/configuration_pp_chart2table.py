@@ -111,7 +111,7 @@ class PPChart2TableConfig(PreTrainedConfig):
                 "attention_dropout": 0.0,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=PPChart2TableVisionConfig),
+        "vision_config": PPChart2TableVisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

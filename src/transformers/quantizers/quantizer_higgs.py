@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import HiggsConfig
 
 from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -39,9 +38,6 @@ class HiggsHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: "HiggsConfig"
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, device_map, **kwargs):
         if not torch.cuda.is_available():
@@ -77,40 +73,6 @@ class HiggsHfQuantizer(HfQuantizer):
             )
 
         return dtype
-
-    # TODO: to remove
-    # Kept here in case we see some interest in adding support for it
-    # def create_quantized_param(
-    #     self,
-    #     model: "PreTrainedModel",
-    #     param_value: "torch.Tensor",
-    #     param_name: str,
-    #     target_device: "torch.device",
-    #     **kwargs,
-    # ):
-    #     from ..integrations import quantize_with_higgs
-
-    #     flute_dict = quantize_with_higgs(
-    #         param_value.to(target_device),
-    #         self.quantization_config.bits,
-    #         self.quantization_config.p,
-    #         self.quantization_config.group_size,
-    #         self.quantization_config.hadamard_size,
-    #     )
-    #     del param_value
-
-    #     module, _ = get_module_from_name(model, param_name)
-    #     module_name = ".".join(param_name.split(".")[:-1])
-    #     for key, value in flute_dict.items():
-    #         if key in module._parameters:
-    #             module._parameters[key] = torch.nn.Parameter(value, requires_grad=False)
-    #         elif key in module._buffers:
-    #             module._buffers[key] = torch.nn.Buffer(value)
-    #         elif key == "tune_metadata":
-    #             module.tune_metadata = value
-    #             self.quantization_config.tune_metadata[module_name] = value.to_dict()
-    #         else:
-    #             raise ValueError(f"Unexpected key {key} in module {module}")
 
     def _process_model_before_weight_loading(
         self,
@@ -171,7 +133,7 @@ class HiggsHfQuantizer(HfQuantizer):
         else:
             return False
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         from ..integrations import dequantize_higgs
 
         model = dequantize_higgs(model)

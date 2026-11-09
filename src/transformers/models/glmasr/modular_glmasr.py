@@ -23,8 +23,9 @@ from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -34,7 +35,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
-from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
+from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
@@ -46,9 +47,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
 @requires(backends=("torch",))
@@ -93,10 +91,13 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[GlmAsrProcessorKwargs],
-    ) -> BatchFeature:
+        transcription: str | list[str] | None = None,
+        tokenize: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature | list[str]:
         """
-        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
+        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt,
+        either for inference or, when `transcription` is given, for training.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -105,12 +106,23 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~GlmAsrProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
-                `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`],
+            or to [`GlmAsrForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
 
         """
 
@@ -141,8 +153,14 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         else:
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
-        conversations = [
-            [
+        is_training = transcription is not None
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
+        conversations = []
+        for prompt_text, audio_item, transcript in zip(prompts, audio_items, transcriptions):
+            conversation = [
                 {
                     "role": "user",
                     "content": [
@@ -151,13 +169,14 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                     ],
                 }
             ]
-            for prompt_text, audio_item in zip(prompts, audio_items)
-        ]
+            if transcript is not None:
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
-            add_generation_prompt=True,
+            tokenize=tokenize,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )
@@ -346,7 +365,7 @@ class GlmAsrModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -378,7 +397,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: GlmAsrConfig):
         super().__init__(config)
         self.model = GlmAsrModel(config)
         self.post_init()
@@ -386,12 +405,12 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -433,6 +452,8 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
             **kwargs,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"GlmAsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "GlmAsrEncoder",

@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -359,8 +359,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
 
     model_type = "fastspeech2_conformer_with_hifigan"
     sub_configs_defaults = {
-        "model_config": SubConfigSpec(config_class=FastSpeech2ConformerConfig),
-        "vocoder_config": SubConfigSpec(config_class=FastSpeech2ConformerHifiGanConfig),
+        "model_config": FastSpeech2ConformerConfig,
+        "vocoder_config": FastSpeech2ConformerHifiGanConfig,
     }
 
     model_config: dict | PreTrainedConfig | None = None

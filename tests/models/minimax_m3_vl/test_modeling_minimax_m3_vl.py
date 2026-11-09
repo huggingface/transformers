@@ -24,7 +24,6 @@ from transformers import (
     MiniMaxM3VLImageProcessorFast,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
-    MiniMaxM3VLTextConfig,
     MiniMaxM3VLVideoProcessor,
     MiniMaxM3VLVisionConfig,
     is_torch_available,
@@ -32,6 +31,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -63,8 +63,7 @@ if is_vision_available():
 class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniMaxM3VLModel
     config_class = MiniMaxM3VLConfig
-    text_config_class = MiniMaxM3VLTextConfig
-    vision_config_class = MiniMaxM3VLVisionConfig
+
     conditional_generation_class = MiniMaxM3SparseForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -73,11 +72,11 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("bos_token_id", 0)
         kwargs.setdefault("eos_token_id", 1)
         kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("image_size", 14)
+        kwargs.setdefault("image_size", 28)
         kwargs.setdefault("patch_size", 14)
         # One patch per image (grid [1, 1, 1]) so that the generation common tests, which crop
         # all inputs along the batch dim, keep ``pixel_values`` and ``image_grid_thw`` consistent.
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("spatial_merge_size", 1)
         kwargs.setdefault("projector_hidden_size", 32)
@@ -121,7 +120,7 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
 
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
 
 @require_torch
@@ -176,9 +175,9 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         heads_differ = (block_indices[0, 0] != block_indices[0, 1]).any()
         self.assertTrue(bool(heads_differ), "indexer heads selected identical blocks -- head axis was collapsed")
 
-    @unittest.skip(reason="IDK exactly why, can be adressed later")
     def test_reverse_loading_mapping(self):
-        pass
+        # As in llava, the base model has no `model.` prefix to reverse the `^language_model\.model\.` rename onto
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
         reason=(
@@ -380,6 +379,7 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
+@require_torch_accelerator_memory(memory=480)  # 413 GiB of MXFP8 weights, plus activations
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/MiniMax-M3-MXFP8"
 

@@ -34,14 +34,27 @@ class DistributedConfig:
         tp_plan (`dict[str, str]` or `"auto"`, *optional*):
             Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
             model's predefined `base_model_tp_plan`. Pass a dictionary to override individual rules of that plan;
-            unspecified rules are kept.
+            unspecified rules are kept. An empty dictionary applies no tensor parallel rule.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Deprecated alias for `ep_size=tp_size` when `ep_size` is omitted, removed in v5.20. An explicit
-            `ep_size` takes precedence. This flag does not change `tp_size` or `fsdp_size`.
+            Deprecated, removed in v5.21. Without `ep_size`, same as `ep_size=tp_size, tp_plan={}`: the
+            expert-parallel plan alone across `tp_size` ranks. An explicit `ep_size` takes precedence. This flag
+            does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
+        dp_replicate_size (`int`, *optional*):
+            Number of FSDP replicas (HSDP). Parameters are sharded across `fsdp_size` devices and replicated
+            `dp_replicate_size` times: gradients are reduce-scattered within a replica, then all-reduced across
+            replicas. Defaults to 1. We suggest it for multi-node training: plain FSDP all-gathers parameters and
+            reduce-scatters gradients across all devices at every step, so this traffic goes over the slower
+            inter-node links. Set `dp_replicate_size` to the number of nodes and `fsdp_size * tp_size` to the number
+            of devices per node: the sharding traffic then stays on the fast intra-node links, and only the gradient
+            all-reduce crosses nodes. The cost is more memory per device, since parameters are sharded within a node.
+        fsdp_plan (`dict[str, str]`, *optional*):
+            FSDP2 sharding plan. Leave as `None` to use the model's predefined `base_model_fsdp_plan` and
+            class-level `_fsdp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept.
+            Applied only when `dp_replicate_size * fsdp_size > 1`.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
@@ -64,6 +77,8 @@ class DistributedConfig:
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
+    dp_replicate_size: int | None = None
+    fsdp_plan: dict[str, str] | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
@@ -93,26 +108,33 @@ class DistributedConfig:
         """
         return self.fsdp_size * self.tp_size // self.ep_size
 
+    @property
+    def dp_size(self) -> int:
+        """The number of ranks that each see a distinct batch: `dp_replicate_size * fsdp_size`."""
+        return self.dp_replicate_size * self.fsdp_size
+
     def __post_init__(self):
         self._resolve_parallelism()
         self._validate_mesh_config()
 
     def _resolve_parallelism(self):
         """Resolve parallel sizes and legacy EP settings."""
-        for value in (self.tp_size, self.fsdp_size, self.pp_size, self.ep_size):
+        for value in (self.tp_size, self.fsdp_size, self.dp_replicate_size, self.pp_size, self.ep_size):
             if value is not None and value < 1:
                 raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
 
         if self.fsdp_size is None:
             self.fsdp_size = 1
+        if self.dp_replicate_size is None:
+            self.dp_replicate_size = 1
         if self.pp_size is None:
             self.pp_size = 1
         if self.tp_size is None and self.tp_plan is not None:
             world_size = int(os.environ.get("WORLD_SIZE", 1))
-            other_parallel_size = self.fsdp_size * self.pp_size
+            other_parallel_size = self.dp_replicate_size * self.fsdp_size * self.pp_size
             if world_size % other_parallel_size != 0:
                 raise ValueError(
-                    f"WORLD_SIZE ({world_size}) must be divisible by fsdp_size * pp_size "
+                    f"WORLD_SIZE ({world_size}) must be divisible by dp_replicate_size * fsdp_size * pp_size "
                     f"({other_parallel_size}) to derive tp_size."
                 )
             self.tp_size = world_size // other_parallel_size
@@ -120,11 +142,14 @@ class DistributedConfig:
             self.tp_size = 1
 
         if self.enable_expert_parallel and self.ep_size is None:
+            # TODO: remove once deprecation cycle is over
             self.ep_size = self.tp_size
+            if self.tp_plan is None:
+                self.tp_plan = {}
             if _get_torch_distributed_rank() == 0:
                 warnings.warn(
-                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.20. "
-                    f"Use ep_size={self.ep_size} instead.",
+                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.21. Use "
+                    f"ep_size={self.ep_size}, tp_plan={{}} instead, or drop tp_plan to also shard the dense modules.",
                     FutureWarning,
                     stacklevel=4,
                 )
@@ -138,6 +163,8 @@ class DistributedConfig:
         """Validate mesh sizes before the model's expert plan is available."""
         if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
             raise ValueError("`ep_plan` must be a dictionary or None.")
+        if self.fsdp_plan is not None and not isinstance(self.fsdp_plan, dict):
+            raise ValueError("`fsdp_plan` must be a dictionary or None.")
 
         if self.ep_size > 1:
             if self.ep_size % self.tp_size:
@@ -145,7 +172,7 @@ class DistributedConfig:
             if (self.fsdp_size * self.tp_size) % self.ep_size:
                 raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
 
-        if self.fsdp_size > 1 and self.pp_size > 1:
+        if self.dp_size > 1 and self.pp_size > 1:
             raise ValueError(
                 "Combining FSDP with pipeline parallelism is not supported yet. "
                 "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
@@ -164,6 +191,10 @@ class DistributedConfig:
         elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
             raise ValueError(
                 "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
+            )
+        elif "megamoe_experts" in ep_plan.values() and self.ep_size != self.tp_size:
+            raise ValueError(
+                "DeepGEMM Mega MoE expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
             )
 
     @classmethod

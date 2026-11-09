@@ -39,11 +39,13 @@ if TYPE_CHECKING:
     from .axk1 import *
     from .axk2 import *
     from .aya_vision import *
+    from .bailing_hybrid import *
     from .bamba import *
     from .bark import *
     from .bart import *
     from .barthez import *
     from .bartpho import *
+    from .beam import *
     from .beit import *
     from .bert import *
     from .bert_generation import *
@@ -162,6 +164,7 @@ if TYPE_CHECKING:
     from .flaubert import *
     from .flava import *
     from .flex_olmo import *
+    from .flint import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -201,6 +204,7 @@ if TYPE_CHECKING:
     from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
+    from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
     from .granite_speech import *
@@ -244,6 +248,7 @@ if TYPE_CHECKING:
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jev import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *
@@ -262,6 +267,7 @@ if TYPE_CHECKING:
     from .lfm2 import *
     from .lfm2_moe import *
     from .lfm2_vl import *
+    from .lfm3 import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
@@ -293,6 +299,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .mimo_v2_flash import *
     from .minicpm3 import *
+    from .minicpm_ocr import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *
@@ -303,6 +310,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mistral4 import *
+    from .mistral_large4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
@@ -320,12 +328,14 @@ if TYPE_CHECKING:
     from .moonshine import *
     from .moonshine_streaming import *
     from .moshi import *
+    from .moss_transcribe_diarize import *
     from .mpnet import *
     from .mpt import *
     from .mra import *
     from .mt5 import *
     from .muse_glimmer import *
     from .muse_glimmer_assistant import *
+    from .muse_spark import *
     from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
@@ -334,6 +344,7 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
+    from .nemotron3_5_transcribe import *
     from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
@@ -381,6 +392,8 @@ if TYPE_CHECKING:
     from .pixio import *
     from .pixtral import *
     from .plbart import *
+    from .pocket_tts import *
+    from .pocket_tts_audio_tokenizer import *
     from .poolformer import *
     from .pop2piano import *
     from .pp_chart2table import *
@@ -492,10 +505,13 @@ if TYPE_CHECKING:
     from .trocr import *
     from .tvp import *
     from .udop import *
+    from .ultrabert import *
+    from .ultravbert import *
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *
     from .univnet import *
+    from .unlimited_ocr import *
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *

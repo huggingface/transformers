@@ -61,6 +61,7 @@ else:
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
             ("minicpmv4_7", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
+            ("muse_spark", {"torchvision": "MuseGlimmerVideoProcessor"}),
             ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("qwen2_5_vl", {"torchvision": "Qwen2VLVideoProcessor"}),

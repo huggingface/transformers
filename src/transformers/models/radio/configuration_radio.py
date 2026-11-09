@@ -40,14 +40,14 @@ class RadioConfig(PreTrainedConfig):
         Number of learned class (summary) tokens prepended to the patch sequence.
     num_registers (`int`, *optional*, defaults to 7):
         Number of learned register tokens prepended to the patch sequence.
+    video_temporal_patch_size (`int`, *optional*):
+        Number of temporally-stacked frames per patch. When set, the patch generator also builds a
+        `video_patch_projection` for temporally-packed video patches; `None` disables the video path.
     patch_dim (`int`, *optional*):
         Flattened size of one image patch. Derived from `num_channels` and `patch_size`.
     video_patch_dim (`int`, *optional*):
         Flattened size of one temporally-packed video patch. Derived from `video_temporal_patch_size`
         and `patch_dim`; `None` for image-only checkpoints.
-    video_temporal_patch_size (`int`, *optional*):
-        Number of temporally-stacked frames per patch. When set, the patch generator also builds a
-        `video_patch_projection` for temporally-packed video patches; `None` disables the video path.
     summary_idxs (`list[int]`, *optional*, defaults to `[0, 1]`):
         Indices of the class tokens to gather and flatten into the `summary` output embedding.
     norm_mean (`tuple[float, float, float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):

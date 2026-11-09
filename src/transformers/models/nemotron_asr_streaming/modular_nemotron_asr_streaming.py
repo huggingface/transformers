@@ -168,8 +168,64 @@ class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
 
 
 class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
+    r"""
+    Constructs a NemotronAsrStreaming feature extractor.
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+
+    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
+    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
+
+    Args:
+        feature_size (`int`, *optional*, defaults to 80):
+            The feature dimension of the extracted features.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        hop_length (`int`, *optional*, defaults to 160):
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
+        n_fft (`int`, *optional*, defaults to 512):
+            Size of the Fourier transform.
+        win_length (`int`, *optional*, defaults to 400):
+            The window length for the STFT computation.
+        preemphasis (`float`, *optional*, defaults to 0.97):
+            A preemphasis filter coefficient. 0.0 means no preemphasis filter.
+        padding_value (`float`, *optional*, defaults to 0.0):
+            Padding value used to pad the audio. Should correspond to silences.
+        mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+            Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+            precision (`"bfloat16"` for Nemotron 3.5 Transcribe): the filter bank and the window are then rounded to
+            that dtype when the features are computed, so the log-mel features match the original front-end; the
+            spectrogram itself is always computed in float32.
+    """
+
+    def __init__(
+        self,
+        feature_size=80,
+        sampling_rate=16000,
+        hop_length=160,
+        n_fft=512,
+        win_length=400,
+        preemphasis=0.97,
+        padding_value=0.0,
+        mel_filters_dtype="float32",
+        **kwargs,
+    ):
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            hop_length=hop_length,
+            n_fft=n_fft,
+            win_length=win_length,
+            preemphasis=preemphasis,
+            padding_value=padding_value,
+            **kwargs,
+        )
+        self.mel_filters_dtype = mel_filters_dtype
+
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        dtype = getattr(torch, self.mel_filters_dtype)
+        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -185,7 +241,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        mel_filters = self.mel_filters.to(device).to(dtype).float()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 

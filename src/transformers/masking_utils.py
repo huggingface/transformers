@@ -593,7 +593,7 @@ def eager_mask(
     if mask is not None:
         min_dtype = torch.finfo(dtype).min
         # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-        mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
+        mask = torch.where(mask, torch.zeros((), device=mask.device, dtype=dtype), min_dtype)
     return mask
 
 
@@ -631,9 +631,9 @@ def flash_attention_mask(
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
-        # We only return an actual mask if there is at least 1 padding token AND the length is the same as the kv_length (it can only
-        # be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we return
-        # `None` and use `is_causal` in FA2 (note that the attention_mask is a boolean dtype here)
+        # We only return an actual mask if there is at least 1 padding token OR the mask length is different from the kv_length (it
+        # can only be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we
+        # return `None` and use `is_causal` in FA2 (note that the attention_mask is of boolean dtype here)
         if attention_mask.shape[1] == kv_length and attention_mask.all():
             attention_mask = None
 
@@ -847,6 +847,23 @@ def _preprocess_mask_arguments(
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
 
+def find_first_full_attention_index(cache: Cache | None) -> int:
+    """
+    Return the index of the first full attention layer inside `cache` if any and if possible to find it.
+    Otherwise, returns 0, i.e. the first layer.
+    """
+    if isinstance(cache, Cache):
+        is_full = [
+            not is_sliding and not is_linear and not is_dummy
+            for is_sliding, is_linear, is_dummy in zip(cache.is_sliding, cache.is_linear, cache.is_dummy)
+        ]
+        layer_idx = is_full.index(True) if True in is_full else 0
+    else:
+        layer_idx = 0
+
+    return layer_idx
+
+
 def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -909,12 +926,9 @@ def create_causal_mask(
             allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(False)
-        else:
-            layer_idx = 0
+        layer_idx = find_first_full_attention_index(past_key_values)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1016,11 +1030,8 @@ def create_bidirectional_mask(
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
     """
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
+    layer_idx = find_first_full_attention_index(past_key_values)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(

@@ -187,6 +187,24 @@ class EsmFold2ModelTest(unittest.TestCase):
                 self.assertTrue(torch.isfinite(coords).all())
                 self.assertEqual(out["distogram_logits"].shape[-1], model.config.structure_head.num_distogram_bins)
 
+    def test_msa_encoder_disabled(self):
+        # Checkpoints without MSA conditioning (e.g. `biohub/ESMFold2-Fast`) set `msa_encoder.enabled=False`: no
+        # MSA-encoder weights exist, so the module must not be built (it would otherwise run with random weights).
+        torch.manual_seed(0)
+        model = EsmFold2Model(get_tiny_config(msa_encoder={"enabled": False})).eval()
+        self.assertIsNone(model.msa_encoder)
+        self.assertFalse(any(key.startswith("msa_encoder.") for key in model.state_dict()))
+        with torch.no_grad():
+            torch.manual_seed(1)
+            out = model.infer_protein(self.seq, num_loops=1, num_diffusion_samples=1, num_sampling_steps=2)
+        self.assertTrue(torch.isfinite(out["sample_atom_coords"]).all())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            reloaded = EsmFold2Model.from_pretrained(tmp).eval()
+        self.assertFalse(reloaded.config.msa_encoder.enabled)
+        self.assertIsNone(reloaded.msa_encoder)
+
     def test_attention_dispatch_attached(self):
         model = self._build("eager")
         swa_modules = [m for m in model.modules() if isinstance(m, EsmFold2AtomAttention)]

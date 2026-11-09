@@ -195,7 +195,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
                 "out_features": ["stage2", "stage3", "stage4"],
             },
         ),
-        "reading_order_config": SubConfigSpec(config_class=PPDocLayoutV2ReadingOrderConfig),
+        "reading_order_config": PPDocLayoutV2ReadingOrderConfig,
     }
 
     layer_types = ("basic", "bottleneck")

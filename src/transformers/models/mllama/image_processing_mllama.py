@@ -18,6 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -31,13 +32,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
-
-
-if is_vision_available():
-    from PIL import Image
-
-from torchvision.transforms.v2 import functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
@@ -333,26 +328,6 @@ def convert_aspect_ratios_to_ids(
     return aspect_ratios_ids
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    """
-    if not is_vision_available() or not isinstance(image, Image.Image):
-        return image
-
-    # PNG tRNS keeps mode "RGB"/"L"/"P" while storing transparency in image.info.
-    if image.mode == "RGB" and image.info.get("transparency") is None:
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
-
-
 @auto_docstring
 class MllamaImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
@@ -384,10 +359,6 @@ class MllamaImageProcessor(TorchvisionBackend):
         """Prepare a nested images structure for processing."""
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Converts an image to RGB format."""
-        return convert_to_rgb(image)
 
     def pad(
         self,

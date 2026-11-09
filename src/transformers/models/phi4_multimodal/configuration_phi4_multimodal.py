@@ -22,7 +22,7 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -215,8 +215,8 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     sliding_window: int | None = None
 
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=Phi4MultimodalAudioConfig),
-        "vision_config": SubConfigSpec(config_class=Phi4MultimodalVisionConfig),
+        "audio_config": Phi4MultimodalAudioConfig,
+        "vision_config": Phi4MultimodalVisionConfig,
     }
     vision_config: dict | PreTrainedConfig | None = None
     audio_config: dict | PreTrainedConfig | None = None

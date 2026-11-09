@@ -12,18 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import inspect
 import json
 import re
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
-from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache, partial
 from inspect import isfunction
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
+import numpy as np
 from packaging import version
 
 from . import logging
@@ -462,7 +463,7 @@ def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
     return obj
 
 
-def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int]:
+def encode_marked_chat(tokenizer, chat: str) -> list[int]:
     """
     Encode a chat rendered from inputs marked by `mark_control_tokens`. Marked control tokens are encoded as plain text,
     without their markers, and the rest of the chat, including the template's own control tokens, is encoded normally.
@@ -473,10 +474,10 @@ def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int
     Args:
         tokenizer: The tokenizer that rendered the chat.
         chat: The rendered chat.
-        markers_re: A regex that matches a marked control token or a lone marker, from `_get_control_token_patterns`.
     """
     # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place of the
     # token for a lone marker
+    _, markers_re = _get_control_token_patterns(tuple(tokenizer.added_tokens_encoder))
     pieces = markers_re.split(chat)
     newline_ids = tokenizer.encode("\n", add_special_tokens=False)
     ids = tokenizer.encode(pieces[0], add_special_tokens=False)
@@ -579,9 +580,11 @@ def _cached_compile_jinja_template(chat_template):
                 self._rendered_blocks = None
                 self._generation_indices = None
 
-    if version.parse(jinja2.__version__) < version.parse("3.1.0"):
+    if version.parse(jinja2.__version__) < version.parse("3.1.6"):
+        # Older versions have known sandbox escapes, and chat templates from the Hub are untrusted code
         raise ImportError(
-            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.6 to be installed. Your version is {jinja2.__version__}. "
+            "You can upgrade it with `pip install -U jinja2`."
         )
 
     def raise_exception(message):
@@ -595,13 +598,98 @@ def _cached_compile_jinja_template(chat_template):
     def strftime_now(format):
         return datetime.now().strftime(format)
 
+    class TemplateDict:
+        # Make a limited subclass so that users can't break out with dictionary attribute access
+        # or type-hackery
+        def __call__(self, *args, **kwargs):
+            return dict(*args, **kwargs)
+
+        def fromkeys(self, *args, **kwargs):
+            return dict.fromkeys(*args, **kwargs)
+
+    class TemplateNamespace(jinja2.utils.Namespace):
+        # Namespaces reject any dunder attributes to prevent access to CPython internals
+        def __init__(*args, **kwargs):
+            # Same signature trick as Jinja's Namespace, so that `namespace(self=...)` still works
+            self, args = args[0], args[1:]
+            attrs = dict(*args, **kwargs)
+            for name in attrs:
+                TemplateNamespace._check_name(name)
+            jinja2.utils.Namespace.__init__(self, attrs)
+
+        def __setitem__(self, name, value):
+            TemplateNamespace._check_name(name)
+            jinja2.utils.Namespace.__setitem__(self, name, value)
+
+        @staticmethod
+        def _check_name(name):
+            if isinstance(name, str) and name.startswith("_"):
+                raise jinja2.exceptions.SecurityError(
+                    f"Chat templates cannot store underscore-prefixed attributes on a namespace, but got {name!r}. "
+                    "Please rename the attribute."
+                )
+
     jinja_env = ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
     jinja_env.filters["tojson"] = tojson
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
+    jinja_env.globals["dict"] = TemplateDict()
+    jinja_env.globals["namespace"] = TemplateNamespace
     return jinja_env.from_string(chat_template)
+
+
+# Names a message's reasoning is passed under. The first is the standard one that chat templates read.
+_REASONING_FIELDS = ("reasoning_content", "thinking", "reasoning")
+
+
+def _alias_reasoning_fields(chat: ChatType) -> ChatType:
+    # Fill `reasoning_content` from older names for it, and fill `thinking` for gpt-oss templates, which read that
+    aliased_chat = []
+    for message in chat:
+        if isinstance(message, dict):
+            reasoning = next((message[key] for key in _REASONING_FIELDS if message.get(key) is not None), None)
+            if reasoning is not None:
+                message = {"thinking": reasoning, **message, "reasoning_content": reasoning}
+        aliased_chat.append(message)
+    return aliased_chat
+
+
+def _plain_template_data(value: Any) -> Any:
+    # Chat templates come from the Hub, but callers often put rich objects in their inputs, like the decoded images,
+    # arrays and tensors in multimodal content blocks. Those objects have methods that the sandbox doesn't know are
+    # dangerous (some of them write files!), so we rebuild everything the template sees out of plain JSON types,
+    # and replace anything else with an inert placeholder. Templates only check whether media keys are present,
+    # and never read their values, so this doesn't change what they render.
+    if value is None or type(value) in (str, int, float, bool):
+        # Exact JSON scalars are safe as-is
+        return value
+    elif isinstance(value, str):
+        # Subclasses (enums, numpy scalars, ...) can carry extra methods, so we strip them back to the base type
+        return str.__str__(value)
+    elif isinstance(value, int):
+        return int.__int__(value)
+    elif isinstance(value, float):
+        return float.__float__(value)
+    elif isinstance(value, Mapping):
+        return {_plain_template_data(key): _plain_template_data(item) for key, item in value.items()}
+    elif isinstance(value, list):
+        return [_plain_template_data(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_plain_template_data(item) for item in value)
+    elif isinstance(value, np.generic):
+        # `np.bool_(False)` would otherwise become a truthy placeholder string
+        return _plain_template_data(value.item())
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # Fields are read one level at a time, so arrays and images inside are not deep-copied
+        return {field.name: _plain_template_data(getattr(value, field.name)) for field in dataclasses.fields(value)}
+    elif callable(getattr(value, "model_dump", None)):
+        # Pydantic models
+        return _plain_template_data(value.model_dump())
+    else:
+        # Anything else becomes a placeholder naming its type, e.g. "<ndarray>"
+        return f"<{type(value).__name__}>"
 
 
 def render_jinja_template(
@@ -643,6 +731,11 @@ def render_jinja_template(
             if not isinstance(document, dict):
                 raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
 
+    # Everything the template can see goes through `_plain_template_data`. The conversations are converted below.
+    tool_schemas = _plain_template_data(tool_schemas)
+    documents = _plain_template_data(documents)
+    kwargs = _plain_template_data(kwargs)
+
     rendered = []
     all_generation_indices = []
     continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
@@ -650,15 +743,24 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        # The converted chat is a fresh copy, so the edits below never touch the caller's messages
+        chat = _plain_template_data(chat)
+        for message in chat:
+            if not isinstance(message, dict):
+                raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
+        chat = _alias_reasoning_fields(chat)
         if continue_final_message:
-            chat = deepcopy(chat)
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
 
             if (final_message := chat[-1].get(continue_final_message)) is None:
                 raise ValueError(
                     f'continue_final_message is set but the final message has no "{continue_final_message}" to continue!'
                 )
-            if continue_final_message not in chat_template:
+            continue_fields = [continue_final_message]
+            if continue_final_message in _REASONING_FIELDS:
+                # Reasoning is copied under several names, so tag every copy and accept whichever one the template reads
+                continue_fields = [field for field in _REASONING_FIELDS if chat[-1].get(field) == final_message]
+            if not any(field in chat_template for field in continue_fields):
                 raise ValueError(
                     f'continue_final_message is set to "{continue_final_message}" but this is not an accepted field in the chat_template'
                 )
@@ -675,7 +777,8 @@ def render_jinja_template(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
-                chat[-1][continue_final_message] = chat[-1][continue_final_message] + continue_final_message_tag
+                for field in continue_fields:
+                    chat[-1][field] = chat[-1][field] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,

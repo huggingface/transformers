@@ -221,7 +221,7 @@ class EsmcLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class EsmcPreTrainedModel(NomicBertPreTrainedModel):
-    config_class = EsmcConfig
+    config: EsmcConfig
     base_model_prefix = "esmc"
     _no_split_modules = ["EsmcLayer"]
     _can_record_outputs = {

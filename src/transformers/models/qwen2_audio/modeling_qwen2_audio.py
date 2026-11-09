@@ -51,14 +51,14 @@ class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    attention_mask (`torch.FloatTensor`, *optional*):
+    attention_mask (`torch.Tensor`, *optional*):
         Attention mask, potentially updated by the audio merging logic so that audio tokens are unmasked.
     labels (`torch.LongTensor`, *optional*):
         Labels, potentially re-aligned by the legacy audio merging logic. Returned so the language-modeling
         head can compute the loss against the expanded sequence.
     """
 
-    attention_mask: torch.FloatTensor | None = None
+    attention_mask: torch.Tensor | None = None
     labels: torch.LongTensor | None = None
 
 
@@ -70,9 +70,9 @@ class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
@@ -83,16 +83,16 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
         If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
         that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
         all `input_ids` of shape `(batch_size, sequence_length)`.
-    attention_mask (`torch.FloatTensor`, *optional*):
+    attention_mask (`torch.Tensor`, *optional*):
         Attentions mask, used to update attention mask and position_ids.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    attention_mask: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    attention_mask: torch.Tensor | None = None
 
 
 # Copied from transformers.models.whisper.modeling_whisper.eager_attention_forward
@@ -239,8 +239,8 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
@@ -299,6 +299,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     config: Qwen2AudioEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
+    _input_embed_layer = "conv1"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
     _can_record_outputs = {"hidden_states": Qwen2AudioEncoderLayer, "attentions": Qwen2AudioAttention}
 
@@ -332,25 +333,19 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
-        input_features,
+        input_features: torch.Tensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+        attention_mask (`torch.Tensor`)`, *optional*):
+            Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
+            but it is not used. By default the silence in the input log mel spectrogram are ignored.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
@@ -648,12 +643,12 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -785,12 +780,12 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],

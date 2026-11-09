@@ -77,7 +77,7 @@ input_features = processor(
     sampling_rate=audio_sample["sampling_rate"],
     return_tensors="pt"
 ).input_features
-input_features = input_features.to(model.device)
+input_features = input_features.to(model.device, dtype=model.dtype)
 
 predicted_ids = model.generate(input_features, cache_implementation="static")
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)

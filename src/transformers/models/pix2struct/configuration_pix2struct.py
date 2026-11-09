@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -169,8 +169,8 @@ class Pix2StructConfig(PreTrainedConfig):
 
     model_type = "pix2struct"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Pix2StructTextConfig),
-        "vision_config": SubConfigSpec(config_class=Pix2StructVisionConfig),
+        "text_config": Pix2StructTextConfig,
+        "vision_config": Pix2StructVisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None
