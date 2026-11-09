@@ -31,7 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -68,14 +68,14 @@ class T5GemmaModelTester:
         vocab_size=99,
         # decoder-specific
         seq_length=7,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
         # encoder-specific
         encoder_seq_length=7,
-        encoder_hidden_size=32,
+        encoder_hidden_size=64,
         encoder_num_hidden_layers=2,
         encoder_num_attention_heads=4,
         encoder_num_key_value_heads=2,
@@ -214,8 +214,8 @@ class T5GemmaModelTester:
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+            decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         lm_labels = None
         if self.use_labels:
@@ -598,8 +598,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     _torch_compile_train_cls = T5GemmaForConditionalGeneration if is_torch_available() else None
     # `t5gemma` will give warning or raise error if it is not `eager` during training.
     _torch_compile_train_attn_implementation = "eager"
-
-    # won't fix
 
     def setUp(self):
         self.model_tester = T5GemmaModelTester(self)
@@ -1408,7 +1406,7 @@ class T5GemmaEncoderOnlyModelTester:
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
 

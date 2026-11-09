@@ -28,7 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, select_hidden_states
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -553,6 +553,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         return conditional_embeddings
 
     @can_return_tuple
+    @select_hidden_states(lambda self: [i + 1 for i in self.extract_layers])
     @auto_docstring
     def forward(
         self,
@@ -601,7 +602,6 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         ```"""
         # step 1: forward the query images through the frozen CLIP vision encoder
         with torch.no_grad():
-            kwargs["output_hidden_states"] = True  # required to extract layers for the stages
             vision_outputs = self.clip.get_image_features(
                 pixel_values=pixel_values,
                 interpolate_pos_encoding=interpolate_pos_encoding,

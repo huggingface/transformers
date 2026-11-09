@@ -2741,6 +2741,30 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
 
+    def test_mismatched_keys_with_quantizer(self):
+        from transformers import FineGrainedFP8Config
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaForCausalLM(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = model.state_dict()
+            # Overwrite with mismatched shape
+            state_dict["model.layers.0.self_attn.q_proj.weight"] = torch.rand(2, 2)
+            model.save_pretrained(tmpdirname, state_dict=state_dict)
+
+            quant_config = FineGrainedFP8Config(modules_to_not_convert=["self_attn.q_proj"])
+            # Skip the GPU check, we won't run any forward anyway
+            with patch(
+                "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+                lambda *arg, **kwargs: None,
+            ):
+                # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
+                with self.assertRaisesRegex(
+                    RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
+                ):
+                    _ = LlamaForCausalLM.from_pretrained(tmpdirname, quantization_config=quant_config)
+
 
 @slow
 @require_torch
