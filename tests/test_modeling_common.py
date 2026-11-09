@@ -1925,6 +1925,16 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
 
+    def _logits_scored_by_loss(self, model, logits):
+        """
+        Returns the positions of `logits` that the language modeling loss is computed on, i.e. the ones
+        `shift_labels` lines up with. That is all of them for almost every head; override for heads whose logits
+        also cover positions the loss skips.
+
+        Currently only used by `test_causal_lm_loss_honors_shift_labels`, and only overridden by `GitModelTest`.
+        """
+        return logits
+
     def test_causal_lm_loss_honors_shift_labels(self):
         """
         Decoder-only LM heads shift ``labels`` by one internally to align them with the logits. Sequence and
@@ -2000,7 +2010,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 # Two random `shift_labels` can leave the loss bit-identical: on nearly flat logits, the per-token
                 # changes cancel out in the mean (see #50533). The least likely tokens raise every per-token loss
                 # above the most likely ones, so the mean has to move.
-                most_likely, least_likely = probe_logits.argmax(dim=-1), probe_logits.argmin(dim=-1)
+                scored_logits = self._logits_scored_by_loss(model, probe_logits)
+                most_likely, least_likely = scored_logits.argmax(dim=-1), scored_logits.argmin(dim=-1)
 
                 baseline = reported_loss(labels, most_likely)
                 self.assertIsNotNone(
