@@ -791,8 +791,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xglm", "XGLMConfig"),
         ("xiaomi_lens0", "XiaomiLens0Config"),
         ("xiaomi_lens0_mask_decoder", "XiaomiLens0MaskDecoderConfig"),
-        ("xiaomi_lens0_text", "XiaomiLens0TextConfig"),
-        ("xiaomi_lens0_vision", "XiaomiLens0VisionConfig"),
         ("xlm", "XLMConfig"),
         ("xlm-roberta", "XLMRobertaConfig"),
         ("xlm-roberta-xl", "XLMRobertaXLConfig"),
@@ -1104,8 +1102,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip_text_model", "x_clip"),
         ("xclip_vision_model", "x_clip"),
         ("xiaomi_lens0_mask_decoder", "xiaomi_lens0"),
-        ("xiaomi_lens0_text", "xiaomi_lens0"),
-        ("xiaomi_lens0_vision", "xiaomi_lens0"),
         ("xlm-roberta", "xlm_roberta"),
         ("xlm-roberta-xl", "xlm_roberta_xl"),
     ]

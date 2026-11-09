@@ -19,21 +19,18 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
 from ...utils.import_utils import requires
-from ..qwen3_5.configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
+from ..auto import AutoConfig, AutoModel
+from ..qwen3_5.configuration_qwen3_5 import Qwen3_5Config
 from ..qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5CausalLMOutputWithPast,
     Qwen3_5ForConditionalGeneration,
     Qwen3_5Model,
-    Qwen3_5ModelOutputWithPast,
     Qwen3_5PreTrainedModel,
-    Qwen3_5TextModel,
-    Qwen3_5VisionModel,
 )
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..sam.modeling_sam import SamLayerNorm
@@ -44,36 +41,6 @@ from .generation_xiaomi_lens0 import XiaomiLens0GenerationMixin
 if is_torch_available():
     import torch
     import torch.nn.functional as F
-
-
-@auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
-@strict
-class XiaomiLens0TextConfig(Qwen3_5TextConfig):
-    model_type = "xiaomi_lens0_text"
-
-    vocab_size: int = 248078
-    hidden_size: int = 2560
-    intermediate_size: int = 9216
-    max_position_embeddings: int = 262144
-    tie_word_embeddings: bool = True
-
-
-@auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
-@strict
-class XiaomiLens0VisionConfig(Qwen3_5VisionConfig):
-    r"""
-    out_hidden_size (`int`, *optional*, defaults to 2560):
-        The output hidden size of the vision model.
-    num_position_embeddings (`int`, *optional*, defaults to 2304):
-        The maximum sequence length that this model might ever be used with
-    """
-
-    model_type = "xiaomi_lens0_vision"
-
-    depth: int = 24
-    hidden_size: int = 1024
-    intermediate_size: int = 4096
-    out_hidden_size: int = 2560
 
 
 @auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
@@ -144,9 +111,29 @@ class XiaomiLens0Config(Qwen3_5Config):
     >>> configuration = model.config
     ```"""
 
+    model_type = "xiaomi_lens0"
     sub_configs_defaults = {
-        "vision_config": XiaomiLens0VisionConfig,
-        "text_config": XiaomiLens0TextConfig,
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3_5_vision",
+            init_kwargs={
+                "depth": 24,
+                "hidden_size": 1024,
+                "intermediate_size": 4096,
+                "out_hidden_size": 2560,
+            },
+        ),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3_5_text",
+            init_kwargs={
+                "vocab_size": 248078,
+                "hidden_size": 2560,
+                "intermediate_size": 9216,
+                "max_position_embeddings": 262144,
+                "tie_word_embeddings": True,
+            },
+        ),
         "mask_decoder_config": XiaomiLens0MaskDecoderConfig,
     }
 
@@ -164,6 +151,8 @@ class XiaomiLens0Config(Qwen3_5Config):
         legacy_mask_decoder = kwargs.pop("mask_decoder", None)
         if self.mask_decoder_config is None and legacy_mask_decoder is not None:
             self.mask_decoder_config = legacy_mask_decoder
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_5":
+            self.vision_config["model_type"] = "qwen3_5_vision"
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
@@ -176,32 +165,34 @@ class XiaomiLens0Config(Qwen3_5Config):
 
 @auto_docstring
 class XiaomiLens0PreTrainedModel(Qwen3_5PreTrainedModel):
-    _no_split_modules = ["XiaomiLens0DecoderLayer", "XiaomiLens0VisionBlock", "XiaomiLens0MaskDecoder"]
+    _no_split_modules = ["XiaomiLens0MaskDecoder"]
+    _can_record_outputs = AttributeError()
 
-
-@auto_docstring
-class XiaomiLens0VisionModel(Qwen3_5VisionModel):
-    pass
-
-
-@auto_docstring
-class XiaomiLens0TextModel(Qwen3_5TextModel):
-    pass
+    def _init_weights(self, module):
+        raise AttributeError("Not needed for XiaomiLens0")
 
 
 @auto_docstring
 @dataclass
-class XiaomiLens0ModelOutputWithPast(Qwen3_5ModelOutputWithPast):
+class XiaomiLens0ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_last_hidden_state (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
         Vision patch features before spatial merging, retaining gradients for mask supervision.
     """
 
     image_last_hidden_state: torch.FloatTensor | None = None
-    rope_deltas = AttributeError()
 
 
 class XiaomiLens0Model(Qwen3_5Model):
+    _no_split_modules = AttributeError()
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.visual = AutoModel.from_config(config.vision_config)
+        self.language_model = AutoModel.from_config(config.text_config)
+
+        self.post_init()
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -422,11 +413,8 @@ def get_non_thinking_token_mask(
 
 @auto_docstring
 @dataclass
-class XiaomiLens0CausalLMOutputWithPast(Qwen3_5CausalLMOutputWithPast):
+class XiaomiLens0CausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-        The rope index difference between sequence length and multimodal rope. Deprecated in favor of
-        `model.base_model.rope_deltas`; this field will be removed in v5.20.
     mask_logits (`list[torch.FloatTensor]`, *optional*):
         Mask logits grouped by image, each of shape `(num_masks, height, width)`.
     mask_token_indices (`list[torch.LongTensor]`, *optional*):
@@ -844,11 +832,7 @@ class XiaomiLens0Processor(Qwen3VLProcessor):
 
 __all__ = [
     "XiaomiLens0Config",
-    "XiaomiLens0TextConfig",
-    "XiaomiLens0VisionConfig",
     "XiaomiLens0MaskDecoderConfig",
-    "XiaomiLens0VisionModel",
-    "XiaomiLens0TextModel",
     "XiaomiLens0Model",
     "XiaomiLens0ForConditionalGeneration",
     "XiaomiLens0PreTrainedModel",

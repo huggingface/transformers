@@ -109,14 +109,6 @@ alt="xiaomi lens0 grounding boxes and masks results" width="600"/>
 
 [[autodoc]] XiaomiLens0Config
 
-## XiaomiLens0TextConfig
-
-[[autodoc]] XiaomiLens0TextConfig
-
-## XiaomiLens0VisionConfig
-
-[[autodoc]] XiaomiLens0VisionConfig
-
 ## XiaomiLens0MaskDecoderConfig
 
 [[autodoc]] XiaomiLens0MaskDecoderConfig
@@ -129,16 +121,6 @@ alt="xiaomi lens0 grounding boxes and masks results" width="600"/>
 ## XiaomiLens0PreTrainedModel
 
 [[autodoc]] XiaomiLens0PreTrainedModel
-
-## XiaomiLens0VisionModel
-
-[[autodoc]] XiaomiLens0VisionModel
-    - forward
-
-## XiaomiLens0TextModel
-
-[[autodoc]] XiaomiLens0TextModel
-    - forward
 
 ## XiaomiLens0Model
 

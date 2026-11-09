@@ -20,134 +20,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-
-
-@auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
-@strict
-class XiaomiLens0TextConfig(PreTrainedConfig):
-    r"""
-    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
-        Kernel size of the convolution used in linear attention layers.
-    linear_key_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of each key head in linear attention.
-    linear_value_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of each value head in linear attention.
-    linear_num_key_heads (`int`, *optional*, defaults to 16):
-        Number of key heads used in linear attention layers.
-    linear_num_value_heads (`int`, *optional*, defaults to 32):
-        Number of value heads used in linear attention layers.
-
-    ```python
-    >>> from transformers import XiaomiLens0TextModel, XiaomiLens0TextConfig
-
-    >>> # Initializing a Qwen3.5 style configuration
-    >>> configuration =  XiaomiLens0TextConfig()
-
-    >>> # Initializing a model from the Qwen3.5-9B style configuration
-    >>> model = XiaomiLens0TextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "xiaomi_lens0_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
-        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
-        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
-        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
-        "layers.*.linear_attn.out_proj": "colwise_gather_output",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-    base_model_ep_plan = None  # no Moe
-
-    vocab_size: int = 248078
-    hidden_size: int = 2560
-    intermediate_size: int = 9216
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 4
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 262144
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    tie_word_embeddings: bool = True
-    rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: float | int = 0.0
-    head_dim: int = 256
-    linear_conv_kernel_dim: int = 4
-    linear_key_head_dim: int = 128
-    linear_value_head_dim: int = 128
-    linear_num_key_heads: int = 16
-    linear_num_value_heads: int = 32
-    layer_types: list[str] | None = None
-    pad_token_id: int | None = None
-    bos_token_id: int | None = None
-    eos_token_id: int | list[int] | None = None
-    base_config_key = "text_config"
-    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
-
-    def __post_init__(self, **kwargs):
-        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
-        if self.layer_types is None:
-            interval_pattern = kwargs.pop("full_attention_interval", 4)
-            self.layer_types = [
-                "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-
-        super().__post_init__(**kwargs)
-
-
-@auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
-@strict
-class XiaomiLens0VisionConfig(PreTrainedConfig):
-    r"""
-    out_hidden_size (`int`, *optional*, defaults to 2560):
-        The output hidden size of the vision model.
-    num_position_embeddings (`int`, *optional*, defaults to 2304):
-        The maximum sequence length that this model might ever be used with
-    """
-
-    model_type = "xiaomi_lens0_vision"
-    base_config_key = "vision_config"
-    default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
-
-    depth: int = 24
-    hidden_size: int = 1024
-    hidden_act: str = "gelu_pytorch_tanh"
-    intermediate_size: int = 4096
-    num_heads: int = 16
-    in_channels: int = 3
-    patch_size: int | list[int] | tuple[int, int] = 16
-    spatial_merge_size: int = 2
-    temporal_patch_size: int | list[int] | tuple[int, int] = 2
-    out_hidden_size: int = 2560
-    num_position_embeddings: int = 2304
-    initializer_range: float = 0.02
-    rope_parameters: dict | None = None
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
@@ -219,10 +94,28 @@ class XiaomiLens0Config(PreTrainedConfig):
     ```"""
 
     model_type = "xiaomi_lens0"
-
     sub_configs_defaults = {
-        "vision_config": XiaomiLens0VisionConfig,
-        "text_config": XiaomiLens0TextConfig,
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3_5_vision",
+            init_kwargs={
+                "depth": 24,
+                "hidden_size": 1024,
+                "intermediate_size": 4096,
+                "out_hidden_size": 2560,
+            },
+        ),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3_5_text",
+            init_kwargs={
+                "vocab_size": 248078,
+                "hidden_size": 2560,
+                "intermediate_size": 9216,
+                "max_position_embeddings": 262144,
+                "tie_word_embeddings": True,
+            },
+        ),
         "mask_decoder_config": XiaomiLens0MaskDecoderConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -249,6 +142,8 @@ class XiaomiLens0Config(PreTrainedConfig):
         legacy_mask_decoder = kwargs.pop("mask_decoder", None)
         if self.mask_decoder_config is None and legacy_mask_decoder is not None:
             self.mask_decoder_config = legacy_mask_decoder
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_5":
+            self.vision_config["model_type"] = "qwen3_5_vision"
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -259,4 +154,4 @@ class XiaomiLens0Config(PreTrainedConfig):
             raise ValueError("mask_decoder_config.vision_hidden_size must match vision_config.hidden_size")
 
 
-__all__ = ["XiaomiLens0Config", "XiaomiLens0TextConfig", "XiaomiLens0VisionConfig", "XiaomiLens0MaskDecoderConfig"]
+__all__ = ["XiaomiLens0Config", "XiaomiLens0MaskDecoderConfig"]
