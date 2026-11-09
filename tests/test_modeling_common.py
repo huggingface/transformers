@@ -647,7 +647,7 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
         # all non-eager implementations must numerically match eager. The experts are computed in a different order,
         # so half precision outputs can differ by a few rounding steps (1 step is ~1.2e-4 around 0.2 in fp16)
-        tol = {torch.float16: 1e-3, torch.bfloat16: 5e-3}.get(dtype, 1e-4)
+        tol = {torch.float32: 1e-4, torch.float16: 1e-3, torch.bfloat16: 5e-3}[dtype]
         eager_outputs = outputs.pop("eager")
         for impl, impl_outputs in outputs.items():
             torch.testing.assert_close(eager_outputs, impl_outputs, rtol=tol, atol=tol)
