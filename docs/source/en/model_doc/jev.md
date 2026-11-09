@@ -42,7 +42,7 @@ decide("Where is my parcel?", questions={"refund": {"type": "noul", "instruction
 See the [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) for image assets.
 
 Without the pipeline, decision models are used like `generate`: the decision config renders a prompt per question (or
-one for all of them) with the chat template, `decide` scores the options of each question, and `decode_decision` turns
+one for all of them) with the chat template, `decide` scores the options of each question, and `Question.answer` turns
 the scores into answers:
 
 > [!IMPORTANT]
@@ -53,7 +53,6 @@ the scores into answers:
 ```python
 import torch
 from transformers import AutoTokenizer, JevForDecision
-from transformers.decision import decode_decision
 
 repo = "autotrust/JEV-9B"
 model = JevForDecision.from_pretrained(repo, dtype=torch.bfloat16, device_map="auto")
@@ -70,7 +69,8 @@ request = {
 }
 answers = {}
 for inputs, questions in config.prepare_inputs(request, tokenizer):
-    answers |= decode_decision(model.decide(**inputs, decision_questions=questions), questions)
+    scores = model.decide(**inputs, decision_questions=questions)
+    answers |= {q.name: q.answer(s.softmax(-1).tolist()) for q, s in zip(questions, scores)}
 ```
 
 The same head reads the 255 answer codes of [pplx-decider](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b)

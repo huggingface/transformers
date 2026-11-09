@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+from typing import ClassVar
 
 from huggingface_hub.dataclasses import strict
 
@@ -127,8 +128,8 @@ class JevConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     # The files of a checkpoint that holds a JEV head next to its weights, read with them: its weights and its configs
-    extra_files = ("head.safetensors", "readout.safetensors")
-    extra_config_files = ("decision_config.json", "judge_config.json", "calibration.json")
+    extra_files: ClassVar[tuple[str, ...]] = ("head.safetensors", "readout.safetensors")
+    extra_config_files: ClassVar[tuple[str, ...]] = ("decision_config.json", "judge_config.json", "calibration.json")
 
     @staticmethod
     def decision_config(head_configs: dict, text_config: dict):

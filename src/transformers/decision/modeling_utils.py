@@ -87,7 +87,7 @@ class DecisionMixin:
             key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
         }
         head_configs = {}
-        for filename in getattr(cls.config_class, "extra_config_files", ()):
+        for filename in cls.config_class.extra_config_files:
             path = cached_file(
                 pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **hub_kwargs
             )
@@ -101,15 +101,10 @@ class DecisionMixin:
             return None, None  # not a checkpoint of this decision model
         return cls.config_class(text_config=text_config, **head_configs), decision_config
 
-    @property
-    def decision_config(self) -> DecisionConfig:
-        if getattr(self, "_decision_config", None) is None:
-            self._decision_config = DecisionConfig.from_pretrained(self.name_or_path)
-        return self._decision_config
-
-    @decision_config.setter
-    def decision_config(self, decision_config: DecisionConfig):
-        self._decision_config = decision_config
+    def post_init(self):
+        """The default decision config, replaced by the one of the repo in `from_pretrained`, like `generation_config`."""
+        super().post_init()
+        self.decision_config = DecisionConfig()
 
     def save_pretrained(self, save_directory, *args, **kwargs):
         """Also saves the decision config, like `generation_config`: the saved repo reloads as the same decision model."""
@@ -129,7 +124,7 @@ class DecisionMixin:
         """
         Scores the options of each question of a prompt from `decision_config.prepare_inputs`: one forward pass,
         then the logits processors of the decision config. Returns the scores of each question, which
-        `decode_decision` turns into answers.
+        `Question.answer` turns into answers.
         """
         decision_config = decision_config or self.decision_config
         inputs = {"input_ids": input_ids, **kwargs}

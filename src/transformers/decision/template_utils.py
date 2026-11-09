@@ -373,15 +373,9 @@ def prepare_inputs(
     return prompts
 
 
-def decode_decision(scores: list, questions: list[Question]) -> dict[str, dict[str, Any]]:
-    """The System One answers to `questions`, from the option scores [`~DecisionMixin.decide`] returns for them."""
-    return {question.name: question.answer(scores.softmax(-1).tolist()) for question, scores in zip(questions, scores)}
-
-
 __all__ = [
     "DECISION_PROMPT",
     "Question",
-    "decode_decision",
     "label_token_ids",
     "parse_questions",
     "prepare_inputs",

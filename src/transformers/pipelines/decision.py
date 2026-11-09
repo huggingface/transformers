@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, decode_decision, label_token_ids
+from ..decision import DecisionConfig, label_token_ids
 from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
@@ -107,5 +107,5 @@ class DecisionPipeline(Pipeline):
     def postprocess(self, model_outputs):
         answers = {}
         for (_, questions), scores in zip(model_outputs["prompts"], model_outputs["scores"]):
-            answers |= decode_decision(scores, questions)
+            answers |= {q.name: q.answer(s.softmax(-1).tolist()) for q, s in zip(questions, scores)}
         return answers

@@ -4331,7 +4331,7 @@ class PreTrainedModel(
             )
             # EXPERIMENTAL: community pushed the decision head weights as separate files. We're using `config.extra_files`
             # as a way to fetch the filename per-class.
-            for filename in getattr(type(config), "extra_files", ()):
+            for filename in config.extra_files:
                 if not filename.endswith(".safetensors") or os.path.basename(filename) != filename:
                     raise ValueError(f"`extra_files` are safetensors file names in the repo, got {filename!r}.")
                 path = cached_file(
