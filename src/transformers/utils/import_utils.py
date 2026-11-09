@@ -1564,8 +1564,8 @@ def is_tokenizers_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_tokenizers_v1_available() -> bool:
-    # tokenizers 1.x drops the component API (`models`, `processors`, `AddedToken`...) the `TokenizersBackend` is
-    # built on, so it is served by `TokenizersV1Backend` instead.
+    # tokenizers 1.x moves encoding and vocab access from `Tokenizer` to `CompiledTokenizer` and drops `trainers`, so
+    # the `TokenizersBackend`, built on the 0.x `Tokenizer`, can't run on it. `TokenizersV1Backend` serves it instead.
     is_available, tokenizers_version = _is_package_available("tokenizers", return_version=True)
     return is_available and version.parse(tokenizers_version).major >= 1
 

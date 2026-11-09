@@ -28,6 +28,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import PaddingStrategy
+from .utils.chat_template_utils import encode_marked_chat
 
 
 TOKENIZER_FILE = "tokenizer.json"
@@ -38,9 +39,9 @@ class TokenizersV1Backend(PreTrainedTokenizerBase):
     Tokenizer backed by tokenizers>=1.
 
     It holds the editable `tokenizers.Tokenizer` spec, loaded from a `tokenizer.json`, and the `CompiledTokenizer`
-    built from it. Edits, such as adding tokens, go to the spec, which is then compiled again. tokenizers 1.x doesn't
-    expose the pipeline components that [`TokenizersBackend`] and the model-specific tokenizer classes are built on, so
-    the `tokenizer.json` is used as is.
+    built from it. Edits, such as adding tokens, go to the spec, which is then compiled again. [`TokenizersBackend`] and
+    the model-specific tokenizer classes are built on the 0.x `Tokenizer` API, which 1.x splits between the spec and
+    `CompiledTokenizer`, so the `tokenizer.json` is used as is.
 
     Not supported yet: offsets, overflowing tokens and stride, special tokens masks, pretokenized inputs, training.
     """
@@ -158,6 +159,21 @@ class TokenizersV1Backend(PreTrainedTokenizerBase):
             raise NotImplementedError(f"{', '.join(requested)} is not supported with tokenizers>=1 yet.")
 
         is_batched = isinstance(text, (list, tuple))
+        if kwargs.get("sanitize_control_tokens"):  # marked by `mark_control_tokens`, see `apply_chat_template`
+            input_ids = [encode_marked_chat(self, chat) for chat in (text if is_batched else [text])]
+            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
+                side = self.truncation_side
+                input_ids = [ids[:max_length] if side == "right" else ids[-max_length:] for ids in input_ids]
+            return self.pad(
+                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
+                padding=padding_strategy,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_attention_mask=return_attention_mask,
+                return_tensors=return_tensors,
+            )
+
         if is_batched:
             inputs = list(text) if text_pair is None else list(zip(text, text_pair))
         else:
