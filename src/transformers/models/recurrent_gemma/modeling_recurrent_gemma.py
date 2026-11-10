@@ -647,8 +647,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
             past_key_values = DynamicCache(config=self.config)
 
+        # The recurrent blocks never write to `past_key_values`: read the cache length from the first attention block
+        attention_layer_idx = self.config.layers_block_type.index("attention")
+
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length(attention_layer_idx) if past_key_values is not None else 0
+            )
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -658,6 +663,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
+            layer_idx=attention_layer_idx,
         )
 
         hidden_states = hidden_states * self.normalizer.type(hidden_states.dtype)
