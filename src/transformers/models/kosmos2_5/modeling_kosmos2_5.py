@@ -1060,7 +1060,11 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
 
-        return BaseModelOutput(last_hidden_state=sequence_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5

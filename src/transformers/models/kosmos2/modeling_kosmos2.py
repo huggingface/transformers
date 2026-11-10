@@ -1653,13 +1653,9 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         if pixel_values is None and inputs is not None:
             pixel_values = inputs
 
-        if image_embeds is None:
-            vision_model_output = self.vision_model(pixel_values)
-            # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
-            # normalized features
-            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
-            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        if image_embeds is None and pixel_values is not None:
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            image_embeds = image_outputs.pooler_output
 
         output = self.text_model.generate(
             input_ids=input_ids,

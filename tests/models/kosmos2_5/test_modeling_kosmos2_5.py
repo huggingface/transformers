@@ -361,6 +361,10 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
         return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
+    @unittest.skip("KOSMOS-2.5 doesn't support pre-computing image features")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
     @unittest.skip("KOSMOS-2.5 doesn't support padding")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
