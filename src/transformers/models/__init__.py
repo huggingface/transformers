@@ -243,9 +243,7 @@ if TYPE_CHECKING:
     from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
-    from .internlm3 import *
     from .internvl import *
-    from .iquestcoder import *
     from .jais2 import *
     from .jamba import *
     from .janus import *
@@ -495,7 +493,6 @@ if TYPE_CHECKING:
     from .table_transformer import *
     from .tapas import *
     from .telechat import *
-    from .telechat3 import *
     from .textnet import *
     from .time_series_transformer import *
     from .timesfm import *

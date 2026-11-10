@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # TeleChat
 
-[TeleChat](https://huggingface.co/Tele-AI) is a family of language models developed by [China Telecom Artificial Intelligence Technology](https://huggingface.co/Tele-AI), covering TeleChat (1B to 12B), TeleChat2 (3B to 115B) and TeleChat2.5 (35B and 115B). TeleChat3 is a separate model, see [TeleChat3](./telechat3).
+[TeleChat](https://huggingface.co/Tele-AI) is a family of language models developed by [China Telecom Artificial Intelligence Technology](https://huggingface.co/Tele-AI), covering TeleChat (1B to 12B), TeleChat2 (3B to 115B) and TeleChat2.5 (35B and 115B). TeleChat3 is a separate model.
 
 Its architecture is the same as [Llama](./llama), except that:
 

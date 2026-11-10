@@ -30,11 +30,11 @@ from ...utils import auto_docstring
 @strict
 class TeleChatConfig(PreTrainedConfig):
     r"""
-    TeleChat applies its own stepwise NTK scaling of RoPE, described by `rope_parameters` with `"rope_type": "telechat_ntk"`:
-
-    - `original_max_position_embeddings` (`training_seqlen` in the original configs, defaults to 8192): the sequence
-      length the model was trained with. Beyond it, the RoPE base and the cos/sin are rescaled.
-    - `base_seqlen` (defaults to 4096): the sequence length the NTK scaling factor of the base is computed relative to.
+    rope_parameters (`RopeParameters`, *optional*):
+        TeleChat always applies its own stepwise NTK scaling, `"rope_type": "telechat_ntk"`, with `rope_theta`,
+        `original_max_position_embeddings` (`training_seqlen` in the original configs, defaults to 8192), the length
+        beyond which the RoPE base and the cos/sin are rescaled, and `base_seqlen` (defaults to 4096), the length the
+        scaling factor of the base is computed relative to.
 
     ```python
     >>> from transformers import TeleChatModel, TeleChatConfig
