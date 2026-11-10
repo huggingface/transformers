@@ -150,7 +150,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     needs: get_modified_models
     if: needs.get_modified_models.outputs.matrix != '' && needs.get_modified_models.outputs.matrix != '[]'
     with:

@@ -36,7 +36,7 @@ permissions:
 jobs:
   triage:
     if: github.repository == 'huggingface/transformers'
-    uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
+    uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
     secrets: inherit
