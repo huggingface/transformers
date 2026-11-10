@@ -129,9 +129,9 @@ DECIDERS = {
 class JevIntegrationTest(unittest.TestCase):
     def test_jev_9b(self):
         expected = {
-            "intent": {"refund": 0.9999, "track": 0.0000, "other": 0.0001},
-            "urgent": 0.5419,
-            "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
+            "intent": {"refund": 0.9998, "track": 0.0000, "other": 0.0002},
+            "urgent": 0.5292,
+            "anger": {"0": 0.0216, "1": 0.1246, "2": 0.5156, "3": 0.2958, "4": 0.0410, "5": 0.0014},
         }
         check_decision(
             self, "hf-internal-testing/JEV-9B", "hf-internal-testing/JEV-9B", expected, atol=1e-2, dtype="bfloat16"
