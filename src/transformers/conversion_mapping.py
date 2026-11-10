@@ -1309,7 +1309,28 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],
         "lfm3_audio": _LFM3_SPEECH_CONVERSIONS,
-        "lfm3_omni": _LFM3_SPEECH_CONVERSIONS,
+        "lfm3_omni": [
+            # the released checkpoint already uses the module names, except in the audio encoder's attention
+            # (its config switches the encoder from lfm2 to lfm3) and the per-codebook depth embeddings
+            WeightRenaming(
+                source_patterns=r"(audio_encoder\.lfm\.layers\.\d+\.self_attn)\.out_proj\.",
+                target_patterns=r"\1.o_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"(audio_encoder\.lfm\.layers\.\d+\.self_attn\.[qk])_layernorm\.",
+                target_patterns=r"\1_norm.",
+            ),
+            WeightConverter(
+                source_patterns="depth_decoder.depth_embeddings.*.embedding.weight",
+                target_patterns="depth_decoder.codebook_embedding",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="depth_decoder.depth_embeddings.*.embedding_norm.weight",
+                target_patterns="depth_decoder.codebook_norm.weight",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "lfm3_vl_vision": [
             WeightRenaming(source_patterns="patchifier", target_patterns="patch_embed"),
             WeightRenaming(source_patterns="q_layernorm", target_patterns="q_norm"),
