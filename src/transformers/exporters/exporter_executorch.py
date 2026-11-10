@@ -740,10 +740,11 @@ def _patch_eval_upper_bound(original):
     per-symbol ranges — so planned buffers stay proportional to the sampled inputs.
     """
 
-    def patch(maybe_symint):
+    # Forward extra arguments: newer ExecuTorch passes an enumeration `budget`, older releases don't take one.
+    def patch(maybe_symint, *args, **kwargs):
         if isinstance(maybe_symint, int):
             return maybe_symint
-        result = original(maybe_symint)
+        result = original(maybe_symint, *args, **kwargs)
         hint = eval_expr(maybe_symint)
         cap = max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR) if isinstance(hint, int) else _MAX_DIM_FLOOR
         return min(result, cap) if isinstance(result, int) else cap
