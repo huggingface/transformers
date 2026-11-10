@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from collections.abc import Callable
 
@@ -216,6 +217,20 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
+# Missing from the hub config
+INKLING2_QUANTIZATION_CONFIG = {
+    "*.layers.(?:40|41|42|43|44|45|46|47).mlp.experts.*": {
+        "quant_method": "fp8",
+        "weight_block_size": [1, 32],
+        "dequantize": True,
+    },
+    "*.layers.(?:0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39).mlp.experts.*": {
+        "quant_method": "nvfp4",
+        "dequantize": True,
+    },
+}
+
+
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2Config(InklingConfig):
@@ -234,6 +249,14 @@ class Inkling2Config(InklingConfig):
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not needed for Inkling2")
+
+    @classmethod
+    def from_dict(cls, config_dict: dict, **kwargs):
+        # Quantization config is missing from the hub config. We cannot set it in `__post_init__` because the model
+        # dequantizes on load and the config must not have a quantization config after that.
+        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
+            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
+        return PreTrainedConfig.from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:
@@ -1511,6 +1534,124 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         )
 
 
+# Missing from the hub checkpoint
+INKLING2_CHAT_TEMPLATE = """{%- macro block(role_token, kind, payload, name='') -%}
+    {{- role_token ~ name ~ '<|content_' ~ kind ~ '|>' ~ payload ~ '<|end_message|>' -}}
+{%- endmacro -%}
+{%- macro render_message(message, role_token, name) -%}
+    {%- set turn = namespace(blocks=0) -%}
+    {%- set reasoning = message.reasoning_content -%}
+    {%- if message.role == 'assistant' and reasoning -%}
+        {{- block(role_token, 'thinking', reasoning) -}}
+        {%- set turn.blocks = turn.blocks + 1 -%}
+    {%- endif -%}
+    {%- if message.content is string -%}
+        {%- if not (message.role == 'assistant' and message.content == '' and (reasoning or message.tool_calls)) -%}
+            {{- block(role_token, 'text', message.content, name) -}}
+            {%- set turn.blocks = turn.blocks + 1 -%}
+        {%- endif -%}
+    {%- elif message.content is iterable -%}
+        {%- for part in message.content -%}
+            {%- if part.type == 'text' -%}
+                {{- block(role_token, 'text', part.text, name) -}}
+            {%- elif part.type in ['image', 'image_url'] -%}
+                {{- block(role_token, 'image', '<|unused_200054|>', name) -}}
+            {%- elif part.type == 'thinking' -%}
+                {{- block(role_token, 'thinking', part.thinking, name) -}}
+            {%- elif part.type == 'tool_error' -%}
+                {{- block(role_token, 'tool_error', part.text, name) -}}
+            {%- else -%}
+                {{- raise_exception('Unsupported content type for ' ~ message.role ~ ': ' ~ part.type) -}}
+            {%- endif -%}
+            {%- set turn.blocks = turn.blocks + 1 -%}
+        {%- endfor -%}
+    {%- endif -%}
+    {%- if message.role == 'assistant' and message.tool_calls -%}
+        {%- for tool_call in message.tool_calls -%}
+            {%- set function = tool_call.function if tool_call.function is defined else tool_call -%}
+            {%- if function.arguments is string -%}
+                {%- set arguments = function.arguments -%}
+            {%- else -%}
+                {%- set arguments = (function.arguments or {}) | tojson(separators=(',', ':'), sort_keys=true) -%}
+            {%- endif -%}
+            {{- block(role_token, 'invoke_tool_json', '{"name":' ~ (function.name | tojson) ~ ',"args":' ~ arguments ~ '}') -}}
+            {%- set turn.blocks = turn.blocks + 1 -%}
+        {%- endfor -%}
+    {%- endif -%}
+    {%- if message.role == 'assistant' and turn.blocks > 0 -%}
+        {{- '<|content_model_end_sampling|>' -}}
+    {%- endif -%}
+{%- endmacro -%}
+{%- set role_tokens = {
+    'system': '<|message_system|>',
+    'developer': '<|message_system|>',
+    'user': '<|message_user|>',
+    'assistant': '<|message_model|>',
+    'tool': '<|message_tool|>',
+} -%}
+{%- set effort_levels = {'none': 0.0, 'minimal': 0.1, 'low': 0.2, 'medium': 0.7, 'high': 0.9, 'xhigh': 0.99, 'max': 0.99} -%}
+{%- if reasoning_effort is not defined or reasoning_effort is none -%}
+    {%- if enable_thinking is defined and enable_thinking is false -%}
+        {%- set effort = 0.0 -%}
+    {%- else -%}
+        {%- set effort = 0.9 -%}
+    {%- endif -%}
+{%- elif reasoning_effort is boolean -%}
+    {%- set effort = -1.0 -%}
+{%- elif reasoning_effort is string and reasoning_effort in effort_levels -%}
+    {%- set effort = effort_levels[reasoning_effort] -%}
+{%- else -%}
+    {%- set effort = reasoning_effort | float(-1.0) -%}
+{%- endif -%}
+{%- if effort < 0 or effort > 0.99 -%}
+    {{- raise_exception('reasoning_effort must be none, minimal, low, medium, high, xhigh, max, or a number in [0, 0.99]') -}}
+{%- endif -%}
+{%- set effort = effort | round(2) -%}
+{%- set effort_text = (effort | int | string) if effort == (effort | int) else (effort | string) -%}
+{%- set leading = namespace(count=0, done=false) -%}
+{%- for message in messages -%}
+    {%- if not leading.done and message.role in ['system', 'developer'] -%}
+        {%- set leading.count = leading.count + 1 -%}
+    {%- else -%}
+        {%- set leading.done = true -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- if tools -%}
+    {%- set declarations = namespace(items=[]) -%}
+    {%- for tool in tools -%}
+        {%- set function = tool.function if tool.function is defined else tool -%}
+        {%- set declarations.items = declarations.items + [{
+            'description': function.description or '',
+            'name': function.name,
+            'parameters': function.parameters or {},
+            'type': tool.type or 'function',
+        }] -%}
+    {%- endfor -%}
+    {{- block('<|message_system|>', 'xml', declarations.items | tojson(separators=(',', ':'), sort_keys=true), 'tool_declare') -}}
+{%- endif -%}
+{%- for message in messages -%}
+    {%- if loop.index0 == leading.count -%}
+        {{- block('<|message_system|>', 'text', 'Thinking effort level: ' ~ effort_text) -}}
+    {%- endif -%}
+    {%- if message.role not in role_tokens -%}
+        {{- raise_exception('Unsupported role: ' ~ message.role) -}}
+    {%- endif -%}
+    {%- set role_token = role_tokens[message.role] -%}
+    {%- set name = message.name if message.role == 'tool' and message.name else '' -%}
+    {%- if message.role == 'assistant' -%}
+        {%- generation -%}
+            {{- render_message(message, role_token, name) -}}
+        {%- endgeneration -%}
+    {%- else -%}
+        {{- render_message(message, role_token, name) -}}
+    {%- endif -%}
+{%- endfor -%}
+{%- if leading.count == messages | length -%}
+    {{- block('<|message_system|>', 'text', 'Thinking effort level: ' ~ effort_text) -}}
+{%- endif -%}
+"""
+
+
 @auto_docstring
 class Inkling2Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, image_token="<|unused_200054|>"):
@@ -1520,6 +1661,8 @@ class Inkling2Processor(ProcessorMixin):
         """
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        if chat_template is None:
+            chat_template = INKLING2_CHAT_TEMPLATE
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:

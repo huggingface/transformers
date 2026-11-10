@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -178,6 +180,20 @@ class Inkling2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+# Missing from the hub config
+INKLING2_QUANTIZATION_CONFIG = {
+    "*.layers.(?:40|41|42|43|44|45|46|47).mlp.experts.*": {
+        "quant_method": "fp8",
+        "weight_block_size": [1, 32],
+        "dequantize": True,
+    },
+    "*.layers.(?:0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39).mlp.experts.*": {
+        "quant_method": "nvfp4",
+        "dequantize": True,
+    },
+}
+
+
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2Config(PreTrainedConfig):
@@ -192,6 +208,14 @@ class Inkling2Config(PreTrainedConfig):
     text_config: Inkling2TextConfig | dict | None = None
     vision_config: Inkling2VisionConfig | dict | None = None
     image_token_id: int = 200054
+
+    @classmethod
+    def from_dict(cls, config_dict: dict, **kwargs):
+        # Quantization config is missing from the hub config. We cannot set it in `__post_init__` because the model
+        # dequantizes on load and the config must not have a quantization config after that.
+        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
+            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
+        return super().from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:

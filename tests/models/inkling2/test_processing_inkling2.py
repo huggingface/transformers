@@ -31,5 +31,7 @@ class Inkling2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer = LlamaTokenizer.from_pretrained(SAMPLE_VOCAB)
-        tokenizer.add_special_tokens({"pad_token": "<pad>", "additional_special_tokens": ["<|unused_200054|>"]})
+        tokenizer.add_special_tokens(
+            {"pad_token": "<pad>", "additional_special_tokens": ["<|unused_200054|>", "<|special_end|>"]}
+        )
         return tokenizer
