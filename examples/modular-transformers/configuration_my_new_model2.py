@@ -37,7 +37,7 @@ class MyNewModel2Config(PreTrainedConfig):
     ```"""
 
     model_type = "my_new_model2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `MyNewModel2Model`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

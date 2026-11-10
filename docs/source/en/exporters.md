@@ -658,8 +658,8 @@ decode = exported.module()   # runs on the device its inputs / cache live on (CU
 
 # the artifact carries an initialized StaticCache template — reuse it (reset to empty)
 _, example_kwargs = exported.example_inputs
-past_key_values = copy.deepcopy(example_kwargs["past_key_values"])
-past_key_values.reset()
+cache = copy.deepcopy(example_kwargs["cache"])
+cache.reset()
 
 def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
     return (torch.arange(cache_len, device="cuda")[None, :] <= positions[:, None])[None, None]
@@ -667,7 +667,7 @@ def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
 # prefill: the whole prompt in one call
 positions = torch.arange(prompt_len, device="cuda")
 logits = decode(input_ids=prompt_ids, attention_mask=causal_mask(positions, max_cache_len),
-                position_ids=positions[None], past_key_values=past_key_values).logits
+                position_ids=positions[None], cache=cache).logits
 next_token = logits[:, -1:].argmax(-1)
 
 # decode: query=1 buffers reused in place
@@ -680,7 +680,7 @@ for position in range(prompt_len, max_cache_len):
     position_ids.fill_(position)
     attention_mask[0, 0, 0].copy_(slots <= position)
     logits = decode(input_ids=input_ids, attention_mask=attention_mask,
-                    position_ids=position_ids, past_key_values=past_key_values).logits
+                    position_ids=position_ids, cache=cache).logits
     next_token = logits[:, -1:].argmax(-1)
 ```
 

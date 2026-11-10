@@ -368,7 +368,7 @@ model_id = 'google/gemma-4-E2B-it'
 processor = AutoProcessor.from_pretrained(model_id)
 model = Gemma4ForConditionalGeneration.from_pretrained(model_id, dtype=torch.float32, device_map='cpu')
 
-past_key_values = DynamicCache()
+cache = DynamicCache()
 streamer = TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
 
 ## Turn 1: multimodal input (text + image + audio)
@@ -386,7 +386,7 @@ messages = [
 ]
 input_string = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(text=input_string, images=[image], audio=[audio], return_tensors='pt')
-output = model.generate(**inputs, past_key_values=past_key_values, max_new_tokens=1024, do_sample=False, streamer=streamer)
+output = model.generate(**inputs, cache=cache, max_new_tokens=1024, do_sample=False, streamer=streamer)
 first_response = processor.decode(output[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
 
 ## Turn 2: text-only follow-up (reuses KV cache, no new media)
@@ -398,9 +398,9 @@ new_string = full_string[len(cached_string):]
 
 new_input_ids = processor.tokenizer(new_string, add_special_tokens=False, return_tensors='pt')['input_ids']
 # Build and pass an attention mask only if batched input or there is padding
-# attention_mask = torch.ones(1, past_key_values.get_seq_length() + new_input_ids.shape[1], dtype=torch.long)
+# attention_mask = torch.ones(1, cache.get_seq_length() + new_input_ids.shape[1], dtype=torch.long)
 
-output2 = model.generate(input_ids=new_input_ids, past_key_values=past_key_values, max_new_tokens=1024, do_sample=False, streamer=streamer)
+output2 = model.generate(input_ids=new_input_ids, cache=cache, max_new_tokens=1024, do_sample=False, streamer=streamer)
 second_response = processor.decode(output2[0][new_input_ids.shape[1]:], skip_special_tokens=True)
 
 ## Turn 3: new image (must go through processor for image token expansion + encoding)
@@ -412,8 +412,8 @@ full_string2 = processor.apply_chat_template(messages, add_generation_prompt=Tru
 new_string2 = full_string2[len(cached_string2):]
 
 new_inputs2 = processor(text=new_string2, images=[image2], add_special_tokens=False, return_tensors='pt')
-# new_inputs2['attention_mask'] = torch.ones(1, past_key_values.get_seq_length() + new_inputs2['input_ids'].shape[1], dtype=torch.long)
-new_inputs2['past_key_values'] = past_key_values
+# new_inputs2['attention_mask'] = torch.ones(1, cache.get_seq_length() + new_inputs2['input_ids'].shape[1], dtype=torch.long)
+new_inputs2['cache'] = cache
 
 output3 = model.generate(**new_inputs2, max_new_tokens=1024, do_sample=False, streamer=streamer)
 ```
