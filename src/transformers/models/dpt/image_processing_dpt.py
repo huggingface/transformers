@@ -40,7 +40,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -412,7 +412,6 @@ class DPTImageProcessor(TorchvisionBackend):
             `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
 
         predicted_depth = outputs.predicted_depth
 

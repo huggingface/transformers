@@ -60,7 +60,7 @@ if is_torch_available():
     import torch
     from torch.export import ExportedProgram
 
-    from ..cache_utils import Cache
+    from ..cache_utils import Cache, DynamicLayer
     from ..modeling_utils import PreTrainedModel
 
 
@@ -232,23 +232,17 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any], outp
 
 @register_patch(
     "dynamo",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.update",
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
 )
-def _patch_sliding_window_length(original):
-    """Read a growing sliding layer's length off its keys tensor instead of its own counter.
+def _patch_sliding_window_layer(original):
+    """Trace sliding-window cache layers as a full `DynamicLayer`; the sliding mask still applies the window.
 
-    The python-int counter is baked as a constant, pinning the graph to the traced step (a tree-spec
-    `cumulative_length` mismatch). Below the window `keys.shape[-2]` is the same quantity, and symbolic.
+    A trace bakes in the sliding layer's Python token counter and its cut to the window, so the exported decode breaks
+    past the window. Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
     """
-
-    def patch(self, *args, **kwargs):
-        keys = getattr(self, "keys", None)
-        cached = keys.shape[-2] if keys is not None else 0
-        with patch_attributes([(self, "cumulative_length", lambda _original: cached)]):
-            return original(self, *args, **kwargs)
-
-    return patch
+    return getattr(DynamicLayer, original.__name__)
 
 
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
@@ -368,9 +362,13 @@ def _reshaped_vision_attention_forward(
         q_proj = getattr(self, "q_proj", getattr(self, "q", None))
         k_proj = getattr(self, "k_proj", getattr(self, "k", None))
         v_proj = getattr(self, "v_proj", getattr(self, "v", None))
+        num_key_value_heads = getattr(self, "num_key_value_heads", self.num_heads)
         query_states = q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
-        key_states = k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
-        value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        key_states = k_proj(hidden_states).view(seq_length, num_key_value_heads, self.head_dim)
+        value_states = v_proj(hidden_states).view(seq_length, num_key_value_heads, self.head_dim)
+        # qk-norm encoders (lfm3_vl) normalize the heads before rotary
+        if hasattr(self, "q_norm"):
+            query_states, key_states = self.q_norm(query_states), self.k_norm(key_states)
 
     if position_embeddings is not None:
         # Each vision encoder ships its own ``apply_rotary_pos_emb_vision`` in its modeling file
@@ -445,8 +443,10 @@ def _reshaped_vision_attention_forward(
     "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
     "transformers.models.muse_spark.modeling_muse_spark.MuseSparkVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
+    "transformers.models.lfm3_vl.modeling_lfm3_vl.Lfm3VlVisionAttention.forward",
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
+    "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
@@ -571,7 +571,7 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if hasattr(obj, "__dict__"):
         attributes = dict(vars(obj))
         # Sliding-layer step counters would pin the graph to the traced step (see
-        # `_patch_sliding_window_length`); normalised before the walk so no SymInt leaf is orphaned.
+        # `_patch_sliding_window_layer`); normalised before the walk so no SymInt leaf is orphaned.
         if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
             attributes["cumulative_length"] = 0
         if "cumulative_length_int" in attributes:

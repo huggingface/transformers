@@ -45,10 +45,6 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_grid_pinpoints=[[64, 64]],
         )
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     @staticmethod
     def prepare_processor_dict():
         return {

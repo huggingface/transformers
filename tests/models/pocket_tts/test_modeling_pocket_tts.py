@@ -228,12 +228,22 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             "test_generate_continue_from_inputs_embeds",
             "test_generate_with_and_without_position_ids",  # reads token sequences; `test_generate` checks position_ids
             "test_generate_compilation_all_outputs",  # checks vocabulary-sized scores
+            # argmaxes the vocabulary logits to pick the next token, then compares against `generate`'s logits: here
+            # the logits are end-of-speech scores of width 1 and `generate` emits latents, so neither side applies
+            "test_flash_attention_2_continue_generate_with_position_ids",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(
                     reason="Pocket TTS generates continuous latents; token-based generation tests do not apply."
                 )
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # the flow head is conditioned on the backbone hidden states, so it has to follow the widened `hidden_size`
+        config.flow_head_config.condition_dim = config.hidden_size
+        return config
 
     def test_config(self):
         self.config_tester.run_common_tests()

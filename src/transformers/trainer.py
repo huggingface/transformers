@@ -56,7 +56,7 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
+from .distributed.fsdp import get_fsdp_ckpt_kwargs, is_fsdp_managed_module, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -751,7 +751,7 @@ class Trainer:
         elif isinstance(self.model, PreTrainedModel):
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-            find_unused = not (self.model.is_gradient_checkpointing or self.args.gradient_checkpointing)
+            find_unused = not (self.model.is_activation_checkpointing or self.args.activation_checkpointing)
         else:
             find_unused = True
 
@@ -775,26 +775,29 @@ class Trainer:
             args["parallelism_config"] = self.args.parallelism_config
 
         model_tp_size = getattr(self.model, "tp_size", None) or 1
-        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
         if model_tp_size > 1:
-            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
-            # dimension): accelerate has to know both sizes.
+            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 or HSDP on more mesh
+            # dimensions): accelerate has to know the TP size and the data parallel size, HSDP replicas included.
+            model_dp_size = self.model.config.distributed_config.dp_size
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             if args.get("parallelism_config") is None:
                 from accelerate import ParallelismConfig
 
-                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_fsdp_size)
+                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_dp_size)
             else:
                 args["parallelism_config"].tp_size = model_tp_size
-                args["parallelism_config"].dp_shard_size = model_fsdp_size
+                args["parallelism_config"].dp_shard_size = model_dp_size
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
             from accelerate.utils import TorchDynamoPlugin
 
             dynamo_plugin = TorchDynamoPlugin(
-                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+                backend=self.args.torch_compile_backend,
+                mode=self.args.torch_compile_mode,
+                # The Neuron backend fails to compile graphs with dynamic shapes
+                dynamic=False if self.args.torch_compile_backend == "neuron" else None,
             )
             args["dynamo_plugin"] = dynamo_plugin
 
@@ -873,11 +876,11 @@ class Trainer:
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
-            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.activation_checkpointing:
                 raise ValueError(
-                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
-                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
-                    "when using FSDP."
+                    "`fsdp_config['activation_checkpointing']` (FSDP's own activation checkpointing) and the "
+                    "`activation_checkpointing` training argument can't both be set to True. Use FSDP's activation "
+                    "checkpointing when using FSDP."
                 )
 
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
@@ -1496,19 +1499,33 @@ class Trainer:
         if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and self.model_init is None:
             self._move_model_to_device(self.model, args.device)
 
-        # Activate gradient checkpointing if needed
-        if args.gradient_checkpointing:
+        # Activate activation checkpointing if needed
+        if args.activation_checkpointing:
             # `every_n_layers` selects which layers are checkpointed and `offload` where their saved
             # activations live; the remaining keys are forwarded to `torch.utils.checkpoint.checkpoint`, so both
             # have to come out of the dict before that happens.
-            gc_kwargs = dict(args.gradient_checkpointing_kwargs or {})
+            gc_kwargs = dict(args.activation_checkpointing_kwargs or {})
             every_n_layers = gc_kwargs.pop("every_n_layers", 1)
             offload = gc_kwargs.pop("offload", False)
-            self.model.gradient_checkpointing_enable(
-                gradient_checkpointing_kwargs=gc_kwargs or None,
-                every_n_layers=every_n_layers,
-                offload=offload,
-            )
+            if hasattr(self.model, "activation_checkpointing_enable"):
+                self.model.activation_checkpointing_enable(
+                    activation_checkpointing_kwargs=gc_kwargs or None,
+                    every_n_layers=every_n_layers,
+                    offload=offload,
+                )
+            else:
+                # Models outside `PreTrainedModel` that only define the deprecated `gradient_checkpointing_enable`
+                # (e.g. sentence-transformers) keep working until v6. Remove the fallback in v6.
+                warnings.warn(
+                    f"`{type(self.model).__name__}` only defines `gradient_checkpointing_enable`, which is deprecated "
+                    "and will no longer be called in v6. Define `activation_checkpointing_enable` instead.",
+                    FutureWarning,
+                )
+                self.model.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs=gc_kwargs or None,
+                    every_n_layers=every_n_layers,
+                    offload=offload,
+                )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
@@ -1883,6 +1900,9 @@ class Trainer:
                     or i == len(batch_samples) - 1
                 ):
                     sync_context = contextlib.nullcontext
+                elif self.is_distributed_loading_by_transformers and is_fsdp_managed_module(self.model):
+                    # Accelerate did not wrap a model sharded at load time, so its `no_sync` does not apply
+                    sync_context = self._defer_fsdp_gradient_reduction
                 else:
                     sync_context = functools.partial(self.accelerator.no_sync, model=model)
                 with sync_context():
@@ -2332,7 +2352,7 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                num_items_in_batch = num_items_in_batch // (
+                num_items_in_batch = num_items_in_batch / (
                     self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
                 )
 
@@ -2585,6 +2605,21 @@ class Trainer:
 
         # 4. Default fallback
         return 1
+
+    @contextlib.contextmanager
+    def _defer_fsdp_gradient_reduction(self):
+        """
+        `no_sync` for a model sharded at load time with FSDP2. With HSDP, only the all-reduce across replicas waits for
+        the last micro-batch: the reduce-scatter inside each replica keeps the gradients sharded.
+        """
+        if self.model.config.distributed_config.dp_replicate_size > 1:
+            self.model.set_requires_all_reduce(False)
+        else:
+            self.model.set_requires_gradient_sync(False)
+        try:
+            yield
+        finally:
+            self.model.set_requires_gradient_sync(True)
 
     def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
         """
@@ -3051,10 +3086,12 @@ class Trainer:
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
         metrics = denumpify_detensorize(metrics)
 
-        if isinstance(all_losses, list) and all_losses:
-            metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
-        elif isinstance(all_losses, np.ndarray):
-            metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+        losses = np.concatenate(all_losses) if isinstance(all_losses, list) and all_losses else all_losses
+        if isinstance(losses, np.ndarray):
+            finite = np.isfinite(losses)
+            if self.args.logging_nan_inf_filter and finite.any():
+                losses = losses[finite]
+            metrics[f"{metric_key_prefix}_loss"] = losses.mean().item()
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
@@ -4051,14 +4088,12 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+            self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -4071,40 +4106,18 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                if self.args.should_save:
-                    self._save(output_dir, state_dict={})
+                self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.is_distributed_loading_by_transformers:
-            # Sharded at load time (`DistributedConfig`): gathering a `DTensor` is collective, so every rank gathers
-            # and only the main process writes.
-            if _is_peft_model(self.model):
-                # The adapter is the trainable parameters. PEFT would otherwise gather the whole sharded model, on the
-                # main process only.
-                from torch.distributed.tensor import DTensor
-
-                state_dict = {
-                    name: param.full_tensor() if isinstance(param, DTensor) else param
-                    for name, param in self.model.named_parameters()
-                    if param.requires_grad
-                }
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
-            else:
-                # `save_pretrained` gathers the weights itself, so every rank calls it; the others leave at the
-                # closing barrier.
-                self._save(output_dir)
-
-        elif self.args.should_save:
+        else:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -4114,8 +4127,13 @@ class Trainer:
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
         """Save model weights, configuration, and processing class to `output_dir`."""
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
+
+        # Non-writer ranks only stay when the model was sharded at load time, to join the collective gathers below.
+        if not self.args.should_save and not self.is_distributed_loading_by_transformers:
+            return
+
         if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
             logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
@@ -4127,15 +4145,15 @@ class Trainer:
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
                 self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
+                    output_dir, state_dict=state_dict, is_main_process=self.args.should_save
                 )
-            else:
+            elif self.args.should_save:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 safetensors.torch.save_file(
                     state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
                 )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            self.model.save_pretrained(output_dir, state_dict=state_dict, is_main_process=self.args.should_save)
 
         # A non-writer rank of a model sharded at load time is only here for the collectives above.
         if not self.args.should_save:
@@ -4212,9 +4230,16 @@ class Trainer:
 
     # ---- Hub Integration ----
 
-    def init_hf_repo(self, token: str | None = None) -> None:
+    def init_hf_repo(self, token: str | None = None, private: bool | None = None) -> None:
         """
         Initializes a git repo in `self.args.hub_model_id`.
+
+        Args:
+            token (`str`, *optional*):
+                Token with write permission. Defaults to `self.args.hub_token`.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `self.args.hub_private_repo`. Has
+                no effect if the repo already exists.
         """
         # Only on process zero
         if not self.is_world_process_zero():
@@ -4226,7 +4251,8 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        private = private if private is not None else self.args.hub_private_repo
+        repo_url = hf_api().create_repo(repo_name, token=token, private=private, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4310,6 +4336,7 @@ class Trainer:
         blocking: bool = True,
         token: str | None = None,
         revision: str | None = None,
+        private: bool | None = None,
         **kwargs,
     ) -> CommitInfo:
         """
@@ -4324,6 +4351,9 @@ class Trainer:
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
                 The git revision to commit from. Defaults to the head of the "main" branch.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `args.hub_private_repo`. Has no
+                effect if the repo already exists.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4343,7 +4373,7 @@ class Trainer:
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
-            self.init_hf_repo(token=token)
+            self.init_hf_repo(token=token, private=private)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
