@@ -261,7 +261,7 @@ class RecurrentGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
         tokenizer.padding_side = "left"
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today I’m going to show you how to make a simple and easy to make a <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY']  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', "Hi today I'm going to show you how to make a simple and easy to make a 3D model of a house.\n\nYou will need:\n\n* A 3D printer\n* A 3D model of a house\n* A 3D printer filament\n* A 3D printer pen\n"]  # fmt: skip
 
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
