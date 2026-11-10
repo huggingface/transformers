@@ -592,18 +592,36 @@ class AutoImageProcessor:
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
+        config_dict = kwargs.pop("processor_config", None)
         use_fast = kwargs.pop("use_fast", None)
         backend_kwarg = kwargs.pop("backend", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs["_from_auto"] = True
 
-        # Resolve the revision once, so that all the files below come from the same repository state.
-        kwargs["revision"] = resolve_revision(
+        hub_kwargs_names = [
+            "cache_dir",
+            "force_download",
+            "local_files_only",
+            "proxies",
+            "revision",
+            "subfolder",
+            "token",
+        ]
+        hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
+        hub_kwargs["_from_auto"] = True
+        code_revision = kwargs.pop("code_revision", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+        token = hub_kwargs.pop("token", None)
+        if token is not None:
+            hub_kwargs["token"] = token
+
+        # Resolve the revision once, so that all the files below come from the same repository state
+        requested_revision = hub_kwargs.get("revision")
+        hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            local_files_only=kwargs.get("local_files_only", False),
-            cache_dir=kwargs.get("cache_dir"),
+            requested_revision,
+            token=token,
+            local_files_only=hub_kwargs.get("local_files_only", False),
+            cache_dir=hub_kwargs.get("cache_dir"),
         )
 
         # Resolve the image processor config filename
@@ -615,22 +633,22 @@ class AutoImageProcessor:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
         # Load the image processor config
-
-        try:
-            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
-                pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
-            )
-        except Exception as initial_exception:
-            # Fallback for Hub TimmWrapper checkpoints (image processing in config.json, not preprocessor_config.json)
+        if not isinstance(config_dict, dict):
             try:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
-                    pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
+                    pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **hub_kwargs
                 )
-            except Exception:
-                raise initial_exception
+            except Exception as initial_exception:
+                # Fallback for Hub TimmWrapper checkpoints (image processing in config.json, not preprocessor_config.json)
+                try:
+                    config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                        pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **hub_kwargs
+                    )
+                except Exception:
+                    raise initial_exception
 
-            if not is_timm_config_dict(config_dict):
-                raise initial_exception
+                if not is_timm_config_dict(config_dict):
+                    raise initial_exception
 
         image_processor_type = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
@@ -651,7 +669,10 @@ class AutoImageProcessor:
             try:
                 if not isinstance(config, PreTrainedConfig):
                     config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        pretrained_model_name_or_path,
+                        trust_remote_code=trust_remote_code,
+                        code_revision=code_revision,
+                        **hub_kwargs,
                     )
 
                 image_processor_type = getattr(config, "image_processor_type", None)
@@ -695,19 +716,21 @@ class AutoImageProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-            _ = kwargs.pop("code_revision", None)
+            image_processor_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
+            )
+            _ = hub_kwargs.pop("code_revision", None)
             image_processor_class.register_for_auto_class()
-            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
         elif image_processor_class is not None:
-            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
             image_processor_mapping = IMAGE_PROCESSOR_MAPPING[type(config)]
             image_processor_class = _load_class_with_fallback(image_processor_mapping, backend)
 
             if image_processor_class is not None:
-                return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
 
             raise ValueError(
                 _format_unavailable_image_processor_error(pretrained_model_name_or_path, image_processor_mapping)

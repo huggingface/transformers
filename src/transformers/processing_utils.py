@@ -1791,12 +1791,12 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        original_loading_kwargs = kwargs.copy()
+        original_kwargs = kwargs.copy()
 
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls._resolve_subprocessors(
-            pretrained_model_name_or_path, processor_dict, load_kwargs=original_loading_kwargs, **kwargs
+            pretrained_model_name_or_path, processor_dict, **original_kwargs
         )
         return cls.from_dict(processor_dict, **kwargs)
 
@@ -1883,7 +1883,7 @@ class ProcessorMixin(PushToHubMixin):
         return tokenizer
 
     @classmethod
-    def _resolve_subprocessors(cls, pretrained_model_name_or_path, processor_dict, load_kwargs=None, **kwargs):
+    def _resolve_subprocessors(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
         and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
@@ -1900,15 +1900,11 @@ class ProcessorMixin(PushToHubMixin):
         Args:
             pretrained_model_name_or_path: Path or model id to load from.
             processor_dict: Dict containing nested processor config (from `processor_config.json`).
-            load_kwargs: Optional dict used when loading an attribute `from_pretrained` if processor_dict
-                doesn't have an attribute config saved (e.g. tokenizers are never saved in processor config).
         """
-        load_kwargs = load_kwargs if load_kwargs is not None else {}
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
-        subfolder = load_kwargs.pop("subfolder", "")
-        keys_to_remove = set()
+        keys_to_remove = set({"return_unused_kwargs"})
 
-        # get args from processor init signature
+        # get attributes from processor init signature
         sub_processors = cls.get_attributes()
         for sub_processor_type in sub_processors:
             # user-provided and already loaded sub-processor, skip loading it again!
@@ -1918,39 +1914,13 @@ class ProcessorMixin(PushToHubMixin):
 
             if "tokenizer" in sub_processor_type:
                 tokenizer = cls._load_tokenizer_from_pretrained(
-                    sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **load_kwargs
+                    sub_processor_type, pretrained_model_name_or_path, **kwargs
                 )
                 processor_dict[sub_processor_type] = tokenizer
-            elif sub_processor_type in processor_dict and isinstance(
-                (sub_processor_config := processor_dict[sub_processor_type]), dict
-            ):
-                # Additional non-tokenizer sub-processor: instantiate from config in processor_dict
-                # Determine the class to instantiate: image processors have 'image_processor_type', etc.
-                modality = _get_modality_for_attribute(sub_processor_type)
-                type_key = f"{modality}_type"
-                if modality == "audio_processor":
-                    # hardcoded in FeatureExtractionMixin: FIXME @eustlib
-                    type_key = "feature_extractor_type"
-                class_name = sub_processor_config.get(type_key)
-                if class_name is None:
-                    raise ValueError(
-                        f"Cannot instantiate {sub_processor_type}: missing '{type_key}' in `processor_config.json`. "
-                        f"Config keys: {list(sub_processor_config.keys())}"
-                    )
-                subprocessor_class = cls.get_possibly_dynamic_module(class_name)
-                valid_subprocessor_kwargs = (
-                    subprocessor_class.valid_kwargs.__annotations__
-                    if hasattr(subprocessor_class, "valid_kwargs")
-                    else sub_processor_config.keys()
-                )
-                sub_kwargs = {k: kwargs[k] for k in kwargs.keys() & valid_subprocessor_kwargs}
-                keys_to_remove |= sub_kwargs.keys()
-
-                sub_processor = subprocessor_class(**{**sub_processor_config, **sub_kwargs})
-                processor_dict[sub_processor_type] = sub_processor
             else:
-                # Fallback for non-tokenizer sub-processor: try loading via Auto class
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                # Load with `Auto` class for non-tokenizer sub-processors
+                modality = _get_modality_for_attribute(sub_processor_type)
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[modality]
                 # For backward compatibility, check if sub-processor class name is hardcoded as an attribute of the processor class.
                 if hasattr(cls, sub_processor_type + "_class"):
                     sub_processor_class_name = getattr(cls, sub_processor_type + "_class")
@@ -1959,13 +1929,18 @@ class ProcessorMixin(PushToHubMixin):
                         f"which is deprecated. Register the correct mapping in `{auto_processor_class.__name__}` instead.",
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
-                sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **load_kwargs
+
+                sub_processor_config = processor_dict.get(sub_processor_type, None)
+                sub_processor, unused_kwargs = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path,
+                    processor_config=sub_processor_config,
+                    **{**kwargs, "return_unused_kwargs": True},
                 )
+                keys_to_remove.update({k for k in kwargs if k not in unused_kwargs})
                 processor_dict[sub_processor_type] = sub_processor
 
         for k in keys_to_remove:
-            kwargs.pop(k)
+            kwargs.pop(k, None)
         return processor_dict, kwargs
 
     @staticmethod
