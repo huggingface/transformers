@@ -654,6 +654,7 @@ class Lfm3AudioCommonTest(ALMModelTest, unittest.TestCase):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
 
+@unittest.skip(reason="Update after release, the Hub checkpoint still points at remote code")
 @slow
 @require_torch_accelerator
 class Lfm3AudioIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
