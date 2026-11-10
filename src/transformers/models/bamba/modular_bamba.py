@@ -143,7 +143,9 @@ class BambaMixer(Mamba2Mixer):
         self.n_groups = config.mamba_n_groups
         self.head_dim = config.mamba_d_head
         self.chunk_size = config.mamba_chunk_size
-        self.norm = BambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = BambaRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,
             out_channels=self.conv_dim,
