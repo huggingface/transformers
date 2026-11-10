@@ -405,7 +405,7 @@ class TeleChatModel(TeleChatPreTrainedModel):
         )
 
 
-@auto_docstring(checkpoint="Tele-AI/TeleChat2-3B")
+@auto_docstring
 class TeleChatForCausalLM(TeleChatPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}

@@ -230,7 +230,7 @@ class TeleChatModel(LlamaModel):
     pass
 
 
-@auto_docstring(checkpoint="Tele-AI/TeleChat2-3B")
+@auto_docstring
 class TeleChatForCausalLM(LlamaForCausalLM):
     pass
 
