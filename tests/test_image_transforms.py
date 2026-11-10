@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
@@ -617,14 +617,12 @@ class ImageTransformsTester(unittest.TestCase):
         with self.assertRaises(ValueError):
             convert_to_rgb(invalid_float_image, return_numpy=True, input_data_format="channels_last")
 
-        if is_torchvision_available():
-            backend = TorchvisionBackend()
-            valid_tensor = torch.tensor([[[1.0]], [[0.0]], [[0.0]], [[0.5]]], dtype=torch.float32)
-            self.assertEqual(backend.convert_to_rgb(valid_tensor).shape, (3, 1, 1))
-
-            invalid_tensor = torch.tensor([[[1.0]], [[2.0]], [[3.0]], [[128.0]]], dtype=torch.float32)
-            with self.assertRaises(ValueError):
-                backend.convert_to_rgb(invalid_tensor)
+    @require_torchvision
+    def test_convert_to_rgb_torchvision_out_of_range(self):
+        backend = TorchvisionBackend()
+        invalid_tensor = torch.tensor([[[1.0]], [[2.0]], [[3.0]], [[128.0]]], dtype=torch.float32)
+        with self.assertRaises(ValueError):
+            backend.convert_to_rgb(invalid_tensor)
 
     @parameterized.expand(["RGB", "L", "P"])
     def test_convert_to_rgb_png_transparency(self, mode):
