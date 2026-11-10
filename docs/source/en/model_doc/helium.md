@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/2025/01/13/helium.html) by the Kyutai Team.
+Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/blog/2025-01-13-helium/) by the Kyutai Team.
 
 Helium-1 preview is a lightweight language model with 2B parameters, targeting edge and mobile devices.
 It supports the following languages: English, French, German, Italian, Portuguese, Spanish.
