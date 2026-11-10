@@ -213,7 +213,11 @@ class Lfm3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): (
                     'We need to answer: "Simply put, what does the theory of relativity state?" '
                     "This is a broad question about Einstein's theories of relativity. There are"
-                )
+                ),
+                ("xpu", 5): (
+                    'We need to answer: "Simply put, what does the theory of relativity state?" '
+                    "This is a broad question about Einstein's theories. The user asks for"
+                ),
             }
         )
         self.assertEqual(text, expectations.get_expectation())

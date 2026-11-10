@@ -77,7 +77,8 @@ def dynamic_rope_update(rope_forward):
 
         # `seq_len` is a scalar, so this picks the long or short set for all positions, like an if/else but traceable
         inv_freq = torch.where(seq_len > original_max_position_embeddings, long_inv_freq, original_inv_freq)
-        self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
+        # Update in place so the buffer keeps its address, which CUDA graphs replay from
+        getattr(self, f"{prefix}inv_freq").copy_(inv_freq)
 
     def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
