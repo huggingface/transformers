@@ -46,19 +46,13 @@ class ALMModelTester(MultiModalModelTester):
         # TODO: should we add automatic-speech-recognition with a special flag?
         return mapping
 
-    def __init__(self, parent, **kwargs):
-        # Apply model overrides before computing modality-dependent defaults.
-        kwargs = {**self.get_small_config_defaults(), **kwargs}
-        # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
-        kwargs.setdefault("seq_length", 32)
-        kwargs.setdefault("pad_token_id", 1)
-
-        # ALM-specific defaults
-        kwargs.setdefault("feat_seq_length", 128)
-        kwargs.setdefault("num_mel_bins", 80)
-        kwargs.setdefault("audio_token_id", 0)
-
-        super().__init__(parent, **kwargs)
+    defaults = {
+        "seq_length": 32,
+        "pad_token_id": 1,
+        "feat_seq_length": 128,
+        "num_mel_bins": 80,
+        "audio_token_id": 0,
+    }
 
     # -- Overridable ALM-specific hooks ------------------------------------------------------
 

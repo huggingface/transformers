@@ -35,47 +35,44 @@ class VLMModelTester(MultiModalModelTester):
             "image-text-to-text": self.conditional_generation_class,
         }
 
-    def __init__(self, parent, **kwargs):
-        # Apply model overrides before computing modality-dependent defaults.
-        kwargs = {**self.get_small_config_defaults(), **kwargs}
-        # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
-        kwargs.setdefault(
-            "seq_length",
-            7
-            + kwargs.get(
-                "num_image_tokens",
-                (kwargs.get("image_size", 8) // kwargs.get("patch_size", 4)) ** 2,
-            ),
+    defaults = {
+        "pad_token_id": 0,
+        "use_token_type_ids": False,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "image_token_id": 3,
+        "is_decoder": False,
+        "image_size": 8,
+        "patch_size": 4,
+        "num_channels": 3,
+        "projection_dim": 32,
+        "projector_hidden_act": "gelu",
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "tie_word_embeddings": False,
+        "vision_rope_parameters": {"rope_type": "axial", "rope_theta": 10000},
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if "num_image_tokens" not in values:
+            values["num_image_tokens"] = (values["image_size"] // values["patch_size"]) ** 2
+        # The shared text sequence length is replaced by the vision default,
+        # unless a model or caller explicitly supplies it.
+        explicit_seq_length = "seq_length" in kwargs or any(
+            "seq_length" in base.__dict__.get("small_config_overrides", {}) for base in cls.__mro__
         )
-        kwargs.setdefault("pad_token_id", 0)
-
-        # VLM-specific defaults
-        kwargs.setdefault("use_token_type_ids", False)
-        kwargs.setdefault("hidden_dropout_prob", 0.1)
-        kwargs.setdefault("attention_probs_dropout_prob", 0.1)
-        kwargs.setdefault("type_vocab_size", 16)
-        kwargs.setdefault("type_sequence_label_size", 2)
-        kwargs.setdefault("initializer_range", 0.02)
-        kwargs.setdefault("num_labels", 3)
-        kwargs.setdefault("num_choices", 4)
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("is_decoder", False)
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("projection_dim", 32)
-        kwargs.setdefault("projector_hidden_act", "gelu")
-        kwargs.setdefault("vision_feature_select_strategy", "default")
-        kwargs.setdefault("vision_feature_layer", -1)
-        kwargs.setdefault("tie_word_embeddings", False)
-        kwargs.setdefault("num_image_tokens", (kwargs["image_size"] // kwargs["patch_size"]) ** 2)
-        kwargs.setdefault("vision_rope_parameters", {"rope_type": "axial", "rope_theta": 10_000})
-
-        super().__init__(parent, **kwargs)
-
-        # Computed default depending on base-class defaults for hidden_size / num_attention_heads.
-        if not hasattr(self, "head_dim"):
-            self.head_dim = self.hidden_size // self.num_attention_heads
+        if not explicit_seq_length:
+            values["seq_length"] = 7 + values["num_image_tokens"]
+        if "head_dim" not in values:
+            values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
 
     # -- Overridable VLM-specific hooks ------------------------------------------------------
 
