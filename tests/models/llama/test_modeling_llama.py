@@ -14,12 +14,14 @@
 """Testing suite for the PyTorch LLaMA model."""
 
 import unittest
+from unittest.mock import patch
 
 import pytest
 
 from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     require_flash_attn,
     require_torch,
@@ -27,6 +29,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import logging
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -329,6 +332,49 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # Both output text should be the same, and equal to the reference
         self.assertEqual(output_text_sdpa, output_text_fa)
         self.assertEqual(output_text_fa, EXPECTED_TEXT)
+
+    @require_torch_accelerator
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    @pytest.mark.torch_compile_test
+    def test_kernels_do_not_recompile_per_wrapper(self):
+        """Kernels test to check whether unnecessary recompiles are triggered on each kernel private wrapper id."""
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-3.2-3B-Instruct",
+            device_map=torch_device,
+            dtype=torch.bfloat16,
+            use_kernels=False,
+        )
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "What's the meaning of life?"}],
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+            date_string="26 Jun 2026",
+        ).to(model.device)
+
+        with torch.no_grad():
+            model.generate(
+                **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False
+            )
+
+        # FA2 introduces a graph break => dynamo recompilations are triggered => specializaton on each func kernel triggered
+        model.set_attn_implementation("flash_attention_2")
+        torch._dynamo.reset()
+
+        torch._logging.set_logs(recompiles_verbose=True)
+        try:
+            with self.assertLogs("torch._dynamo.convert_frame", level="WARNING") as logs:
+                with torch.no_grad():
+                    model.generate(
+                        **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False
+                    )
+        finally:
+            torch._logging.set_logs(recompiles_verbose=False)
+
+        self.assertNotIn("_ACTIVE_KERNEL_FUNCS.global_var[", "\n".join(logs.output))
 
 
 @slow
