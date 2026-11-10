@@ -244,8 +244,6 @@ class GemmaModel(LlamaModel):
 class GemmaForCausalLM(LlamaForCausalLM):
     def forward(**super_kwargs):
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

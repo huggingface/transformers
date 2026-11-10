@@ -1345,8 +1345,6 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             Number of local patches per image in the batch.
         patches_grid (`list[list[int]]`, *optional*):
             The patches grid `(num_columns, num_rows)` per image.
-        cache (<fill_type>):
-            <fill_docstring>
 
         Example single-page OCR:
 

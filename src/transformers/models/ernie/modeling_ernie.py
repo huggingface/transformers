@@ -181,11 +181,12 @@ class ErnieSelfAttention(nn.Module):
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -196,14 +197,14 @@ class ErnieSelfAttention(nn.Module):
         key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        if past_key_values is not None:
+        if cache is not None:
             # decoder-only ernie can have a simple dynamic cache for example
-            current_past_key_values = past_key_values
-            if isinstance(past_key_values, EncoderDecoderCache):
-                current_past_key_values = past_key_values.self_attention_cache
+            current_cache = cache
+            if isinstance(cache, EncoderDecoderCache):
+                current_cache = cache.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
+            key_layer, value_layer = current_cache.update(key_layer, value_layer, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -247,12 +248,13 @@ class ErnieCrossAttention(nn.Module):
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
@@ -263,23 +265,21 @@ class ErnieCrossAttention(nn.Module):
         # get query proj
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
-        if past_key_values is not None and is_updated:
+        is_updated = cache.is_updated.get(self.layer_idx) if cache is not None else False
+        if cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
-            value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+            key_layer = cache.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = cache.cross_attention_cache.layers[self.layer_idx].values
         else:
             kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.attention_head_size)
             key_layer = self.key(encoder_hidden_states).view(kv_shape).transpose(1, 2)
             value_layer = self.value(encoder_hidden_states).view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all states to the cache
-                key_layer, value_layer = past_key_values.cross_attention_cache.update(
-                    key_layer, value_layer, self.layer_idx
-                )
+                key_layer, value_layer = cache.cross_attention_cache.update(key_layer, value_layer, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -321,13 +321,14 @@ class ErnieAttention(nn.Module):
         self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = ErnieSelfOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -335,7 +336,7 @@ class ErnieAttention(nn.Module):
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = self.output(attention_output, hidden_states)
@@ -391,19 +392,20 @@ class ErnieLayer(GradientCheckpointingLayer):
         self.intermediate = ErnieIntermediate(config)
         self.output = ErnieOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -420,7 +422,7 @@ class ErnieLayer(GradientCheckpointingLayer):
                 None,  # attention_mask
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
             attention_output = cross_attention_output
@@ -490,13 +492,14 @@ class ErnieEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([ErnieLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
@@ -506,13 +509,13 @@ class ErnieEncoder(nn.Module):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
@@ -604,8 +607,6 @@ class ErnieModel(ErniePreTrainedModel):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -666,14 +667,14 @@ class ErnieModel(ErniePreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        past_key_values,
+        cache,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
         else:
             attention_mask = create_bidirectional_mask(
@@ -904,8 +905,6 @@ class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if labels is not None:
             use_cache = False

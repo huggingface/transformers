@@ -115,11 +115,12 @@ class AudioFlamingo3Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
@@ -144,21 +145,21 @@ class AudioFlamingo3Attention(nn.Module):
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
-        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None and isinstance(cache, EncoderDecoderCache):
+            is_updated = cache.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_values.is_updated[self.layer_idx] = True
-                past_key_values = past_key_values.cross_attention_cache
+                cache.is_updated[self.layer_idx] = True
+                cache = cache.cross_attention_cache
             else:
-                past_key_values = past_key_values.self_attention_cache
+                cache = cache.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_values and is_updated:
+        if is_cross_attention and cache and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_values.layers[self.layer_idx].keys
-            value_states = past_key_values.layers[self.layer_idx].values
+            key_states = cache.layers[self.layer_idx].keys
+            value_states = cache.layers[self.layer_idx].values
         else:
             # Use the query's batch dimension for kv view so that a different-batch
             # encoder output (e.g. in tests) gets absorbed into the sequence axis,
@@ -166,8 +167,8 @@ class AudioFlamingo3Attention(nn.Module):
             kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
             key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
-            if past_key_values is not None:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -254,7 +255,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["AudioFlamingo3Attention"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -530,8 +531,6 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -603,8 +602,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
-        cache (<fill_type>):
-            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.
 

@@ -761,8 +761,6 @@ class EvollaModel(EvollaPreTrainedModel):
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         protein_input_ids (torch.LongTensor):
             The input IDs for the protein sequence in structure-aware tokens. Should be of shape `(batch_size, protein_seq_length)` and type `torch.LongTensor`.
         protein_attention_mask (torch.Tensor):

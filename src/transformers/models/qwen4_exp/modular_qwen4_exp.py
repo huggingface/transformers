@@ -938,8 +938,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Original token ids used by Per-Layer Embedding (PLE). This is only needed when PLE is enabled and
             `inputs_embeds` are passed instead of `input_ids`.

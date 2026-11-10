@@ -397,8 +397,6 @@ class DiaDecoder(DiaPreTrainedModel):
             The original `decoder_input_ids` in 3D shape to facilitate more efficient computations.
 
             [What are input IDs?](../glossary#input-ids)
-        cache (<fill_type>):
-            <fill_docstring>
         """
 
         batch_size, seq_length = input_ids.size()[:-1]

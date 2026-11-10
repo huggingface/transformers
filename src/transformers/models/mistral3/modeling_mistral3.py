@@ -284,10 +284,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Mistral3ModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -388,8 +384,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Mistral3CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

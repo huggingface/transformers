@@ -924,10 +924,6 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1239,8 +1235,6 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`):
             Token IDs for the canvas to be refined.
-        cache (<fill_type>):
-            <fill_docstring>
         self_conditioning_logits (`torch.Tensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the
             self-conditioning embeddings.
@@ -1628,8 +1622,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             Uncached token IDs for the prompt to be encoded as context for the canvas.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `dict`, *optional*):
             Mask for the input tokens.
-        cache (<fill_type>):
-            <fill_docstring>
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`, *optional*):
             Token IDs for the canvas to be refined.
         self_conditioning_logits (`torch.Tensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):

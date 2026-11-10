@@ -243,7 +243,7 @@ class MossTranscribeDiarizePreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["MossTranscribeDiarizeAudioLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -555,8 +555,6 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
             `input_features`. Used to compute each chunk's valid encoder-output length.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
-        cache (<fill_type>):
-            <fill_docstring>
         inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
             `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located

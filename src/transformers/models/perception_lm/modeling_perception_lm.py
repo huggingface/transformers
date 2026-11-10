@@ -247,10 +247,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -336,8 +332,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         **kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

@@ -448,8 +448,6 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         audio_latents_mask (`torch.Tensor` of shape `(batch_size, num_latents)`, *optional*):
             Mask of each row's latents (`1`) as opposed to padding (`0`) in `audio_latents`, when the rows hold different
             numbers of latent positions (training).
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -762,8 +760,6 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
             speech.
         labels_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask of each row's target frames (`1`) as opposed to padding (`0`) in `labels`.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if labels is not None and audio_latents is not None:
             raise ValueError(

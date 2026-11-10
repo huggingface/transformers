@@ -489,7 +489,7 @@ class GlmImagePreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -729,10 +729,6 @@ class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -800,10 +796,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

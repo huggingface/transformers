@@ -464,19 +464,20 @@ class NemotronHMamba2Mixer(nn.Module):
         init.ones_(self.dt_bias)
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -486,7 +487,7 @@ class NemotronHMamba2Mixer(nn.Module):
 
         A = -torch.exp(self.A_log.float())
         fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
@@ -517,7 +518,7 @@ class NemotronHMamba2Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -526,8 +527,8 @@ class NemotronHMamba2Mixer(nn.Module):
                 activation=self.activation,
             )
         else:
-            if cache_params is not None:
-                hidden_states_B_C = cache_params.update_conv_state(
+            if cache is not None:
+                hidden_states_B_C = cache.update_conv_state(
                     hidden_states_B_C,
                     self.layer_idx,
                     conv_kernel_size=self.conv_kernel_size,
@@ -541,7 +542,7 @@ class NemotronHMamba2Mixer(nn.Module):
                 **kwargs,
             )
 
-            if cache_params is not None:
+            if cache is not None:
                 hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
 
         # 3. SSM transformation
@@ -579,7 +580,7 @@ class NemotronHMamba2Mixer(nn.Module):
 
         # Chunk form
         else:
-            output_final_state = cache_params is not None
+            output_final_state = cache is not None
             scan_result = mamba2_chunk_scan(
                 hidden_states.view(batch_size, seq_len, self.num_heads, self.head_dim),
                 dt,
@@ -599,7 +600,7 @@ class NemotronHMamba2Mixer(nn.Module):
 
             if output_final_state:
                 scan_output, final_state = scan_result
-                cache_params.update_recurrent_state(final_state, layer_idx=self.layer_idx)
+                cache.update_recurrent_state(final_state, layer_idx=self.layer_idx)
             else:
                 scan_output = scan_result
 
@@ -1186,8 +1187,6 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

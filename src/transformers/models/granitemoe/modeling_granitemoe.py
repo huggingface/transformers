@@ -426,10 +426,6 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -581,8 +577,6 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

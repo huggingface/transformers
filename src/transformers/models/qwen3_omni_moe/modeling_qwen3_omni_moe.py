@@ -123,7 +123,7 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         "Qwen3OmniMoeTalkerDecoderLayer",
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False
@@ -1965,8 +1965,6 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             - 0 for tokens that are **masked**.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
-        cache (<fill_type>):
-            <fill_docstring>
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
@@ -2254,8 +2252,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             - 0 for tokens that are **masked**.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
-        cache (<fill_type>):
-            <fill_docstring>
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
@@ -2659,10 +2655,6 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if input_ids is not None:
             raise ValueError("`input_ids` is expected to be `None`")
 
@@ -2749,8 +2741,6 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3OmniMoeP
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         generation_steps (`int`):
             generation step of code predictor, 0..num_code_groups-1
         """
@@ -3746,10 +3736,6 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         use_cache=None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if input_ids is not None:
             raise ValueError("input_ids is not expected")
         if (input_ids is None) ^ (inputs_embeds is not None):

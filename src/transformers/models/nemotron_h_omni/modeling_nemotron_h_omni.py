@@ -375,8 +375,6 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             placeholder tokens.
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask marking the real mel frames of each padded clip.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(

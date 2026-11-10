@@ -529,17 +529,17 @@ class MultiHeadAttention(nn.Module):
                 is_updated = cache.is_updated.get(self.layer_id)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = cache.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = cache.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = cache
+                curr_cache = cache
 
         current_states = kv if is_cross_attention else input
         if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            k = curr_past_key_values.key_cache[self.layer_id]
-            v = curr_past_key_values.value_cache[self.layer_id]
+            k = curr_cache.key_cache[self.layer_id]
+            v = curr_cache.value_cache[self.layer_id]
         else:
             k = self.k_lin(current_states)
             v = self.v_lin(current_states)
@@ -548,7 +548,7 @@ class MultiHeadAttention(nn.Module):
 
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                k, v = curr_past_key_values.update(k, v, self.layer_id)
+                k, v = curr_cache.update(k, v, self.layer_id, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True

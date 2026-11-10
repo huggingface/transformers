@@ -95,15 +95,13 @@ class IBertEmbeddings(nn.Module):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, cache_length=0):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(
-                    input_ids, self.padding_idx, past_key_values_length
-                ).to(input_ids.device)
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, cache_length).to(
+                    input_ids.device
+                )
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
@@ -1151,7 +1149,7 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         )
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+def create_position_ids_from_input_ids(input_ids, padding_idx, cache_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's *utils.make_positions*.
@@ -1164,7 +1162,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + cache_length) * mask
     return incremental_indices.long() + padding_idx
 
 

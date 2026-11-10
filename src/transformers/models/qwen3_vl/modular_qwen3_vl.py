@@ -522,8 +522,6 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         visual_pos_masks (`torch.Tensor` of shape `(batch_size, seqlen)`, *optional*):
             The mask of the visual positions.
         deepstack_visual_embeds (`list[torch.Tensor]`, *optional*):

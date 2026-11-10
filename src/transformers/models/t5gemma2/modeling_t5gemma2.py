@@ -978,10 +978,6 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if encoder_hidden_states is None:
@@ -1118,8 +1114,6 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        cache (<fill_type>):
-            <fill_docstring>
         """
         # encoder
         if encoder_outputs is None:
@@ -1234,8 +1228,6 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        cache (<fill_type>):
-            <fill_docstring>
         """
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:

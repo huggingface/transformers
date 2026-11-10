@@ -246,8 +246,6 @@ class Dots1ForCausalLM(DeepseekV3ForCausalLM):
         **super_kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

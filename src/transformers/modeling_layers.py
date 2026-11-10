@@ -140,10 +140,6 @@ class GenericForSequenceClassification:
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         transformer_outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
@@ -225,10 +221,6 @@ class GenericForQuestionAnswering:
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
@@ -297,10 +289,6 @@ class GenericForTokenClassification:
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,

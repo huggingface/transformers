@@ -555,8 +555,6 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
         r"""
         moe_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             The same as `mm_token_type_ids` while additionally considering start/end image/video tokens as respective vision tokens.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

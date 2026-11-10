@@ -30,6 +30,7 @@ from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_mamba2 import Mamba2Config
 
 
@@ -451,19 +452,20 @@ class Mamba2Mixer(nn.Module):
         init.copy_(self.dt_bias, inv_dt)
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -473,7 +475,7 @@ class Mamba2Mixer(nn.Module):
 
         A = -torch.exp(self.A_log.float())
         fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
@@ -504,7 +506,7 @@ class Mamba2Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -513,8 +515,8 @@ class Mamba2Mixer(nn.Module):
                 activation=self.activation,
             )
         else:
-            if cache_params is not None:
-                hidden_states_B_C = cache_params.update_conv_state(
+            if cache is not None:
+                hidden_states_B_C = cache.update_conv_state(
                     hidden_states_B_C,
                     self.layer_idx,
                     conv_kernel_size=self.conv_kernel_size,
@@ -528,7 +530,7 @@ class Mamba2Mixer(nn.Module):
                 **kwargs,
             )
 
-            if cache_params is not None:
+            if cache is not None:
                 hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
 
         # 3. SSM transformation
@@ -566,7 +568,7 @@ class Mamba2Mixer(nn.Module):
 
         # Chunk form
         else:
-            output_final_state = cache_params is not None
+            output_final_state = cache is not None
             scan_result = mamba2_chunk_scan(
                 hidden_states.view(batch_size, seq_len, self.num_heads, self.head_dim),
                 dt,
@@ -586,7 +588,7 @@ class Mamba2Mixer(nn.Module):
 
             if output_final_state:
                 scan_output, final_state = scan_result
-                cache_params.update_recurrent_state(final_state, layer_idx=self.layer_idx)
+                cache.update_recurrent_state(final_state, layer_idx=self.layer_idx)
             else:
                 scan_output = scan_result
 
@@ -625,10 +627,11 @@ class Mamba2Block(GradientCheckpointingLayer):
         self.norm = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = Mamba2Mixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
 
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
@@ -637,7 +640,7 @@ class Mamba2Block(GradientCheckpointingLayer):
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.mixer(hidden_states, cache=cache, attention_mask=attention_mask, **kwargs)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -689,7 +692,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.mamba.modeling_mamba.MambaOutput with MAMBA->MAMBA2,Mamba->Mamba2
 class Mamba2Output(ModelOutput):
     r"""
-    cache_params (`Cache`):
+    cache (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
 
@@ -697,7 +700,7 @@ class Mamba2Output(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    cache_params: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
 
 
@@ -714,7 +717,7 @@ class Mamba2CausalLMOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache_params (`Cache`):
+    cache (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
 
@@ -723,7 +726,7 @@ class Mamba2CausalLMOutput(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    cache_params: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
 
 
@@ -754,11 +757,12 @@ class Mamba2Model(Mamba2PreTrainedModel):
         self.embeddings = new_embeddings
 
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -766,11 +770,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
         **kwargs,
     ) -> tuple | Mamba2Output:
         r"""
-        cache_params (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
-            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+            If set to `True`, the `cache` is returned and can be used to quickly generate the next logits.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -787,14 +791,14 @@ class Mamba2Model(Mamba2PreTrainedModel):
         if self.gradient_checkpointing and self.training and use_cache:
             use_cache = False
 
-        if use_cache and cache_params is None:
-            cache_params = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         attention_mask = create_recurrent_attention_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=cache_params,
+            cache=cache,
         )
 
         hidden_states = inputs_embeds
@@ -802,7 +806,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
         for mixer_block in self.layers:
             hidden_states = mixer_block(
                 hidden_states,
-                cache_params=cache_params,
+                cache=cache,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -816,11 +820,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, cache, all_hidden_states] if v is not None)
 
         return Mamba2Output(
             last_hidden_state=hidden_states,
-            cache_params=cache_params if use_cache else None,
+            cache=cache if use_cache else None,
             hidden_states=all_hidden_states,
         )
 
@@ -852,7 +856,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         input_ids,
         inputs_embeds=None,
         use_cache=None,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
@@ -861,7 +865,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             input_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_params=cache_params,
+            cache=cache,
             attention_mask=attention_mask,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -873,11 +877,12 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         return model_inputs
 
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -887,7 +892,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         **kwargs,  # for now we need this for generation and loss_function
     ) -> tuple | Mamba2CausalLMOutput:
         r"""
-        cache_params (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -895,13 +900,13 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         use_cache (`bool`, *optional*):
-            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+            If set to `True`, the `cache` is returned and can be used to quickly generate the next logits.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         mamba2_outputs = self.backbone(
             input_ids,
-            cache_params=cache_params,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -924,7 +929,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         return Mamba2CausalLMOutput(
             loss=loss,
             logits=logits,
-            cache_params=mamba2_outputs.cache_params,
+            cache=mamba2_outputs.cache,
             hidden_states=mamba2_outputs.hidden_states,
         )
 

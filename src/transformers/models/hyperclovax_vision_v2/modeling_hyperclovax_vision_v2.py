@@ -40,7 +40,7 @@ class HyperCLOVAXVisionV2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["HyperCLOVAXVisionV2VisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -159,8 +159,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         pixel_values (`torch.Tensor`, *optional*):
             Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
@@ -308,8 +306,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
             `[temporal, height, width]` grid counts per image.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             `[temporal, height, width]` grid counts per video.
-        cache (<fill_type>):
-            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.
         logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):

@@ -387,8 +387,6 @@ class CanaryDecoder(CanaryPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.
@@ -509,8 +507,6 @@ class CanaryModel(CanaryPreTrainedModel):
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.Tensor`.
-        cache (<fill_type>):
-            <fill_docstring>
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
@@ -628,8 +624,6 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.Tensor`.
-        cache (<fill_type>):
-            <fill_docstring>
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`

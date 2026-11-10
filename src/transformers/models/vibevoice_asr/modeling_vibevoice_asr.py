@@ -392,8 +392,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         sample (`bool`, *optional*, defaults to `True`):
@@ -463,8 +461,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         sample (`bool`, *optional*, defaults to `True`):

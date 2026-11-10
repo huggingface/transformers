@@ -660,8 +660,6 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if inputs_embeds is None and input_ids is not None:
             inputs_embeds = self._embed_input_ids(input_ids)

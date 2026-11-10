@@ -151,8 +151,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         pixel_values (`torch.Tensor`, *optional*):
             Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.

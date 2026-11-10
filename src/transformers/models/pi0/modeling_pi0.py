@@ -154,8 +154,6 @@ class PI0Model(PI0PreTrainedModel):
             The embeddings of input actions and robot states.
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if pixel_values is not None and cache is None:
             if attention_mask is not None and position_ids is None:
@@ -257,8 +255,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             Current denoising timestep.
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
-        cache (<fill_type>):
-            <fill_docstring>
         actions (`torch.Tensor`, *optional*):
             Input actions that need to be predicted. Used only when training to compute loss.
         """

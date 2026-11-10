@@ -138,8 +138,6 @@ class PLBartModel(PLBartPreTrainedModel):
             obj:*torch.LongTensor* of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior:
             generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also be used by default.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         # different to other models, PLBart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided

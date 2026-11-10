@@ -373,7 +373,7 @@ class SwitchTransformersAttention(nn.Module):
         mask=None,
         key_value_states=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
@@ -383,7 +383,7 @@ class SwitchTransformersAttention(nn.Module):
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.key_value_proj_dim)
-        past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
+        past_seen_tokens = cache.get_seq_length(self.layer_idx) if cache is not None else 0
         # We clone here for StaticCache, as we get the value before updating it, but use it after and it's the same ref
         past_seen_tokens = past_seen_tokens.clone() if isinstance(past_seen_tokens, torch.Tensor) else past_seen_tokens
 
@@ -394,31 +394,31 @@ class SwitchTransformersAttention(nn.Module):
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
-        if isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if isinstance(cache, EncoderDecoderCache):
+            is_updated = cache.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_values = past_key_values.cross_attention_cache
+                curr_cache = cache.cross_attention_cache
             else:
-                curr_past_key_values = past_key_values.self_attention_cache
+                curr_cache = cache.self_attention_cache
         else:
-            curr_past_key_values = past_key_values
+            curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             kv_shape = (*current_states.shape[:-1], -1, self.key_value_proj_dim)
             key_states = self.k(current_states).view(kv_shape).transpose(1, 2)
             value_states = self.v(current_states).view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         if position_bias is None:
@@ -475,7 +475,7 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -483,7 +483,7 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = hidden_states + self.dropout(attention_output)
@@ -505,7 +505,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -514,7 +514,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         layer_output = hidden_states + self.dropout(attention_output)
@@ -841,10 +841,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         decoder_inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
@@ -999,10 +995,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         output_router_logits: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,

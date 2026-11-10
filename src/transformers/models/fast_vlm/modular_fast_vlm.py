@@ -179,8 +179,6 @@ class FastVlmModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FastVlmModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
             corresponding indices will be concatenated to form the vision features. Only -1 supported.

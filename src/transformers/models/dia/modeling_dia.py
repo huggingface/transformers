@@ -584,8 +584,6 @@ class DiaDecoder(DiaPreTrainedModel):
             The original `decoder_input_ids` in 3D shape to facilitate more efficient computations.
 
             [What are input IDs?](../glossary#input-ids)
-        cache (<fill_type>):
-            <fill_docstring>
         """
 
         batch_size, seq_length = input_ids.size()[:-1]
@@ -687,8 +685,6 @@ class DiaModel(DiaPreTrainedModel):
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`.
 
             [What are position IDs?](../glossary#position-ids)
-        cache (<fill_type>):
-            <fill_docstring>
         """
 
         if input_ids is None and encoder_outputs is None:
@@ -813,8 +809,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`.
 
             [What are position IDs?](../glossary#position-ids)
-        cache (<fill_type>):
-            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size * num_codebooks,)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in
             `[0, ..., config.decoder_config.vocab_size - 1]` or -100. Tokens with indices set to `-100`

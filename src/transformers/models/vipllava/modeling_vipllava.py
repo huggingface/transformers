@@ -222,8 +222,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
@@ -330,8 +328,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.

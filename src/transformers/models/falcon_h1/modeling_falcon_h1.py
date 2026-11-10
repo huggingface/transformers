@@ -1059,10 +1059,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1148,8 +1144,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

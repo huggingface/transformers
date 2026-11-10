@@ -729,10 +729,6 @@ class Florence2Model(Florence2PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if encoder_outputs is None:
             if (input_ids is None) ^ (inputs_embeds is not None):
                 raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -851,8 +847,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

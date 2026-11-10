@@ -321,10 +321,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -415,8 +411,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
@@ -504,10 +498,6 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs,
     ) -> SequenceClassifierOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
@@ -580,8 +570,6 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         **kwargs,
     ) -> TokenClassifierOutput:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

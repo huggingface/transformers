@@ -1115,7 +1115,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "Emu3DecoderLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _skip_keys_device_placement = ["cache", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -1209,10 +1209,6 @@ class Emu3TextModel(Emu3PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1289,8 +1285,6 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python
@@ -1460,8 +1454,6 @@ class Emu3Model(Emu3PreTrainedModel):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
             [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
             [`Emu3ImageProcessor`] for processing images).
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1548,8 +1540,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
             [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
             [`Emu3ImageProcessor`] for processing images).
-        cache (<fill_type>):
-            <fill_docstring>
 
         Example:
 

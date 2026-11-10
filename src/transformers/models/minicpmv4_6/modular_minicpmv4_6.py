@@ -659,8 +659,6 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
-        cache (<fill_type>):
-            <fill_docstring>
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """

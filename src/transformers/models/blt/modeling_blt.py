@@ -146,6 +146,7 @@ class BltTransformerLayer(GradientCheckpointingLayer):
 
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -154,7 +155,7 @@ class BltTransformerLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -167,9 +168,9 @@ class BltTransformerLayer(GradientCheckpointingLayer):
                 query_sequence_length, key_sequence_length)` if default attention is used.
 
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            cache (`Cache`, *optional*): cached past key and value projection states
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -186,7 +187,7 @@ class BltTransformerLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -297,7 +298,7 @@ class BltSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
-        past_key_values=None,
+        cache=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -313,8 +314,8 @@ class BltSelfAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -360,6 +361,7 @@ class BltCrossAttention(nn.Module):
         self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.is_causal = False
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1381,8 +1383,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
-        cache (<fill_type>):
-            <fill_docstring>
 
         Example:
 

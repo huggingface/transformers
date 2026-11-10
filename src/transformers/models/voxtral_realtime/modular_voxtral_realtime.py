@@ -343,8 +343,6 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
             Cache for padding in convolutional layers to maintain state across streaming chunks.
         use_padding_cache (`bool`, *optional*):

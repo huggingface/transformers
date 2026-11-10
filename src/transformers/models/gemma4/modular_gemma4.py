@@ -1451,8 +1451,6 @@ class Gemma4TextModel(Gemma3TextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4TextModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         per_layer_inputs (`torch.Tensor`, *optional*):
             Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`

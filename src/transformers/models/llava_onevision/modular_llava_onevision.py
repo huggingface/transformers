@@ -638,8 +638,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        cache (<fill_type>):
-            <fill_docstring>
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processing image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):

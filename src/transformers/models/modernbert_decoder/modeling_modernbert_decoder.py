@@ -454,10 +454,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -552,8 +548,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`]
             comprising various elements depending on the configuration and inputs.
@@ -643,10 +637,6 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,

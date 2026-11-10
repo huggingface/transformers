@@ -273,8 +273,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def forward(self, **super_kwargs):
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         Example:
 
         ```python

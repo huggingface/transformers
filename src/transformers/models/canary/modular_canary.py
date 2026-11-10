@@ -200,8 +200,6 @@ class CanaryDecoder(CohereAsrDecoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.

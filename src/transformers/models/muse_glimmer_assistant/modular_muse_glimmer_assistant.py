@@ -232,8 +232,6 @@ class MuseGlimmerAssistantModel(Exaone4Model):
             because the Attention will first concatenate `context_hidden_states` and the hidden states derived from `noise_embeds`, so that
             k/v states do not have the same length as q_states, even before the `cache.update()` call. Thus the `position_ids` and the derived
             `position_embeddings` need to span all the additional positions.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if use_cache and cache is None:
             cache = DFlashCache(config=self.config)

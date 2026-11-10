@@ -188,8 +188,6 @@ class Lfm2VlModel(LlavaModel):
             The spatial shapes of the input images.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`, *optional*):
             The pixel attention mask of the input images.
-        cache (<fill_type>):
-            <fill_docstring>
         """
 
         if (input_ids is None) ^ (inputs_embeds is not None):

@@ -214,8 +214,6 @@ class ErnieModel(BertModel):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

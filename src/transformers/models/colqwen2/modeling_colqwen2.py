@@ -124,10 +124,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
             offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (batch_size,)

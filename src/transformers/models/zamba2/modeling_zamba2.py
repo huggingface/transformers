@@ -720,19 +720,20 @@ class Zamba2MambaMixer(nn.Module):
         init.ones_(self.dt_bias)
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -742,7 +743,7 @@ class Zamba2MambaMixer(nn.Module):
 
         A = -torch.exp(self.A_log.float())
         fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
@@ -773,7 +774,7 @@ class Zamba2MambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -782,8 +783,8 @@ class Zamba2MambaMixer(nn.Module):
                 activation=self.activation,
             )
         else:
-            if cache_params is not None:
-                hidden_states_B_C = cache_params.update_conv_state(
+            if cache is not None:
+                hidden_states_B_C = cache.update_conv_state(
                     hidden_states_B_C,
                     self.layer_idx,
                     conv_kernel_size=self.conv_kernel_size,
@@ -797,7 +798,7 @@ class Zamba2MambaMixer(nn.Module):
                 **kwargs,
             )
 
-            if cache_params is not None:
+            if cache is not None:
                 hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
 
         # 3. SSM transformation
@@ -835,7 +836,7 @@ class Zamba2MambaMixer(nn.Module):
 
         # Chunk form
         else:
-            output_final_state = cache_params is not None
+            output_final_state = cache is not None
             scan_result = mamba2_chunk_scan(
                 hidden_states.view(batch_size, seq_len, self.num_heads, self.head_dim),
                 dt,
@@ -855,7 +856,7 @@ class Zamba2MambaMixer(nn.Module):
 
             if output_final_state:
                 scan_output, final_state = scan_result
-                cache_params.update_recurrent_state(final_state, layer_idx=self.layer_idx)
+                cache.update_recurrent_state(final_state, layer_idx=self.layer_idx)
             else:
                 scan_output = scan_result
 
@@ -972,6 +973,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -979,7 +981,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         layer_idx: int | None = None,
         attention_mask: torch.Tensor | None = None,
         causal_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_ids: torch.LongTensor | None = None,
         transformer_hidden_states: torch.Tensor | None = None,
@@ -990,10 +992,10 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            cache (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
 
         residual = hidden_states
@@ -1007,7 +1009,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mamba(
             hidden_states=hidden_states,
-            cache_params=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -1162,10 +1164,6 @@ class Zamba2Model(Zamba2PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -1282,12 +1280,13 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1315,7 +1314,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1337,7 +1336,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1387,10 +1386,6 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,

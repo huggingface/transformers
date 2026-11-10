@@ -242,8 +242,6 @@ class HiggsAudioV2Model(LlamaModel):
             Indices can be obtained using [`HiggsAudioV2TokenizerModel.encode`].
         audio_input_ids_mask (`torch.BoolTensor` of shape `(batch_size, num_audio_frames)`, *optional*):
             Indicates which audio frames in `audio_input_ids` are valid.
-        cache (<fill_type>):
-            <fill_docstring>
 
         Returns:
             [`~models.modeling_outputs.BaseModelOutputWithPast`]:

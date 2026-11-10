@@ -476,7 +476,7 @@ class VoxtralRealtimePreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -547,8 +547,6 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
             Cache for padding in convolutional layers to maintain state across streaming chunks.
         use_padding_cache (`bool`, *optional*):
@@ -788,10 +786,6 @@ class VoxtralRealtimeTextModel(VoxtralRealtimeTextPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -910,8 +904,6 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
             Cache for padding in convolutional layers to maintain state across streaming chunks.
         encoder_inputs_embeds (`torch.Tensor`, *optional*):
             Optionally, instead of passing `input_features` you can choose to directly pass an embedded representation for the encoder.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         audio_outputs = self.audio_tower(
             input_features=input_features,
@@ -952,8 +944,6 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VoxtralRealtimeModelOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         encoder_cache (`Cache`, *optional*):
             Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder.
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
@@ -1058,8 +1048,6 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VoxtralRealtimeCausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         encoder_cache (`Cache`, *optional*):
             Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder that can be used to speed up sequential decoding.
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):

@@ -111,7 +111,7 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -286,7 +286,6 @@ class Nemotron3_5TranscribeAttention(nn.Module):
         self.q_norm = nn.LayerNorm(self.head_dim)
         self.k_norm = nn.LayerNorm(self.head_dim)
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -725,8 +724,6 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
-        cache (<fill_type>):
-            <fill_docstring>
         """
         if inputs_embeds is None and input_ids is not None:
             inputs_embeds = self._embed_input_ids(input_ids)
@@ -850,8 +847,6 @@ class Nemotron3_5TranscribeForConditionalGeneration(Nemotron3_5TranscribePreTrai
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
-        cache (<fill_type>):
-            <fill_docstring>
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.
 

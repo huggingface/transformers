@@ -1395,8 +1395,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        cache (<fill_type>):
-            <fill_docstring>
         image_pixel_values (`torch.Tensor`, *optional*):
             If the input contains images, these correspond to the pixel values after transformations (as returned by
             the Processor)

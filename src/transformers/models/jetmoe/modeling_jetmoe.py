@@ -603,10 +603,6 @@ class JetMoeModel(JetMoePreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -754,10 +750,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         output_router_logits: bool | None = None,
         **kwargs,
     ) -> MoeCausalLMOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )

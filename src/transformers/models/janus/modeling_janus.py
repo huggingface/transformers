@@ -93,7 +93,7 @@ class JanusBaseModelOutputWithPast(ModelOutput):
     last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
 
-        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     image_hidden_states (`tuple(torch.Tensor)`, *optional*):
         Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
@@ -103,7 +103,7 @@ class JanusBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     image_hidden_states: tuple[torch.Tensor] | None = None
@@ -121,11 +121,11 @@ class JanusCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`tuple(torch.Tensor)`, *optional*):
         Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
@@ -135,7 +135,7 @@ class JanusCausalLMOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     image_hidden_states: tuple[torch.Tensor] | None = None
@@ -1029,10 +1029,6 @@ class JanusModel(JanusPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> JanusBaseModelOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -1111,10 +1107,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> JanusCausalLMOutputWithPast:
-        r"""
-        cache (<fill_type>):
-            <fill_docstring>
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

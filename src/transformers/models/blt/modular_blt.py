@@ -1123,8 +1123,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
-        cache (<fill_type>):
-            <fill_docstring>
 
         Example:
 
