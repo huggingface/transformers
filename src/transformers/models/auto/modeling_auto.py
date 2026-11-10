@@ -2133,6 +2133,7 @@ MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
         ("qwen3_5", "JevForDecision"),
         ("qwen3_5_moe", "JevForDecision"),
         ("qwen3_5_text", "JevForDecision"),
+        ("von", "VonForDecision"),
     ]
 )
 
