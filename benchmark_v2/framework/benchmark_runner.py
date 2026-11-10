@@ -378,7 +378,8 @@ class BenchmarkRunner:
             os.makedirs(self.profile_dir, exist_ok=True)
         prof.export_chrome_trace(f"{self.profile_dir}/{config_name}.json")
 
-    @torch.inference_mode()
+    # CB warmup buffers are later mutated by a background thread outside inference mode.
+    @torch.no_grad()
     def run_benchmarks(
         self,
         model_id: str,

@@ -197,3 +197,22 @@ def test_main_runner_rejects_partial_generation_before_decoding(bad_results):
     with pytest.raises(RuntimeError):
         runner.time_generate(config, warmup=False)
     runner.tokenizer.decode.assert_not_called()
+
+
+def test_warmup_buffers_can_be_reset_by_background_thread(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    runner = runner_for_scenarios(tmp_path)
+
+    def generate(config, num_tokens_to_profile):
+        # CB warms up buffers on the caller thread, then resets them on its generation thread.
+        buffer = torch.ones(4)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(buffer.zero_).result()
+        assert not torch.is_grad_enabled()
+        return successful_result()
+
+    runner.run_benchmark = generate
+    runner.run_benchmarks(
+        "test", [BenchmarkConfig(continuous_batching=True, skip_validity_check=True)], pretty_print_summary=False
+    )
