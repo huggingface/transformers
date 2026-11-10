@@ -544,6 +544,13 @@ class ModelOutput(OrderedDict):
             super().__setitem__(name, value)
         super().__setattr__(name, value)
 
+    def __getattribute__(self, name):
+        # For BC
+        if name in ("past_key_values", "cache_params"):
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+            name = "cache"
+        return super().__getattribute__(name)
+
     def __setitem__(self, key, value):
         # For BC
         if key in ("past_key_values", "cache_params"):
