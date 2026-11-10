@@ -143,7 +143,9 @@ class BambaMixer(Mamba2Mixer):
         self.n_groups = config.mamba_n_groups
         self.head_dim = config.mamba_d_head
         self.chunk_size = config.mamba_chunk_size
-        self.norm = BambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = BambaRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,
             out_channels=self.conv_dim,
@@ -208,7 +210,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -297,7 +299,7 @@ class BambaModel(BambaPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -350,7 +352,7 @@ class BambaModel(BambaPreTrainedModel):
 
 
 class BambaForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: BambaConfig):
         super().__init__(config)
         self.z_loss_coefficient = config.z_loss_coefficient
 
@@ -365,7 +367,7 @@ class BambaForCausalLM(LlamaForCausalLM):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

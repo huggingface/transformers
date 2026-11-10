@@ -39,21 +39,21 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TimmWrapperModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor`):
+    last_hidden_state (`torch.Tensor`):
         The last hidden state of the model, output before applying the classification head.
-    pooler_output (`torch.FloatTensor`, *optional*):
+    pooler_output (`torch.Tensor`, *optional*):
         The pooled output derived from the last hidden state, if applicable.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`):
         A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned if `output_attentions=True` is set or if `config.output_attentions=True`.):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned if `output_attentions=True` is set or if `config.output_attentions=True`.):
         A tuple containing the intermediate attention weights of the model at the output of each layer.
         Note: Currently, Timm models do not support attentions output.
     """
 
-    last_hidden_state: torch.FloatTensor
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
@@ -177,7 +177,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | list[int] | None = None,
         return_dict: bool | None = None,
@@ -303,7 +303,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | list[int] | None = None,

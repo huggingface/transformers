@@ -33,3 +33,5 @@ class LevitImageProcessingTester(ImageProcessingTester):
 @require_vision
 class LevitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = LevitImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5

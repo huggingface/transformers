@@ -84,12 +84,12 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder",
+    "hf-doc-builder>=0.6.0",
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
-    "jinja2>=3.1.0",
+    "jinja2>=3.1.6",
     "kenlm",
-    "kernels>=0.17.2,<0.18",
+    "kernels>=0.18.2,<0.19",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
@@ -144,6 +144,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
+    "transformers-mic[runtime]",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -212,6 +213,7 @@ extras["testing"] = (
         "pytest-timeout",
         "pytest-env",
         "timeout-decorator",
+        "transformers-mic[runtime]",
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests
@@ -313,7 +315,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.21.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.23.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

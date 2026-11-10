@@ -167,7 +167,7 @@ class HfQuantizer(ABC):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
-        from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
+        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
         suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}

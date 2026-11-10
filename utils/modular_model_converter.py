@@ -1036,7 +1036,9 @@ def replace_class_node(
             original_base_name = original_base.value.value
             for additional_base_name in additional_bases:
                 suffix = common_partial_suffix(original_base_name, additional_base_name)
-                if len(suffix) > 0 and suffix[0].isupper():
+                # In some cases we have custom class overrides, e.g. `GenerationMixin/ProcessorMixin`
+                # Allow to override the inheritance in that case by checking `endswith`
+                if (len(suffix) > 0 and suffix[0].isupper()) or additional_base_name.endswith(original_base_name):
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)
                     # Remove from set
@@ -1493,6 +1495,39 @@ def split_all_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CS
     return all_all_per_file
 
 
+def split_deprecate_attr_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CSTNode]:
+    """Split the `__getattr__ = deprecate_attr(__name__, remove={...}, rename={...})` assignment found in the modular
+    between each corresponding files, based on the deprecated names."""
+    deprecate_attr_per_file = {}
+    call_node = node.body[0].value
+    if not m.matches(call_node, m.Call(func=m.Name("deprecate_attr"))):
+        return deprecate_attr_per_file
+
+    module_name_arg, *dict_args = call_node.args
+    dict_args_per_file = defaultdict(list)
+    for dict_arg in dict_args:
+        if not isinstance(dict_arg.value, cst.Dict):
+            continue
+
+        elements_per_file = defaultdict(list)
+        for element in dict_arg.value.elements:
+            file = find_file_type(element.key.evaluated_value, model_name)
+            elements_per_file[file].append(element)
+
+        for file, elements in elements_per_file.items():
+            # Remove trailing commas so that ruff does not force a multi-line layout
+            elements[-1] = elements[-1].with_changes(comma=cst.MaybeSentinel.DEFAULT)
+            new_dict = dict_arg.value.with_changes(elements=elements)
+            dict_args_per_file[file].append(dict_arg.with_changes(value=new_dict))
+
+    for file, file_dict_args in dict_args_per_file.items():
+        file_dict_args[-1] = file_dict_args[-1].with_changes(comma=cst.MaybeSentinel.DEFAULT)
+        new_call = call_node.with_changes(args=[module_name_arg, *file_dict_args])
+        deprecate_attr_per_file[file] = node.with_changes(body=[node.body[0].with_changes(value=new_call)])
+
+    return deprecate_attr_per_file
+
+
 class ModularFileMapper(ModuleMapper):
     """This is a Mapper to visit a modular file (like `modular_llama.py`). It visits the whole file, recording dependency,
     then visits all imported modeling files (like `modeling_llama.py`), and manages their mutual dependencies.
@@ -1508,6 +1543,7 @@ class ModularFileMapper(ModuleMapper):
         self.model_specific_modules: dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.all_all_to_add = {}
+        self.deprecate_attr_to_add = {}
 
         self.excluded_external_files = {} if package_name == "transformers" else EXCLUDED_EXTERNAL_FILES[package_name]
         # fmt: on
@@ -1598,6 +1634,8 @@ class ModularFileMapper(ModuleMapper):
                 # __all__ is treated differently and not added to general assignments
                 if assigned_variable == "__all__":
                     self.all_all_to_add = split_all_assignment(node, self.model_name)
+                elif assigned_variable == "__getattr__":
+                    self.deprecate_attr_to_add = split_deprecate_attr_assignment(node, self.model_name)
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
@@ -1774,6 +1812,12 @@ class ModularFileMapper(ModuleMapper):
             if len(modeling_bases) > 1:
                 raise ValueError(
                     f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {(*modeling_bases,)}."
+                )
+            deprecated_bases = [base for base in modeling_bases if base.startswith("Deprecated")]
+            if deprecated_bases:
+                raise ValueError(
+                    f"{class_name} inherits from {deprecated_bases[0]}, but inheriting from `Deprecated` classes is "
+                    "unsupported. Please define the class explicitly instead."
                 )
             if len(modeling_bases) == 1:
                 filename = self.model_specific_imported_objects[modeling_bases[0]]
@@ -2011,6 +2055,11 @@ def create_modules(
                 idx = current_file_indices[file_type]
                 current_file_indices[file_type] += 1
             files[file_type][dependency] = {"insert_idx": idx, "node": node}
+
+    for file_type, node in modular_mapper.deprecate_attr_to_add.items():
+        idx = current_file_indices[file_type]
+        current_file_indices[file_type] += 1
+        files[file_type]["__getattr__"] = {"insert_idx": idx, "node": node}
 
     # Add the __all__ statement to files at the end
     for file_type, node in modular_mapper.all_all_to_add.items():

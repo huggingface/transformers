@@ -39,24 +39,24 @@ logger = logging.get_logger(__name__)
 @dataclass
 class SegGptEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+    hidden_states (`tuple[torch.Tensor]`, `optional`, returned when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
         of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-    attentions (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
-        Tuple of *torch.FloatTensor* (one for each layer) of shape
+    attentions (`tuple[torch.Tensor]`, `optional`, returned when `config.output_attentions=True`):
+        Tuple of *torch.Tensor* (one for each layer) of shape
         `(batch_size, num_heads, seq_len, seq_len)`.
-    intermediate_hidden_states (`tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
-        Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+    intermediate_hidden_states (`tuple[torch.Tensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
+        Tuple of `torch.Tensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
         Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
         Additionally, each feature passes through a LayerNorm.
     """
 
-    last_hidden_state: torch.FloatTensor
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    intermediate_hidden_states: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    intermediate_hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -67,22 +67,22 @@ class SegGptEncoderOutput(ModelOutput):
 @dataclass
 class SegGptImageSegmentationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor`, *optional*, returned when `labels` is provided):
         The loss value.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         The predicted masks.
-    hidden_states (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+    hidden_states (`tuple[torch.Tensor]`, `optional`, returned when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
         of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-    attentions (`tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape
+    attentions (`tuple[torch.Tensor]`, `optional`, returned when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape
         `(batch_size, num_heads, seq_len, seq_len)`.
     """
 
-    loss: torch.FloatTensor | None = None
-    pred_masks: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    pred_masks: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 # Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGpt
@@ -537,7 +537,7 @@ class SegGptDecoderHead(nn.Module):
         self.act_fct = ACT2FN[config.hidden_act]
         self.head = nn.Conv2d(config.decoder_hidden_size, 3, kernel_size=1, bias=True)  # decoder to patch
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layernorm(hidden_states)
         hidden_states = self.act_fct(hidden_states)
@@ -559,7 +559,7 @@ class SegGptDecoder(nn.Module):
         self.decoder_hidden_size = config.decoder_hidden_size
         self.config = config
 
-    def _reshape_hidden_states(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def _reshape_hidden_states(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, patch_height, patch_width, _ = hidden_states.shape
         hidden_states = hidden_states.reshape(
             batch_size, patch_height, patch_width, self.patch_size, self.patch_size, self.decoder_hidden_size
@@ -571,7 +571,7 @@ class SegGptDecoder(nn.Module):
 
         return hidden_states
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.decoder_embed(hidden_states)
         hidden_states = self._reshape_hidden_states(hidden_states)
         hidden_states = self.decoder_pred(hidden_states)
@@ -633,17 +633,17 @@ class SegGptModel(SegGptPreTrainedModel):
         bool_masked_pos: torch.BoolTensor | None = None,
         feature_ensemble: bool | None = None,
         embedding_type: str | None = None,
-        labels: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SegGptEncoderOutput:
         r"""
-        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        prompt_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
             [`SegGptImageProcessor.__call__`] for details.
-        prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        prompt_masks (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`] for
             details.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -655,7 +655,7 @@ class SegGptModel(SegGptPreTrainedModel):
         embedding_type (`str`, *optional*):
             Embedding type. Indicates whether the prompt is a semantic or instance embedding. Can be either
             instance or semantic.
-        labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
+        labels (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
             Ground truth mask for input images.
 
         Examples:
@@ -777,28 +777,28 @@ class SegGptLoss(nn.Module):
 
     def forward(
         self,
-        prompt_masks: torch.FloatTensor,
-        pred_masks: torch.FloatTensor,
-        labels: torch.FloatTensor,
+        prompt_masks: torch.Tensor,
+        pred_masks: torch.Tensor,
+        labels: torch.Tensor,
         bool_masked_pos: torch.BoolTensor,
     ):
         """Computes the L1 loss between the predicted masks and the ground truth masks.
 
         Args:
-            prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            prompt_masks (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values from mask prompt.
 
-            pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, 2*height, width)`):
+            pred_masks (`torch.Tensor` of shape `(batch_size, num_channels, 2*height, width)`):
                 Predicted masks.
 
-            labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            labels (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Ground truth mask for input images.
 
             bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
                 Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
         Returns:
-            `torch.FloatTensor`: The mean L1 loss between the predicted masks and the ground truth masks.
+            `torch.Tensor`: The mean L1 loss between the predicted masks and the ground truth masks.
         """
         ground_truth = torch.cat((prompt_masks, labels), dim=2)
 
@@ -836,17 +836,17 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         bool_masked_pos: torch.BoolTensor | None = None,
         feature_ensemble: bool | None = None,
         embedding_type: str | None = None,
-        labels: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SegGptImageSegmentationOutput:
         r"""
-        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        prompt_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
             [`SegGptImageProcessor.__call__`] for details.
-        prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        prompt_masks (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`] for
             details.
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -858,7 +858,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         embedding_type (`str`, *optional*):
             Embedding type. Indicates whether the prompt is a semantic or instance embedding. Can be either
             instance or semantic.
-        labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
+        labels (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
             Ground truth mask for input images.
 
         Examples:

@@ -16,7 +16,9 @@ import numpy as np
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...processing_utils import ProcessingKwargs
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoMetadata
 from ..auto import AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
@@ -78,7 +80,7 @@ class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
 class Glm46VModel(Glm4vModel):
     _no_split_modules = None
 
-    def __init__(self, config):
+    def __init__(self, config: Glm46VConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -168,6 +170,8 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
 
         return np.array(uniq, dtype=int)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Glm46VProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Glm46VConfig",

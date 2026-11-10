@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torchaudio,
     slow,
     torch_device,
 )
@@ -105,6 +106,7 @@ class HiggsAudioV2TokenizerModelTester:
 
 
 @require_torch
+@require_torchaudio
 class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -163,7 +165,7 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip("HiggsAudioV2TokenizerModel cannot be tested with meta device")
     def test_can_load_with_meta_device_context_manager(self):

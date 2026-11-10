@@ -177,13 +177,49 @@ def padding_mask_function(padding_mask: torch.Tensor) -> Callable:
 
 def packed_sequence_mask_function(packed_sequence_mask: torch.Tensor) -> Callable:
     """
-    This return the mask_function function corresponding to a 2D packed sequence mask.
+    This return the mask_function corresponding to a 2D packed sequence mask, that will make sure each sequence is fully independent
+    of all others inside a batch dimension.
+    Note that it is ensured that `packed_sequence_mask.shape[1] == q_length == kv_length`, so we can never have indexing problems here.
+    If this was not the case, i.e. q_length < kv_length, we would need a more advanced way to decide if a given (`q_idx`, `kv_idx`) tuple
+    belongs to the same sequence or not.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return packed_sequence_mask[batch_idx, q_idx] == packed_sequence_mask[batch_idx, kv_idx]
 
     return inner_mask
+
+
+def remap_positions_for_packed_sequence(mask_function: Callable, position_ids: torch.Tensor) -> Callable:
+    """
+    This function remaps the monotonically increasing `q_idx` and `kv_idx` to their actual per-sequence indices when we detect
+    packed sequence format, i.e. several sequences inside the same batch dimension.
+    Note that it is ensured that `position_ids.shape[1] == q_length == kv_length` here, so we can never have indexing problems here.
+    If this was not the case, i.e. q_length < kv_length, we would need to infer the packed kv_position_ids, since the `position_ids`
+    in the argument here are the packed query positions. Then we would need to remap q_idx and kv_idx with a different tensor.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return mask_function(batch_idx, head_idx, position_ids[batch_idx, q_idx], position_ids[batch_idx, kv_idx])
+
+    return inner_mask
+
+
+def packed_sequence_compatibility_function(
+    mask_function: Callable, position_ids: torch.Tensor, packed_sequence_mask: torch.Tensor
+) -> Callable:
+    """
+    This function ensures compatibility of the current `mask_function` with packed sequence format, by making sure each sequence
+    stays fully independent of all others, and the `q_idx` and `kv_idx` positions inside each sequence are correctly remapped to
+    their actual values.
+    Note that it is ensured that `position_ids.shape[1] == packed_sequence_mask.shape[1] == q_length == kv_length`, so we can never
+    have indexing problems here.
+    """
+    # For packed sequences, we need to make sure each sequence are independent, as well as remapping the indices
+    return and_masks(
+        packed_sequence_mask_function(packed_sequence_mask),
+        remap_positions_for_packed_sequence(mask_function, position_ids),
+    )
 
 
 def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offset: int) -> Callable:
@@ -847,6 +883,23 @@ def _preprocess_mask_arguments(
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
 
+def find_first_full_attention_index(cache: Cache | None) -> int:
+    """
+    Return the index of the first full attention layer inside `cache` if any and if possible to find it.
+    Otherwise, returns 0, i.e. the first layer.
+    """
+    if isinstance(cache, Cache):
+        is_full = [
+            not is_sliding and not is_linear and not is_dummy
+            for is_sliding, is_linear, is_dummy in zip(cache.is_sliding, cache.is_linear, cache.is_dummy)
+        ]
+        layer_idx = is_full.index(True) if True in is_full else 0
+    else:
+        layer_idx = 0
+
+    return layer_idx
+
+
 def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -909,12 +962,9 @@ def create_causal_mask(
             allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(False)
-        else:
-            layer_idx = 0
+        layer_idx = find_first_full_attention_index(past_key_values)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -951,7 +1001,10 @@ def create_causal_mask(
 
     # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
-        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        # The position ids are sometimes just unsqueezed, without being expanded
+        mask_factory_function = packed_sequence_compatibility_function(
+            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
+        )
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
@@ -1016,11 +1069,8 @@ def create_bidirectional_mask(
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
     """
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
-    else:
-        layer_idx = 0
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
+    layer_idx = find_first_full_attention_index(past_key_values)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1183,7 +1233,10 @@ def create_sliding_window_causal_mask(
 
     # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
-        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        # The position ids are sometimes just unsqueezed, without being expanded
+        mask_factory_function = packed_sequence_compatibility_function(
+            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
+        )
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
@@ -1414,7 +1467,10 @@ def create_chunked_causal_mask(
 
     # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
-        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        # The position ids are sometimes just unsqueezed, without being expanded
+        mask_factory_function = packed_sequence_compatibility_function(
+            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
+        )
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)

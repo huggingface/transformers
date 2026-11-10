@@ -204,6 +204,8 @@ class TextGenerationPipeline(Pipeline):
 
         # postprocess kwargs
         postprocess_params = {}
+        if tools is not None:
+            postprocess_params["tools"] = tools
         if return_full_text is not None and return_type is None:
             if return_text is not None:
                 raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
@@ -403,7 +405,7 @@ class TextGenerationPipeline(Pipeline):
                     other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
                 if isinstance(value, tuple) and len(value[0]) == out_b:
                     value = torch.stack(value).swapaxes(0, 1)
-                    other_outputs[key] = value
+                    other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
         else:
             generated_sequence = output
             other_outputs = {}
@@ -417,7 +419,7 @@ class TextGenerationPipeline(Pipeline):
             "prompt_text": prompt_text,
         }
         if other_outputs:
-            model_outputs.update({"additional_outputs": other_outputs})
+            model_outputs.update({k: v for k, v in other_outputs.items() if isinstance(v, torch.Tensor)})
         return model_outputs
 
     def postprocess(
@@ -427,18 +429,21 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         continue_final_message=None,
         skip_special_tokens=None,
+        tools=None,
     ):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
         generated_sequence = generated_sequence.numpy().tolist()
         records = []
-        other_outputs = model_outputs.get("additional_outputs", {})
+        other_outputs = {
+            k: v for k, v in model_outputs.items() if k not in {"generated_sequence", "input_ids", "prompt_text"}
+        }
         split_keys = {}
         if other_outputs:
             for k, v in other_outputs.items():
-                if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
-                    split_keys[k] = v.numpy().tolist()
+                if isinstance(v, torch.Tensor):
+                    split_keys[k] = v[0].numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         if getattr(self.tokenizer, "response_template", None):
@@ -485,7 +490,9 @@ class TextGenerationPipeline(Pipeline):
                                     skip_special_tokens=skip_special_tokens,
                                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                                 )
-                                assistant_message = self.tokenizer.parse_response(all_text, prefix=prompt_prefix)
+                                assistant_message = self.tokenizer.parse_response(
+                                    all_text, prefix=prompt_prefix, tools=tools
+                                )
                             else:
                                 # If there's no template, then we have to assume it's all content
                                 assistant_message = {"role": "assistant", "content": all_text}
