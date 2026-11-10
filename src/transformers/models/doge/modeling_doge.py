@@ -408,6 +408,8 @@ class DogeCDMoE(nn.Module):
         bsz, seq_len, _ = hidden_states.shape
 
         # get routing logits with router gate
+        # Note: this split mixes router logits across tokens, so routing is not causal in a full forward pass
+        # (token-by-token generation is unaffected). It is kept as-is so existing checkpoints give the same outputs.
         router_logits = self.router_gate(hidden_states).view(2, bsz * seq_len, -1)
 
         # get experts with the highest routing logits
@@ -456,7 +458,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         # sequence transformation
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -543,7 +545,7 @@ class DogeModel(DogePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -647,7 +649,7 @@ def load_balancing_loss_func(
         _, position_indices = all_scores.topk(top_k, dim=-1)
         expert_indices = all_indices.gather(-1, position_indices)
 
-        routing_weights = F.softmax(all_scores, dim=-1)
+        routing_weights = torch.zeros_like(all_scores).scatter(-1, all_indices, F.softmax(all_scores, dim=-1))
 
         all_expert_indices.append(expert_indices)
         all_routing_weights.append(routing_weights)
@@ -707,7 +709,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: DogeConfig):
         super().__init__(config)
         self.model = DogeModel(config)
         self.vocab_size = config.vocab_size
@@ -727,7 +729,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

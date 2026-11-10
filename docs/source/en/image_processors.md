@@ -62,6 +62,8 @@ The [AutoClass](./model_doc/auto) API provides a convenient method to load an im
 
 Use [`~AutoImageProcessor.from_pretrained`] with the `backend` argument to select the backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Note that `backend="pil"` is only supported for older models; newer models only expose the torchvision backend.
 
+For the closest match to a model's training preprocessing, use the backend specified in its docs or training code. If the training pipeline uses PIL and the model supports both backends, pass `backend="pil"`. Switching backends can change resized pixel values, and Pillow or torchvision updates can also change them. For reproducible preprocessing, keep the backend and image-library versions fixed.
+
 > [!NOTE]
 > A small set of older models (Chameleon, Flava, Idefics3, SmolVLM) use Lanczos interpolation. Their default backend depends on your torchvision version. With torchvision > 0.27, Lanczos is supported natively and these models default to torchvision. Older torchvision version falls back to BICUBIC, so the default is PIL to preserve the original outputs. Pass `backend="torchvision"` explicitly to override the default.
 

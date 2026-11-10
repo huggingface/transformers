@@ -37,7 +37,6 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
-from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     is_kernels_available,
     maybe_import_error,
@@ -577,14 +576,12 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    output_dtype: torch.dtype | None = None,
     activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.

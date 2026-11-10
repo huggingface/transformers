@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ..auto import AutoConfig, AutoModel
 from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
@@ -71,7 +72,7 @@ class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4_5_vision"),
+        "vision_config": Exaone4_5_VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
     }
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -235,10 +236,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -333,11 +334,11 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -413,21 +414,16 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
-class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Exaone4_5_Processor(Qwen2VLProcessor):
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     @property
     def model_input_names(self):
         return super().model_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Exaone4_5_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Exaone4_5_Config",

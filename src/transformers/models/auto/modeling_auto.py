@@ -308,6 +308,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("lfm2", "Lfm2Model"),
         ("lfm2_moe", "Lfm2MoeModel"),
         ("lfm2_vl", "Lfm2VlModel"),
+        ("lfm3", "Lfm3Model"),
+        ("lfm3_vl", "Lfm3VlModel"),
+        ("lfm3_vl_vision", "Lfm3VlVisionModel"),
         ("lightglue", "LightGlueForKeypointMatching"),
         ("lighton_ocr", "LightOnOcrModel"),
         ("lilt", "LiltModel"),
@@ -356,6 +359,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralModel"),
         ("mistral3", "Mistral3Model"),
         ("mistral4", "Mistral4Model"),
+        ("mistral_large4", "MistralLarge4Model"),
+        ("mistral_large4_text", "MistralLarge4TextModel"),
         ("mixtral", "MixtralModel"),
         ("mlcd", "MLCDVisionModel"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionModel"),
@@ -393,8 +398,12 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("musicgen_melody", "MusicgenMelodyModel"),
         ("mvp", "MvpModel"),
         ("nanochat", "NanoChatModel"),
+        ("nemo_speechlm", "Nemotron3_5TranscribeModel"),
         ("nemotron", "NemotronModel"),
         ("nemotron3_5_asr", "Nemotron3_5AsrForRNNT"),
+        ("nemotron3_5_transcribe_asr_audio", "Nemotron3_5TranscribeAsrAudioModel"),
+        ("nemotron3_5_transcribe_audio", "Nemotron3_5TranscribeAudioModel"),
+        ("nemotron3_5_transcribe_word_timestamp", "Nemotron3_5TranscribeWordTimestampModel"),
         ("nemotron3_diarization", "Nemotron3DiarizationModel"),
         ("nemotron3_diarization_audio", "Nemotron3DiarizationAudioModel"),
         ("nemotron_asr_streaming", "NemotronAsrStreamingForRNNT"),
@@ -689,6 +698,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForPreTraining"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
+        ("mistral_large4", "MistralLarge4ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("mobilebert", "MobileBertForPreTraining"),
         ("moss_transcribe_diarize", "MossTranscribeDiarizeForConditionalGeneration"),
@@ -698,6 +708,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("musicflamingo", "MusicFlamingoForConditionalGeneration"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nanochat", "NanoChatForCausalLM"),
+        ("nemo_speechlm", "Nemotron3_5TranscribeForConditionalGeneration"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
@@ -838,6 +849,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("laguna", "LagunaForCausalLM"),
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
+        ("lfm3", "Lfm3ForCausalLM"),
         ("llama", "LlamaForCausalLM"),
         ("llama4", "Llama4ForCausalLM"),
         ("llama4_text", "Llama4ForCausalLM"),
@@ -1179,6 +1191,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("kosmos-2.5", "Kosmos2_5ForConditionalGeneration"),
         ("lfm2_vl", "Lfm2VlForConditionalGeneration"),
+        ("lfm3_vl", "Lfm3VlForConditionalGeneration"),
         ("lighton_ocr", "LightOnOcrForConditionalGeneration"),
         ("llama4", "Llama4ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
@@ -1191,6 +1204,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("minimax_m3_vl", "MiniMaxM3SparseForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
+        ("mistral_large4", "MistralLarge4ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("molmo2", "Molmo2ForConditionalGeneration"),
         ("muse_glimmer", "MuseGlimmerForConditionalGeneration"),
@@ -1238,6 +1252,7 @@ MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
         ("granite_speech_plus", "GraniteSpeechPlusForConditionalGeneration"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
         ("moss_transcribe_diarize", "MossTranscribeDiarizeForConditionalGeneration"),
+        ("nemo_speechlm", "Nemotron3_5TranscribeForConditionalGeneration"),
         ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
         ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
         ("qwen2_audio", "Qwen2AudioForConditionalGeneration"),
@@ -1398,6 +1413,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "MT5ForConditionalGeneration"),
         ("musicflamingo", "MusicFlamingoForConditionalGeneration"),
         ("mvp", "MvpForConditionalGeneration"),
+        ("nemo_speechlm", "Nemotron3_5TranscribeForConditionalGeneration"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("pegasus", "PegasusForConditionalGeneration"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
@@ -2110,6 +2126,18 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
+# EXPERIMENTAL: besides `jev`, the models whose checkpoints ship a JEV head next to their weights
+MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
+    [
+        ("gemma4", "JevForDecision"),
+        ("jev", "JevForDecision"),
+        ("qwen2", "JevForDecision"),
+        ("qwen3_5", "JevForDecision"),
+        ("qwen3_5_moe", "JevForDecision"),
+        ("qwen3_5_text", "JevForDecision"),
+    ]
+)
+
 MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES = OrderedDict(
     [
         ("sapiens2", "Sapiens2ForImageMatting"),
@@ -2252,6 +2280,8 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
 MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
+
+MODEL_FOR_DECISION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DECISION_MAPPING_NAMES)
 
 MODEL_FOR_IMAGE_MATTING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES)
 MODEL_FOR_NORMAL_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES)
@@ -2610,6 +2640,13 @@ AutoModelForAudioTokenization = auto_class_update(
 )
 
 
+class AutoModelForDecision(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DECISION_MAPPING
+
+
+AutoModelForDecision = auto_class_update(AutoModelForDecision, head_doc="decision")
+
+
 class AutoModelForImageMatting(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_MATTING_MAPPING
 
@@ -2647,6 +2684,7 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
+    "MODEL_FOR_DECISION_MAPPING",
     "MODEL_FOR_RNNT_MAPPING",
     "MODEL_FOR_TDT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
@@ -2701,6 +2739,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForDecision",
     "AutoModelForRNNT",
     "AutoModelForTDT",
     "AutoModelForDepthEstimation",
