@@ -1077,10 +1077,10 @@ class LogitsProcessorTest(unittest.TestCase):
         logits_uncond = torch.tensor([[[1.0, 0, 1.5]]])
         logits_cond = torch.tensor([[[1.0, 1.0, 1.0]]])
 
-        def dummy_model(input_ids, attention_mask, use_cache=True, past_key_values=None):
+        def dummy_model(input_ids, attention_mask, use_cache=True, cache=None):
             out = Namespace()
             out.logits = logits_uncond
-            out.past_key_values = None
+            out.cache = None
             return out
 
         def lsm(x):

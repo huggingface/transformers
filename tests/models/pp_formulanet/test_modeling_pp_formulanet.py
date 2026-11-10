@@ -283,9 +283,9 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="PPFormulaNet does not support continuing generation from past_key_values across generate calls."
+        reason="PPFormulaNet does not support continuing generation from cache across generate calls."
     )
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
 

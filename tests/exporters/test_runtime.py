@@ -103,15 +103,15 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
         for query_len in (1, 2, 4):
             with self.subTest(query_len=query_len):
-                past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
-                past_key_values.reset()
+                cache = copy.deepcopy(decode_inputs["cache"])
+                cache.reset()
                 positions = torch.arange(query_len)
                 with torch.no_grad():
                     out = decode(
                         input_ids=torch.randint(0, 64, (1, query_len)),
                         attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                         position_ids=positions[None],
-                        past_key_values=past_key_values,
+                        cache=cache,
                     )
                 logits = out.logits if hasattr(out, "logits") else out[0]
                 self.assertEqual(logits.shape[:2], (1, query_len))
@@ -132,8 +132,8 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             .module()
         )
 
-        past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
-        past_key_values.reset()
+        cache = copy.deepcopy(decode_inputs["cache"])
+        cache.reset()
 
         def run(input_ids, positions):
             with torch.no_grad():
@@ -141,14 +141,14 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                     input_ids=input_ids,
                     attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                     position_ids=positions[None],
-                    past_key_values=past_key_values,
+                    cache=cache,
                 )
 
-        self.assertEqual(int(past_key_values.get_seq_length()), 0)
+        self.assertEqual(int(cache.get_seq_length()), 0)
         run(torch.randint(0, 64, (1, 4)), torch.arange(4))  # prefill 4 tokens
-        self.assertEqual(int(past_key_values.get_seq_length()), 4)
+        self.assertEqual(int(cache.get_seq_length()), 4)
         run(torch.randint(0, 64, (1, 1)), torch.tensor([4]))  # one decode step
-        self.assertEqual(int(past_key_values.get_seq_length()), 5)
+        self.assertEqual(int(cache.get_seq_length()), 5)
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
@@ -204,13 +204,13 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         # shared cache buffers (device, zeroed = empty cache), passed in `feed_dict` each step so
         # `CudaSession` binds each `input.<name>` and its `output.<name>` to the same buffer → in place
         cache_tensors = [
-            t for t in torch.utils._pytree.tree_leaves(decode_inputs["past_key_values"]) if isinstance(t, torch.Tensor)
+            t for t in torch.utils._pytree.tree_leaves(decode_inputs["cache"]) if isinstance(t, torch.Tensor)
         ]
         cache = {name: torch.zeros_like(t, device=buffer_device) for name, t in zip(cache_names, cache_tensors)}
         cache_feed = {f"input.{name}": buf for name, buf in cache.items()}
 
         # eager reference: a fresh StaticCache fed the same tokens across the whole trajectory
-        eager_cache = copy.deepcopy(decode_inputs["past_key_values"])
+        eager_cache = copy.deepcopy(decode_inputs["cache"])
         eager_cache.reset()
 
         def eager(input_ids, positions):
@@ -219,7 +219,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                     input_ids=input_ids,
                     attention_mask=_causal_mask(positions, MAX_CACHE_LEN),
                     position_ids=positions[None],
-                    past_key_values=eager_cache,
+                    cache=eager_cache,
                 ).logits
 
         # prefill the whole prompt in one multi-token forward (populates the shared cache in place)

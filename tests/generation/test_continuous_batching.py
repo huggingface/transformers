@@ -1306,13 +1306,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
         model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
         # Create a static cache if compile_config is set, because regular generate requires a compileable cache
-        past_key_values = None
+        cache = None
         if model.generation_config.compile_config is not None:
             max_cache_len = num_input_tokens + max_new_tokens
-            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+            cache = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
-            **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
+            **inputs.to(torch_device), generation_config=model.generation_config, cache=cache
         )
 
         for i, user_message in enumerate(user_messages):

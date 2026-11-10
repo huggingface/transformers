@@ -425,7 +425,7 @@ class MimiIntegrationTest(unittest.TestCase):
                 decoder_outputs_first_part = model.decode(audio_codes[:, :, : audio_codes.shape[2] // 2])
                 decoder_outputs_second_part = model.decode(
                     audio_codes[:, :, audio_codes.shape[2] // 2 :],
-                    decoder_past_key_values=decoder_outputs_first_part.decoder_past_key_values,
+                    decoder_cache=decoder_outputs_first_part.decoder_cache,
                 )
 
                 audio_output_entire_context = model.decode(audio_codes)[0]
@@ -469,7 +469,7 @@ class MimiIntegrationTest(unittest.TestCase):
         audio_codes = model.encode(inputs["input_values"]).audio_codes
 
         # streaming chunk by chunk
-        encoder_past_key_values = None
+        encoder_cache = None
         padding_cache = None
         encoded_frames_list = []
 
@@ -478,10 +478,10 @@ class MimiIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(
                 input_values_chunk,
                 padding_cache=padding_cache,
-                encoder_past_key_values=encoder_past_key_values,
+                encoder_cache=encoder_cache,
                 use_streaming=True,
             )
-            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            encoder_cache = encoder_outputs.encoder_cache
             padding_cache = encoder_outputs.padding_cache
             encoded_frames_list.append(encoder_outputs.audio_codes)
 

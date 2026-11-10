@@ -277,7 +277,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         decode_model, decode_inputs = self._decode_component()
         generate_kwargs = {"input_ids": decode_inputs["input_ids"], "attention_mask": decode_inputs["attention_mask"]}
         quantizer = self._pt2e_quantizer("x86", [generate_kwargs])
-        with self.assertRaisesRegex(ValueError, "lacks the traced inputs .*past_key_values"):
+        with self.assertRaisesRegex(ValueError, "lacks the traced inputs .*cache"):
             DynamoExporter().export(decode_model, copy.deepcopy(decode_inputs), DynamoConfig(quantizer=quantizer))
 
     @pytest.mark.torch_export_test
