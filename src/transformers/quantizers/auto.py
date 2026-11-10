@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import warnings
 from collections.abc import Callable
 from itertools import chain
@@ -483,6 +484,13 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return None
 
     def update_weight_conversions(self, weight_conversions, model):
+        """
+        The model's conversions, then the formats' own converters. A model converter's `weight` also takes its scales
+        (see `PerName`), named by `rename_layer`.
+        """
+        if not self.module_quantizers:
+            self.match_modules(model)
+        self.params = set(model.state_dict())  # the modules are the format's by now
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
         # Every format's `weight` first: a `*.down_proj.weight_scale` is a `weight`'s, not MXFP4's fused `down_proj`
@@ -490,19 +498,20 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         general.sort(key=lambda converter: converter._original_target_patterns != ["weight"])
         return [*weight_conversions, *general]
 
-    def order_keys(self, state_dict):
-        "A format's params first in their module: their converter then collects the module's other serialized names"
-        params = {param for quantizer in self.all_quantizers for param in quantizer.serialized_names}
-        return sorted(state_dict, key=lambda kv: (kv[0].rpartition(".")[0], kv[0].rpartition(".")[2] not in params))
+    def rename_layer(self, key):
+        "A key the model does not have, in its layer's format names (`renamed_names`), e.g. ModelOpt's FP8 `weight_scale`"
+        names = getattr(self.get_quantizer(key), "renamed_names", None)
+        if not names or {key, f"{self.prefix}{key}"} & self.params:
+            return key
+        return re.sub(rf"(?<=\.)({'|'.join(names)})$", lambda match: names[match[1]], key)
 
-    def update_weight_transform(self, transform, model, name, renamings, converters, pattern_to_converter):
+    def update_weight_transform(self, transform, model, name):
         """
         The ops of the param `name`, once its first key matched a converter, from its layer's quantizer: a
-        deserialization (after the converter's ops), a dequantization (before them), or a quantization of a full
-        precision checkpoint. A model converter also reads the param's other serialized names, renamed to ours on its
-        layer.
+        deserialization (after the converter's ops, once per serialized name for a model converter), a dequantization
+        (before them), or a quantization of a full precision checkpoint.
         """
-        from ..core_model_loading import PerName, WeightConverter, WeightRenaming
+        from ..core_model_loading import PerName, WeightConverter
 
         quantizer = self.get_quantizer(name)
         if quantizer is None:
@@ -518,40 +527,17 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         if operation is None or not isinstance(transform, WeightConverter):
             return transform
 
-        dequantize = getattr(quantizer.quantization_config, "dequantize", False)  # before the model's ops, else after
-        sources, targets = transform._original_source_patterns, transform._original_target_patterns
-        stored = sources[0].rpartition(".")[2]  # the param: read first, e.g. `weight` of `experts.*.gate_proj.weight`
-        names = quantizer.serialized_names.get(stored)
-        if names is None:  # not one of the format's params, e.g. a merged expert bias
+        sources, ops = transform._original_source_patterns, transform.operations
+        stored = sources[0].rpartition(".")[2]  # the param, e.g. `weight` of `experts.*.gate_proj.weight`
+        if stored not in quantizer.serialized_names:  # not one of the format's params, e.g. a merged expert bias
             return transform
-
-        # The checkpoint's names for ours, on this layer only: e.g. ModelOpt's `weight_scale` is also NVFP4's own
-        for ours, aliases in quantizer.renamed_names.items():
-            renaming = WeightRenaming(rf"(?<![^.])(?:{'|'.join(aliases)})$", ours)  # a whole name: not `hc_scale`
-            renaming.scope_prefix = name.rpartition(".")[0].removeprefix(self.prefix)
-            renaming.base_model_prefix = model.base_model_prefix
-            renamings.append(renaming)
-
-        if sources == names:  # a format's general converter: it reads all its names
-            if dequantize:
-                transform.operations = [operation(quantizer), *transform.operations]
-            else:
-                transform.operations = [*transform.operations, operation(quantizer)]
-            return transform
-
-        # A model converter, e.g. merging the experts: it also reads the param's other names (its scales)
-        # Route the scales' keys (`experts.*.gate_proj.weight_scale_inv`) to this target, like the weights': collected
-        # together. Once, and before the format's general converters, which would take them (`weight_scale_inv` -> `weight`)
-        scales = [source.removesuffix(stored) + n for source in sources for n in names[1:]]
-        if scales and scales[0] not in pattern_to_converter:
-            router = transform.copy(scales, targets, operations=transform.operations)
-            converters.insert(0, router)
-            pattern_to_converter.update(dict.fromkeys(router.source_patterns, router))
-
-        # Dequantized, the scales fold into the weight first. Else the ops run per name, e.g. `gate_up_proj_scale_inv`
-        per_name = PerName(transform.operations, quantizer.serialized_names, stored)
-        ops = [operation(quantizer), *transform.operations] if dequantize else [per_name, operation(quantizer)]
-        return transform.copy([*sources, *scales], targets, operations=ops)
+        if getattr(quantizer.quantization_config, "dequantize", False):  # the scales fold into the weight first
+            transform.operations = [operation(quantizer), *ops]
+        elif sources[0].endswith(f".{stored}"):  # a model converter: its ops run once per serialized name
+            transform.operations = [PerName(ops, quantizer.serialized_names, stored), operation(quantizer)]
+        else:  # a format's general converter: its names load together
+            transform.operations = [*ops, operation(quantizer)]
+        return transform
 
     def param_element_size(self, model, param_name, param):
         if not self.module_quantizers:

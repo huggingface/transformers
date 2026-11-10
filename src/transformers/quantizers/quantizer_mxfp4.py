@@ -273,7 +273,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         ]
 
     # DeepSeek-V4 saves the expert scales under `.scale`
-    renamed_names = {"weight_scale_inv": ["scale"]}
+    renamed_names = {"scale": "weight_scale_inv"}
 
     def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize

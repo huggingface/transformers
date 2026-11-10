@@ -123,6 +123,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         "down_proj": ["down_proj", "down_proj_scale", "down_proj_scale_2", "down_proj_input_scale"],
     }
 
+    # An expert's `input_scale`, named after its weight: the experts' converter takes it along
+    renamed_names = {"input_scale": "weight_input_scale"}
+
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
 

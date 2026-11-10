@@ -399,8 +399,8 @@ class HfQuantizer(ABC):
             return []
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
 
-    # Our names, and what checkpoints store them as, renamed on the layers of the format, e.g. ModelOpt's `weight_scale`
-    renamed_names: dict[str, list[str]] = {}
+    # A checkpoint's names for ours, renamed on the layers of the format when the model lacks them, see `rename_layer`
+    renamed_names: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):
         "A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"
