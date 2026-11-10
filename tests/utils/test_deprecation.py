@@ -20,7 +20,7 @@ from parameterized import parameterized
 
 from transformers import __version__, is_torch_available
 from transformers.testing_utils import require_torch_accelerator, torch_device
-from transformers.utils.deprecation import deprecate_kwarg
+from transformers.utils.deprecation import deprecate_attr, deprecate_kwarg
 
 
 if is_torch_available():
@@ -195,3 +195,36 @@ class DeprecationDecoratorTester(unittest.TestCase):
         # Check that we can correctly call the compiled function with both names, without raising errors
         out = compiled_function(new_factor=2, deprecated_factor=10)
         self.assertEqual(out.item(), 2)
+
+
+class DeprecateAttrTester(unittest.TestCase):
+    def test_remove(self):
+        class Replacement:
+            pass
+
+        module_getattr = deprecate_attr("dummy_module", remove={"OldName": (Replacement, INFINITE_VERSION)})
+        with self.assertWarns(FutureWarning) as context:
+            self.assertIs(module_getattr("OldName"), Replacement)
+        self.assertNotIn("instead", str(context.warning))
+
+    def test_rename(self):
+        class Replacement:
+            pass
+
+        module_getattr = deprecate_attr("dummy_module", rename={"OldName": (Replacement, INFINITE_VERSION)})
+        with self.assertWarns(FutureWarning) as context:
+            self.assertIs(module_getattr("OldName"), Replacement)
+        self.assertIn("Use `Replacement` instead.", str(context.warning))
+
+    def test_unknown_name(self):
+        module_getattr = deprecate_attr("dummy_module", rename={"OldName": (int, INFINITE_VERSION)})
+        with self.assertRaises(AttributeError):
+            module_getattr("UnknownName")
+
+    def test_name_in_remove_and_rename(self):
+        with self.assertRaises(ValueError):
+            deprecate_attr(
+                "dummy_module",
+                remove={"OldName": (int, INFINITE_VERSION)},
+                rename={"OldName": (int, INFINITE_VERSION)},
+            )

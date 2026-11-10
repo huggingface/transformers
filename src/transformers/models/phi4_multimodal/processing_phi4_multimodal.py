@@ -18,17 +18,10 @@ Processor class for Phi4Multimodal
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "device": "cpu",
-        },
-    }
 
 
 @auto_docstring
@@ -58,5 +51,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_img_tokens"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Phi4MultimodalProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Phi4MultimodalProcessor"]

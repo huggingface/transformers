@@ -17,17 +17,7 @@ Processor class for TVP.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class TvpProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "truncation": True,
-            "padding": "max_length",
-            "pad_to_max_length": True,
-            "return_token_type_ids": False,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
@@ -59,5 +49,7 @@ class TvpProcessor(ProcessorMixin):
 
         return start, end
 
+
+__getattr__ = deprecate_attr(__name__, rename={"TvpProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["TvpProcessor"]

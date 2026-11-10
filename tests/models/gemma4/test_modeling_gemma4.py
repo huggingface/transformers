@@ -260,12 +260,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("attention_context_left", 5)
         kwargs.setdefault("attention_context_right", 0)
         kwargs.setdefault("output_proj_dims", 32)
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
         # comparison logic (inf - inf = NaN). Disable for testing.
         kwargs.setdefault("use_clipped_linears", False)
         super().__init__(parent, **kwargs)
         self.head_dim = self.hidden_size // self.num_attention_heads
-        self.per_layer_config = {
+        self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
             if layer_type == "full_attention"
@@ -418,8 +419,9 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("top_k_experts", 2)
         kwargs.setdefault("use_bidirectional_attention", "vision")
         kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         super().__init__(parent, **kwargs)
-        self.per_layer_config = {
+        self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
             if layer_type == "full_attention"
@@ -1117,10 +1119,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_COMPLETIONS = Expectations(
             {
-                ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'"
-                    if attn_implementation == "sdpa"
-                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
+                ("cuda", (8, 6)): [
+                    "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [
