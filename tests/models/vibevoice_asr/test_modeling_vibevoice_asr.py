@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import set_seed
 
+from ...alm_tester import ALMModelTest
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -49,6 +50,8 @@ class VibeVoiceAsrModelTester:
     """
     Builds a tiny VibeVoice ASR config and synthetic inputs for testing.
     """
+
+    conditional_generation_class = VibeVoiceAsrForConditionalGeneration if is_torch_available() else None
 
     def __init__(
         self,
@@ -153,6 +156,8 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass
+
+    test_save_pretrained_matches_hub_checkpoint = ALMModelTest.test_save_pretrained_matches_hub_checkpoint
 
     @unittest.skip(reason="VibeVoiceAsr has no separate base model without a head.")
     def test_model_base_model_prefix(self):
