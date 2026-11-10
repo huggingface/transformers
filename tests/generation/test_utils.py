@@ -2402,9 +2402,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 logits_padded = res_padded.logits[dummy_attention_mask.bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                # acceptable numerical instability
+                # acceptable numerical instability, scaled to the logits: with the norm eps set to 1.0 for less flaky
+                # tests, the logits of the tiny test models are often smaller than `tol` itself
                 tol = torch.finfo(torch.bfloat16).eps
-                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+                atol = tol * logits_padded.abs().max().item()
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=atol)
 
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager")
