@@ -83,8 +83,9 @@ class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
 
 
-# The Python types that can be written directly as a JSON value, and so can appear in a schema "enum"
-JSON_SCALAR_TYPES = (int, float, str, bool, type(None))
+# The Python types that can be written directly as a JSON value, and so can appear in a schema "enum",
+# mapped to the name of their JSON schema type
+JSON_SCALAR_TYPES = {int: "integer", float: "number", str: "string", bool: "boolean", type(None): "null"}
 
 
 def _get_json_schema_type(param_type: type) -> dict[str, str] | None:
@@ -108,13 +109,18 @@ def _get_json_schema_type(param_type: type) -> dict[str, str] | None:
     return type_mapping.get(param_type)
 
 
+def _enum_values_to_json_schema(values: list) -> dict:
+    # The "type" lists each JSON type that appears in the values once, in the order they first appear
+    value_types = list(dict.fromkeys(JSON_SCALAR_TYPES[type(value)] for value in values))
+    return {"type": value_types[0] if len(value_types) == 1 else value_types, "enum": values}
+
+
 def _parse_type_hint(hint: str) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
     if origin is None and isinstance(hint, type) and issubclass(hint, Enum):
-        # An Enum class becomes a JSON "enum" of its member values, since those are what the model has to generate.
-        # The values have the same restrictions as Literal args, so we just treat it as a Literal
+        # An Enum class becomes a JSON "enum" of its member values, since those are what the model has to generate
         values = [member.value for member in hint]
         if not values:
             raise TypeHintParsingException(
@@ -126,7 +132,7 @@ def _parse_type_hint(hint: str) -> dict:
                 f"Values: {values}\n"
                 "Enum member values must be int, float, str, bool or None to be converted to a JSON schema."
             )
-        return _parse_type_hint(Literal[tuple(values)])
+        return _enum_values_to_json_schema(values)
 
     elif origin is None:
         # Any other bare type is either one of the basic types we know how to map, or a custom class.
@@ -162,17 +168,9 @@ def _parse_type_hint(hint: str) -> dict:
         return return_dict
 
     elif origin is Literal and len(args) > 0:
-        args_types = []
-        for arg in args:
-            if type(arg) not in JSON_SCALAR_TYPES:
-                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
-            arg_type = _get_json_schema_type(type(arg)).get("type")
-            if arg_type is not None and arg_type not in args_types:
-                args_types.append(arg_type)
-        return {
-            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
-            "enum": list(args),
-        }
+        if any(type(arg) not in JSON_SCALAR_TYPES for arg in args):
+            raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+        return _enum_values_to_json_schema(list(args))
 
     elif origin is list:
         if not args:
