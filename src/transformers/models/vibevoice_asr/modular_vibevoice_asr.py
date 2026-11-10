@@ -283,9 +283,9 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         if padding_mask is not None:
             hop_length = self.config.acoustic_tokenizer_encoder_config.hop_length
             num_audio_tokens = (padding_mask.sum(dim=-1) + hop_length - 1) // hop_length
-            padding_mask = torch.arange(num_audio_tokens.max(), device=combined_features.device) < num_audio_tokens[
-                :, None
-            ].to(combined_features.device)
+            positions = torch.arange(combined_features.shape[1], device=num_audio_tokens.device)
+            # Keeps a mask already on the CPU from syncing with the accelerator
+            padding_mask = (positions < num_audio_tokens[:, None]).cpu()
             combined_features = combined_features[padding_mask]
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)

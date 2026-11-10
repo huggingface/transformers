@@ -93,6 +93,8 @@ class Siglip2TextConfig(SiglipTextConfig):
 @strict
 class Siglip2VisionConfig(SiglipVisionConfig):
     r"""
+    vision_use_head ('bool', *optional*):
+        Whether to use a vision head module or not.
     num_patches (`int`, *optional*, defaults to 256):
         The number of patches in the image with the size of (`patch_size`, `patch_size`).
         The image is resized to fill maximum of this number of patches, and to preserve
