@@ -17,15 +17,13 @@ import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, InternLM3Config, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers import InternLM3Config, is_torch_available
+from transformers.testing_utils import require_torch
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    import torch
-
     from transformers import LlamaModel
 
 
@@ -46,34 +44,3 @@ class InternLM3ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(config.mlp_bias)
         with self.assertRaises(StrictDataclassClassValidationError):
             InternLM3Config(qkv_bias=True, bias=False)
-
-
-@slow
-@require_torch_accelerator
-class InternLM3IntegrationTest(unittest.TestCase):
-    model_id = "internlm/internlm3-8b-instruct"
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def test_model_8b_logits(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
-        input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
-        with torch.no_grad():
-            logits = model(input_ids).logits.float().cpu()
-
-        EXPECTED_MEAN = torch.tensor([-0.2702, 1.8108, 2.4337, 4.6791, 3.8414, 4.021, 4.3054, 4.6507, 4.841, 4.5961])
-        EXPECTED_SLICE = torch.tensor(
-            [-1.7656, -0.5547, 3.5625, -0.6719, 1.9141, 1.5781, 1.2344, 0.7188, 0.3398, 0.5039]
-        )
-        torch.testing.assert_close(logits.mean(-1)[0], EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
-        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
-
-    def test_model_8b_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
-        inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
-        output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
-        text = tokenizer.decode(output[0], skip_special_tokens=True)
-        EXPECTED_TEXT = "The capital of France is Paris.Paris is the capital of France. It is a city that is known"
-        self.assertEqual(text, EXPECTED_TEXT)

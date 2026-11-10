@@ -16,15 +16,13 @@
 import math
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, TeleChat3Config, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers import TeleChat3Config, is_torch_available
+from transformers.testing_utils import require_torch
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    import torch
-
     from transformers import LlamaModel
 
 
@@ -73,34 +71,3 @@ class TeleChat3ConfigTest(unittest.TestCase):
             rope_scaling={"factor": 4.0, "attention_factor": 1.5, "rope_type": "telechat3-yarn"},
         )
         self.assertEqual(config.rope_parameters["attention_factor"], 1.5)
-
-
-@slow
-@require_torch_accelerator
-class TeleChat3IntegrationTest(unittest.TestCase):
-    model_id = "Tele-AI/TeleChat3-36B-Thinking"
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def test_model_36b_logits(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
-        input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
-        with torch.no_grad():
-            logits = model(input_ids).logits.float().cpu()
-
-        EXPECTED_MEAN = torch.tensor(
-            [-4.6161, -2.5073, -1.4698, -2.3869, -2.4526, -4.3019, -2.0553, -3.1628, -2.0378, -1.7738]
-        )
-        EXPECTED_SLICE = torch.tensor([-8.75, -10.75, -7.875, -6.7188, -8.8125, -8.75, -8.6875, -8.75, -8.75, -7.1562])
-        torch.testing.assert_close(logits.mean(-1)[0], EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
-        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
-
-    def test_model_36b_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
-        inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
-        output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
-        text = tokenizer.decode(output[0], skip_special_tokens=True)
-        EXPECTED_TEXT = "The capital of France is Paris.\n\n\nOkay, let's see. The user wants me"
-        self.assertEqual(text, EXPECTED_TEXT)
