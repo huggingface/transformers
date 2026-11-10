@@ -38,7 +38,6 @@ def JevForDecisionLoss(
     indices = (starts[:, None] + positions).clamp_max(logits.numel() - 1)
     scores = logits[indices].masked_fill(~option_mask, -torch.inf)
     # Exclude the maximum before log1p to retain tiny losses and target gradients at confident predictions.
-    # https://jonbarron.info/softmaxfix/ (softmax collapse; the separate soft-target fix needs teacher logits).
     maximum = scores.argmax(-1, keepdim=True)
     is_maximum = positions[None] == maximum
     shifted = torch.where(is_maximum, 0.0, scores - scores.gather(-1, maximum))
