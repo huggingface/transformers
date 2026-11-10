@@ -728,12 +728,6 @@ class Inkling2UnweightedRMSNorm(nn.Module):
 
 
 class Inkling2BlockAttentionResidual(nn.Module):
-    """
-    Block attention residual: attention over depth that mixes the completed blocks and the current partial block into
-    the input of the next sublayer. At each position, every learned pseudo-query attends to that position's block
-    states. Keys and values are the RMS-normalized block states.
-    """
-
     def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
         self.query = nn.Parameter(
@@ -741,15 +735,8 @@ class Inkling2BlockAttentionResidual(nn.Module):
         )
         self.norm = Inkling2UnweightedRMSNorm()
 
-    def forward(
-        self, block_states: list[torch.Tensor], partial_block_states: torch.Tensor
-    ) -> tuple[torch.Tensor, ...]:
-        """
-        Returns one `(batch_size, seq_len, hidden_size)` float32 tensor per query: the block states (completed blocks
-        and the partial block) weighted by that query's attention. Full-attention layers use three queries for separate
-        query, key and value inputs, all other sublayers use one.
-        """
-        stacked_states = torch.stack([*block_states, partial_block_states], dim=-2).float()
+    def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
         stacked_states = self.norm(stacked_states)
 
         hidden_size = stacked_states.shape[-1]
@@ -783,7 +770,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        block_states: list[torch.Tensor],
+        block_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
@@ -807,7 +794,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         if self.is_block_boundary:
-            block_states = [*block_states, block_residual]
+            block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
         else:
             hidden_states = block_residual.float() + hidden_states.float()
 
@@ -845,7 +832,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        block_states: list[torch.Tensor],
+        block_states: torch.Tensor,
         position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
@@ -877,7 +864,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         if self.is_block_boundary:
-            block_states = [*block_states, block_residual]
+            block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
         else:
             hidden_states = block_residual.float() + hidden_states.float()
 
@@ -1313,11 +1300,11 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        block_states = []
+        block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
         for decoder_layer in self.layers:
             new_hidden_states = decoder_layer(
                 hidden_states,
-                block_states=block_states,
+                block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
@@ -1325,7 +1312,7 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
                 **kwargs,
             )
             if decoder_layer.is_block_boundary:
-                block_states = [*block_states, hidden_states]
+                block_states = torch.cat([block_states, hidden_states.unsqueeze(-2)], dim=-2)
             hidden_states = new_hidden_states
 
         hidden_states = self.final_input(block_states, hidden_states)[0]
