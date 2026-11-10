@@ -442,39 +442,41 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def match_modules(self, model):
         """
-        The quantizer of every module: the plan pattern its name (or one of its params') matches, exact names before
-        globs, `"*"` for the rest. A checkpoint's plan names checkpoint modules: renamed like their keys first.
+        The quantizer of every module: the first plan pattern its name, a parent's or a param's (with or without the
+        model's prefix) matches, exact names before globs before `"*"`. A checkpoint's plan names checkpoint modules:
+        renamed like their keys (per-expert names onto the fused module), its exact names kept for `rename_layer`.
         """
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightConverter, build_glob_alternation, rename_source_key
 
-        checkpoint = {}  # the checkpoint's module names too, for `rename_layer`
-        if self.checkpoint_names:  # e.g. per-expert names collapse on the fused module
+        checkpoint = {}
+        if self.checkpoint_names:
             transforms = get_model_conversion_mapping(model)
             converters = [t for t in transforms if isinstance(t, WeightConverter)]
-            renamings = [t for t in transforms if not isinstance(t, WeightConverter)]
-            renamed = {}
-            for pattern, quantizer in self.quantizers.items():
-                renamed.setdefault(
-                    rename_source_key(f"{pattern}.weight", renamings, converters)[0][: -len(".weight")], quantizer
-                )
+            renamings = [t for t in transforms if t not in converters]
             checkpoint = {pattern: quantizer for pattern, quantizer in self.quantizers.items() if "*" not in pattern}
+            renamed = {
+                rename_source_key(f"{pattern}.weight", renamings, converters)[0].removesuffix(".weight"): quantizer
+                for pattern, quantizer in self.quantizers.items()
+            }
             self.set_quantizers(renamed)
             self.checkpoint_names = False
             model.config.quantization_config = self.quantization_config
-        tiers = [[p for p in self.quantizers if "*" not in p], [p for p in self.quantizers if "*" in p and p != "*"]]
-        tiers = [build_glob_alternation(tier)[:2] for tier in tiers if tier]
+        patterns = sorted(self.quantizers, key=lambda pattern: ("*" in pattern) + (pattern == "*"))
+        alternation, group_to_pattern, _ = build_glob_alternation(patterns)
         self.prefix, self.module_quantizers = f"{model.base_model_prefix}.", {}
+
         for name, module in model.named_modules():
-            keys = [name, *(f"{name}.{param}" for param in chain(module._parameters, module._buffers))]
-            matches = (
-                patterns[m.lastgroup]
-                for alternation, patterns in tiers
-                for key in keys
-                if (m := alternation.search(key))
-            )
-            self.module_quantizers[name] = self.quantizers.get(next(matches, "*"))
-        self.module_quantizers |= checkpoint
+            # A pattern names the module, a parent (exact names hold their submodules), or one of its params (merged
+            # experts: `layers.0.mlp.experts.gate_up_proj`)
+            parts = name.split(".")
+            keys = [".".join(parts[: i + 1]) for i in range(len(parts))]
+            keys += [f"{name}.{param}" for param in chain(module._parameters, module._buffers)]
+            keys += [key.removeprefix(self.prefix) for key in keys]
+            matched = [group_to_pattern[match.lastgroup] for key in keys if (match := alternation.fullmatch(key))]
+            first = min(matched, key=patterns.index, default=None)
+            self.module_quantizers[name] = self.quantizers.get(first)
+        self.module_quantizers.update(checkpoint)
 
     def get_quantizer(self, name):
         "The quantizer of the module owning `name` (a param, or a module), as matched by `match_modules`"
@@ -498,28 +500,18 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.params = set(model.state_dict())  # the modules are the format's by now
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
-        # Dequantized, a weight's scales fold into it before the model's ops: its converter reads them along
-        names = {}  # of every dequantized format: a layer's checkpoint only has its own
-        for quantizer in self.all_quantizers:
-            if getattr(quantizer.quantization_config, "dequantize", False):
-                for param, serialized in quantizer.serialized_names.items():
-                    names[param] = [
-                        *dict.fromkeys(
-                            [*names.get(param, []), *map(quantizer.renamed_names.get, serialized, serialized)]
-                        )
-                    ]
-        weight_conversions = [
-            converter.copy(
-                [source.removesuffix(param) + name for source in sources for name in names[param]],
-                converter._original_target_patterns,
-                operations=converter.operations,
-            )
-            if isinstance(converter, WeightConverter)
-            and (param := (sources := converter._original_source_patterns)[0].rpartition(".")[2]) in names
-            and all(source.endswith(f".{param}") for source in sources)
-            else converter
-            for converter in weight_conversions
-        ]
+        # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
+        # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
+        dequantized = [q for q in self.all_quantizers if getattr(q.quantization_config, "dequantize", False)]
+        names = [name for q in dequantized for name in (*q.serialized_names["weight"], *q.renamed_names.values())]
+        for i, converter in enumerate(weight_conversions):
+            sources = converter._original_source_patterns
+            if names and isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
+                sources = [source.removesuffix("weight") + name for source in sources for name in names]
+                weight_conversions[i] = converter.copy(
+                    sources, converter._original_target_patterns, operations=converter.operations
+                )
+
         # Every format's `weight` first: a `*.down_proj.weight_scale` is a `weight`'s, not MXFP4's fused `down_proj`
         general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
         general.sort(key=lambda converter: converter._original_target_patterns != ["weight"])
