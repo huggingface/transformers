@@ -13,6 +13,7 @@
 # limitations under the License.
 """Granite Switch: a Granite model that carries its LoRA adapters and routes them per token."""
 
+from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -22,8 +23,15 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
 from ..granitemoehybrid.configuration_granitemoehybrid import GraniteMoeHybridConfig
+from ..granitemoehybrid.modeling_granitemoehybrid import (
+    GraniteMoeHybridMLP,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+    rotate_half,
+)
 from .switch_codes import KerdockDGCodeGenerator, recover_count_from_signal
 
 
@@ -856,6 +864,253 @@ class GraniteSwitchMergedLoRALinear(nn.Module):
         if is_batched:
             return output_flat.view(batch_size, seq_len, self.total_out_features)
         return output_flat
+
+
+class GraniteSwitchMLP(GraniteMoeHybridMLP):
+    """
+    The dense shared-expert MLP, with switched LoRA on whichever of its two projections
+    `lora_target_modules` names. The fused `input_linear` takes the merged variant because gate and
+    up are one matmul; `output_linear` is a plain projection and takes the single variant.
+
+    `forward` takes `adapter_indices` explicitly rather than reading it off the submodules, so the
+    per-token routing travels with the activations and the module stays stateless.
+    """
+
+    def __init__(self, config: GraniteSwitchConfig):
+        super().__init__(config)
+
+        # CODEPATH: both branches fire on an adapter-bearing checkpoint whose base has a dense
+        # shared MLP; a `num_adapters == 0` skin has an empty `lora_target_modules` and keeps the
+        # plain projections the parent built.
+        self.has_input_lora = "shared_input_linear" in config.lora_target_modules
+        if self.has_input_lora:
+            self.input_linear = GraniteSwitchMergedLoRALinear(
+                self.input_size,
+                output_slices=(self.hidden_size, self.hidden_size),
+                num_adapters=config.num_adapters,
+                max_lora_rank=config.max_lora_rank,
+                bias=False,
+            )
+
+        self.has_output_lora = "shared_output_linear" in config.lora_target_modules
+        if self.has_output_lora:
+            self.output_linear = GraniteSwitchLoRALinear(
+                self.hidden_size,
+                self.input_size,
+                config.num_adapters,
+                config.max_lora_rank,
+                bias=False,
+            )
+
+    def forward(self, hidden_states: torch.Tensor, adapter_indices: torch.Tensor | None = None) -> torch.Tensor:
+        if self.has_input_lora:
+            hidden_states = self.input_linear(hidden_states, adapter_indices)
+        else:
+            hidden_states = self.input_linear(hidden_states)
+        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        if self.has_output_lora:
+            hidden_states = self.output_linear(hidden_states, adapter_indices)
+        else:
+            hidden_states = self.output_linear(hidden_states)
+        return hidden_states
+
+
+class GraniteSwitchAttention(nn.Module):
+    """
+    Granite attention whose projections carry the embedded LoRA adapters, selected per token.
+
+    Q, K and V come out of one fused `qkv_proj` so the on-disk layout matches the vLLM backend's;
+    the adapter weights stay per slice inside [`GraniteSwitchMergedLoRALinear`]. `forward` is the
+    ordinary single-stream path, and `forward_dual_stream` is the Shadow Residual adapter stream,
+    which computes only Q and attends against the base stream's K/V.
+    """
+
+    def __init__(self, config: GraniteSwitchConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.attention_dropout = config.attention_dropout
+        self.scaling = config.attention_multiplier
+        self.is_causal = True
+
+        self.q_size = config.num_attention_heads * self.head_dim
+        self.kv_size = config.num_key_value_heads * self.head_dim
+
+        # CODEPATH: the LoRA branches fire on any adapter-bearing checkpoint; the plain-`nn.Linear`
+        # branches are for a `num_adapters == 0` skin, whose `lora_target_modules` is empty.
+        self.has_qkv_lora = "qkv_proj" in config.lora_target_modules
+        if self.has_qkv_lora:
+            self.qkv_proj = GraniteSwitchMergedLoRALinear(
+                self.hidden_size,
+                output_slices=(self.q_size, self.kv_size, self.kv_size),
+                num_adapters=config.num_adapters,
+                max_lora_rank=config.max_lora_rank,
+                bias=config.attention_bias,
+            )
+        else:
+            self.qkv_proj = nn.Linear(self.hidden_size, self.q_size + 2 * self.kv_size, bias=config.attention_bias)
+
+        self.has_o_lora = "o_proj" in config.lora_target_modules
+        if self.has_o_lora:
+            self.o_proj = GraniteSwitchLoRALinear(
+                self.q_size,
+                self.hidden_size,
+                config.num_adapters,
+                config.max_lora_rank,
+                bias=config.attention_bias,
+            )
+        else:
+            self.o_proj = nn.Linear(self.q_size, self.hidden_size, bias=config.attention_bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        adapter_indices: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        return_kv: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, ...]:
+        r"""
+        adapter_indices (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Per-token adapter selection from the switch. `0` routes a token through the base model.
+        return_kv (`bool`, *optional*, defaults to `False`):
+            Whether to also return the post-cache `(key_states, value_states)`, so a Shadow
+            Residual adapter stream can attend against the base stream's keys and values.
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        if self.has_qkv_lora:
+            qkv = self.qkv_proj(hidden_states, adapter_indices)
+        else:
+            qkv = self.qkv_proj(hidden_states)
+        query_states, key_states, value_states = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
+
+        # CODEPATH: `None` on a base that opts out of RoPE with `position_embedding_type=None`.
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        if self.has_o_lora:
+            attn_output = self.o_proj(attn_output, adapter_indices)
+        else:
+            attn_output = self.o_proj(attn_output)
+
+        if return_kv:
+            return attn_output, attn_weights, (key_states, value_states)
+        return attn_output, attn_weights
+
+    def forward_dual_stream(
+        self,
+        hidden_states: torch.Tensor,
+        base_kv: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        adapter_indices: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        r"""
+        The Shadow Residual adapter stream: project Q from the adapter stream's hidden states and
+        attend against `base_kv`, the base stream's keys and values.
+
+        Args:
+            base_kv (`tuple[torch.Tensor, torch.Tensor]`):
+                The base stream's post-cache `(key_states, value_states)`, each of shape
+                `(batch_size, num_key_value_heads, kv_length, head_dim)`. Being post-cache, they
+                already span the full sequence, which is what makes autoregressive decode work.
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        if self.has_qkv_lora:
+            qkv = self.qkv_proj(hidden_states, adapter_indices)
+        else:
+            qkv = self.qkv_proj(hidden_states)
+        query_states = qkv[..., : self.q_size].view(hidden_shape).transpose(1, 2)
+
+        # Q only: the base stream already applied RoPE to the keys this stream is about to read.
+        # CODEPATH: `None` on a base that opts out of RoPE with `position_embedding_type=None`.
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_states = apply_rotary_pos_emb_q_only(query_states, cos, sin)
+
+        key_states, value_states = base_kv
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, _ = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        if self.has_o_lora:
+            return self.o_proj(attn_output, adapter_indices)
+        return self.o_proj(attn_output)
+
+
+def apply_rotary_pos_emb_q_only(
+    q: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    unsqueeze_dim: int = 1,
+) -> torch.Tensor:
+    """
+    Rotary position embedding applied to the queries alone, for the Shadow Residual adapter stream:
+    the keys it attends against come from the base stream, which has already rotated them.
+
+    Args:
+        q (`torch.Tensor`):
+            The query tensor, of shape `(batch_size, num_heads, sequence_length, head_dim)`.
+        cos (`torch.Tensor`):
+            The cosine part of the rotary embedding.
+        sin (`torch.Tensor`):
+            The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The dimension along which to unsqueeze `cos` and `sin` so they broadcast over `q`'s
+            head dimension.
+
+    Returns:
+        `torch.Tensor`: The rotated query tensor.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    return (q * cos) + (rotate_half(q) * sin)
 
 
 __all__ = ["GraniteSwitchConfig"]
