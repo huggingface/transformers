@@ -18,12 +18,13 @@ Model loading, caching, and lifecycle management.
 import asyncio
 import gc
 import json
+import os
 import threading
+import time
 from collections.abc import Callable
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from huggingface_hub import scan_cache_dir
+from huggingface_hub import CacheNotFound, scan_cache_dir
 from tqdm import tqdm
 
 import transformers
@@ -65,6 +66,7 @@ class TimedModel:
         self.processor = processor
         self.timeout_seconds = timeout_seconds
         self._on_unload = on_unload
+        self.created = int(time.time())
         self._timer = threading.Timer(self.timeout_seconds, self._timeout_reached)
         self._timer.start()
 
@@ -473,16 +475,48 @@ class ModelManager:
             raise ValueError(f"Unknown modality for: {model_classname}")
 
     @staticmethod
-    @lru_cache
-    def get_gen_models(cache_dir: str | None = None) -> list[dict]:
-        """List generative models (LLMs and VLMs) available in the HuggingFace cache.
+    def _format_loaded_model_id(key: str) -> tuple[str, str]:
+        """Convert a ``loaded_models`` cache key into ``(model_id, owned_by)`` for ``/v1/models``.
+
+        ``loaded_models`` keys have the form ``'repo@revision'`` or ``'repo@revision:file.gguf'``.
+        Stripping the default ``@main`` revision aligns IDs with ``scan_cache_dir`` and ``force_model``.
+        """
+        repo_and_revision, gguf_file = split_model_id(key)
+        if "@" in repo_and_revision:
+            repo_id, revision = repo_and_revision.rsplit("@", 1)
+            base_id = repo_id if revision == "main" else f"{repo_id}@{revision}"
+        else:
+            repo_id = repo_and_revision
+            base_id = repo_id
+
+        model_id = f"{base_id}:{gguf_file}" if gguf_file is not None else base_id
+
+        is_local_path = (
+            os.path.exists(base_id)
+            or os.path.exists(repo_id)
+            or os.path.isabs(repo_id)
+            or repo_id.startswith(("./", "../", ".\\", "..\\", "~"))
+            or "\\" in repo_id
+            or repo_id.count("/") > 1
+        )
+        if is_local_path:
+            owned_by = "local"
+        elif "/" in repo_id:
+            owned_by = repo_id.split("/")[0]
+        else:
+            owned_by = ""
+
+        return model_id, owned_by
+
+    def get_gen_models(self, cache_dir: str | None = None) -> list[dict]:
+        """List generative models (LLMs and VLMs) in the HuggingFace cache and currently loaded models.
 
         Args:
             cache_dir (`str`, *optional*): Path to the HuggingFace cache directory.
-                Defaults to the standard cache location.
+                Defaults to ``$HF_HUB_CACHE`` or the standard cache location.
 
         Returns:
-            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc.
+            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, ``created``, and ``owned_by``.
         """
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
@@ -491,49 +525,79 @@ class ModelManager:
         )
 
         generative_models = []
-        logger.warning("Scanning the cache directory for LLMs and VLMs.")
+        logger.warning_once("Scanning the cache directory for LLMs and VLMs.")
 
-        for repo in tqdm(scan_cache_dir(cache_dir).repos):
-            if repo.repo_type != "model":
+        if cache_dir is None:
+            cache_dir = os.environ.get("HF_HUB_CACHE") or None
+
+        try:
+            cached_repos = scan_cache_dir(cache_dir).repos
+        except CacheNotFound:
+            cached_repos = None
+
+        if cached_repos:
+            for repo in tqdm(cached_repos):
+                if repo.repo_type != "model":
+                    continue
+
+                for ref, revision_info in repo.refs.items():
+                    author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
+
+                    # One quantization per file, each a separate model, so list files rather than the repo.
+                    gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
+                    for gguf_file in gguf_files:
+                        generative_models.append(
+                            {
+                                "owned_by": author,
+                                "id": f"{repo.repo_id}:{gguf_file}",
+                                "object": "model",
+                                "created": int(repo.last_modified),
+                            }
+                        )
+
+                    config_path = next(
+                        (f.file_path for f in revision_info.files if f.file_name == "config.json"), None
+                    )
+                    if not config_path:
+                        continue
+
+                    config = json.loads(config_path.open().read())
+                    if not isinstance(config, dict):
+                        continue
+
+                    architectures = config.get("architectures") or []
+                    llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
+                    vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
+                    multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
+
+                    if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
+                        repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
+                        generative_models.append(
+                            {
+                                "owned_by": author,
+                                "id": repo_handle,
+                                "object": "model",
+                                "created": int(repo.last_modified),
+                            }
+                        )
+
+        seen_ids = {model["id"] for model in generative_models}
+        for key, timed in list(self.loaded_models.items()):
+            if getattr(timed, "model", None) is None:
                 continue
-
-            for ref, revision_info in repo.refs.items():
-                author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
-
-                # One quantization per file, each a separate model, so list files rather than the repo.
-                gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
-                for gguf_file in gguf_files:
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": f"{repo.repo_id}:{gguf_file}",
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
-
-                config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
-                if not config_path:
-                    continue
-
-                config = json.loads(config_path.open().read())
-                if not isinstance(config, dict):
-                    continue
-
-                architectures = config.get("architectures") or []
-                llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
-                vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
-                multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
-
-                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": repo_handle,
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
+            model_id, owned_by = self._format_loaded_model_id(key)
+            if model_id in seen_ids:
+                continue
+            seen_ids.add(model_id)
+            raw_created = getattr(timed, "created", None)
+            created = int(raw_created) if isinstance(raw_created, (int, float)) else int(time.time())
+            generative_models.append(
+                {
+                    "owned_by": owned_by,
+                    "id": model_id,
+                    "object": "model",
+                    "created": created,
+                }
+            )
 
         return generative_models
