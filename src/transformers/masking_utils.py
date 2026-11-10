@@ -17,7 +17,6 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
-from torch.fx.experimental.symbolic_shapes import has_free_unbacked_symbols
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
@@ -242,11 +241,7 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     local_padding_mask = attention_mask
     if attention_mask is not None:
         # Pad it if necessary
-        padding_length = kv_length + kv_offset - attention_mask.shape[-1]
-        # An unbacked width (only under export, e.g. opt) can't be compared, so clamp it with `sym_max` instead
-        if is_torchdynamo_exporting() and has_free_unbacked_symbols(padding_length):
-            local_padding_mask = torch.nn.functional.pad(attention_mask, (0, torch.sym_max(padding_length, 0)))
-        elif padding_length > 0:
+        if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
     return local_padding_mask
 
