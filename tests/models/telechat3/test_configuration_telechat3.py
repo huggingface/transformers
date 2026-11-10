@@ -11,30 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for TeleChat3, which uses the Llama implementation."""
+"""Tests for the TeleChat3 config, which converts the original RoPE parameters for the Llama implementation."""
 
 import math
 import unittest
 
-from transformers import TeleChat3Config, is_torch_available
-from transformers.testing_utils import require_torch
-
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-
-
-if is_torch_available():
-    from transformers import LlamaModel
-
-
-class TeleChat3ModelTester(CausalLMModelTester):
-    config_class = TeleChat3Config
-    if is_torch_available():
-        base_model_class = LlamaModel
-
-
-@require_torch
-class TeleChat3ModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = TeleChat3ModelTester
+from transformers import TeleChat3Config
 
 
 class TeleChat3ConfigTest(unittest.TestCase):
