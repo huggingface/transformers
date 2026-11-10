@@ -52,12 +52,12 @@ from ..inkling.modeling_inkling import (
     InklingModelOutputWithPast,
     InklingPreTrainedModel,
     InklingRelativeLogits,
-    InklingRMSNorm,
     InklingShortConvolution,
     InklingTextModel,
 )
 from ..llama.modeling_llama import repeat_kv
 from ..llava.modeling_llava import LlavaMultiModalProjector
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
@@ -251,7 +251,8 @@ class Inkling2CausalLMOutputWithPast(InklingCausalLMOutputWithPast):
     pass
 
 
-class Inkling2RMSNorm(InklingRMSNorm):
+# Different rounding order than original Inkling
+class Inkling2RMSNorm(Olmo2RMSNorm):
     pass
 
 
@@ -487,7 +488,7 @@ class Inkling2SlidingAttention(InklingAttention):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = attn_output * torch.sigmoid(gate)
+        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -602,7 +603,7 @@ class Inkling2FullAttention(InklingAttention):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = attn_output * torch.sigmoid(gate)
+        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
