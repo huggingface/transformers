@@ -121,6 +121,7 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
+        input_ndim = hidden_states.ndim
 
         if not self.norm_before_gate and gate is not None:
             hidden_states = hidden_states * F.silu(gate.to(torch.float32))
@@ -140,7 +141,7 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
         hidden_states = self.weight.view(self.n_groups, int(dim // self.n_groups)) * hidden_states
         hidden_states = hidden_states.view(batch_size, seq_len, dim)
 
-        if seq_len == 1:
+        if input_ndim == 2:
             hidden_states = hidden_states.squeeze(1)
 
         if self.norm_before_gate and gate is not None:
