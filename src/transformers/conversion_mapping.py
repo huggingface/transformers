@@ -325,7 +325,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"attn_sconv\.", target_patterns=r"post_attention_convolution."),
             WeightRenaming(source_patterns=r"mlp_sconv\.", target_patterns=r"post_mlp_convolution."),
-            WeightRenaming(source_patterns=r"(convolution|sconv)\.weight", target_patterns=r"\1.conv1d.weight"),
+            WeightRenaming(source_patterns=r"(convolution|sconv)\.weight(?!_)", target_patterns=r"\1.conv1d.weight"),
             WeightRenaming(source_patterns=r"(convolution|sconv)\.static_w", target_patterns=r"\1.static_weight"),
             WeightRenaming(
                 source_patterns=r"(convolution|sconv)\.weight_proj", target_patterns=r"\1.weight_proj.weight"
