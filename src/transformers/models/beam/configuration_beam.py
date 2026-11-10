@@ -102,6 +102,8 @@ class BeamConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
+    # the attention scaling computed from the positions of the whole sequence is applied to each rank's queries
+    base_model_cp_plan = None
     head_dim: int = 128
 
     layer_types: list[str] | None = None
