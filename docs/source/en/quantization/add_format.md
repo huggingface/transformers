@@ -16,26 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Add a quantized format
 
-This page adds a format the way a new vLLM / ModelOpt dtype usually arrives: as a checkpoint whose layers store
-low-precision weights plus scales. It goes step by step, from the cheapest case to the most work, and stops as soon as
-the format runs. Most formats stop at step 1 or 2.
+A new quantization format has 3 things to define: what it stores, which module to replace, how to read and write the weights.
+The following should guide you in your addition.
 
-Loading is already generic: renaming checkpoint names, merging per-expert tensors into fused experts, tensor parallel
-sharding, per-layer mixing of formats and `dequantize=True` all come from the quantization plan. A format only says
-what it stores, which module computes with it, and how its tensors become that module's.
+## 1. It is `FineGrainedFP8` with other settings
 
-```text
-step  the format is…                                   you add                                     ~lines
-1     FP8 with another block size / scale format        a config (or a plan entry)                  0-5
-2     another dtype the FP8 kernels can run             a module subclass                           10
-3     a new kernel                                      a hub kernel entry + module + ops           100
-4     stored per layer in a mixed checkpoint            a `MODELOPT_ALGOS` / `PLAN_CONVERTERS` entry  1-5
-```
-
-## 1. It is FineGrainedFP8 with other settings
-
-Take MXFP8: e4m3 weights, one ue8m0 scale per 32 values of a row. That is FP8 with a `(1, 32)` block and power-of-two
-scales, which [`FineGrainedFP8Config`] already describes:
+Take MXFP8: e4m3 weights, one ue8m0 scale per 32 values of a row. That is FP8 with a `(1, 32)` block and power-of-two scales, which [`FineGrainedFP8Config`] already describes:
 
 ```py
 from transformers import AutoModelForCausalLM, FineGrainedFP8Config
@@ -44,12 +30,8 @@ config = FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")
 model = AutoModelForCausalLM.from_pretrained("my-org/model-mxfp8", quantization_config=config)
 ```
 
-Why it works: `FP8Linear` / `FP8Experts` allocate their scales from `block_size` and `scale_fmt`, and the
-`kernels-community/finegrained-fp8` kernels take any block size. If the checkpoint names its scales differently (e.g.
-`weight_scale` instead of `weight_scale_inv`), that is a rename, not a new format: add it to the quantizer's
-`renamed_names`, which renames only on the layers of that quantizer.
-
-Check the kernel actually supports your block size on the GPUs you target before stopping here.
+Check the kernel actually supports your block size on the GPUs you target, and most probably you just have to add a setting to `FineGrainedFP8`.
+We'll add anything that reflects a "setting" and not an actual difference in computation.
 
 ## 2. It is another dtype the FP8 kernels can run
 
@@ -129,20 +111,15 @@ class NVFP4HfQuantizer(HfQuantizer):
     def get_load_operations(self):
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
-    def get_quantize_ops(self):  # quantize a full-precision checkpoint on load (optional)
+    def get_quantize_ops(self):  # quantize a full-precision checkpoint on load (optional + will be moved to load ops soon
         return NVFP4Quantize(self)
 ```
 
-Why ops and not a post-processing pass: the plan gives each param its ops while loading, so every format runs the same
-way under tensor parallelism (each op sees this rank's shard) and nothing walks the model after loading.
-
-For MoE checkpoints, the experts module is the main extra work: a grouped forward over the kernel (see
-`NVFP4Experts.grouped_forward`), with a per-expert eager loop as the fallback.
+For MoE checkpoints, the experts module replacement requires a bit more work as you need a grouped forward over the kernel (see `NVFP4Experts.grouped_forward`), with a per-expert eager loop as the fallback.
 
 ## 4. It is stored per layer in a mixed checkpoint
 
-ModelOpt checkpoints name their format with a `quant_algo`: one for the whole model, or with `MIXED_PRECISION`, one per
-layer under `quantized_layers`. Both load as a plan once the name maps to a config in `quantizers/auto.py`:
+For example ModelOpt checkpoints name their format with a `quant_algo`: one for the whole model, or with `MIXED_PRECISION`, one per layer under `quantized_layers`. Both are converted to `transformers'` format using the following:
 
 ```py
 MODELOPT_ALGOS = {
@@ -154,17 +131,10 @@ MODELOPT_ALGOS = {
 ```
 
 A new `quant_algo` that is another FP8 variant (step 1) is one line here, e.g.
-`"MXFP8": lambda: FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")`. Layers ModelOpt leaves out keep the
-base `quant_method` if it is one (e.g. DeepSeek-V4's block `fp8`), else stay unquantized like its `ignore`d ones.
+`"MXFP8": lambda: FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")`. 
 
-A checkpoint format that describes its layers some other way gets a function in `PLAN_CONVERTERS` that turns its
-`quantization_config` into a plan, `{module pattern: config}` (see `fp4_experts_plan` for DeepSeek-V4's
-`expert_dtype`). The plan then matches every module once, renames the patterns to the model's names, and loads each
-layer through its own quantizer.
+Layers ModelOpt leaves out keep the base `quant_method` if it is one (e.g. DeepSeek-V4's block `fp8`), else stay unquantized like its `ignore`d ones.
 
-## Checklist
+Any checkpoint format that describes its layers some other way will get a function in `PLAN_CONVERTERS` that turns its `quantization_config` into a plan, `{module pattern: config}` (see `fp4_experts_plan` for DeepSeek-V4's `expert_dtype`). 
 
-- `tests/quantization/<format>/`: load a tiny checkpoint quantized and with `dequantize=True`, and compare the weights to
-  an independent dequantization.
-- A kernel test on the GPUs you target, with more than one token per expert (grouped kernels often fail only then).
-- A page in `docs/source/en/quantization/` and an entry in `_toctree.yml`.
+This enforces the creation of a `dtype_plan`, which ensures parallelism, load operations and etc are respected.

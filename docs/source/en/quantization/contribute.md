@@ -60,7 +60,7 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 4. Write the `validate_environment` and `update_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. Refer to other quantizers for an example of it is implemented.
 
-5. Write the `quantized_module(name, module)` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. `quantized_module` returns the quantized module replacing `module` (e.g. an [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)), or `None` to keep it. It is called on meta, only for the modules your quantizer owns (see [Several methods in one model](./overview#several-methods-in-one-model)) and that `modules_to_not_convert` doesn't skip, so don't walk the model yourself. Use `_process_model_before_weight_loading` for anything else to set up before loading, such as computing `modules_to_not_convert`.
+5. Write the `quantized_module(name, module)` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. `quantized_module` returns the quantized module replacing `module` (e.g. an [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)), or `None` to keep it. It is called on meta, only for the modules your quantizer owns (see [Several methods in one model](./overview#several-methods-in-one-model)) and that `modules_to_not_convert` doesn't skip, so don't walk the model yourself. 
 
 Define the quantized modules and load operations in a new file in [transformers/src/integrations/](https://github.com/huggingface/transformers/tree/main/src/transformers/integrations).
 
