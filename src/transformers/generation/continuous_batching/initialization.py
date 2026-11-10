@@ -332,7 +332,7 @@ def update_cb_config_after_cache_creation(
     cb_config.max_batch_tokens = max_batch_tokens
     # Cap the number of max requests per batch to the max tokens per batch
     cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
-    # TODO: add a cap based on the cache size to the number of concurrent requests if it's usefull
+    # TODO: add a cap based on the cache size to the number of concurrent requests if it's useful
 
 
 def check_cb_values_bounds(cb_config: ContinuousBatchingConfig) -> None:
