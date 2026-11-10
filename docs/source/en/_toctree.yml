@@ -231,6 +231,8 @@
       title: DDP
     - local: fsdp
       title: FSDP2
+    - local: sequence_parallelism
+      title: Sequence parallelism
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
