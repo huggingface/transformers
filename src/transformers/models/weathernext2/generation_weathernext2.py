@@ -44,9 +44,7 @@ class WeatherNext2GenerationConfig(GenerationConfig):
     def __init__(self, num_steps: int | None = None, num_members: int | None = None, **kwargs):
         self.num_steps = num_steps
         self.num_members = num_members
-        self._commit_hash = kwargs.pop("_commit_hash", None)
         self._from_model_config = kwargs.pop("_from_model_config", None)
-        self.transformers_version = kwargs.pop("transformers_version", None)
         for key, value in kwargs.items():
             setattr(self, key, value)
         self.validate()
