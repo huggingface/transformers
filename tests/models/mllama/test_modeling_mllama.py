@@ -625,6 +625,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 (None, None): torch.tensor([6.9375, 4.4688, 3.4531, 0.1973, 1.9766], dtype=actual_logits.dtype),
+                ("cuda", (8, 6)): torch.tensor(
+                    [6.78125, 4.4375, 3.34375, 0.1298828125, 1.9140625], dtype=actual_logits.dtype
+                ),
             }
         )
 
