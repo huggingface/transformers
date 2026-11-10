@@ -220,7 +220,3 @@ class MiniMaxVL01ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertIsInstance(processor, MiniMaxVL01Processor)
         self.assertEqual(processor.image_token, "<image>")
-
-
-if __name__ == "__main__":
-    unittest.main()

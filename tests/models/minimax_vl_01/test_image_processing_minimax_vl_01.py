@@ -185,7 +185,3 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
                 self.assertEqual(tuple(wide_resized.shape[-2:]), (1, 4))
                 self.assertEqual(tuple(tall_resized.shape[-2:]), (4, 1))
-
-
-if __name__ == "__main__":
-    unittest.main()

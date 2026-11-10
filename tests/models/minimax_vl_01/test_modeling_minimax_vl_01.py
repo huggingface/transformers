@@ -464,7 +464,3 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             generated_ids[:, inputs["input_ids"].shape[1] :].tolist(),
             [[60, 87, 65, 68, 53], [21, 82, 7, 60, 87]],
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
