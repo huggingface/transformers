@@ -671,4 +671,191 @@ class MultiSwitch(nn.Module):
         return adapter_indices, modified_input_ids
 
 
+def _add_switched_lora(
+    hidden_states: torch.Tensor,
+    output: torch.Tensor,
+    adapter_indices: torch.Tensor,
+    lora_A: torch.Tensor,
+    lora_B: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Add each token's LoRA contribution into `output`, in place, on flattened `[num_tokens, dim]`
+    inputs. One matmul pair runs per adapter actually present in the batch rather than one per
+    token, which is what keeps a mixed batch to a handful of dense matmuls.
+
+    `lora_B` is pre-scaled by `alpha / rank` when the checkpoint is built, so there is no runtime
+    scaling here, and no `alpha` to carry on the module.
+    """
+    for adapter_idx in adapter_indices[adapter_indices > 0].unique():
+        token_indices = torch.where(adapter_indices == adapter_idx)[0]
+        # Adapter `i` lives at stacked slice `i - 1`; slot 0 of `adapter_indices` is the base model.
+        lora_a = lora_A[adapter_idx - 1, 0]
+        lora_b = lora_B[adapter_idx - 1, 0]
+        hidden_states_adapter = hidden_states[token_indices]
+        lora_output = torch.matmul(torch.matmul(hidden_states_adapter, lora_a.t()), lora_b.t())
+        output[token_indices] += lora_output
+    return output
+
+
+class GraniteSwitchLoRALinear(nn.Module):
+    r"""
+    A linear layer that carries every embedded LoRA adapter and picks one per token.
+
+    The adapter weights are stacked into two parameters indexed by adapter, so a single module
+    serves the whole adapter population and the switch's per-token `adapter_indices` chooses which
+    slice each token is routed through. Index `0` means "base model, no LoRA"; adapter `i` reads
+    stacked slice `i - 1`. Adapters whose rank is below `max_lora_rank` are zero-padded on disk, so
+    the padded columns contribute nothing.
+
+    Args:
+        in_features (`int`):
+            Input dimension.
+        out_features (`int`):
+            Output dimension.
+        num_adapters (`int`):
+            Number of embedded LoRA adapters.
+        max_lora_rank (`int`):
+            Rank every stacked adapter is padded to. This is the on-disk padding contract, not the
+            largest rank actually in use.
+        bias (`bool`, *optional*, defaults to `True`):
+            Whether the base linear layer carries a bias.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        num_adapters: int,
+        max_lora_rank: int,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.num_adapters = num_adapters
+        self.max_lora_rank = max_lora_rank
+
+        self.base_layer = nn.Linear(in_features, out_features, bias=bias)
+
+        # The singleton second dimension is part of the on-disk layout, shared with the vLLM
+        # backend's stacked LoRA tensors, and is what keeps one checkpoint loadable by both.
+        self.lora_A = nn.Parameter(torch.empty(num_adapters, 1, max_lora_rank, in_features))
+        self.lora_B = nn.Parameter(torch.empty(num_adapters, 1, out_features, max_lora_rank))
+
+    @property
+    def weight(self):
+        return self.base_layer.weight
+
+    @property
+    def bias(self):
+        return self.base_layer.bias
+
+    def forward(self, x: torch.Tensor, adapter_indices: torch.Tensor | None = None) -> torch.Tensor:
+        output = self.base_layer(x)
+
+        # Nothing to add when every token is on the base model, which is the whole sequence for an
+        # unadapted request and the prefix of an adapted one before its first control token.
+        if adapter_indices is None or not torch.any(adapter_indices > 0):
+            return output
+
+        is_batched = x.dim() == 3
+        if is_batched:
+            batch_size, seq_len, _ = x.shape
+            x_flat = x.reshape(-1, self.in_features)
+            adapter_indices_flat = adapter_indices.reshape(-1)
+            output_flat = output.view(-1, self.out_features)
+        else:
+            x_flat = x
+            adapter_indices_flat = adapter_indices
+            output_flat = output
+
+        output_flat = _add_switched_lora(x_flat, output_flat, adapter_indices_flat, self.lora_A, self.lora_B)
+
+        if is_batched:
+            return output_flat.view(batch_size, seq_len, self.out_features)
+        return output_flat
+
+
+class GraniteSwitchMergedLoRALinear(nn.Module):
+    r"""
+    The fused-projection counterpart of [`GraniteSwitchLoRALinear`], used for QKV and gate/up.
+
+    The base projection is a single fused `nn.Linear`, but LoRA stays per slice: fusing the adapter
+    weights too would force every slice to share one rank. The slices are held in `ParameterList`s
+    so the parameter names are `lora_A_slices.0`, `lora_A_slices.1`, ... — the same names the vLLM
+    backend writes, which is what makes one checkpoint serve both.
+
+    Args:
+        in_features (`int`):
+            Input dimension, shared by all slices.
+        output_slices (`tuple[int, ...]`):
+            Output dimension of each fused slice, e.g. `(q_size, kv_size, kv_size)` for QKV or
+            `(intermediate_size, intermediate_size)` for gate/up.
+        num_adapters (`int`):
+            Number of embedded LoRA adapters.
+        max_lora_rank (`int`):
+            Rank every stacked adapter is padded to.
+        bias (`bool`, *optional*, defaults to `False`):
+            Whether the fused base linear layer carries a bias.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        output_slices: tuple[int, ...],
+        num_adapters: int,
+        max_lora_rank: int,
+        bias: bool = False,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.output_slices = output_slices
+        self.total_out_features = sum(output_slices)
+        self.num_slices = len(output_slices)
+        self.num_adapters = num_adapters
+        self.max_lora_rank = max_lora_rank
+
+        self.base_layer = nn.Linear(in_features, self.total_out_features, bias=bias)
+
+        self.lora_A_slices = nn.ParameterList(
+            [nn.Parameter(torch.empty(num_adapters, 1, max_lora_rank, in_features)) for _ in output_slices]
+        )
+        self.lora_B_slices = nn.ParameterList(
+            [nn.Parameter(torch.empty(num_adapters, 1, output_size, max_lora_rank)) for output_size in output_slices]
+        )
+
+    def forward(self, x: torch.Tensor, adapter_indices: torch.Tensor | None = None) -> torch.Tensor:
+        output = self.base_layer(x)
+
+        if adapter_indices is None or not torch.any(adapter_indices > 0):
+            return output
+
+        is_batched = x.dim() == 3
+        if is_batched:
+            batch_size, seq_len, _ = x.shape
+            x_flat = x.reshape(-1, self.in_features)
+            adapter_indices_flat = adapter_indices.reshape(-1)
+            output_flat = output.view(-1, self.total_out_features)
+        else:
+            x_flat = x
+            adapter_indices_flat = adapter_indices
+            output_flat = output
+
+        offset = 0
+        for slice_idx, output_size in enumerate(self.output_slices):
+            # The slice is a view, so writing through it updates the fused output in place.
+            _add_switched_lora(
+                x_flat,
+                output_flat[:, offset : offset + output_size],
+                adapter_indices_flat,
+                self.lora_A_slices[slice_idx],
+                self.lora_B_slices[slice_idx],
+            )
+            offset += output_size
+
+        if is_batched:
+            return output_flat.view(batch_size, seq_len, self.total_out_features)
+        return output_flat
+
+
 __all__ = ["GraniteSwitchConfig"]
