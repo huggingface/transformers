@@ -92,7 +92,7 @@ TensorFlowからPyTorchにチェックポイントを変換するには、`from_
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 
-## Push a model during traning
+## Push a model during training
 
 <Youtube id="Z1-XMy-GNLQ"/>
 
