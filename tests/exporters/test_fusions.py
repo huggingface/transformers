@@ -21,6 +21,8 @@ the backend runs, and that none of the ops they replace are left.
 import collections
 import unittest
 
+import numpy as np
+import torch
 from parameterized import parameterized
 
 from tests.models.gemma3.test_modeling_gemma3 import Gemma3TextModelTester
@@ -44,12 +46,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import is_torch_available
-
-
-if is_torch_available():
-    import numpy as np
-    import torch
 
 
 # model type: the tester of its tiny model
