@@ -214,6 +214,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
+        "T5Gemma2ForConditionalGeneration": (
+            "The runtime builds the cross-attention cache from the decoder config, whose sliding layers it copies; "
+            "the model's own `_prepare_cache_for_generation` makes it full, so the traced cache doesn't match."
+        ),
         # The multi-token decode graph also serves the prefill step, and these can't take that call.
         "MambaForCausalLM": (
             "The selective scan runs as a python loop under export, which unrolls to the traced length, so the "
