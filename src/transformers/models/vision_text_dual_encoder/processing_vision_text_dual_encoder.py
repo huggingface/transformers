@@ -17,10 +17,7 @@ Processor class for VisionTextDualEncoder
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class VisionTextDualEncoderProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
@@ -28,5 +25,7 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VisionTextDualEncoderProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VisionTextDualEncoderProcessor"]

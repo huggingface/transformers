@@ -28,7 +28,7 @@ from transformers import (
     FlavaMultimodalConfig,
     FlavaTextConfig,
 )
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -1116,9 +1116,23 @@ class FlavaModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, return_dict=True)
 
         # verify the embeddings
-        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.4686, places=4)
+        expected_image_embeddings_sum = Expectations(
+            {
+                (None, None): -1352.4686,
+                ("cuda", (8, 6)): -1352.4685,
+            }
+        ).get_expectation()
+        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), expected_image_embeddings_sum, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4229, places=4)
+        expected_multimodal_embeddings_sum = Expectations(
+            {
+                (None, None): -4030.4229,
+                ("cuda", (8, 6)): -4030.4231,
+            }
+        ).get_expectation()
+        self.assertAlmostEqual(
+            outputs.multimodal_embeddings.sum().item(), expected_multimodal_embeddings_sum, places=4
+        )
 
 
 @require_vision

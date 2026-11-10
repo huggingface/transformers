@@ -435,7 +435,12 @@ class JanusIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at'  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                ("cuda", (8, 6)): "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees in",
+            }
+        ).get_expectation()  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
@@ -474,6 +479,10 @@ class JanusIntegrationTest(unittest.TestCase):
                 (None, None): [
                     "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
                     "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars, and it appears to depict a constellation. The",
+                ],
+                ("cuda", (8, 6)): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars. There are several bright stars visible, and a",
                 ],
             }
         )

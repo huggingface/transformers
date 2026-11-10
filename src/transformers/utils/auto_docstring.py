@@ -438,6 +438,28 @@ class ProcessorArgs:
         "shape": None,
     }
 
+    return_mm_token_type_ids = {
+        "description": """
+    Whether to return multimodal token type ids indicating multimodal placeholder token positions.
+    """,
+        "type": "bool",
+    }
+
+    return_text_replacement_offsets = {
+        "description": """
+    Whether to return character offsets for each multimodal placeholder and its replacement.
+    """,
+        "type": "bool",
+    }
+
+    load_audio_from_video = {
+        "description": """
+    Whether to load the audio track of the input videos. The audio tokens are interleaved with the video tokens
+    if the model supports it.
+    """,
+        "type": "bool",
+    }
+
     # Standard tokenizer arguments
     add_special_tokens = {
         "description": """
@@ -2209,6 +2231,27 @@ class ModelArgs:
     Whether to interpolate the pre-trained position encodings.
     """,
         "shape": None,
+    }
+
+    marks = {
+        "description": """
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
+    """,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in `Question.questions_types`.
+    """,
+        "shape": "of shape `(num_questions,)`",
     }
 
     position_embeddings = {

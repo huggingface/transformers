@@ -31,7 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -214,8 +214,8 @@ class T5GemmaModelTester:
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+            decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         lm_labels = None
         if self.use_labels:
@@ -1406,7 +1406,7 @@ class T5GemmaEncoderOnlyModelTester:
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
 

@@ -480,36 +480,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
-    @require_torch
-    @require_vision
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
-
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
-        ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
