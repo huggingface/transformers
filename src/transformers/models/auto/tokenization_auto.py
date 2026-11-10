@@ -397,6 +397,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "hyperclovax_vlm",
     "hyperclovax_vision_v2",
     "internlm2",
+    "internlm3",
     "jamba",
     "llava",
     "llava_next",

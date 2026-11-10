@@ -243,6 +243,7 @@ if TYPE_CHECKING:
     from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internlm3 import *
     from .internvl import *
     from .jais2 import *
     from .jamba import *
