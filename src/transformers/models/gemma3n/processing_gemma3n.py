@@ -17,20 +17,15 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False, "return_mm_token_type_ids": True},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Gemma3nProcessor(ProcessorMixin):
-    valid_processor_kwargs = Gemma3nProcessorKwargs
+    return_mm_token_type_ids = True
 
     def __init__(
         self,
@@ -76,7 +71,7 @@ class Gemma3nProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
-        **kwargs: Unpack[Gemma3nProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         model_inputs = super().__call__(images=images, text=text, audio=audio, **kwargs)
         if "mm_token_type_ids" in model_inputs:
@@ -98,8 +93,37 @@ class Gemma3nProcessor(ProcessorMixin):
                 text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
 
         if audio is not None and not text:
-            text = " ".join([self.audio_token] * len(audio))
+            text = [self.audio_token] * len(audio)
         return images, text, None, audio
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            audio_lengths (`list[int]`, *optional*):
+                The lengths of audio inputs in number of samples.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            # NOTE: No image cropping supported yet
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if audio_lengths is not None:
+            # NOTE: Every audio is padded or truncated to a fixed window
+            vision_data["num_audio_tokens"] = [self.audio_seq_length] * len(audio_lengths)
+
+        return MultiModalData(**vision_data)
 
     @property
     def model_input_names(self):
@@ -109,5 +133,7 @@ class Gemma3nProcessor(ProcessorMixin):
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma3nProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma3nProcessor"]
