@@ -1708,12 +1708,7 @@ def convert_and_load_state_dict_in_model(
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
-        # A quantized layer's checkpoint names for ours, e.g. ModelOpt's FP8 `weight_scale`
-        key = (
-            hf_quantizer.rename_layer(original_key)
-            if hf_quantizer is not None and hf_quantizer.pre_quantized
-            else original_key
-        )
+        key = original_key if hf_quantizer is None else hf_quantizer.rename_layer(original_key)
         renamed_key, source_pattern = rename_source_key(
             key, renamings, converters, base_model_prefix, meta_model_state_dict
         )

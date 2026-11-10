@@ -528,7 +528,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def rename_layer(self, key):
         "A key the model does not have, in its layer's format names (`renamed_names`), e.g. ModelOpt's FP8 `weight_scale`"
         names = getattr(self.get_quantizer(key), "renamed_names", None)
-        if not names or {key, f"{self.prefix}{key}"} & self.params:
+        if not self.pre_quantized or not names or {key, f"{self.prefix}{key}"} & self.params:
             return key
         return re.sub(rf"(?<=\.)({'|'.join(names)})$", lambda match: names[match[1]], key)
 
