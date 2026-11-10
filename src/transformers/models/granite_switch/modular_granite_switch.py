@@ -15,6 +15,7 @@
 
 from typing import Any
 
+import torch
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -322,6 +323,59 @@ class GraniteSwitchConfig(GraniteMoeHybridConfig):
                 f"cross_stream_rank must be None when dual_stream is False; got {self.cross_stream_rank}. "
                 "The cross_stream site only exists in a Shadow Residual checkpoint."
             )
+
+
+def build_control_to_substitute_lut(config: GraniteSwitchConfig) -> torch.Tensor | None:
+    """Derive the control-token to substitute-token lookup table from `config`.
+
+    Shape `[max(vocab_size, max_control_id + 1)]`, holding `-1` at every non-control id and the
+    substitute id at each control slot. Indexing it with `input_ids` therefore yields `-1` wherever
+    a token is ordinary, which is what lets `apply_token_exchange` rewrite the sequence without a
+    data-dependent branch.
+
+    The `max` is what sizes the table when a checkpoint's control ids sit past `vocab_size`. That
+    happens while a checkpoint is being built: the control tokens are appended to the tokenizer
+    before the embedding matrix is resized, so for a window the largest control id exceeds the
+    recorded vocabulary and sizing at `vocab_size` alone would make the assignment below raise
+    `IndexError`. A finished checkpoint has been resized, so the table comes out at exactly
+    `vocab_size` and the `max` no longer fires.
+
+    Only the real adapter control tokens are mapped. A base-reset token, when the checkpoint has
+    one, is deliberately left alone: it is only ever placed at turn boundaries, which are
+    in-distribution positions for the base model, so its embedding needs no substitute.
+
+    Returns `None` when the config carries no mapping, in which case the switch leaves `input_ids`
+    untouched. An empty id list counts as no mapping, which is why this tests falsiness rather than
+    `is None` — `max(())` raises.
+    """
+    control_ids = config.adapter_token_ids
+    substitute_ids = config.adapter_substitute_token_ids
+    if not control_ids or not substitute_ids:
+        return None
+
+    lut_size = max(config.vocab_size, max(control_ids) + 1)
+    lut = torch.full((lut_size,), -1, dtype=torch.long)
+    for control_id, substitute_id in zip(control_ids, substitute_ids):
+        lut[control_id] = substitute_id
+    return lut
+
+
+def apply_token_exchange(lut: torch.Tensor | None, input_ids: torch.Tensor) -> torch.Tensor:
+    """Rewrite each control token's id to its substitute id through `lut`.
+
+    The switch has already read the original ids to decide the active adapter by the time this
+    runs, so rewriting here is what keeps control tokens invisible to the decoder: it embeds the
+    substitute instead, and never sees an id it was not trained on.
+
+    `torch.where` runs unconditionally rather than short-circuiting on "are there any control
+    tokens", because a `.any()` test is a data-dependent branch that would graph-break under
+    `torch.compile`. When `lut` is `None` the input is returned unchanged.
+    """
+    if lut is None:
+        return input_ids
+    substitute_per_position = lut[input_ids]
+    is_control = substitute_per_position >= 0
+    return torch.where(is_control, substitute_per_position, input_ids)
 
 
 __all__ = ["GraniteSwitchConfig"]
