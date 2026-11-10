@@ -17,8 +17,10 @@
 # `model_results.json` the CI dashboard reads. Meant to be run by hand from the repo root, on a
 # device whose wheels are not in the shared CI images (currently TPU).
 #
-#   MACHINE_TYPE=multi-gpu    key the results land under: `multi-gpu` or `single-gpu`. The "gpu" is
-#                             the CI's own spelling and only ever appears in report directory names.
+#   MACHINE_TYPE=multi-gpu    `multi-gpu` runs on every chip, `single-gpu` on one. The "gpu" is the
+#                             CI's own spelling and only ever appears in report directory names.
+#                             Reports accumulate under `reports/`, so after one run of each the
+#                             second run's results cover both.
 #   ONLY_IN=IMPORTANT_MODELS  which models to run, `IMPORTANT_MODELS` or a space-separated list.
 #   RUN_SLOW=1                also run the tests marked slow.
 #   TMP_CACHE=<prefix>        run with a throwaway hub cache under that prefix.
@@ -46,16 +48,10 @@ export TRANSFORMERS_IS_CI=yes NO_COLOR=1 OMP_NUM_THREADS=8
 # Fail such a test and move on; the slowest tests that do finish take about 22 minutes.
 export PYTEST_ADDOPTS="${PYTEST_ADDOPTS:-} --timeout=${TEST_TIMEOUT:-3600}"
 
-# `TPU_VISIBLE_DEVICES` is torch_tpu's `CUDA_VISIBLE_DEVICES` and does restrict which chips the
-# process opens, but `torch.tpu.device_count()` keeps reporting every chip on the host (still the case
-# on `torch_tpu 0.2.1.dev20261012152517`). Every test that gates on the device count would
-# therefore still run, and still reach for chips the run is supposed to have given up, so a
-# `single-gpu` run here would be a `multi-gpu` run reported under the other name. Leave that column
-# empty instead: the dashboard reads a missing key as no data.
+# A `single-gpu` run sees one chip. `TPU_VISIBLE_DEVICES` is torch_tpu's `CUDA_VISIBLE_DEVICES`, and
+# `transformers.testing_utils` reads it for the device count the multi-device tests are gated on.
 if [ "${MACHINE_TYPE:-multi-gpu}" = "single-gpu" ]; then
-    echo "single-gpu runs are not available on this device: restricting the visible chips does not" >&2
-    echo "restrict what the tests see, so the results would be a multi-gpu run under another name." >&2
-    exit 1
+    export TPU_VISIBLE_DEVICES=0
 fi
 
 python3 -m utils.get_test_reports tests/ --suite models \
