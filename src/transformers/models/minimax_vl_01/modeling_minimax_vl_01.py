@@ -1212,8 +1212,7 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for causal language modeling. Padding positions excluded by `attention_mask` and labels equal to
-            `-100` are ignored.
+            Labels for causal language modeling. Labels equal to `-100` are ignored.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1239,8 +1238,6 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
 
         loss = None
         if labels is not None:
-            if attention_mask is not None:
-                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, -100)
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )

@@ -369,22 +369,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
             candidate = model(**{**inputs, "pixel_values": pixel_values_4d}).logits
             torch.testing.assert_close(candidate, reference, rtol=1e-5, atol=1e-5)
 
-    def test_attention_mask_is_applied_to_loss(self):
-        config = self.model_tester.get_config()
-        model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
-        input_ids = torch.tensor([[5, 6, 7, 8, 9]], device=torch_device)
-        attention_mask = torch.tensor([[1, 1, 1, 1, 0]], device=torch_device)
-        labels = input_ids.clone()
-
-        with torch.no_grad():
-            output = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-
-        shifted_mask = attention_mask[:, 1:].bool()
-        shifted_logits = output.logits[:, :-1][shifted_mask]
-        shifted_labels = labels[:, 1:][shifted_mask]
-        expected_loss = torch.nn.functional.cross_entropy(shifted_logits, shifted_labels)
-        torch.testing.assert_close(output.loss, expected_loss)
-
     def test_empty_pixel_tensor_uses_text_only_path(self):
         config = self.model_tester.get_config()
         model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
