@@ -426,6 +426,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
+    "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
