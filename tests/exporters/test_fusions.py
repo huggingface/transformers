@@ -95,6 +95,36 @@ ORT_MOE_FUSIONS = {
 }
 
 
+def _ort_fusions(model_type, ort_fusions, component):
+    """The ONNX Runtime ops each layer of `model_type`'s `component` graph must fuse into for `ort_fusions`."""
+    fusions = dict((ORT_MOE_FUSIONS if model_type in MOE_MODELS else ORT_FUSIONS)[ort_fusions])
+    if ort_fusions == "cuda" and component == "prefill":
+        # CUDA's `GroupQueryAttention` with a mask is slower than `MultiHeadAttention` for a prefill
+        # (microsoft/onnxruntime#33869).
+        fusions["MultiHeadAttention"] = fusions.pop("GroupQueryAttention")
+    if ort_fusions == "cuda" and model_type == "olmo2":
+        # A float16 OLMo2 rotates in float32: fused, it would rotate in float16.
+        fusions["Neg"] = 2
+    return fusions
+
+
+def _ort_model(model_type="llama", ort_fusions="cpu"):
+    """`_model`, in float16 for CUDA, which the per-head query and key norms need to fold into `GroupQueryAttention`.
+    The experts are SiLU-gated, as checkpoints are: ONNX Runtime's `MoE` miscomputes gated GELU experts
+    (microsoft/onnxruntime#33863). The head size is a multiple of 16, the only ones `GroupQueryAttention` rotates."""
+    dtype = torch.float16 if ort_fusions == "cuda" else None
+    config = {"hidden_act": "silu"} if model_type in MOE_MODELS else {}
+    return _model(model_type, dtype, head_dim=16, **config)
+
+
+def _padded_inputs(model):
+    """Two rows, the first left-padded."""
+    return {
+        "input_ids": torch.randint(0, model.config.vocab_size, (2, 7)),
+        "attention_mask": torch.tensor([[0, 0, 1, 1, 1, 1, 1], [1] * 7]),
+    }
+
+
 def _export_for_ort(model, ort_fusions, inputs=None, dynamic=True):
     """The prefill and decode programs of `model`, fused for `ort_fusions`."""
     if inputs is None:
@@ -102,6 +132,24 @@ def _export_for_ort(model, ort_fusions, inputs=None, dynamic=True):
     return OnnxExporter().export_for_generation(
         model, dict(inputs), OnnxConfig(dynamic=dynamic, ort_fusions=ort_fusions), GenerationConfig(max_new_tokens=3)
     )
+
+
+def _decode_feeds(program, vocab_size):
+    """Inputs for one new token after a random past cache."""
+    generator = np.random.default_rng(0)
+    inputs = {value.name: [int(dim) for dim in value.shape] for value in program.model.graph.inputs}
+    past_length = next(shape[2] for name, shape in inputs.items() if "past_key_values" in name)
+    feeds = {}
+    for name, shape in inputs.items():
+        if "past_key_values" in name:
+            feeds[name] = generator.standard_normal(shape).astype(np.float32)
+        elif "mask" in name:
+            feeds[name] = np.ones(shape, dtype=np.int64)
+        elif "position" in name:
+            feeds[name] = np.full(shape, past_length, dtype=np.int64)
+        else:
+            feeds[name] = generator.integers(0, vocab_size, shape).astype(np.int64)
+    return feeds
 
 
 def _run(program, feeds):
@@ -112,6 +160,10 @@ def _run(program, feeds):
     return session.run(None, {item.name: feeds[item.name] for item in session.get_inputs()})
 
 
+def _group_query_attentions(program):
+    return [node for node in program.model.graph.all_nodes() if node.op_type == "GroupQueryAttention"]
+
+
 @slow
 @require_torch
 @require_onnxscript
@@ -120,84 +172,50 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     """The ONNX Runtime ops `OnnxConfig(ort_fusions=...)` fuses the graph into, for each provider (building a `"cuda"`
     or `"webgpu"` graph needs no GPU), and on CPU the fused graph's outputs against the plain export's."""
 
-    def assert_fused(self, program, fusions, num_layers, component=None):
+    def assert_fused(self, model, program, fusions, component=None):
+        num_layers = model.config.num_hidden_layers
         ops = collections.Counter(node.op_type for node in program.model.graph.all_nodes())
         self.assertEqual({op: ops[op] for op in fusions}, {op: n * num_layers for op, n in fusions.items()}, component)
 
-    @parameterized.expand(
-        [(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ("cpu", "cuda", "webgpu")]
-    )
+    @parameterized.expand([(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ORT_FUSIONS])
     def test_generation_fuses(self, model_type, ort_fusions):
-        # A CUDA graph is fused in float16, which the per-head query and key norms need to fold into
-        # `GroupQueryAttention`. The experts are SiLU-gated, as checkpoints are: ONNX Runtime's `MoE` miscomputes
-        # gated GELU experts (microsoft/onnxruntime#33863), so those stay unfused.
-        dtype = torch.float16 if ort_fusions == "cuda" else None
-        moe = model_type in MOE_MODELS
-        model = _model(model_type, dtype, **({"hidden_act": "silu"} if moe else {}))
+        model = _ort_model(model_type, ort_fusions)
         for component, program in _export_for_ort(model, ort_fusions).items():
-            fusions = dict((ORT_MOE_FUSIONS if moe else ORT_FUSIONS)[ort_fusions])
-            if ort_fusions == "cuda" and component == "prefill":
-                # CUDA's `GroupQueryAttention` with a mask is slower than `MultiHeadAttention` for a prefill
-                # (microsoft/onnxruntime#33869).
-                fusions["MultiHeadAttention"] = fusions.pop("GroupQueryAttention")
-            if ort_fusions == "cuda" and model_type == "olmo2":
-                # A float16 OLMo2 rotates in float32: fused, it would rotate in float16.
-                fusions["Neg"] = 2
-            self.assert_fused(program, fusions, model.config.num_hidden_layers, component)
-            if ort_fusions == "webgpu":
-                rotating = [
-                    node for node in program.model.graph.all_nodes() if node.attributes.get_int("do_rotary", 0)
-                ]
-                self.assertEqual(rotating, [], component)
+            self.assert_fused(model, program, _ort_fusions(model_type, ort_fusions, component), component)
 
-    def setUp(self):
-        super().setUp()
-        # `GroupQueryAttention` only applies rotary itself for head sizes that are multiples of 16.
-        self.model = _model("llama", head_dim=16)
-        # Left-pad the first row so the test covers the padding mask.
-        self.inputs = {
-            "input_ids": torch.randint(0, self.model.config.vocab_size, (2, 7)),
-            "attention_mask": torch.tensor([[0, 0, 1, 1, 1, 1, 1], [1] * 7]),
-        }
-
-    def test_forward_fuses_norms_and_attention(self):
-        """The norms, residual adds and attention of a forward export are fused, and its logits match the plain
-        export's, which has no ONNX Runtime ops."""
-        fused = OnnxExporter().export(self.model, dict(self.inputs), OnnxConfig(dynamic=False, ort_fusions="cpu"))
-        plain = OnnxExporter().export(self.model, dict(self.inputs), OnnxConfig(dynamic=False))
-        self.assert_fused(fused, ORT_FUSIONS["cpu"], self.model.config.num_hidden_layers)
+    def test_forward_matches_plain_export(self):
+        model = _ort_model()
+        inputs = _padded_inputs(model)
+        fused = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, ort_fusions="cpu"))
+        plain = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False))
+        self.assert_fused(model, fused, ORT_FUSIONS["cpu"])
         ops = {node.op_type for node in fused.model.graph.all_nodes()}
         self.assertLessEqual({"SimplifiedLayerNormalization", "SkipSimplifiedLayerNormalization"}, ops)
         self.assertFalse(any(node.domain == "com.microsoft" for node in plain.model.graph.all_nodes()))
-        feeds = {name: value.numpy() for name, value in self.inputs.items()}
+        feeds = {name: value.numpy() for name, value in inputs.items()}
         np.testing.assert_allclose(_run(fused, feeds)[0], _run(plain, feeds)[0], atol=1e-4, rtol=1e-4)
 
-    def test_decode_fuses_cache_update_and_rotary_into_group_query_attention(self):
-        """Each layer of a decode step is one `GroupQueryAttention` that updates the cache, applies rotary itself and
-        reads the packed query, key and value projection. Its logits and updated cache match the plain export's."""
-        fused, plain = (
-            _export_for_ort(self.model, fusions, self.inputs, dynamic=False)["decode"] for fusions in ("cpu", None)
-        )
-        self.assert_fused(fused, ORT_FUSIONS["cpu"], self.model.config.num_hidden_layers)
-        attentions = [node for node in fused.model.graph.all_nodes() if node.op_type == "GroupQueryAttention"]
-        self.assertTrue(all(node.attributes.get_int("do_rotary", 0) for node in attentions))
-        self.assertTrue(all(node.inputs[1] is None and node.inputs[2] is None for node in attentions))
-        # Feed one new token after a random past cache.
-        generator = np.random.default_rng(0)
-        inputs = {value.name: [int(dim) for dim in value.shape] for value in plain.model.graph.inputs}
-        past_length = next(shape[2] for name, shape in inputs.items() if "past_key_values" in name)
-        feeds = {}
-        for name, shape in inputs.items():
-            if "past_key_values" in name:
-                feeds[name] = generator.standard_normal(shape).astype(np.float32)
-            elif "mask" in name:
-                feeds[name] = np.ones(shape, dtype=np.int64)
-            elif "position" in name:
-                feeds[name] = np.full(shape, past_length, dtype=np.int64)
-            else:
-                feeds[name] = generator.integers(0, self.model.config.vocab_size, shape).astype(np.int64)
+    def test_decode_matches_plain_export(self):
+        model = _ort_model()
+        inputs = _padded_inputs(model)
+        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cpu", None))
+        self.assert_fused(model, fused, ORT_FUSIONS["cpu"])
+        feeds = _decode_feeds(plain, model.config.vocab_size)
         for fused_output, plain_output in zip(_run(fused, feeds), _run(plain, feeds)):
             np.testing.assert_allclose(fused_output, plain_output, atol=1e-4, rtol=1e-4)
+
+    def test_decode_group_query_attention_rotates_and_reads_packed_projection(self):
+        model = _ort_model()
+        attentions = _group_query_attentions(_export_for_ort(model, "cpu")["decode"])
+        self.assertTrue(all(node.attributes.get_int("do_rotary", 0) for node in attentions))
+        self.assertTrue(all(node.inputs[1] is None and node.inputs[2] is None for node in attentions))
+
+    def test_webgpu_group_query_attention_leaves_rotary(self):
+        # WebGPU's rotates at the positions after the past, ignoring `position_ids`.
+        model = _ort_model(ort_fusions="webgpu")
+        for component, program in _export_for_ort(model, "webgpu").items():
+            attentions = _group_query_attentions(program)
+            self.assertFalse(any(node.attributes.get_int("do_rotary", 0) for node in attentions), component)
 
 
 # The fused kernels OpenVINO's CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls
