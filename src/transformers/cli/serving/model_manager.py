@@ -286,7 +286,14 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
+        from transformers import AutoModelForDecision
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        # A decision model, or a checkpoint shipping a decision head next to its weights: loaded like the pipeline does
+        try:
+            return AutoModelForDecision.from_pretrained(model_id, **model_kwargs)
+        except ValueError:  # not a decision model, nor a checkpoint with a decision head: as the pipeline does
+            pass
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM
