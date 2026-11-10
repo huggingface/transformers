@@ -1131,7 +1131,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         return outputs
 
 
-# Modified from from transformers.models.detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetrEncoder->OneFormerPixelDecoderEncoderOnly
+# Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetrEncoder->OneFormerPixelDecoderEncoderOnly
 class OneFormerPixelDecoderEncoderOnly(nn.Module):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
@@ -1257,7 +1257,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         )
 
 
-# Modified from from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoder with Mask2->One
+# Modified from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoder with Mask2->One
 class OneFormerPixelDecoder(nn.Module):
     def __init__(self, config: OneFormerConfig, feature_channels):
         super().__init__()
@@ -1455,7 +1455,7 @@ class OneFormerPixelDecoder(nn.Module):
         )
 
 
-# Modified from from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelLevelModule with Mask2->One
+# Modified from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelLevelModule with Mask2->One
 class OneFormerPixelLevelModule(nn.Module):
     def __init__(self, config: OneFormerConfig):
         """
