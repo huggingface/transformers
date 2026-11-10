@@ -144,6 +144,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
+    "transformers-mic[runtime]",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -212,6 +213,7 @@ extras["testing"] = (
         "pytest-timeout",
         "pytest-env",
         "timeout-decorator",
+        "transformers-mic[runtime]",
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests

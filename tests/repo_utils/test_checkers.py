@@ -244,3 +244,23 @@ class EnsureRequirementsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(checkers, "REPO_ROOT", Path(tmp)):
                 self.assertTrue(self._calls(["reviewers"], needing={"reviewers"}))
+
+
+class InPlaceLineTest(unittest.TestCase):
+    """A checker line starting with "\r" redraws the previous line (progress bars)."""
+
+    def test_captured_output_keeps_only_the_last_redraw(self):
+        script = "print('start'); print('#..'); print('\\r##.'); print('\\r###'); print('done')"
+        seen = []
+        rc, output = checkers._run_cmd([sys.executable, "-c", script], line_callback=seen.append)
+        self.assertEqual(rc, 0)
+        self.assertEqual(output.splitlines(), ["start", "###", "done"])
+        self.assertEqual(len(seen), 5)
+
+    def test_sliding_window_redraws_in_place(self):
+        with patch("sys.stdout", new_callable=io.StringIO):
+            window = checkers.SlidingWindow("label")
+            for line in ("start", "#..", "\r##.", "\r###", "done"):
+                window.add_line(line)
+            window.finish(success=True)
+        self.assertEqual(list(window.lines), ["start", "###", "done"])
