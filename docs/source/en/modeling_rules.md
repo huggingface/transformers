@@ -946,6 +946,34 @@ Flags backends in `@requires` that repeat the file's implicit requirements or, f
          return outputs
 ```
 
+### TRF067
+
+In modeling_*.py and modular_*.py, flags a call made with every hidden state switched on -- `output_hidden_states=True` passed to it, or `kwargs["output_hidden_states"] = True` (or `.update`/`.setdefault`) on a path that reaches a call unpacking `**kwargs` -- when the same function then only reads that call's `.hidden_states[...]` by index: a single layer, a config value such as `vision_feature_layer`, or a comprehension over feature layers. Code that needs the whole tuple is exempt: iterating or slicing it, indexing it with every position (`range(len(...))`, `enumerate`), passing it to `torch.stack` or a weighted sum, or handing it on in an output or return value. So are backbones decorated with `@filter_output_hidden_states`. `output_hidden_states=True` keeps one `(batch, seq, hidden)` tensor per layer alive until the call returns, even when only one or two of them are projected, so peak activation memory grows with depth times image tokens. For Aria in vLLM it raised peak activation memory from 5.79 GiB to 14.91 GiB, cost about half the KV cache and cut image throughput by roughly 30%. `output_hidden_states` also takes an index or list of indices, which captures only those hidden states. The returned tuple keeps its full length, with `None` for the rest, so the same indices pick the same features. Decorate a method that forwards `**kwargs` with `@select_hidden_states`, naming its feature-layer argument or passing a function of the model; it lets an explicit `output_hidden_states` from the caller win. For a single call, pass the index directly.
+
+```diff
++from ...utils.output_capturing import select_hidden_states
+ ...
++    @select_hidden_states("vision_feature_layer")
+     def get_image_features(self, pixel_values, vision_feature_layer=None, **kwargs):
+-        kwargs["output_hidden_states"] = True
+         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+ ...
+-        outputs = self.img_processor(img_embeds, output_hidden_states=True)
++        outputs = self.img_processor(img_embeds, output_hidden_states=self.layer_idx)
+         return outputs.hidden_states[self.layer_idx]
+```
+
+### TRF068
+
+Checks every `_no_split_modules` assignment against the classes the modeling file defines or imports. `modeling_*.py` files are checked directly. `modular_*.py` files are checked through the `modeling_*.py` files they generate, and each problem is reported on the modular class so `# trf-ignore: TRFXXX` works there. Note that for modular files this rule inspects the generated files on disk, so the results reflect the last converted file. After editing `modular_*.py`, regenerate before running the linter, otherwise a fix will not show up and a new breakage will not be caught. accelerate matches `_no_split_modules` against the class names of the model's submodules. A name that is not a class never matches, so the layer is silently split across devices. In modular files this happens when `_no_split_modules` is inherited from another model: the converter renames the prefix but not the class (`Qwen4ExpDecoderLayer` vs. the real `Qwen4ExpTextDecoderLayer`).
+
+```diff
+class Qwen4ExpModel(Qwen3_5MoeModel):
+-    # inherits ["Qwen3_5MoeDecoderLayer"] -> converted to "Qwen4ExpDecoderLayer", which does not exist
++    _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
+```
+
 <!-- END RULES REFERENCE -->
 
 ## Suppressing violations

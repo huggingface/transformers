@@ -52,7 +52,7 @@ deps = {
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",
     "rjieba": "rjieba",
     "ruff": "ruff==0.14.10",
-    "transformers-mlinter": "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@16ea798a806eebc7a0c390c7c58130c217619838",
+    "transformers-mlinter": "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@587c0378f83fd3739d2b152b0c2fbcb3d121c327",
     "ty": "ty==0.0.20",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.8.0",
