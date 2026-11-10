@@ -14,6 +14,7 @@
 import copy
 import functools
 import inspect
+import types
 import unittest
 from unittest import mock
 
@@ -291,15 +292,13 @@ def _test_model_matches_unsharded(rank, cp_size):
 
 
 def _test_forward_refusals(rank, cp_size):
-    """A cache and a sequence the ranks cannot split raise instead of being silently recomputed wrong."""
+    """A cache raises instead of being silently recomputed wrong."""
     mesh = _init_cp_mesh("cpu")
     model = _install_default_plan(LlamaForCausalLM(_tiny_config()), mesh)
 
     input_ids = torch.randint(0, model.config.vocab_size, (2, 8), generator=torch.Generator().manual_seed(1))
     with pytest.raises(ValueError, match="`past_key_values` are not allowed"):
         model(input_ids=input_ids, past_key_values=DynamicCache())
-    with pytest.raises(ValueError, match="must be divisible by `cp_size`"):
-        model(input_ids=input_ids[:, :-1])
 
 
 @is_fsdp_test
@@ -537,7 +536,8 @@ def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):
     if not packed:
         return input_ids, None
     # two documents back to back, which `position_ids` has to describe for the whole sequence
-    position_ids = torch.cat([torch.arange(seq_len // 2), torch.arange(seq_len // 2)]).expand(batch_size, -1)
+    first = seq_len // 2
+    position_ids = torch.cat([torch.arange(first), torch.arange(seq_len - first)]).expand(batch_size, -1)
     return input_ids, position_ids
 
 
@@ -585,7 +585,8 @@ def _compare_with_unsharded(init_dir, batch, distributed_config, keep=None):
     Run the full `batch` through an unsharded model and through the same weights sharded with context parallelism,
     then compare the loss, the logits and every gradient.
 
-    `keep` masks the logits of the positions the comparison is about, e.g. the ones padding does not cover.
+    `keep` is the 2D `attention_mask` of the unsharded batch: the logits of its padded positions are not part of what
+    the model is trained on.
     """
     tokens = batch["input_ids"] if batch.get("input_ids") is not None else batch["inputs_embeds"]
 
@@ -608,11 +609,17 @@ def _compare_with_unsharded(init_dir, batch, distributed_config, keep=None):
     output = model(**local_batch)
     output.loss.backward()
 
-    # every rank computed the loss of the full sequences, and its own slice of the logits
+    # every rank computed the loss of the full sequences, and its own slice of the logits of the padded sequence: the
+    # padding at the end of the last rank's slice has no counterpart in the unsharded run
     cp_rank = model._mesh_manager.get_mesh("cp").get_local_rank()
-    expected_logits = reference_logits[rows].chunk(distributed_config.cp_size, dim=1)[cp_rank]
-    logits = _local(output.logits)
+    local_seq = output.logits.shape[1]
+    start = cp_rank * local_seq
+    # the real positions of this rank's slice, which can be none of them when the padding fills it
+    real = max(0, min(local_seq, reference_logits.shape[1] - start))
+    expected_logits = reference_logits[rows][:, start : start + real]
+    logits = _local(output.logits)[:, :real]
     if keep is not None:
+        keep = (keep[:, start : start + real] == 1)[..., None]
         expected_logits, logits = expected_logits * keep, logits * keep
     torch.testing.assert_close(logits, expected_logits, rtol=CP_RTOL, atol=CP_ATOL, msg="Logits mismatch")
 
@@ -668,9 +675,10 @@ def _test_tp_and_cp_compose(rank, tp_size, cp_size):
         dist.barrier()
 
 
-def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed):
-    config = _tiny_config()
-    batch_size, seq_len = 2, 8
+def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed, seq_len=8):
+    # Ulysses splits the heads over the ranks, so four ranks need four key/value heads
+    config = _tiny_config(num_key_value_heads=4) if cp_size > 2 else _tiny_config()
+    batch_size = 2
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         input_ids, position_ids = _tiny_batch(config, batch_size * fsdp_size * dp_replicate_size, seq_len, packed)
         distributed_config = DistributedConfig(
@@ -684,10 +692,10 @@ def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed)
         dist.barrier()
 
 
-def _test_padded(rank, cp_size, config=None, packed=False):
+def _test_padded(rank, cp_size, config=None, packed=False, seq_len=8):
     """Left and right padding through a 2D `attention_mask`; the padded positions carry no label."""
     config = config or _tiny_config()
-    batch_size, seq_len = 2, 8
+    batch_size = 2
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         input_ids, position_ids = _tiny_batch(config, batch_size, seq_len, packed)
         attention_mask = torch.ones_like(input_ids)
@@ -701,9 +709,7 @@ def _test_padded(rank, cp_size, config=None, packed=False):
         }
         if position_ids is not None:
             batch["position_ids"] = position_ids
-        # the logits of the padded positions are not part of what the model is trained on
-        keep = (attention_mask.chunk(cp_size, dim=1)[rank] == 1)[..., None]
-        _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size), keep=keep)
+        _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size), keep=attention_mask)
         dist.barrier()
 
 
@@ -765,10 +771,10 @@ def _test_matches_unsharded_with_all_reduce_ep(rank, cp_size, ep_size, tp_size):
         dist.barrier()
 
 
-def _test_inputs_embeds(rank, cp_size):
+def _test_inputs_embeds(rank, cp_size, seq_len=8):
     """`inputs_embeds` is sharded along its sequence dim, not along its last, hidden one."""
-    config = _tiny_config()
-    batch_size, seq_len = 2, 8
+    config = _tiny_config(num_key_value_heads=4) if cp_size > 2 else _tiny_config()
+    batch_size = 2
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         input_ids, _ = _tiny_batch(config, batch_size, seq_len)
         reference = AutoModelForCausalLM.from_pretrained(init_dir)
@@ -855,6 +861,51 @@ def _test_save_load_distributed_checkpoint(rank, cp_size):
         dist.barrier()
 
 
+class TestContextParallelPadding(unittest.TestCase):
+    """`ModelContextParallel` pads every sequence-shaped input to a multiple of `cp_size`."""
+
+    def setUp(self):
+        self.addCleanup(ALL_ATTENTION_FUNCTIONS.register, "sdpa", ALL_ATTENTION_FUNCTIONS["sdpa"])
+
+    def _prepare(self, module, args=(), **kwargs):
+        return ModelContextParallel().transform_inputs_pre_forward(module, args, kwargs, _MeshStub(2))
+
+    def _module(self, pad_token_id=7):
+        config = types.SimpleNamespace(_attn_implementation="sdpa", pad_token_id=pad_token_id)
+        return types.SimpleNamespace(config=config)
+
+    def test_pads_input_ids_labels_and_the_mask(self):
+        input_ids = torch.tensor([[1, 2, 3, 4, 5]])
+        kwargs = {
+            "input_ids": input_ids,
+            "position_ids": torch.tensor([[0, 1, 2, 0, 1]]),
+            "labels": input_ids.clone(),
+            "attention_mask": torch.ones_like(input_ids),
+        }
+        _, padded = self._prepare(self._module(), **kwargs)
+
+        # the id of the padding is the pad token, and the positions continue those of the last document
+        torch.testing.assert_close(padded["input_ids"], torch.tensor([[1, 2, 3, 4, 5, 7]]))
+        torch.testing.assert_close(padded["position_ids"], torch.tensor([[0, 1, 2, 0, 1, 2]]))
+        torch.testing.assert_close(padded["attention_mask"], torch.tensor([[1, 1, 1, 1, 1, 0]]))
+        torch.testing.assert_close(padded["labels"], torch.tensor([[1, 2, 3, 4, 5, -100]]))
+        assert padded["use_cache"] is False
+
+    def test_pads_positionally_and_without_a_pad_token(self):
+        input_ids = torch.tensor([[1, 2, 3, 4, 5]])
+        args, padded = self._prepare(self._module(pad_token_id=None), (input_ids,), labels=input_ids.clone())
+
+        # no `pad_token_id` on the config: the padding token is 0, and a positional input stays positional
+        torch.testing.assert_close(args[0], torch.tensor([[1, 2, 3, 4, 5, 0]]))
+        torch.testing.assert_close(padded["labels"], torch.tensor([[1, 2, 3, 4, 5, -100]]))
+
+    def test_leaves_a_divisible_sequence_alone(self):
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]])
+        _, padded = self._prepare(self._module(), input_ids=input_ids, labels=input_ids.clone())
+        torch.testing.assert_close(padded["input_ids"], input_ids)
+        assert "position_ids" not in padded
+
+
 @unittest.skipUnless(is_torch_greater_or_equal("2.10"), "Context parallelism requires torch>=2.10")
 class TestContextParallelConfig(unittest.TestCase):
     def test_refuses_pipeline_parallelism(self):
@@ -917,6 +968,20 @@ class TestContextParallelModel(unittest.TestCase):
         for packed in (False, True):
             with self.subTest(packed=packed):
                 run_distributed(world_size=2, backend="gloo")(_test_padded)(2, None, packed)
+
+    def test_padded_sequences(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed, 7)
+
+    def test_padded_sequences_with_four_ranks(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(4, 1, 1, False, 5)
+
+    def test_padded_sequences_with_a_padding_mask(self):
+        run_distributed(world_size=2, backend="gloo")(_test_padded)(2, None, False, 7)
+
+    def test_padded_inputs_embeds(self):
+        run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2, 7)
 
     def test_sliding_window(self):
         config = MistralConfig(
