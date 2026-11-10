@@ -23,48 +23,48 @@ Transformers is the model-definition framework for machine learning models in te
 
 The rest of the ecosystem builds on the model definition instead of writing its own. Training frameworks, inference engines, and local runtimes all use the model definition from Transformers, so a model supported in Transformers is compatible with most of these tools.
 
-<div class="relative flex items-center mb-28">
+<div class="not-prose relative flex items-center mb-28">
   <div class="peer group pr-4">
-    <a class="!no-underline flex h-10 items-center" href="./community_integrations/vllm">
+    <a class="flex h-10 items-center" href="./community_integrations/vllm">
       <span class="relative block h-10 w-10">
-        <img class="!m-0 h-full w-full object-contain grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM"/>
-        <img class="!m-0 h-full w-full object-contain absolute inset-0 opacity-0 group-hover:opacity-100" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt=""/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM"/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain absolute inset-0 h-full w-full opacity-0 group-hover:opacity-100" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt=""/>
       </span>
     </a>
-    <div class="hidden group-hover:block absolute left-0 top-full w-full pt-3">
+    <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
       <div class="text-gray-500 dark:text-gray-400">vLLM</div>
       Serve LLMs at scale. vLLM batches requests continuously and keeps KV cache memory compact with PagedAttention.
     </div>
   </div>
   <div class="peer group pr-4">
-    <a class="!no-underline flex h-10 items-center" href="./community_integrations/sglang">
+    <a class="flex h-10 items-center" href="./community_integrations/sglang">
       <span class="relative block h-6 w-20">
-        <img class="!m-0 h-full w-full object-contain grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang"/>
-        <img class="!m-0 h-full w-full object-contain absolute inset-0 opacity-0 group-hover:opacity-100" src="https://www.sglang.io/images/logo.png" alt=""/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang"/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain absolute inset-0 h-full w-full opacity-0 group-hover:opacity-100" src="https://www.sglang.io/images/logo.png" alt=""/>
       </span>
     </a>
-    <div class="hidden group-hover:block absolute left-0 top-full w-full pt-3">
+    <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
       <div class="text-gray-500 dark:text-gray-400">SGLang</div>
       Serve LLMs with low latency. SGLang is a high-throughput inference engine with a frontend language for agentic workflows.
     </div>
   </div>
   <div class="peer group pr-4">
-    <a class="!no-underline flex h-10 items-center" href="./community_integrations/llama_cpp">
+    <a class="flex h-10 items-center" href="./community_integrations/llama_cpp">
       <span class="relative block h-7 w-7">
-        <img class="!m-0 h-full w-full object-contain grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp"/>
-        <img class="!m-0 h-full w-full object-contain absolute inset-0 opacity-0 group-hover:opacity-100" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt=""/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp"/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain absolute inset-0 h-full w-full opacity-0 group-hover:opacity-100" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt=""/>
       </span>
     </a>
-    <div class="hidden group-hover:block absolute left-0 top-full w-full pt-3">
+    <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
       <div class="text-gray-500 dark:text-gray-400">llama.cpp</div>
       Run LLMs locally without Python. llama.cpp is a C/C++ inference engine that runs quantized models in the GGUF format.
     </div>
   </div>
   <div class="order-first pr-4 peer-hover:hidden">
-    <a class="!no-underline flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 h-8 w-8 object-contain" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth"/></a>
+    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth"/></a>
   </div>
   <div class="order-first pr-4 hidden peer-hover:block">
-    <a class="!no-underline flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 h-8 w-8 object-contain grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth"/></a>
+    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8 grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt=""/></a>
   </div>
   <div class="peer-hover:hidden absolute left-0 top-full w-full pt-3">
     <div class="text-gray-500 dark:text-gray-400">Unsloth</div>
