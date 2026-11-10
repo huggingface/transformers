@@ -949,6 +949,8 @@ class Fp8Deserialize(ConversionOps):
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
         module = get_module_from_name(model, full_layer_name)[0]
+        if len(input_dict) == 1:  # a param of its own, e.g. merged experts' `gate_up_proj_scale_inv`: named by its target
+            input_dict = {full_layer_name: next(iter(input_dict.values()))}
         output = {}
         for key, value in input_dict.items():
             value = value[0] if isinstance(value, list) else value

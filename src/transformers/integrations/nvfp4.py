@@ -319,7 +319,9 @@ class NVFP4Deserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict, **kwargs) -> dict[str, torch.Tensor]:
+    def convert(self, input_dict, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
+        if len(input_dict) == 1:  # a param of its own, e.g. merged experts' `gate_up_proj_scale`: named by its target
+            input_dict = {full_layer_name: next(iter(input_dict.values()))}
         output = {}
         for key, value in input_dict.items():
             tensor = value[0] if isinstance(value, list) else value

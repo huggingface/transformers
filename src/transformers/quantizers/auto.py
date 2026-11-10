@@ -448,6 +448,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightConverter, build_glob_alternation, rename_source_key
 
+        checkpoint = {}  # the checkpoint's module names too, for `rename_layer`
         if self.checkpoint_names:  # e.g. per-expert names collapse on the fused module
             transforms = get_model_conversion_mapping(model)
             converters = [t for t in transforms if isinstance(t, WeightConverter)]
@@ -457,6 +458,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
                 renamed.setdefault(
                     rename_source_key(f"{pattern}.weight", renamings, converters)[0][: -len(".weight")], quantizer
                 )
+            checkpoint = {pattern: quantizer for pattern, quantizer in self.quantizers.items() if "*" not in pattern}
             self.set_quantizers(renamed)
             self.checkpoint_names = False
             model.config.quantization_config = self.quantization_config
@@ -472,6 +474,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
                 if (m := alternation.search(key))
             )
             self.module_quantizers[name] = self.quantizers.get(next(matches, "*"))
+        self.module_quantizers |= checkpoint
 
     def get_quantizer(self, name):
         "The quantizer of the module owning `name` (a param, or a module), as matched by `match_modules`"
@@ -488,11 +491,35 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         The model's conversions, then the formats' own converters. A model converter's `weight` also takes the scales
         named after it (`weight_scale_inv`, see `rename_layer`), into its target's (`gate_up_proj_scale_inv`).
         """
+        from ..core_model_loading import WeightConverter
+
         if not self.module_quantizers:
             self.match_modules(model)
         self.params = set(model.state_dict())  # the modules are the format's by now
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
+        # Dequantized, a weight's scales fold into it before the model's ops: its converter reads them along
+        names = {}  # of every dequantized format: a layer's checkpoint only has its own
+        for quantizer in self.all_quantizers:
+            if getattr(quantizer.quantization_config, "dequantize", False):
+                for param, serialized in quantizer.serialized_names.items():
+                    names[param] = [
+                        *dict.fromkeys(
+                            [*names.get(param, []), *map(quantizer.renamed_names.get, serialized, serialized)]
+                        )
+                    ]
+        weight_conversions = [
+            converter.copy(
+                [source.removesuffix(param) + name for source in sources for name in names[param]],
+                converter._original_target_patterns,
+                operations=converter.operations,
+            )
+            if isinstance(converter, WeightConverter)
+            and (param := (sources := converter._original_source_patterns)[0].rpartition(".")[2]) in names
+            and all(source.endswith(f".{param}") for source in sources)
+            else converter
+            for converter in weight_conversions
+        ]
         # Every format's `weight` first: a `*.down_proj.weight_scale` is a `weight`'s, not MXFP4's fused `down_proj`
         general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
         general.sort(key=lambda converter: converter._original_target_patterns != ["weight"])
