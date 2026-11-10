@@ -15,6 +15,7 @@
 import math
 import unittest
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import GPT2Config, WatermarkingConfig, is_torch_available
@@ -99,6 +100,13 @@ class WatermarkDetectorTest(unittest.TestCase):
     )
     def test_num_tokens_scored_selfhash(self, name, context_width, tokens, ignore_repeated_ngrams, table_count):
         self._check_num_tokens_scored("selfhash", context_width, tokens, ignore_repeated_ngrams, table_count)
+
+    def test_compute_pval(self):
+        model_config = GPT2Config(vocab_size=128, bos_token_id=127, eos_token_id=127)
+        detector = WatermarkDetector(model_config, torch_device, WatermarkingConfig())
+        z_scores = np.array([-2.0, 0.0, 1.0, 2.0, 4.0, 6.0, 10.0])
+        expected = [0.5 * math.erfc(z / math.sqrt(2)) for z in z_scores]
+        np.testing.assert_allclose(detector._compute_pval(z_scores), expected, rtol=1e-12)
 
     def _check_identical_tokens(self, seeding_scheme, context_width, ignore_repeated_ngrams, expected_count):
         result = self._check_num_tokens_scored(

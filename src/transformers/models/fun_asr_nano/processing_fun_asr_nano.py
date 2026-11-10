@@ -28,13 +28,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-
-
-class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 # The model was trained with these Chinese names in the transcription instruction ("语音转写成<NAME>：").
@@ -51,7 +45,11 @@ LANGUAGE_CODE_TO_NAME = {
 
 @auto_docstring
 class FunAsrNanoProcessor(ProcessorMixin):
-    valid_processor_kwargs = FunAsrNanoProcessorKwargs
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "sampling_rate": 16000,
+    }
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,
@@ -73,8 +71,9 @@ class FunAsrNanoProcessor(ProcessorMixin):
         self,
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
+        # Should be a processor kwarg but needs to stay for BC.
         output_labels: bool | None = False,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -138,8 +137,9 @@ class FunAsrNanoProcessor(ProcessorMixin):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
+        tokenize: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature | list[str]:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
 
         Args:
@@ -154,12 +154,18 @@ class FunAsrNanoProcessor(ProcessorMixin):
             keywords (`str`, `list[str]`, or `list[list[str]]`, *optional*):
                 Hotwords to bias recognition. A string or flat list is shared across the batch; a nested list
                 supplies separate hotwords for each audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`]
                 and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`FunAsrNanoForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
@@ -187,7 +193,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -226,5 +232,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         return stripped
 
+
+__getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["FunAsrNanoProcessor"]

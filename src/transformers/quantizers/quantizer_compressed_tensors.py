@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from copy import deepcopy
-from functools import partial
 
 from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import CompressedTensorsConfig
@@ -24,7 +23,7 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import CompressedTensorsDequantize, get_experts_scheme
+    from ..integrations.compressed_tensors import CompressedTensorsDequantize
 
 
 logger = logging.get_logger(__name__)
@@ -90,46 +89,34 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             self.use_fp8_kernel = False
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        ct_config = self.compressor.quantization_config
-        remaining_groups = dict(ct_config.config_groups)
+        if self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
+        from compressed_tensors.quantization import apply_quantization_config
 
+        ct_config = deepcopy(self.compressor.quantization_config)
         if self.use_fp8_kernel:
             from ..integrations.compressed_tensors import replace_with_compressed_tensors_fp8_linear
 
             # Quantization may only target a subset of the layers: each config group scopes
             # its scheme with `targets` (class names or `re:` regexes) minus `ignore`.
-            fp8_groups = {name: group for name, group in remaining_groups.items() if _is_fp8_scheme(group)}
-            remaining_groups = {name: group for name, group in remaining_groups.items() if name not in fp8_groups}
-
+            fp8_groups = {name: group for name, group in ct_config.config_groups.items() if _is_fp8_scheme(group)}
+            ct_config.config_groups = {
+                name: group for name, group in ct_config.config_groups.items() if name not in fp8_groups
+            }
             self.modules_to_not_convert = self.get_modules_to_not_convert(model, None, model._keep_in_fp32_modules)
-            targets = [target for group in fp8_groups.values() for target in group.targets]
             replace_with_compressed_tensors_fp8_linear(
                 model,
-                targets=targets,
+                targets=[target for group in fp8_groups.values() for target in group.targets],
                 ignore=ct_config.ignore,
                 modules_to_not_convert=self.modules_to_not_convert,
             )
 
-        from compressed_tensors.quantization import apply_quantization_config
-
-        remaining_config = deepcopy(ct_config)
-        remaining_config.config_groups = remaining_groups
-
-        apply_quantization_config(model, remaining_config, run_compressed=False)
+        apply_quantization_config(model, ct_config, run_compressed=False)
         # Packed formats (e.g. int4 `weight_packed`) need the compressed module layout to
         # receive the checkpoint tensors.
         if self.quantization_config.is_quantization_compressed:
             self.compressor.compress_model(model=model)
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        """Dequantize the layers loaded through the compressed-tensors wrappers, but only when asked
-        for: with `dequantize=False` the weights are left compressed, and the hook `compress_model`
-        registered decompresses them on the first forward pass instead.
-
-        FP8-kernel modules were never wrapped (their weights loaded directly in FP8) and hold no
-        compressed-tensors scheme, so neither the call below nor that hook touches them."""
-        if self.quantization_config.dequantize and self.quantization_config.is_quantization_compressed:
-            self.compressor.decompress_model(model=model)
 
     @property
     def is_trainable(self):
@@ -156,7 +143,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         tensors into the row-wise kernel layout once at load time — see
         :class:`ConvertFP8LinearScale`."""
         if not self.use_fp8_kernel:
-            return []
+            return super().get_weight_conversions()
 
         from ..integrations.compressed_tensors import ConvertFP8LinearScale
 
@@ -168,14 +155,18 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         ]
 
-    @property
-    def serialized_names(self):
-        if self.quantization_config.quantization_config is None:  # e.g. sparsity only
-            return {}
-        if _is_fp8_scheme(get_experts_scheme(self.quantization_config.quantization_config)):
-            return {"weight": ["weight", "weight_scale"]}
-        return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}
+    # Every name a compressed-tensors format stores for a weight; a checkpoint only has its own format's
+    serialized_names = {
+        "weight": [
+            "weight",
+            "weight_scale",
+            "weight_zero_point",
+            "weight_global_scale",
+            "weight_packed",
+            "weight_shape",
+        ]
+    }
 
     def get_load_operations(self):
-        scheme = get_experts_scheme(self.quantization_config.quantization_config)
-        return {"dequantize": partial(CompressedTensorsDequantize, scheme=scheme)}
+        # No `deserialize`: the serialized tensors load as is into the params compressed-tensors creates
+        return {"dequantize": CompressedTensorsDequantize}

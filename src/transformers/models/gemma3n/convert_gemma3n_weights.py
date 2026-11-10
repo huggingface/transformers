@@ -43,7 +43,7 @@ from transformers import (
     Gemma3nVisionConfig,
     GemmaTokenizer,
     GenerationConfig,
-    SiglipImageProcessorFast,
+    SiglipImageProcessor,
 )
 from transformers.image_utils import PILImageResampling
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
@@ -761,7 +761,7 @@ def main(*args):
     logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
 
     feature_extractor = Gemma3nAudioFeatureExtractor()
-    image_processor = SiglipImageProcessorFast(
+    image_processor = SiglipImageProcessor(
         image_seq_length=256,
         image_mean=(0.5,) * 3,
         image_std=(0.5,) * 3,

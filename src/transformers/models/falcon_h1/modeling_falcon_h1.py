@@ -234,7 +234,7 @@ class FalconH1Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class FalconH1RMSNormGated(torch.nn.Module):
+class FalconH1RMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, n_groups=1, norm_before_gate=True):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -244,6 +244,7 @@ class FalconH1RMSNormGated(torch.nn.Module):
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
+        input_ndim = hidden_states.ndim
 
         if not self.norm_before_gate and gate is not None:
             hidden_states = hidden_states * F.silu(gate.to(torch.float32))
@@ -263,7 +264,7 @@ class FalconH1RMSNormGated(torch.nn.Module):
         hidden_states = self.weight.view(self.n_groups, int(dim // self.n_groups)) * hidden_states
         hidden_states = hidden_states.view(batch_size, seq_len, dim)
 
-        if seq_len == 1:
+        if input_ndim == 2:
             hidden_states = hidden_states.squeeze(1)
 
         if self.norm_before_gate and gate is not None:
@@ -890,17 +891,17 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_values (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
@@ -1050,7 +1051,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -1114,7 +1115,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: FalconH1Config):
         super().__init__(config)
         self.model = FalconH1Model(config)
         self.vocab_size = config.vocab_size
@@ -1131,7 +1132,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
