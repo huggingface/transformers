@@ -140,19 +140,13 @@ class Data2VecAudioFeatureEncoder(nn.Module):
             [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
         )
         self.gradient_checkpointing = False
-        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
-        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
-
-        # make sure hidden_states require grad for gradient_checkpointing
-        if self._requires_grad and self.training:
-            hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
