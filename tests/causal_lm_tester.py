@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from .test_configuration_common import ConfigTester
+from .test_context_parallel_mixin import ContextParallelTesterMixin
 from .test_expert_parallel_mixin import ExpertParallelTesterMixin
 from .test_fsdp_mixin import FSDPTesterMixin
 from .test_modeling_common import (
@@ -279,6 +280,7 @@ class CausalLMModelTest(
     TensorParallelTesterMixin,
     ExpertParallelTesterMixin,
     FSDPTesterMixin,
+    ContextParallelTesterMixin,
 ):
     model_tester_class = None
     all_model_classes = None
