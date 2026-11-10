@@ -61,6 +61,20 @@ Use `modules_to_not_convert` to keep selected modules in their original precisio
 quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
 ```
 
+## Pre-quantized checkpoints
+
+Pre-quantized NVFP4 weights are stored as [ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) saves them
+(`weight`, `weight_scale`, `weight_scale_2`, `input_scale`), MoE experts included. ModelOpt checkpoints load without a
+`quantization_config`, as a [quantization plan](./overview#several-methods-in-one-model): a single `quant_algo` for the
+whole model, or `MIXED_PRECISION` with one per layer (e.g. NVFP4 experts with FP8 attention).
+
+```py
+model = AutoModelForCausalLM.from_pretrained("nvidia/Qwen3.6-35B-A3B-NVFP4", device_map="cuda")
+```
+
+Pass `NVFP4Config(dequantize=True)` to load such a checkpoint in full precision. Dequantizing is pure PyTorch, so it
+needs neither the kernel nor a Blackwell GPU.
+
 NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
 the model before measuring generation throughput.
 
@@ -69,5 +83,5 @@ the model before measuring generation throughput.
 - Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
   the sharding behavior of the NVFP4 scale metadata is defined.
 - CPU and disk offload are not supported.
-- Pre-quantized NVFP4 checkpoints are not supported.
+- MoE experts are only quantized from pre-quantized checkpoints, not on the fly.
 - NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.

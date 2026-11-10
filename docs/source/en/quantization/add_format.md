@@ -78,6 +78,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return Mxfp4Experts(module.config)
 ```
 
+`quantized_module` is called on meta for each module whose params the quantizer owns; returning `None` keeps the module.
+All quantizers of a plan swap their modules in one pass, so a quantizer never walks the model itself.
+
 Why nothing else: `serialized_names` is enough for the plan to load each expert's scale with its weight, through the
 same merge and concatenation the model applies to the weights. No load op is needed because the module stores the
 tensors exactly as the checkpoint does.
@@ -116,8 +119,8 @@ class NVFP4Linear(nn.Module):
 ```
 
 **The load ops**, which turn the checkpoint's tensors into the module's. `deserialize` runs on the pre-quantized
-tensors of one param, after the model's own merges. `dequantize` runs before them, so `dequantize=True` (and GPUs
-without the kernel) get plain weights:
+tensors of one param, after the model's own merges. `dequantize` runs before them, on the weight and its scales
+collected together, so `dequantize=True` gets plain weights and needs no kernel (or GPU):
 
 ```py
 class NVFP4HfQuantizer(HfQuantizer):
@@ -138,15 +141,21 @@ For MoE checkpoints, the experts module is the main extra work: a grouped forwar
 
 ## 4. It is stored per layer in a mixed checkpoint
 
-ModelOpt's `MIXED_PRECISION` checkpoints list a `quant_algo` per layer. Map the name to a config:
+ModelOpt checkpoints name their format with a `quant_algo`: one for the whole model, or with `MIXED_PRECISION`, one per
+layer under `quantized_layers`. Both load as a plan once the name maps to a config in `quantizers/auto.py`:
 
 ```py
 MODELOPT_ALGOS = {
     "NVFP4": NVFP4Config,
+    "W4A16_NVFP4": NVFP4Config,
     "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
-    "MXFP8": lambda: FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0"),  # step 1
+    "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
 }
 ```
+
+A new `quant_algo` that is another FP8 variant (step 1) is one line here, e.g.
+`"MXFP8": lambda: FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")`. Layers ModelOpt leaves out keep the
+base `quant_method` if it is one (e.g. DeepSeek-V4's block `fp8`), else stay unquantized like its `ignore`d ones.
 
 A checkpoint format that describes its layers some other way gets a function in `PLAN_CONVERTERS` that turns its
 `quantization_config` into a plan, `{module pattern: config}` (see `fp4_experts_plan` for DeepSeek-V4's

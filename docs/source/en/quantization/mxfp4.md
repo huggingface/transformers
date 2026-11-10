@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b.
+Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b, and for DeepSeek-V4's routed experts. Those are loaded from DeepSeek-V4's FP8 checkpoints as a [quantization plan](./overview#several-methods-in-one-model) and run W4A8 on the [fine-grained FP8](./finegrained_fp8) kernels.
 
 MXFP4 is a 4-bit floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve its range and accuracy, which typically becomes degraded at lower precisions.
 

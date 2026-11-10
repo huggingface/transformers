@@ -56,7 +56,7 @@ Each row recommends a first method to try. Check the full comparison table befor
 | [HQQ](./hqq) | `hqq` | While loading | 1, 2, 3, 4, 8 | CUDA, XPU | ✅ | ✅ | ❌ |
 | [Metal](./metal) | `metal` | While loading | 2, 4, 8 | MPS | ✅ | ❌ | ❌ |
 | [MXFP4](./mxfp4) | `mxfp4` | While loading | 4 | CUDA (compute capability 7.5+), XPU, CPU | ✅ | ❌ | ❌ |
-| [NVFP4](./nvfp4) | `nvfp4` | While loading | 4 | One Blackwell GPU | ❌ | ❌ | ✅ |
+| [NVFP4](./nvfp4) | `nvfp4` | While loading, or pre-quantized (ModelOpt) | 4 | One Blackwell GPU | ❌ | ❌ | ✅ |
 | [Quanto](./quanto) | `quanto` | While loading | 2, 4, 8 | CUDA, MPS, XPU, CPU | ❌ | ✅ | ❌ |
 | [Quark](./quark) | `quark` | Pre-quantized only | Set by checkpoint | CUDA, ROCm, CPU | ❌ | ❌ | ❌ |
 | [SINQ](./sinq) | `sinq` | While loading | 2, 3, 4, 6, 8 | One CUDA GPU, CPU | ✅ | ✅ | ❌ |

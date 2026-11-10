@@ -61,6 +61,27 @@ quantized_model.save_pretrained(quant_path)
 model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
 ```
 
+## Activation schemes
+
+`activation_scheme` sets how activations are quantized:
+
+| scheme | activations |
+|---|---|
+| `"dynamic"` (default) | quantized per token group at runtime |
+| `"static"` | quantized with a stored per-tensor `activation_scale` |
+| `"none"` | not quantized (weight-only FP8): weights are dequantized to the activations' dtype in forward |
+
+`weight_block_size=None` stores one scale per tensor, as ModelOpt's per-tensor FP8 checkpoints do.
+
+## Pre-quantized checkpoints with other layouts
+
+Checkpoints that name their scales differently load without a `quantization_config`: DeepSeek-V4's `scale`, Mistral
+Large 4's `qscale_weight`, and ModelOpt's `weight_scale` / `input_scale`. Checkpoints that mix FP8 with other methods
+per layer load as a [quantization plan](./overview#several-methods-in-one-model):
+
+- ModelOpt checkpoints map their `quant_algo` (`FP8`, `FP8_PB_WO`, `NVFP4`, ...), or each layer's for `MIXED_PRECISION`, to its config.
+- DeepSeek-V4's routed experts, saved as MXFP4 (`expert_dtype: "fp4"` in the model config), load with [MXFP4](./mxfp4) and the other layers with FP8.
+
 ## DeepGEMM fast path
 
 On Hopper (SM90+) and Blackwell (SM100+) GPUs, every FP8 linear automatically dispatches to the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm) when `weight_block_size=(128, 128)` and `activation_scheme="dynamic"`. DeepGEMM is 3-6x faster than the Triton fallback. Install or upgrade the [kernels](https://github.com/huggingface/kernels) package to enable it.

@@ -160,6 +160,14 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertEqual((fallback["*"].quant_method, fallback["*"].scale_fmt), ("fp8", "ue8m0"))
         self.assertNotIn("head", fallback)
 
+    def test_modelopt_single_algo(self):
+        # e.g. nvidia/Llama-3.1-8B-Instruct-FP4: one `quant_algo` for the whole model
+        saved = {"quant_method": "modelopt", "quant_algo": "NVFP4", "group_size": 16, "ignore": ["lm_head"]}
+        plan = self.plan_from_config(saved)[0].quantization_config
+        self.assertEqual(list(plan), ["lm_head", "*"])
+        self.assertIsNone(plan["lm_head"])
+        self.assertEqual(repr(plan["*"]), repr(NVFP4Config()))
+
     def test_modelopt_checkpoint_names(self):
         hf_quantizer, config = self.plan_from_config(DEEPSEEK)
         with torch.device("meta"):

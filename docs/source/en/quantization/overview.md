@@ -108,6 +108,8 @@ model = Mistral4ForCausalLM.from_pretrained(
 
 Pass a plan of configs instead to change a single pattern, e.g. `NVFP4Config(dequantize=True)` for the shared experts only.
 
+Checkpoints that describe their mix another way load as a plan too, with no `quantization_config`: ModelOpt checkpoints (one `quant_algo`, or a `quant_algo` per layer, e.g. [NVFP4](./nvfp4) experts and [FP8](./finegrained_fp8) attention) and DeepSeek-V4's FP8 checkpoints with [MXFP4](./mxfp4) experts. To support a new one, see [Add a quantized format](./add_format).
+
 ## Save a quantized model
 
 Call [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`] to save the quantized weights and their `quantization_config`. Not every method can save its quantized weights.

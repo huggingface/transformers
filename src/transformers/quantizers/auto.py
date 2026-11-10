@@ -362,15 +362,16 @@ MODELOPT_ALGOS = {
 
 def modelopt_plan(config: dict) -> dict | None:
     """
-    ModelOpt's per-layer `quantized_layers`. The layers it leaves out keep the base `quant_method` if it is one (e.g.
-    `fp8`), else stay unquantized like its `ignore`d ones.
+    ModelOpt's per-layer `quantized_layers`, or its single `quant_algo` for every layer. The layers it leaves out keep
+    the base `quant_method` if it is one (e.g. `fp8`), else stay unquantized like its `ignore`d ones.
     """
-    if "quantized_layers" not in config:
+    if "quantized_layers" not in config and config.get("quant_algo") not in MODELOPT_ALGOS:
         return None
+    layers = config.get("quantized_layers", {"*": config})
     base = {key: value for key, value in config.items() if key != "quantized_layers"}
     base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
     plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
-    plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in config["quantized_layers"].items()}
+    plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in layers.items()}
     return plan | {"*": base} if base else plan
 
 
