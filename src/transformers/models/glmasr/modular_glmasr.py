@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -402,6 +402,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         self.model = GlmAsrModel(config)
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -409,7 +410,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -444,7 +445,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,

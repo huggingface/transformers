@@ -318,7 +318,7 @@ class NeoMMEAttention(nn.Module):
         self.exclusive_self_attention = NeoMMEExclusiveSelfAttention(config)
         self.output_projection = NeoMMESigmoidGatedProjection(config)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

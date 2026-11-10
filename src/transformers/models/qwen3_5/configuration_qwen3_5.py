@@ -173,7 +173,7 @@ class Qwen3_5Config(PreTrainedConfig):
         "vision_config": Qwen3_5VisionConfig,
         "text_config": Qwen3_5TextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

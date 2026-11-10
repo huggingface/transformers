@@ -225,7 +225,7 @@ class UltrabertAttention(nn.Module):
             config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
         )
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -292,7 +292,7 @@ class UltrabertDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = UltrabertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = UltrabertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

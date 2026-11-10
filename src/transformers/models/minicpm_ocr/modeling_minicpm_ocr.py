@@ -39,6 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
@@ -661,6 +662,7 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -670,7 +672,7 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel):
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
+        cache: list[torch.Tensor] | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
@@ -686,6 +688,8 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
+        cache (<fill_type>):
+            <fill_docstring>
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
@@ -733,7 +737,7 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel):
         output = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -789,6 +793,7 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -798,7 +803,7 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
+        cache: list[torch.Tensor] | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -815,6 +820,8 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
+        cache (<fill_type>):
+            <fill_docstring>
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
@@ -826,7 +833,7 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
             target_sizes_videos=target_sizes_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -846,7 +853,7 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -864,7 +871,7 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         inputs_embeds=None,
         pixel_values=None,
@@ -877,7 +884,7 @@ class MiniCPMOcrForConditionalGeneration(MiniCPMOcrPreTrainedModel, GenerationMi
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             is_first_iteration=is_first_iteration,

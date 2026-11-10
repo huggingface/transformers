@@ -56,7 +56,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
     def forward(
         self,
         attention_mask: torch.LongTensor,
-        past_key_values_length: int = 0,
+        cache_length: int = 0,
         position_ids: torch.LongTensor | None = None,
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
@@ -64,8 +64,8 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         if position_ids is None:
             position_ids = torch.cumsum(attention_mask, dim=1)
             position_ids = (position_ids * attention_mask - 1).long()
-            # cut positions if `past_key_values_length` is > 0
-            position_ids = position_ids[:, past_key_values_length:]
+            # cut positions if `cache_length` is > 0
+            position_ids = position_ids[:, cache_length:]
 
         return super().forward(position_ids + self.offset)
 

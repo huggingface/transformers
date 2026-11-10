@@ -42,7 +42,6 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_embedding_gemma2 import EmbeddingGemma2Config, EmbeddingGemma2TextConfig
 
@@ -407,6 +406,7 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -508,10 +508,7 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -741,6 +738,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

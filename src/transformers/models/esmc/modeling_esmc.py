@@ -207,7 +207,7 @@ class EsmcAttention(nn.Module):
         self.q_norm = EsmcLayerNorm(config.hidden_size, bias=False)
         self.k_norm = EsmcLayerNorm(config.hidden_size, bias=False)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -263,7 +263,7 @@ class EsmcLayer(GradientCheckpointingLayer):
         # ESM3 residual scaling to stabilise deep networks; every released checkpoint uses it.
         self.scaling_factor = math.sqrt(config.num_hidden_layers / 36)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

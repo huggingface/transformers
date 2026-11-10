@@ -657,7 +657,7 @@ class GenerationMixin(ContinuousMixin):
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
@@ -2569,8 +2569,8 @@ class GenerationMixin(ContinuousMixin):
             generation_mode_kwargs = {k: kwargs.pop(k) for k in new_custom_keys if k in kwargs}
         return generation_mode_kwargs
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
-    @deprecate_kwarg("cache_params", new_name="cache")
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     @torch.no_grad()
     def generate(
         self: "GenerativePreTrainedModel",

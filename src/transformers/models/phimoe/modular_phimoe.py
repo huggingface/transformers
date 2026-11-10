@@ -353,7 +353,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         inputs_embeds=None,
         position_ids=None,
@@ -367,18 +367,18 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
-            past_key_values
+            cache
             and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
-            past_length = past_key_values.get_seq_length()
+            past_length = cache.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
-                past_key_values = None
+                cache = None
                 kwargs["next_sequence_length"] = None
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,

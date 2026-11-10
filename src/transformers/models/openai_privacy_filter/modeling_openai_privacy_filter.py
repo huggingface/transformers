@@ -198,7 +198,7 @@ class OpenAIPrivacyFilterAttention(nn.Module):
         self.sliding_window = config.sliding_window + 1  # Account for FA symmetry using -1
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -350,7 +350,7 @@ class OpenAIPrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = OpenAIPrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenAIPrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

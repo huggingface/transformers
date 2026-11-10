@@ -172,7 +172,7 @@ class PocketTTSAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -225,7 +225,7 @@ class PocketTTSDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -521,6 +521,7 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -530,7 +531,7 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
         audio_latents_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -548,6 +549,8 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
         audio_latents_mask (`torch.Tensor` of shape `(batch_size, num_latents)`, *optional*):
             Mask of each row's latents (`1`) as opposed to padding (`0`) in `audio_latents`, when the rows hold different
             numbers of latent positions (training).
+        cache (<fill_type>):
+            <fill_docstring>
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -586,11 +589,11 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
                 )
                 inputs_embeds = inputs_embeds.masked_scatter(latent_mask, latent_embeds)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -598,7 +601,7 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -611,7 +614,7 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -619,7 +622,7 @@ class PocketTTSModel(PocketTTSPreTrainedModel):
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
     def embed_audio_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
@@ -704,6 +707,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -714,7 +718,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
         labels_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -735,6 +739,8 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
             speech.
         labels_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask of each row's target frames (`1`) as opposed to padding (`0`) in `labels`.
+        cache (<fill_type>):
+            <fill_docstring>
         """
         if labels is not None and audio_latents is not None:
             raise ValueError(
@@ -766,7 +772,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
             audio_latents_mask=audio_latents_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -802,7 +808,7 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
             loss=loss,
             logits=logits,
             last_hidden_state=hidden_states,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

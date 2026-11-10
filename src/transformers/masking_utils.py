@@ -901,7 +901,7 @@ def find_first_full_attention_index(cache: Cache | None) -> int:
     return layer_idx
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1029,7 +1029,7 @@ def create_causal_mask(
     return causal_mask
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_bidirectional_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1126,7 +1126,7 @@ def create_bidirectional_mask(
     return attention_mask
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1262,7 +1262,7 @@ def create_sliding_window_causal_mask(
     return causal_mask
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1359,7 +1359,7 @@ def create_bidirectional_sliding_window_mask(
     return attention_mask
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_chunked_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1496,7 +1496,7 @@ def create_chunked_causal_mask(
     return causal_mask
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_recurrent_attention_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1546,7 +1546,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
 }
 
 
-@deprecate_kwarg("past_key_values", new_name="cache")
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_masks_for_generate(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,

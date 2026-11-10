@@ -119,7 +119,7 @@ class HunYuanVLTextConfig(PreTrainedConfig):
     """
 
     model_type = "hunyuan_vl_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 290943
     hidden_size: int = 4096

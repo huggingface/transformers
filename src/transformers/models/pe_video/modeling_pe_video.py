@@ -318,7 +318,7 @@ class PeVideoEncoderAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -383,7 +383,7 @@ class PeVideoEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = PeVideoEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PeVideoEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -422,7 +422,7 @@ class PeVideoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "video_model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeVideoEncoderLayer", "TimmWrapperForImageClassification"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

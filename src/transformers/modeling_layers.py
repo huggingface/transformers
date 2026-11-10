@@ -126,7 +126,7 @@ class GenericForSequenceClassification:
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -140,6 +140,10 @@ class GenericForSequenceClassification:
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
+        r"""
+        cache (<fill_type>):
+            <fill_docstring>
+        """
         transformer_outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
@@ -207,7 +211,7 @@ class GenericForQuestionAnswering:
     def set_input_embeddings(self, value):
         getattr(self, self.base_model_prefix).embed_tokens = value
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -221,6 +225,10 @@ class GenericForQuestionAnswering:
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> QuestionAnsweringModelOutput:
+        r"""
+        cache (<fill_type>):
+            <fill_docstring>
+        """
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
@@ -275,7 +283,7 @@ class GenericForTokenClassification:
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -289,6 +297,10 @@ class GenericForTokenClassification:
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
+        r"""
+        cache (<fill_type>):
+            <fill_docstring>
+        """
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
             attention_mask=attention_mask,
@@ -332,7 +344,7 @@ class MtpLayer(nn.Module):
         self.mtp_block = decoder_layer_cls(config, layer_idx)
         self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps) if use_post_norm else None
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         inputs_embeds: torch.Tensor,

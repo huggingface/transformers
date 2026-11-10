@@ -642,7 +642,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -658,6 +658,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
+        cache (<fill_type>):
+            <fill_docstring>
         Example:
 
         ```python
@@ -773,8 +775,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             max_cache_length=self.config.codec_config.sliding_window,
         )
 
-        if "past_key_values" in temporary_model_kwargs:
-            model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+        if "cache" in temporary_model_kwargs:
+            model_kwargs["encoder_cache"] = temporary_model_kwargs["cache"]
 
         # initialize the padding cache for the codec model
         per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
@@ -805,7 +807,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         padding_mask: torch.Tensor | None = None,
         audio_window_size: int | None = None,
         current_window: tuple[int, int] | None = None,
-        encoder_past_key_values: Cache | None = None,
+        encoder_cache: Cache | None = None,
         padding_cache: KyutaiSpeechToTextConv1dPaddingCache | None = None,
         **kwargs,
     ):
@@ -813,7 +815,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
 
         if input_values is not None:
             seqlen, device = model_inputs["position_ids"].shape[-1], model_inputs["position_ids"].device
-            cache = model_inputs.get("past_key_values")
+            cache = model_inputs.get("cache")
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             positions = torch.arange(seqlen, device=device) + past_seen_tokens
             start, end = current_window[0]
@@ -827,7 +829,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
                     current_input_values = input_values[..., input_values_start_idx:input_values_end_idx]
                     codec_model_output = self.codec_model.encode(
                         current_input_values,
-                        encoder_past_key_values=encoder_past_key_values,
+                        encoder_cache=encoder_cache,
                         padding_cache=padding_cache,
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
