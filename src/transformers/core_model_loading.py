@@ -897,8 +897,11 @@ class WeightTransform:
             pattern = source_pattern.replace("*.", r".*\.")
             # A pattern ends on a name boundary: `gate` matches `mlp.gate`, not `mlp.gate_up_proj`. But a module's
             # `.weight` also matches the scales stored next to it (`weight_scale_inv`), renamed like it
-            # (`gate_up_proj_scale_inv`). One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
-            if re.search(r"[a-zA-Z0-9]$", pattern) and not pattern.endswith(".weight"):
+            # (`gate_up_proj_scale_inv`). One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`. A
+            # converter's bare name (e.g. a quantizer's `down_proj`) is a key's last name, not `mlp.down_proj.weight`
+            if isinstance(self, WeightConverter) and re.fullmatch(r"\w+", pattern):
+                pattern = rf"(?<![^.]){pattern}$"
+            elif re.search(r"[a-zA-Z0-9]$", pattern) and not pattern.endswith(".weight"):
                 pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))

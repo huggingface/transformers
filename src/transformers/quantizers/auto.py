@@ -493,9 +493,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
                     sources, converter._original_target_patterns, operations=converter.operations
                 )
 
-        # Every format's `weight` first: a `*.down_proj.weight_scale` is a `weight`'s, not MXFP4's fused `down_proj`
         general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
-        general.sort(key=lambda converter: converter._original_target_patterns != ["weight"])
         return [*weight_conversions, *general]
 
     def rename_layer(self, key):
