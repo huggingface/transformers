@@ -84,7 +84,7 @@ class Inkling2TextConfig(InklingTextConfig):
         Per-head dimension of the relative states that are mixed into the relative position bias.
     rel_extent (`int`, *optional*, defaults to 1024):
         Backward distance, in tokens, over which the relative position bias is applied in the full-attention layers.
-    log_scaling_n_floor (`int`, *optional*, defaults to 8192):
+    log_scaling_n_floor (`int`, *optional*, defaults to 128000):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
@@ -133,7 +133,7 @@ class Inkling2TextConfig(InklingTextConfig):
     swa_num_attention_heads: int = 48
     swa_num_key_value_heads: int = 8
     sliding_window_size: int = 1024
-    log_scaling_n_floor: int = 8192
+    log_scaling_n_floor: int = 128000
     max_position_embeddings: int = 1048576
     moe_intermediate_size: int = 2304
     n_routed_experts: int = 384
@@ -224,7 +224,7 @@ class Inkling2Config(InklingConfig):
         Token index of the image placeholders, each replaced by one image feature.
     """
 
-    model_type = "inkling2_mm_model"
+    model_type = "inkling2"
     sub_configs_defaults = {"text_config": Inkling2TextConfig, "vision_config": Inkling2VisionConfig}
 
     audio_config = AttributeError()

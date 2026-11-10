@@ -258,7 +258,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
         ],
-        "inkling2_mm_model": [
+        "inkling2": [
             WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model.language_model."),
             WeightRenaming(
