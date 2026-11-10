@@ -60,7 +60,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
         hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
         audio (`list(torch.Tensor)` of length `batch_size`):
             The generated audio.
@@ -326,7 +326,7 @@ class CsmGenerationMixin(GenerationMixin):
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=model_kwargs.get("past_key_values"),
+                cache=model_kwargs.get("cache"),
             )
         else:
             return input_ids

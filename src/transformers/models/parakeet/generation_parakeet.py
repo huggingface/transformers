@@ -192,7 +192,7 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     def _prepare_model_inputs(self, *args, **kwargs):
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
         explicit = {"input_features", "attention_mask", "output_attention_mask"}
-        irrelevant_prefix = ("decoder_", "cross_attn", "use_cache", "past_key_values", "cache_params")
+        irrelevant_prefix = ("decoder_", "cross_attn", "use_cache", "cache", "cache_params")
         encoder_kwargs = {
             key: value
             for key, value in model_kwargs.items()

@@ -58,7 +58,7 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
                 self._validate_stream_chunk(chunk, is_first_chunk=False)
                 chunk_outputs = self.get_audio_features(
                     input_features=chunk,
-                    past_key_values=model_kwargs["encoder_past_key_values"],
+                    cache=model_kwargs["encoder_cache"],
                     padding_cache=model_kwargs["padding_cache"],
                     num_lookahead_tokens=self._streaming_num_lookahead_tokens,
                     use_cache=True,
@@ -176,7 +176,7 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
             output_attention_mask=False,
         )
 
-        model_kwargs["encoder_past_key_values"] = outputs.encoder_past_key_values
+        model_kwargs["encoder_cache"] = outputs.encoder_cache
         model_kwargs["padding_cache"] = outputs.padding_cache
         model_kwargs["encoder_outputs"] = NemotronAsrStreamingEncoderModelOutput(pooler_output=outputs.pooler_output)
         model_kwargs["encoder_valid_lengths"] = torch.full(

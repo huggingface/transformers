@@ -739,7 +739,7 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     axis now has hint `N > 1` so it stays dynamic. The exported decode then handles both a single token
     (ordinary decoding) and many (continuation-from-past for multi-turn, or a plain prefill when the cache is empty).
 
-    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
+    The cache (`cache`) is taken from the FIRST step (the state right after prefill, before
     the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
     handled below (its layout depends on the cache).
     """

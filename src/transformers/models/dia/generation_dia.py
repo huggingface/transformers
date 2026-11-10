@@ -361,7 +361,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
-        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - different models have a different cache name expected by the model (default = "cache")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
         if (

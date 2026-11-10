@@ -2330,7 +2330,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             "input_ids": unconditional_ids,
             "attention_mask": unconditional_attention_mask,
             "use_cache": use_cache,
-            "past_key_values": None,
+            "cache": None,
             "first_pass": True,
         }
 
@@ -2364,9 +2364,9 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             input_ids,
             attention_mask=attention_mask,
             use_cache=self.unconditional_context["use_cache"],
-            past_key_values=self.unconditional_context["past_key_values"],
+            cache=self.unconditional_context["cache"],
         )
-        self.unconditional_context["past_key_values"] = out.get("past_key_values", None)
+        self.unconditional_context["cache"] = out.get("cache", None)
 
         return out.logits
 
