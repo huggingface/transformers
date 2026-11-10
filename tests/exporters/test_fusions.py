@@ -112,6 +112,7 @@ def _run(program, feeds):
     return session.run(None, {item.name: feeds[item.name] for item in session.get_inputs()})
 
 
+@slow
 @require_torch
 @require_onnxscript
 @require_onnxruntime
@@ -126,7 +127,6 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     @parameterized.expand(
         [(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ("cpu", "cuda", "webgpu")]
     )
-    @slow
     def test_generation_fuses(self, model_type, ort_fusions):
         # A CUDA graph is fused in float16, which the per-head query and key norms need to fold into
         # `GroupQueryAttention`. The experts are SiLU-gated, as checkpoints are: ONNX Runtime's `MoE` miscomputes

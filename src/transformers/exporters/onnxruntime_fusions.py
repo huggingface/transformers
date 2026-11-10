@@ -423,9 +423,9 @@ def _unfuse_mixed_dtype_skip_norms(model: ir.Model) -> None:
         normalized = _add_node(
             graph, node, "SimplifiedLayerNormalization", [total, scale], output.shape, output.dtype, **attributes
         )
-        ir.convenience.replace_all_uses_with(output, normalized)
+        _replace(output, normalized)
         if len(node.outputs) > 3:
-            ir.convenience.replace_all_uses_with(node.outputs[3], total)
+            _replace(node.outputs[3], total)
         node.graph.remove(node, safe=True)
 
 
@@ -544,17 +544,14 @@ def _untranspose_batch_matmuls(model: ir.Model, matmuls: bool = False) -> None:
             shape = [source.shape[axis] for axis in perm] if source.shape is not None else None
             transposed = _add_node(node.graph, node, "Transpose", [source], shape, source.dtype, perm=perm)
             node.replace_input_with(index, transposed)
-            for attribute in (f"transBatch{side}", f"trans{side}"):
-                node.attributes[attribute] = ir.Attr(attribute, ir.AttributeType.INT, 0)
+            node.attributes.pop(f"transBatch{side}", None)
+            node.attributes.pop(f"trans{side}", None)
         if matmuls:
             output = node.outputs[0]
             product = _add_node(node.graph, node, "MatMul", node.inputs[:2], output.shape, output.dtype)
             alpha = node.attributes.get_float("alpha", 1.0)
             if alpha != 1.0:
-                scale = ir.Value(
-                    name=f"{output.name}_alpha", const_value=ir.tensor(np.array(alpha, output.dtype.numpy()))
-                )
-                model.graph.register_initializer(scale)
+                scale = _initializer(model.graph, f"{output.name}_alpha", np.array(alpha, output.dtype.numpy()))
                 product = _add_node(node.graph, node, "Mul", [product, scale], output.shape, output.dtype)
             _replace(output, product)
 
@@ -1412,7 +1409,7 @@ _STEPS = (
     (_unfuse_leftover_attentions, None),
     (_unfuse_attention_activation_biases, None),
     (_unfuse_group_norms, None),
-    (_untranspose_batch_matmuls, ("cuda")),
+    (_untranspose_batch_matmuls, ("cuda",)),
     (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",)),
     # 5. More fusions.
     (_WEIGHTLESS_RMS_NORMS.apply_to_model, None),
@@ -1434,6 +1431,8 @@ _STEPS = (
     (_pack_group_query_attention_inputs, None),
     # 6. CUDA provider.
     (_CONSTANT_GATHER_ND.apply_to_model, ("cuda",)),
+    # What every layer computes alike (its mask's unattended rows), computed once.
+    (_merge_equal_computations, None),
 )
 
 
@@ -1448,5 +1447,3 @@ def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str) -> None:
     for step, providers in _STEPS:
         if providers is None or ort_fusions in providers:
             step(model)
-    # What every layer computes alike (its mask's unattended rows), computed once.
-    _merge_equal_computations(model)
