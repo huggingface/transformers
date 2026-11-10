@@ -220,9 +220,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
                     outputs = model(input_ids=next_tokens, cache=cache, use_cache=True)
                     next_tokens = outputs.logits[:, -1:].argmax(dim=-1)
 
-            reference_layers = [
-                layer for layer in cache.layers if layer._layer_type == "reference_sliding_attention"
-            ]
+            reference_layers = [layer for layer in cache.layers if layer._layer_type == "reference_sliding_attention"]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:
                 self.assertEqual(layer.prefill_length, prompt_length)

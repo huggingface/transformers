@@ -282,9 +282,7 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(
-        reason="PPFormulaNet does not support continuing generation from cache across generate calls."
-    )
+    @unittest.skip(reason="PPFormulaNet does not support continuing generation from cache across generate calls.")
     def test_generate_continue_from_cache(self):
         pass
 

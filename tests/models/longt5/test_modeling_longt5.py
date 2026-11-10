@@ -326,9 +326,7 @@ class LongT5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, cache=cache, attention_mask=attn_mask)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, cache=cache, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -362,9 +360,7 @@ class LongT5ModelTester:
         next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

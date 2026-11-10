@@ -340,9 +340,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = (
-                prompt_length + generated_length if not has_static_cache else decoder_cache.get_max_length()
-            )
+            query_length = prompt_length + generated_length if not has_static_cache else decoder_cache.get_max_length()
 
             expected_shape = (
                 batch_size,

@@ -433,9 +433,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         cache.update(prefilled, prefilled, 0)
 
         inputs_embeds = torch.zeros(1, 1, model.config.text_config.hidden_size, device=torch_device)
-        position_ids = model.compute_3d_position_ids(
-            input_ids=None, inputs_embeds=inputs_embeds, cache=cache
-        )
+        position_ids = model.compute_3d_position_ids(input_ids=None, inputs_embeds=inputs_embeds, cache=cache)
 
         self.assertIsNotNone(position_ids)
         self.assertEqual(tuple(position_ids.shape), (3, 1, 1))

@@ -187,9 +187,7 @@ class GPTNeoModelTester:
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, cache=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

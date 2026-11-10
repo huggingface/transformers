@@ -144,9 +144,7 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
     # the language model is Nemotron-H: its Mamba2 layers cache convolution and SSM states
     _get_conv_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_conv_state_shape
     _get_recurrent_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_recurrent_state_shape
-    _check_cache_for_generate = (
-        test_modeling_nemotron_h.NemotronHModelTest._check_cache_for_generate
-    )
+    _check_cache_for_generate = test_modeling_nemotron_h.NemotronHModelTest._check_cache_for_generate
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
         return self.model_tester.get_config().audio_config.asr_config.num_hidden_layers

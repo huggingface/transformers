@@ -202,9 +202,7 @@ class SpQRTest(unittest.TestCase):
         seq_length = input_ids.shape[1]
 
         # Setup static KV cache for generation
-        cache = StaticCache(
-            config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1
-        )
+        cache = StaticCache(config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1)
 
         # Allocate token ids to be generated and copy prefix ids
         position = torch.arange(seq_length, device=torch_device)

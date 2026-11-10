@@ -426,9 +426,7 @@ class Mask4DTestHard(unittest.TestCase):
         input_1b = input_ids_shared_prefix[:, part_a:]
         position_ids_1b = position_ids_shared_prefix[:, part_a:]
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
-        outs_1b = self.model.forward(
-            input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, cache=cache_a
-        )
+        outs_1b = self.model.forward(input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, cache=cache_a)
         decoded_1b = [
             self.tokenizer.decode(t)
             for t in outs_1b.logits.argmax(-1)[

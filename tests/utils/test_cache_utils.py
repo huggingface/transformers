@@ -1302,9 +1302,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         for prompt in prompts:
             new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(torch_device)
             cache = copy.deepcopy(prompt_cache)
-            outputs = model.generate(
-                **new_inputs, cache=cache, max_new_tokens=40, disable_compile=True
-            )
+            outputs = model.generate(**new_inputs, cache=cache, max_new_tokens=40, disable_compile=True)
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
@@ -1527,9 +1525,7 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
             {"new_states": new_states, "cache": DynamicCache(config=cache_config)},
             strict=False,
         )
-        exported_cache = exported_program.module()(
-            new_states=new_states, cache=DynamicCache(config=cache_config)
-        )
+        exported_cache = exported_program.module()(new_states=new_states, cache=DynamicCache(config=cache_config))
         eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
 
         self.assertEqual(len(exported_cache.layers), 2)

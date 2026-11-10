@@ -290,9 +290,7 @@ class SwitchTransformersModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, cache=cache, output_router_logits=False)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, cache=cache, output_router_logits=False)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -345,9 +343,9 @@ class SwitchTransformersModelTester:
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)[
             "last_hidden_state"
         ]
-        output_from_past = model(
-            next_tokens, cache=cache, attention_mask=attn_mask, output_router_logits=False
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache, attention_mask=attn_mask, output_router_logits=False)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

@@ -687,9 +687,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         inputs = self._prepare(self.processor, [text])
         voice_cache = self._load_voices(model, [voice])
         torch.manual_seed(self.SAMPLED_SEED)
-        output = self._generate(
-            model, inputs, cache=voice_cache, do_sample=True, temperature=self.SAMPLED_TEMPERATURE
-        )
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=True, temperature=self.SAMPLED_TEMPERATURE)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         # compared in the flow head's normalised space (the original's)

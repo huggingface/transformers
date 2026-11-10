@@ -1672,9 +1672,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 text_config = model.config.get_text_config()
                 max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
                 self.assertTrue(isinstance(static_cache_generation.cache, StaticCache))
-                self._check_cache_for_generate(
-                    batch_size, static_cache_generation.cache, max_cache_len, text_config
-                )
+                self._check_cache_for_generate(batch_size, static_cache_generation.cache, max_cache_len, text_config)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
@@ -1797,9 +1795,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # sanity checks for the default cache implementation
                     if not has_defined_cache_implementation:
                         decoder_cache = (
-                            gen_out.cache.self_attention_cache
-                            if config.is_encoder_decoder
-                            else gen_out.cache
+                            gen_out.cache.self_attention_cache if config.is_encoder_decoder else gen_out.cache
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
                         # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
@@ -1827,9 +1823,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                         compiled_outputs.append(gen_out)
                         # sanity checks
                         decoder_cache = (
-                            gen_out.cache.self_attention_cache
-                            if config.is_encoder_decoder
-                            else gen_out.cache
+                            gen_out.cache.self_attention_cache if config.is_encoder_decoder else gen_out.cache
                         )
                         self.assertFalse(isinstance(decoder_cache, DynamicCache))
                         self.assertTrue(decoder_cache.is_compileable)
@@ -2930,9 +2924,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         # In this case, we simply call recursively the function on both internal caches
         if isinstance(cache, EncoderDecoderCache):
-            self._check_cache_for_generate(
-                batch_size, cache.self_attention_cache, seq_length, config
-            )
+            self._check_cache_for_generate(batch_size, cache.self_attention_cache, seq_length, config)
             # For cross attention cache, the seq_length depends on the model, so we remove that dim
             self._check_cache_for_generate(batch_size, cache.cross_attention_cache, None, config)
             return

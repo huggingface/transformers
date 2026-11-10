@@ -214,9 +214,7 @@ class XGLMModelTester:
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=past)["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice

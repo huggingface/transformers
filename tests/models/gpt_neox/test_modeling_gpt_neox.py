@@ -239,9 +239,7 @@ class GPTNeoXModelTester:
         # We need to run both on a copy of the cache, otherwise it is modified in-place
         cache_outputs = model(**cache_inputs)
         cache = cache_outputs.cache
-        full_outputs_with_attention_mask = model(
-            **non_cache_inputs, cache=copy_cache(cache)
-        ).last_hidden_state
+        full_outputs_with_attention_mask = model(**non_cache_inputs, cache=copy_cache(cache)).last_hidden_state
         full_outputs_without_attention_mask = model(
             non_cache_inputs["input_ids"], cache=copy_cache(cache)
         ).last_hidden_state

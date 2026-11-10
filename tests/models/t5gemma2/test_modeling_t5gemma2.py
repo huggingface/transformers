@@ -462,9 +462,9 @@ class T5Gemma2ModelTester:
         next_input_ids = torch.cat([decoder_input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, encoder_hidden_states=encoder_hidden_states)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, encoder_hidden_states=encoder_hidden_states, cache=cache
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, encoder_hidden_states=encoder_hidden_states, cache=cache)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

@@ -539,15 +539,11 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         attention_mask = torch.ones((1, 5), dtype=torch.long, device=torch_device)
 
         # Must not raise (previously `KeyError: 'moe'`), and defers the raw mask to the model.
-        out = create_masks_for_generate(
-            config, inputs_embeds=None, attention_mask=attention_mask, cache=None
-        )
+        out = create_masks_for_generate(config, inputs_embeds=None, attention_mask=attention_mask, cache=None)
         self.assertIs(out, attention_mask)
 
         # `None` (no padding) is deferred too.
-        self.assertIsNone(
-            create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None)
-        )
+        self.assertIsNone(create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None))
 
     def test_causal_mask_default_layer_skips_linear_layers(self):
         """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
