@@ -1197,7 +1197,8 @@ class Fp8Dequantize(ConversionOps):
                 scales = input_dict["weight_scale_inv"]
                 scales = scales[0] if isinstance(scales, list) else scales
                 return {target_key: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
-            return {target_key: quantized}
+            # A weight the checkpoint stores unquantized (e.g. the embeddings or a norm) still takes the model's dtype
+            return {target_key: quantized if output_dtype is None else quantized.to(output_dtype)}
 
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
