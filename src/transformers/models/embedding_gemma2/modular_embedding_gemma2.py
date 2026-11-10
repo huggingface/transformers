@@ -30,7 +30,13 @@ from ...masking_utils import create_bidirectional_mask, create_bidirectional_sli
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import AudioKwargs, OmniModalProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import (
+    AudioKwargs,
+    OmniModalProcessingKwargs,
+    OmniModalProcessorMixin,
+    ProcessingKwargs,
+    Unpack,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
@@ -39,6 +45,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
@@ -53,7 +60,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
 )
-from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
+from ..gemma4.processing_gemma4 import Gemma4Processor
 from ..gemma4.video_processing_gemma4 import (
     Gemma4VideoProcessor,
     Gemma4VideoProcessorKwargs,
@@ -767,6 +774,7 @@ class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):
         Can be set only to "uniform" or "truncate". Applied after FPS-based sampling, and on its
         own when FPS-based sampling is off or not applicable.
     load_audio_from_video (`bool`, *optional*):
+        Deprecated, use [`OmniModalProcessingKwargs.load_audio_from_video`] instead.
         Whether to load the audio track of an input video or not.
     """
 
@@ -844,17 +852,8 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {"padding": True},
-        "images_kwargs": {"do_convert_rgb": True},
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
-    valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+    return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):
         raise AttributeError("Deleted: Gemma 4 appended `mm_token_type_ids`, which we no longer produce.")
@@ -929,7 +928,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[EmbeddingGemma2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         OmniModalProcessorMixin.validate_inputs(self, images=images, text=text, videos=videos, audio=audio, **kwargs)
 
@@ -961,7 +960,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: VideosKwargs,
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         # When `load_audio_from_video` -> format is `mm:ss, vision_tokens, audio_tokens, mm:ss, vision_tokens, audio_tokens [...]`
         metadata = video_inputs["video_metadata"][video_idx]
@@ -1013,14 +1012,14 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: VideosKwargs,
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
-        add_timestamps = kwargs.get("add_timestamps", self.video_processor.add_timestamps)
+        add_timestamps = kwargs["videos_kwargs"].get("add_timestamps", self.video_processor.add_timestamps)
 
         # Visual-only mode: one block per frame, no timestamps
         if not add_timestamps:
-            if kwargs.get("load_audio_from_video"):
+            if kwargs["load_audio_from_video"]:
                 raise ValueError("You must allow adding timestamps when `load_audio_from_video=True`!")
 
             # `pixel_values_videos` is a flat frame sequence, so its leading axis indexes frames, not videos
@@ -1037,7 +1036,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
             )
 
         # When loading audio from video and if current video has an associated audio, i.e. no silent
-        if kwargs.get("load_audio_from_video") and video_to_audio_indices[video_idx] is not None:
+        if kwargs["load_audio_from_video"] and video_to_audio_indices[video_idx] is not None:
             return self.replace_video_with_audio_token(
                 video_inputs, video_idx, processed_audio, video_to_audio_indices, **kwargs
             )
@@ -1118,6 +1117,8 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
             ]
         return int(mask_or_len.sum())
 
+
+__getattr__ = deprecate_attr(__name__, rename={"EmbeddingGemma2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "EmbeddingGemma2Config",

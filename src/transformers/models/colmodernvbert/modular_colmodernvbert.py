@@ -20,16 +20,17 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple
 from ...utils.import_utils import requires
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
-from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorKwargs
+from ..idefics3.processing_idefics3 import Idefics3Processor
 
 
 logger = logging.get_logger(__name__)
@@ -54,23 +55,29 @@ class ColModernVBertConfig(ColQwen2Config):
     }
 
 
-class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+class DeprecatedColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    suffix (`str`, *optional*):
+        Deprecated, pass directly to [`ColModernVBertProcessor.process_queries`] instead.
+        Suffix appended to queries.
+    """
+
+    suffix: str | None
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         image_processor,
@@ -108,7 +115,7 @@ class ColModernVBertProcessor(Idefics3Processor):
     def process_images(
         self,
         images: ImageInput | None = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several image(s). Handles input validation, RGB conversion,
@@ -136,7 +143,6 @@ class ColModernVBertProcessor(Idefics3Processor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -157,12 +163,7 @@ class ColModernVBertProcessor(Idefics3Processor):
         images = [image.convert("RGB") for image in images]
 
         # Pair each image with the visual prompt prefix for the VLM backbone
-        batch_doc = self.__call__(
-            text=[self.visual_prompt_prefix] * len(images),
-            images=images,
-            images_kwargs=output_kwargs["images_kwargs"],
-            text_kwargs=output_kwargs["text_kwargs"],
-        )
+        batch_doc = self(text=[self.visual_prompt_prefix] * len(images), images=images, **output_kwargs)
 
         # When suffix is provided, generate labels by masking non-suffix tokens
         if return_token_type_ids:
@@ -174,7 +175,8 @@ class ColModernVBertProcessor(Idefics3Processor):
     def process_queries(
         self,
         text: TextInput | list[TextInput],
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        suffix: str | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several text queries. Handles input validation, prepends the
@@ -186,6 +188,8 @@ class ColModernVBertProcessor(Idefics3Processor):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            suffix (`str`, *optional*):
+                Suffix appended to queries.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -200,13 +204,20 @@ class ColModernVBertProcessor(Idefics3Processor):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
         """
+        # text_kwargs has priority for backwards compatibility
+        text_kwargs = kwargs.get("text_kwargs", {}).copy()
+        if "suffix" in text_kwargs:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+            suffix = text_kwargs.pop("suffix")
+            kwargs["text_kwargs"] = text_kwargs
+
         output_kwargs = self._merge_kwargs(
-            ColModernVBertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
         if isinstance(text, str):
             text = [text]
@@ -220,11 +231,8 @@ class ColModernVBertProcessor(Idefics3Processor):
         # Build final queries: prefix + original query + augmentation suffix
         texts_query: list[str] = [self.query_prefix + query + suffix for query in text]
 
-        batch_query = self.__call__(
-            text=texts_query,
-            return_token_type_ids=False,
-            text_kwargs=output_kwargs["text_kwargs"],
-        )
+        output_kwargs["text_kwargs"]["return_token_type_ids"] = False
+        batch_query = self(text=texts_query, **output_kwargs)
 
         return batch_query
 
@@ -359,6 +367,12 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
             attentions=vlm_output.attentions,
             image_pooler_output=vlm_output.image_pooler_output,
         )
+
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={"ColModernVBertProcessorKwargs": (DeprecatedColModernVBertProcessorKwargs, "5.29.0")},
+)
 
 
 __all__ = [
