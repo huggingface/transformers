@@ -17,6 +17,8 @@ import re
 import unittest
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers import is_torch_available
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.models.step3p7.configuration_step3p7 import (
@@ -37,6 +39,13 @@ if is_torch_available():
     import torch
 
     from transformers import Step3p7ForConditionalGeneration, Step3p7Model
+    from transformers.core_model_loading import PermuteForRope
+    from transformers.models.step3p7.configuration_step3p7 import Step3p7VisionConfig
+    from transformers.models.step3p7.modeling_step3p7 import (
+        Step3p7VisionRotaryEmbedding,
+        apply_rotary_pos_emb_vision,
+    )
+    from transformers.vision_utils import get_vision_position_ids
 
 
 _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
@@ -44,6 +53,40 @@ _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
 # `config.json` carries a native `quant_method: fp8` block so `from_pretrained` dequantizes/
 # dispatches it automatically, with no hand-built `quantization_config` needed.
 _REAL_CHECKPOINT_FP8 = "stepfun-ai/Step-3.7-Flash-FP8"
+
+
+@require_torch
+class Step3p7VisionRotaryEmbeddingTest(unittest.TestCase):
+    @parameterized.expand([(4, 2, 2), (8, 2, 3), (96, 3, 2)])
+    def test_vision_rope_matches_original(self, head_dim, height, width):
+        config = Step3p7VisionConfig(
+            hidden_size=head_dim,
+            num_attention_heads=1,
+            num_hidden_layers=1,
+            intermediate_size=2 * head_dim,
+            rope_parameters={"rope_type": "axial", "rope_theta": 10000.0},
+        )
+        rope = Step3p7VisionRotaryEmbedding(config).to(torch_device)
+        positions = get_vision_position_ids(torch.tensor([[1, height, width]], device=torch_device), 1)
+        cos, sin = rope(torch.empty((), device=torch_device), positions)
+
+        # Original EncoderRope2D concatenates W then H, with adjacent real/imaginary pairs.
+        spatial_dim = head_dim // 2
+        inv_freq = 1.0 / (10000.0 ** (torch.arange(0, spatial_dim, 2, device=torch_device).float() / spatial_dim))
+        angles = torch.cat((positions[:, 1:2] * inv_freq, positions[:, :1] * inv_freq), dim=-1)
+        angles = angles.repeat_interleave(2, dim=-1)
+        order = PermuteForRope().convert(
+            {"q_proj": torch.arange(head_dim, device=torch_device)}, ["q_proj"], ["q_proj"], config
+        )["q_proj"]
+        torch.testing.assert_close(cos, angles.cos()[:, order])
+        torch.testing.assert_close(sin, angles.sin()[:, order])
+
+        q, k = torch.randn(2, height * width, 1, head_dim, device=torch_device).unbind(0)
+        outputs = apply_rotary_pos_emb_vision(q[..., order], k[..., order], cos, sin)
+        for original, output in zip((q, k), outputs):
+            rotated_pairs = torch.stack((-original[..., 1::2], original[..., ::2]), dim=-1).flatten(-2)
+            expected = original * angles.cos().unsqueeze(1) + rotated_pairs * angles.sin().unsqueeze(1)
+            torch.testing.assert_close(output, expected[..., order])
 
 
 class Step3p7VisionText2TextModelTester(VLMModelTester):
