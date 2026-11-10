@@ -158,8 +158,9 @@ class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
         self.activation = ACT2FN[config.activation]
 
     def forward(self, x):
-        # Align activations to block parameter dtype for mixed precision stability
-        x = x.to(self.input_layer.weight.dtype)
+        # Quantized weights may use integer storage; keep activations floating point.
+        if (target_dtype := self.input_layer.weight.dtype).is_floating_point:
+            x = x.to(target_dtype)
         return super().forward(x)
 
 
@@ -263,7 +264,7 @@ class TimesFm2_5DecoderLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class TimesFm2_5PreTrainedModel(TimesFmPreTrainedModel):
-    config_class = TimesFm2_5Config
+    config: TimesFm2_5Config
     base_model_prefix = "model"
     _no_split_modules = ["TimesFm2_5DecoderLayer"]
     _supports_flash_attn = True

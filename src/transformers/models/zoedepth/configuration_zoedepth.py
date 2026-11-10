@@ -17,8 +17,7 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
@@ -109,7 +108,22 @@ class ZoeDepthConfig(PreTrainedConfig):
     ```"""
 
     model_type = "zoedepth"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="beit",
+            init_kwargs={
+                "image_size": 384,
+                "num_hidden_layers": 24,
+                "hidden_size": 1024,
+                "intermediate_size": 4096,
+                "num_attention_heads": 16,
+                "use_relative_position_bias": True,
+                "reshape_hidden_states": False,
+                "out_features": ["stage6", "stage12", "stage18", "stage24"],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     hidden_act: str = "gelu"
@@ -140,23 +154,7 @@ class ZoeDepthConfig(PreTrainedConfig):
     patch_transformer_num_attention_heads: int | None = None
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="beit",
-            default_config_kwargs={
-                "image_size": 384,
-                "num_hidden_layers": 24,
-                "hidden_size": 1024,
-                "intermediate_size": 4096,
-                "num_attention_heads": 16,
-                "use_relative_position_bias": True,
-                "reshape_hidden_states": False,
-                "out_features": ["stage6", "stage12", "stage18", "stage24"],
-            },
-            **kwargs,
-        )
         self.bin_configurations = self.bin_configurations or [{"n_bins": 64, "min_depth": 0.001, "max_depth": 10.0}]
-
         super().__post_init__(**kwargs)
 
 

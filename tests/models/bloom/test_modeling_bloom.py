@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...generation.test_utils import assert_similar_generate_outputs
 from ...test_modeling_common import ids_tensor
 
 
@@ -193,6 +194,23 @@ class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Bloom needs a 2D attention for alibi")
     def test_custom_4d_attention_mask(self):
         pass
+
+    def test_generate_static_cache_without_attention_mask(self):
+        # Regression test: `attention_mask=None` with a static cache used to pass a 4D mask to `build_alibi_tensor`
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = BloomForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "pad_token_id": None,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+
+        dynamic_output = model.generate(input_ids, **generation_kwargs)
+        static_output = model.generate(input_ids, cache_implementation="static", **generation_kwargs)
+        assert_similar_generate_outputs(dynamic_output, static_output)
 
 
 @require_torch

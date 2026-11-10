@@ -49,7 +49,7 @@ import torch
 from transformers import AutoProcessor, AutoTokenizer, AutoModelForImageTextToText
 from transformers.distributed.configuration_utils import DistributedConfig
 
-distributed_config = DistributedConfig(enable_expert_parallel=True)
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"]))
 
 processor = AutoProcessor.from_pretrained('moonshotai/Kimi-K2.6')
 model = AutoModelForImageTextToText.from_pretrained(

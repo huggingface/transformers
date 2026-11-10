@@ -21,16 +21,18 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...processing_utils import Unpack
+from ...modeling_utils import slice_logits_to_keep
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import accepts_precomputed_kwargs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..exaone4_5.processing_exaone4_5 import Exaone4_5_Processor
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
@@ -58,7 +60,10 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
     """
 
     model_type = "hyperclovax_vision_v2"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2_5_vl_vision"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="hyperclovax"),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -68,20 +73,9 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            model_type = self.vision_config.get("model_type", "qwen2_5_vl_vision")
-            # The Hub config uses the full Qwen2.5-VL type for the vision transformer.
-            model_type = "qwen2_5_vl_vision" if model_type == "qwen2_5_vl" else model_type
-            self.vision_config["model_type"] = model_type
-            self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["qwen2_5_vl_vision"]()
-
-        if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "hyperclovax")
-            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["hyperclovax"]()
+        # The Hub config uses the full Qwen2.5-VL type for the vision transformer.
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen2_5_vl":
+            self.vision_config["model_type"] = "qwen2_5_vl_vision"
 
         # This is necessary to properly find the weight conversion mapping.
         if kwargs.get("model_type") == "vlm":
@@ -107,12 +101,12 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
         return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
@@ -122,12 +116,12 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
@@ -146,21 +140,21 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
             In the input token sequence, each image position should contain `config.image_token_id`.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel values of input videos, with the same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width dimensions of the feature grid for each image.
@@ -238,14 +232,14 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -253,9 +247,9 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel values of input images after preprocessing.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel values of input videos, same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             `[temporal, height, width]` grid counts per image.
@@ -306,9 +300,9 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         # Key difference: additional logits scaling applied
-        logits = self.lm_head(hidden_states[:, slice_indices, :]) * self.config.text_config.logits_scaling
+        logits = self.lm_head(hidden_states) * self.config.text_config.logits_scaling
 
         loss = None
         if labels is not None:
@@ -381,6 +375,8 @@ class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
         result = super().get_text_with_replacements(text, images_replacements, videos_replacements, audio_replacements)
         return result
 
+
+__getattr__ = deprecate_attr(__name__, rename={"HyperCLOVAXVisionV2_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "HyperCLOVAXVisionV2Config",

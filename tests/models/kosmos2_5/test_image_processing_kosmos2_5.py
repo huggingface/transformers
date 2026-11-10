@@ -230,7 +230,11 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
-                    image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
+                    image_inputs[0],
+                    do_convert_rgb=False,
+                    return_tensors="pt",
+                    max_patches=max_patch,
+                    input_data_format="channels_last",
                 ).flattened_patches
                 self.assertEqual(
                     encoded_images.shape,
@@ -239,7 +243,11 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
                 # Test batched
                 encoded_images = image_processor(
-                    image_inputs, return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
+                    image_inputs,
+                    do_convert_rgb=False,
+                    return_tensors="pt",
+                    max_patches=max_patch,
+                    input_data_format="channels_last",
                 ).flattened_patches
                 self.assertEqual(
                     encoded_images.shape,

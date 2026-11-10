@@ -16,6 +16,7 @@ Speech processor class for Wav2Vec2
 """
 
 import os
+import warnings
 from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import ModelOutput, auto_docstring, logging, requires_backends
+from ...utils import ModelOutput, auto_docstring, is_kenlm_available, is_pyctcdecode_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -45,7 +46,8 @@ ListOfDict = list[dict[str, int | str]]
 @dataclass
 class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     """
-    Output type of [`Wav2Vec2DecoderWithLM`], with transcription.
+    Output type of [`~Wav2Vec2ProcessorWithLM.decode`] and [`~Wav2Vec2ProcessorWithLM.batch_decode`]. Deprecated, will
+    be removed in Transformers v6.
 
     Args:
         text (list of `str` or `str`):
@@ -67,6 +69,20 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
 
 @auto_docstring
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
+    _deprecation_message = (
+        "`Wav2Vec2ProcessorWithLM` and n-gram language model decoding with pyctcdecode + kenlm are deprecated and "
+        "will be removed in Transformers v6. To keep language model decoding, call pyctcdecode directly: "
+        "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+    )
+    _missing_dependencies_message = (
+        "`Wav2Vec2ProcessorWithLM` needs `pyctcdecode` and `kenlm`, which are no longer installed with "
+        "`transformers[audio]`. It is deprecated and will be removed in Transformers v6.\n"
+        "- To keep language model decoding, install them or call pyctcdecode directly: "
+        "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode\n"
+        "- To decode without the language model, load `Wav2Vec2Processor` instead and decode "
+        "`logits.argmax(-1)` with `processor.batch_decode`."
+    )
+
     def __init__(
         self,
         feature_extractor: "FeatureExtractionMixin",
@@ -77,6 +93,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
         """
+        warnings.warn(self._deprecation_message, FutureWarning)
         from pyctcdecode import BeamSearchDecoderCTC
 
         super().__init__(feature_extractor, tokenizer)
@@ -133,7 +150,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 Additional keyword arguments passed along to both [`SequenceFeatureExtractor`] and
                 [`PreTrainedTokenizer`]
         """
-        requires_backends(cls, "pyctcdecode")
+        if not (is_pyctcdecode_available() and is_kenlm_available()):
+            raise ImportError(cls._missing_dependencies_message)
         from pyctcdecode import BeamSearchDecoderCTC
 
         feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)

@@ -27,6 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -35,7 +36,6 @@ from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3DecoderLayer,
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
@@ -49,6 +49,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 
 
 logger = logging.get_logger(__name__)
@@ -62,10 +63,11 @@ class AXK1Config(DeepseekV3Config):
         Number of groups for routed experts.
     topk_group (`int`, *optional*, defaults to 4):
         Number of selected groups per token (each token's experts are drawn from these groups).
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of leading layers that use a dense MLP; the rest use the MoE block.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to use the interleaved rotary position embedding layout.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Derived from the (legacy) kwargs
+        `first_k_dense_replace` / `moe_layer_freq` when not provided.
 
     ```python
     >>> from transformers import AXK1Config, AXK1Model
@@ -103,13 +105,32 @@ class AXK1Config(DeepseekV3Config):
     n_group: int = 8
     topk_group: int = 4
     num_experts_per_tok: int = 8
-    first_k_dense_replace: int = 1
+    mlp_layer_types: list[str] | None = None
     max_position_embeddings: int = 32768
     rms_norm_eps: float = 1e-6
     bos_token_id: int | None = 163691
     eos_token_id: int | list[int] | None = 163691
 
     num_mtp_layers = AttributeError()
+    first_k_dense_replace = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        self.head_dim = self.qk_rope_head_dim
+
+        # Convert from legacy args to mlp layer types
+        if self.mlp_layer_types is None:
+            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            moe_layer_freq = kwargs.pop("moe_layer_freq", 1)
+            self.mlp_layer_types = [
+                "sparse" if i >= first_k_dense_replace and i % moe_layer_freq == 0 else "dense"
+                for i in range(self.num_hidden_layers)
+            ]
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class AXK1RMSNorm(DeepseekV3RMSNorm):
@@ -220,7 +241,7 @@ class AXK1Attention(DeepseekV3Attention):
         return attn_output, attn_weights
 
 
-class AXK1DecoderLayer(DeepseekV3DecoderLayer):
+class AXK1DecoderLayer(Glm4MoeLiteDecoderLayer):
     pass
 
 

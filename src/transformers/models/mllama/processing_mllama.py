@@ -21,14 +21,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "image_kwargs": {
-            "max_image_tiles": 4,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 def get_cross_attention_token_mask(input_ids: list[int], image_token_id: int) -> list[list[int]]:
@@ -166,7 +159,9 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 
 @auto_docstring
 class MllamaProcessor(ProcessorMixin):
-    valid_processor_kwargs = MllamaProcessorKwargs
+    image_kwargs = {
+        "max_image_tiles": 4,
+    }
 
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
@@ -186,7 +181,7 @@ class MllamaProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[MllamaProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -203,7 +198,6 @@ class MllamaProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            MllamaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -258,33 +252,16 @@ class MllamaProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images, text, **kwargs)
+        super().validate_inputs(images=images, text=text, **kwargs)
 
-        if text is not None:
-            n_images_in_text = [t.count(self.image_token) for t in text]
-
-            if sum(n_images_in_text) > 0 and images is None:
-                raise ValueError("No image were provided, but there are image tokens in the prompt")
-            elif images is not None:
-                images = make_nested_list_of_images(images)
-                n_images_in_images = [len(sample) for sample in images]
-
-                if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
-                    batch_img == 0 for batch_img in n_images_in_text
-                ):
-                    raise ValueError(
-                        "If a batch of text is provided, there should be either no images or at least one image per sample"
-                    )
-
-                if n_images_in_images != n_images_in_text:
-                    add_message = ""
-                    if sum(n_images_in_images) == sum(n_images_in_text) and n_images_in_images != n_images_in_text:
-                        add_message = "Make sure to pass your images as a nested list, where each sub-list holds images per batch"
-
-                    raise ValueError(
-                        f"The number of image tokens in each text ({n_images_in_text}) should be the same as the "
-                        f"number of provided images per batch ({n_images_in_images}). {add_message}"
-                    )
+        if text is not None and images is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
+                raise ValueError(
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
+                )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # Mllama has an `image_token` but doesn't need to add placeholders because
@@ -328,5 +305,7 @@ class MllamaProcessor(ProcessorMixin):
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MllamaProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MllamaProcessor"]

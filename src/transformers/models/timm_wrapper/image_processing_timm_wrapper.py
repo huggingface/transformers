@@ -61,7 +61,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
 
-        # useful for training, see examples/pytorch/image-classification/run_image_classification.py
+        # useful for training
         self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
 
         # If `ToTensor` is in the transforms, then the input should be numpy array or PIL image.

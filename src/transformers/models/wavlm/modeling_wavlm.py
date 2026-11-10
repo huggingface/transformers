@@ -191,10 +191,10 @@ class WavLMAttention(nn.Module):
 
     def torch_multi_head_self_attention(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.LongTensor | torch.BoolTensor,
-        gated_position_bias: torch.FloatTensor,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+        gated_position_bias: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)
@@ -243,7 +243,7 @@ class WavLMAttention(nn.Module):
 
         return attn_output, attn_weights
 
-    def compute_bias(self, query_length: int, key_length: int) -> torch.FloatTensor:
+    def compute_bias(self, query_length: int, key_length: int) -> torch.Tensor:
         device = self.rel_attn_embed.weight.device
         context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
@@ -253,7 +253,7 @@ class WavLMAttention(nn.Module):
         values = values.permute([2, 0, 1])
         return values
 
-    def _relative_positions_bucket(self, relative_positions: torch.FloatTensor) -> torch.FloatTensor:
+    def _relative_positions_bucket(self, relative_positions: torch.Tensor) -> torch.Tensor:
         num_buckets = self.num_buckets // 2
 
         relative_buckets = (relative_positions > 0).to(torch.long) * num_buckets
@@ -551,6 +551,29 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+class AMSoftmaxLoss(nn.Module):
+    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
+        super().__init__()
+        self.scale = scale
+        self.margin = margin
+        self.num_labels = num_labels
+        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, hidden_states, labels):
+        labels = labels.flatten()
+        weight = nn.functional.normalize(self.weight, dim=0)
+        hidden_states = nn.functional.normalize(hidden_states, dim=1)
+        cos_theta = torch.mm(hidden_states, weight)
+        psi = cos_theta - self.margin
+
+        onehot = nn.functional.one_hot(labels, self.num_labels)
+        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
+        loss = self.loss(logits, labels)
+
+        return loss
+
+
 @auto_docstring
 class WavLMPreTrainedModel(PreTrainedModel):
     config: WavLMConfig
@@ -592,6 +615,12 @@ class WavLMPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, WavLMModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, WavLMAttention):
+            init.ones_(module.gru_rel_pos_const)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """
@@ -947,8 +976,8 @@ class WavLMModel(WavLMPreTrainedModel):
 
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -998,7 +1027,7 @@ class WavLMModel(WavLMPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | WavLMBaseModelOutput:
         r"""
@@ -1043,7 +1072,7 @@ class WavLMModel(WavLMPreTrainedModel):
     """
 )
 class WavLMForCTC(WavLMPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: WavLMConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1148,26 +1177,15 @@ class WavLMForCTC(WavLMPreTrainedModel):
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=input_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1181,7 +1199,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
     """
 )
 class WavLMForSequenceClassification(WavLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1224,12 +1242,12 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`WavLMProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`WavLMProcessor.__call__`] for details.
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True
@@ -1274,7 +1292,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
 @auto_docstring
 class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1316,12 +1334,12 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`WavLMProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`WavLMProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1357,29 +1375,6 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-class AMSoftmaxLoss(nn.Module):
-    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
-        super().__init__()
-        self.scale = scale
-        self.margin = margin
-        self.num_labels = num_labels
-        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
-        self.loss = nn.CrossEntropyLoss()
-
-    def forward(self, hidden_states, labels):
-        labels = labels.flatten()
-        weight = nn.functional.normalize(self.weight, dim=0)
-        hidden_states = nn.functional.normalize(hidden_states, dim=1)
-        cos_theta = torch.mm(hidden_states, weight)
-        psi = cos_theta - self.margin
-
-        onehot = nn.functional.one_hot(labels, self.num_labels)
-        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
-        loss = self.loss(logits, labels)
-
-        return loss
 
 
 class TDNNLayer(nn.Module):
@@ -1420,7 +1415,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class WavLMForXVector(WavLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
 
         self.wavlm = WavLMModel(config)
@@ -1480,12 +1475,12 @@ class WavLMForXVector(WavLMPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XVectorOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`WavLMProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`WavLMProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

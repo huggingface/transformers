@@ -47,7 +47,6 @@ rendered properly in your Markdown viewer.
 
 ```bash
 RUN_SLOW=1 pytest tests/
-RUN_SLOW=1 pytest examples/
 ```
 
    결과는 [여기](https://github.com/huggingface/transformers/actions)에서 확인할 수 있습니다.
@@ -513,7 +512,7 @@ n_gpu = get_gpu_count()  #torch와 tf와 함께 작동
 다음은 사용 가능한 테스트입니다:
 
 - [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
-- [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
+- [test_trainer_distributed_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed_deepspeed.py)
 
 실행 지점으로 바로 이동하려면, 해당 테스트에서 `execute_subprocess_async` 호출을 검색하세요.
 
@@ -719,7 +718,7 @@ from transformers.testing_utils import TestCasePlus
 
 class PathExampleTest(TestCasePlus):
     def test_something_involving_local_locations(self):
-        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt16"
 ```
 
 만약 `pathlib`를 통해 경로를 조작할 필요가 없거나 경로를 문자열로만 필요로 하는 경우에는 `pathlib` 객체에 `str()`을 호출하거나 `_str`로 끝나는 접근자를 사용할 수 있습니다.

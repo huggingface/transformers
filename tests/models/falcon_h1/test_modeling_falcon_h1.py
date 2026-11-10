@@ -299,7 +299,10 @@ class FalconH1ModelTester:
         input_ids = input_ids.to(torch_device)
         seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
         with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
 
         self.parent.assertTrue(seen, "the Mamba2 mixer was never called")
         self.parent.assertIn("seq_idx", seen[0])

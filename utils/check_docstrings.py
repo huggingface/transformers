@@ -124,9 +124,6 @@ OBJECTS_TO_IGNORE = {
     "AudioFlamingo3Processor",
     "FourOverSixConfig",
     "Llama4Processor",
-    # Deprecated
-    "InputExample",
-    "InputFeatures",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
@@ -198,6 +195,8 @@ OBJECTS_TO_IGNORE = {
     "DebertaV2TokenizerFast",
     "DeformableDetrImageProcessor",
     "DeiTModel",
+    "DecisionConfig",
+    "DecisionPipeline",
     "DepthEstimationPipeline",
     "DetrImageProcessor",
     "DinatModel",

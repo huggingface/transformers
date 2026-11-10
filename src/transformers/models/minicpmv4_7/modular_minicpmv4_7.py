@@ -19,18 +19,16 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.import_utils import torch_compilable_check
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import make_batched_videos
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
-    MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
 
@@ -38,13 +36,13 @@ from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7Config(MiniCPMV4_6Config):
     r"""
@@ -84,48 +82,6 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     slice_end_id: int | None = None
     newline_id: int | None = None
     drop_vision_last_layer = AttributeError()
-
-
-class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        target_sizes: torch.IntTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        device = hidden_states.device
-
-        window_index, window_cu_seqlens, window_max_seqlens = self.get_window_index(target_sizes, kwargs=kwargs)
-        window_index = window_index.to(device)
-
-        hidden_states = hidden_states[:, window_index, :]
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            cu_seqlens=window_cu_seqlens.to(device),
-            max_seqlen=window_max_seqlens,
-        )
-        hidden_states = residual[:, window_index, :] + hidden_states
-
-        window_h, window_w = self.window_kernel_size
-        window_size = window_h * window_w
-        embed_dim = hidden_states.shape[-1]
-        torch_compilable_check(
-            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
-            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
-        )
-        patch = hidden_states.reshape(-1, window_size, embed_dim)
-        flat = patch.flatten(1)
-        patch_residual = patch.mean(dim=1)
-
-        hidden_state = self.pre_norm(flat)
-        hidden_state = self.linear_1(hidden_state)
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.linear_2(hidden_state)
-        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
-
-        return hidden_state
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -551,14 +507,14 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -566,11 +522,11 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -645,14 +601,14 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
@@ -662,11 +618,11 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -693,8 +649,8 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         hidden_states = outputs[0]
 
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -750,37 +706,24 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
 
 # Different from MiniCPM4-6, we need `mm_token_type_ids` returned by default
 class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
-    _defaults = {
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "return_mm_token_type_ids": True,
-            "return_text_replacement_offsets": False,
-        },
-    }
+    pass
 
 
 class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
 
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[MiniCPMV4_7ProcessorKwargs],
-    ):
-        kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
-            **kwargs,
-        )
-        # `use_image_id` is an image-only setting, so it must not leak into the video branch.
-        kwargs["videos_kwargs"].pop("use_image_id", None)
-        return super().__call__(images=images, text=text, videos=videos, **kwargs)
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
+    return_mm_token_type_ids = True
 
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)

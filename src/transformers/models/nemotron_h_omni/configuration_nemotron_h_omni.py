@@ -13,9 +13,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 __all__ = ["NemotronH_Omni_Reasoning_V3_Config"]
@@ -54,10 +54,17 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
     """
 
     model_type = "nemotron_h_omni"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "text_config": AutoConfig,
-        "audio_config": AutoConfig,
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="radio", init_kwargs={"video_temporal_patch_size": 2}
+        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron_h"),
+        "audio_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="parakeet_encoder",
+            init_kwargs={"attention_bias": False, "scale_input": False},
+            optional=True,
+        ),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -94,18 +101,6 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
             if legacy_value is not None and getattr(self, name) == getattr(type(self), name, None):
                 setattr(self, name, legacy_value)
 
-        if isinstance(self.vision_config, dict):
-            self.vision_config = CONFIG_MAPPING["radio"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["radio"](video_temporal_patch_size=self.video_temporal_patch_size)
-
-        # Handle both cases: when loading from JSON (text_config is dict) and when called
-        # internally by transformers (text_config is None).
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING["nemotron_h"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["nemotron_h"]()
-
         # Backwards compatibility: released checkpoints omit `attention_bias`/`scale_input` from
         # `audio_config`, and their Parakeet variant expects `False` for both, whereas
         # `ParakeetEncoderConfig` defaults them to `True`. Supply them for configs that predate the
@@ -115,17 +110,9 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
             # the checkpoint stores `model_type: parakeet`, which is not a registered type; let the
             # sub-config class supply its own
             audio_config.pop("model_type", None)
-            self.audio_config = CONFIG_MAPPING["parakeet_encoder"](
-                attention_bias=audio_config.pop("attention_bias", False),
-                scale_input=audio_config.pop("scale_input", False),
-                **audio_config,
-            )
+            self.audio_config = {"attention_bias": False, "scale_input": False, **self.audio_config}
 
         super().__post_init__(**kwargs)
-
-        # `attn_implementation` flows in through `**kwargs` (the base `PreTrainedConfig` stores it as
-        # `self._attn_implementation`, as for every other model); propagate it to the language model.
-        self.text_config._attn_implementation = self._attn_implementation
 
     def validate_architecture(self):
         super().validate_architecture()

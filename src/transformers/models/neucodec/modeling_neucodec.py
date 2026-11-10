@@ -50,7 +50,7 @@ if is_torch_available():
 @dataclass
 class NeuCodecOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained using the decoder
         part of NeuCodec. These represent the reconstructed audio signal.
     audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
@@ -62,7 +62,7 @@ class NeuCodecOutput(ModelOutput):
         Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     audio_codes: torch.LongTensor | None = None
     latents: torch.Tensor | None = None
     audio_codes_mask: torch.Tensor | None = None
@@ -91,13 +91,13 @@ class NeuCodecEncoderOutput(ModelOutput):
 @dataclass
 class NeuCodecDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, segment_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained by converting
         the discrete codes back into continuous audio signals. This represents
         the reconstructed audio that can be played back.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class NeuCodecMLP(nn.Module):
@@ -681,18 +681,10 @@ class NeuCodecRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -950,7 +942,7 @@ class NeuCodecSemanticAdapter(nn.Module):
 
 @auto_docstring(custom_intro="NeuCodec neural audio codec model.")
 class NeuCodecModel(NeuCodecPreTrainedModel):
-    config_class = NeuCodecConfig
+    config: NeuCodecConfig
 
     def __init__(self, config: NeuCodecConfig):
         super().__init__(config)

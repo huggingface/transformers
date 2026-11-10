@@ -15,8 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
@@ -77,7 +76,17 @@ class Mask2FormerConfig(PreTrainedConfig):
     """
 
     model_type = "mask2former"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="swin",
+            init_kwargs={
+                "depths": [2, 2, 18, 2],
+                "drop_path_rate": 0.3,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
     backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "hidden_dim", "num_hidden_layers": "decoder_layers"}
 
@@ -110,25 +119,13 @@ class Mask2FormerConfig(PreTrainedConfig):
     feature_strides: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     output_auxiliary_logits: bool | None = None
 
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={
-                "depths": [2, 2, 18, 2],
-                "drop_path_rate": 0.3,
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
+    def validate_architecture(self):
+        super().validate_architecture()
         if self.backbone_config.model_type not in self.backbones_supported:
             logger.warning_once(
                 f"Backbone {self.backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
                 f"Supported model types: {','.join(self.backbones_supported)}"
             )
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Mask2FormerConfig"]

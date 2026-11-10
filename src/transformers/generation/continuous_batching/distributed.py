@@ -19,7 +19,7 @@ import torch
 import torch.distributed as _dist
 
 from ...distributed.utils import _is_torch_distributed_initialized
-from .requests import logger
+from .utils import logger
 
 
 # torch marks `torch.distributed` members as possibly-missing, which leads to type check errors. To avoid them, we mark

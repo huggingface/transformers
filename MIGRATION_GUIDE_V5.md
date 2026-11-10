@@ -475,6 +475,26 @@ This will match the previous behavior in the large majority of cases. If your mo
 
 Linked PR: https://github.com/huggingface/transformers/pull/42564
 
+### `hidden_states[-1]` of vision models is the pre-norm output
+
+For many vision encoders (ViT, DeiT, DINOv2, DINOv3, and others), `hidden_states[-1]` is the output of the last block *before* the final layernorm. `last_hidden_state` is the normalized output. Up to v4.57.1, the two tensors were identical. They differ starting in v4.57.2, and v5 keeps this behavior. This only affects you if you're upgrading from v4.57.1 or earlier.
+
+Code that uses `hidden_states[-1]` as the final features runs without errors but gets different values, and the difference can be large with pretrained weights. To check a model, compare the two tensors.
+
+```python
+outputs = model(pixel_values=pixel_values, output_hidden_states=True)
+features = outputs.last_hidden_state  # normalized; outputs.hidden_states[-1] is pre-norm
+```
+
+Use `last_hidden_state` for the normalized features. From v5.18.0 onward, you can also restore the old behavior by setting `tie_last_hidden_states=True` in the model config.
+
+```python
+from transformers import ViTConfig, ViTModel
+
+config = ViTConfig(tie_last_hidden_states=True)
+model = ViTModel(config)  # outputs.hidden_states[-1] is now identical to outputs.last_hidden_state
+```
+
 ## Quantization changes
 
 We clean up the quantization API in transformers, and significantly refactor the weight loading as highlighted

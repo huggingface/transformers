@@ -53,7 +53,6 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 <PipelineTag pipeline="image-segmentation"/>
 
 - All notebooks that illustrate inference as well as fine-tuning on custom data with MaskFormer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MaskFormer).
-- Scripts for finetuning [`MaskFormer`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/instance-segmentation).
 
 ## MaskFormer specific outputs
 

@@ -26,6 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
@@ -328,26 +329,19 @@ def _detect_and_fix_repetitions(text, threshold=20):
     return text
 
 
-class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-            "n_window": 50,  # should match config.n_window
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen3ASRProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "return_attention_mask": True,
+        "n_window": 50,  # should match config.n_window
+    }
 
     def __init__(
         self,
@@ -375,7 +369,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput,
         output_labels: bool | None = False,
-        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -442,10 +436,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
-    ) -> BatchFeature:
+        transcription: str | list[str] | None = None,
+        tokenize: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature | list[str]:
         """
-        Prepare inputs for automatic speech recognition without manually writing the chat template.
+        Prepare inputs for automatic speech recognition without manually writing the chat template, either for
+        inference or, when `transcription` is given, for training.
 
         Args:
             audio (`AudioInput` or `list[AudioInput]`):
@@ -462,13 +459,27 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 Context/hotwords to include as the system prompt, e.g. domain-specific words or
                 phrases to bias the transcription towards. A list must be the same length as the
                 audio batch. When `None`, the system prompt is left empty.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~Qwen3ASRProcessor.__call__`]).
+                With a `language`, the transcript is prefixed with ``language <NAME><asr_text>`` to match the model's
+                output format. Without one, it is written as is, so it should already be in that format to preserve
+                the pretrained behavior.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`]
-                and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`Qwen3ASRForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
+            [`Qwen3ASRForConditionalGeneration.generate`], or to [`Qwen3ASRForConditionalGeneration.forward`] to
+            compute the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
 
@@ -479,6 +490,11 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
+        is_training = transcription is not None
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
             messages = []
@@ -488,15 +504,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
             conversations.append(messages)
 
         # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
-        # so that the model only generates the transcription text in the desired language
-        for messages, lang in zip(conversations, languages):
+        # so that the model only generates the transcription text in the desired language. For training, the
+        # transcript completes the assistant turn, which is then closed.
+        for messages, lang, transcript in zip(conversations, languages, transcriptions):
             prefill = f"language {lang}<asr_text>" if lang is not None else ""
+            if transcript is not None:
+                prefill += transcript
             messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             return_dict=True,
-            continue_final_message=True,
+            continue_final_message=not is_training,
             **kwargs,
         )
 
@@ -775,5 +794,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
     def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen3ASRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen3ASRProcessor"]

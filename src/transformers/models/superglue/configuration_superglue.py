@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="magic-leap-community/superglue_indoor")
@@ -50,7 +50,9 @@ class SuperGlueConfig(PreTrainedConfig):
     """
 
     model_type = "superglue"
-    sub_configs = {"keypoint_detector_config": AutoConfig}
+    sub_configs_defaults = {
+        "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
+    }
 
     keypoint_detector_config: dict | PreTrainedConfig | None = None
     hidden_size: int = 256
@@ -68,14 +70,6 @@ class SuperGlueConfig(PreTrainedConfig):
         self.keypoint_encoder_sizes = (
             self.keypoint_encoder_sizes if self.keypoint_encoder_sizes is not None else [32, 64, 128, 256]
         )
-
-        if isinstance(self.keypoint_detector_config, dict):
-            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
-            self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
-                **self.keypoint_detector_config
-            )
-        elif self.keypoint_detector_config is None:
-            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
 
         super().__post_init__(**kwargs)
 

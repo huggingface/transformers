@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import (
     auto_docstring,
     logging,
@@ -167,7 +167,7 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }
@@ -190,6 +190,34 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
             }
 
         super().__post_init__(**kwargs)
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
+        # After this index, all layers are consumers
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
+
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer][::-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4UnifiedAssistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
@@ -294,10 +322,10 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma4_unified"
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": Gemma4UnifiedTextConfig,
-        "vision_config": Gemma4UnifiedVisionConfig,
-        "audio_config": Gemma4UnifiedAudioConfig,
+        "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
     }
 
     text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
@@ -312,25 +340,6 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma4UnifiedTextConfig()
-            logger.info("text_config is None. Using default Gemma4UnifiedTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma4UnifiedTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. Gemma4UnifiedModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma4UnifiedVisionConfig(**self.vision_config)
-
-        if self.audio_config is None:
-            logger.info("audio_config is None. Gemma4UnifiedModel.audio_tower will not be initialized.")
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma4UnifiedAudioConfig(**self.audio_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma4UnifiedAudioConfig", "Gemma4UnifiedConfig", "Gemma4UnifiedTextConfig", "Gemma4UnifiedVisionConfig"]

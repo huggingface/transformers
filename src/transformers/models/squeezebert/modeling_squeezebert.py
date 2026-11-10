@@ -416,7 +416,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class SqueezeBertModel(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.embeddings = SqueezeBertEmbeddings(config)
@@ -439,7 +439,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -506,7 +506,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         "cls.predictions.decoder.weight": "transformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
@@ -576,7 +576,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     """
 )
 class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -657,7 +657,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
@@ -702,7 +702,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -756,7 +756,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -818,7 +818,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

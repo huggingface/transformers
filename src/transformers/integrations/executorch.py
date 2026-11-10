@@ -16,6 +16,7 @@ from itertools import zip_longest
 import torch
 
 from ..cache_utils import (
+    DummyLayer,
     DynamicCache,
     DynamicLayer,
     DynamicSlidingWindowLayer,
@@ -27,10 +28,6 @@ from ..cache_utils import (
 from ..configuration_utils import get_head_shapes
 from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
-from ..pytorch_utils import (
-    is_torch_greater_or_equal,
-    is_torch_greater_or_equal_than_2_6,
-)
 
 
 class TorchExportableModuleForVLM:
@@ -526,6 +523,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.static_cache.layers[i] = StaticLayer(max_cache_len)
+            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
+            elif isinstance(layer, DummyLayer):
+                self.static_cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
@@ -704,6 +704,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         for i, layer in enumerate(self.cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.cache.layers[i] = StaticLayer(max_cache_len)
+            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
+            elif isinstance(layer, DummyLayer):
+                self.cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
@@ -788,32 +791,13 @@ def convert_and_export_with_cache(
             else torch.tensor([0], dtype=torch.long, device=model.device)
         )
 
-        if is_torch_greater_or_equal("2.6.0"):
-            exported_program = torch.export.export(
-                TorchExportableModuleWithStaticCache(model),
-                args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
-                dynamic_shapes=dynamic_shapes,
-                strict=strict if strict is not None else True,
-            )
-        else:
-            if dynamic_shapes is not None:
-                logging.warning(
-                    "Dynamic shapes spec will be ignored by convert_and_export_with_cache for torch < 2.6.0."
-                )
-            if strict is not None:
-                logging.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
-            # We have to keep this path for BC.
-            #
-            # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
-            # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
-            exported_program = torch.export._trace._export(
-                TorchExportableModuleWithStaticCache(model),
-                args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
-                pre_dispatch=False,
-                strict=True,
-            )
+        exported_program = torch.export.export(
+            TorchExportableModuleWithStaticCache(model),
+            args=(),
+            kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
+            dynamic_shapes=dynamic_shapes,
+            strict=strict if strict is not None else True,
+        )
         return exported_program
 
 
@@ -857,6 +841,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.static_cache.layers[i] = StaticLayer(max_static_cache_length)
+            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
+            elif isinstance(layer, DummyLayer):
+                self.static_cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(self.config)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))
@@ -1100,13 +1087,10 @@ def _get_dynamic_cache_layout(cache: DynamicCache) -> list[int | None]:
 
 def _get_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
-    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer) for layer in cache.layers):
+    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer, DummyLayer) for layer in cache.layers):
         raise RuntimeError(
-            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer` and `DynamicSlidingWindowLayer`"
+            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer`, `DynamicSlidingWindowLayer` and `DummyLayer`"
         )
-
-    if not is_torch_greater_or_equal_than_2_6:
-        logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],

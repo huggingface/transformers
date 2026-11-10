@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
 
-from transformers.models.ijepa.configuration_ijepa import IJepaConfig
-
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ..vit.modeling_vit import ViTEmbeddings, ViTForImageClassification, ViTModel, ViTPreTrainedModel
+from .configuration_ijepa import IJepaConfig
 
 
 class IJepaEmbeddings(ViTEmbeddings):

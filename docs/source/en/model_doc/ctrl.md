@@ -52,8 +52,7 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
 - CTRL is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
 - CTRL was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
-  token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text as it can be
-  observed in the *run_generation.py* example script.
+  token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text.
 - The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
   Using the `past_key_values` value prevents the model from re-computing
   pre-computed values in the context of text generation. See the [`~CTRLModel#forward`]

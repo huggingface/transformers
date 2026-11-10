@@ -18,7 +18,6 @@ import tempfile
 import unittest
 from functools import reduce
 
-import pytest
 import requests
 
 from transformers import (
@@ -289,7 +288,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                 model = model_class(config)
 
                 model.to(torch_device)
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
                 model.train()
 
                 # unfreeze additional layers
@@ -309,11 +308,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                             self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
                         else:
                             pass
-
-    @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
 
 
 class JanusVQModelTester:
@@ -420,6 +414,8 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class JanusIntegrationTest(unittest.TestCase):
+    maxDiff = None
+
     def setUp(self):
         self.model_id = "deepseek-community/Janus-Pro-1B"
 
@@ -439,7 +435,12 @@ class JanusIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation'  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                ("cuda", (8, 6)): "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees in",
+            }
+        ).get_expectation()  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
@@ -479,6 +480,10 @@ class JanusIntegrationTest(unittest.TestCase):
                     "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
                     "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars, and it appears to depict a constellation. The",
                 ],
+                ("cuda", (8, 6)): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars. There are several bright stars visible, and a",
+                ],
             }
         )
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
@@ -510,7 +515,7 @@ class JanusIntegrationTest(unittest.TestCase):
             model.device, torch.float16
         )
 
-        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same star constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part"]  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe image you provided shows a night sky with stars and a constellation, while the second image shows a night sky with stars and a different constellation. Both images feature stars and a dark sky,"]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

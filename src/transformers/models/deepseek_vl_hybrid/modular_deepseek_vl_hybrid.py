@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -34,8 +34,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -43,7 +43,9 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ...utils.deprecation import deprecate_attr
+from ...utils.output_capturing import select_hidden_states
+from ..auto import AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
 from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
@@ -52,7 +54,7 @@ from ..deepseek_vl.modeling_deepseek_vl import (
     DeepseekVLModel,
     DeepseekVLPreTrainedModel,
 )
-from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVLProcessorKwargs
+from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
@@ -61,7 +63,7 @@ logger = logging.get_logger(__name__)
 
 
 DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
-    high_res_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
+    high_res_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
         The tensors corresponding to the input images. Pixel values can be obtained using
         [`AutoImageProcessor`].
 """
@@ -90,48 +92,37 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     ```"""
 
     model_type = "deepseek_vl_hybrid"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "high_res_vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "high_res_vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam_vision_model"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+    }
 
     high_res_vision_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.high_res_vision_config is None:
-            self.high_res_vision_config = {}
-            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
-
-        if isinstance(self.high_res_vision_config, dict):
-            self.high_res_vision_config["model_type"] = self.high_res_vision_config.get(
-                "model_type", "sam_vision_model"
-            )
-            self.high_res_vision_config = CONFIG_MAPPING[self.high_res_vision_config["model_type"]](
-                **self.high_res_vision_config
-            )
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
 @dataclass
 class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     r"""
-    high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    high_res_vision_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the high resolution vision model.
-    high_res_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the high resolution vision model has an embedding layer, +
+    high_res_vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the high resolution vision model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
         Hidden-states of the high resolution vision model at the output of each layer plus the optional initial embedding outputs.
-    high_res_vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    high_res_vision_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)` from the high resolution vision model.
 
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
     """
 
-    high_res_vision_last_hidden_state: torch.FloatTensor | None = None
-    high_res_vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    high_res_vision_attentions: tuple[torch.FloatTensor] | None = None
+    high_res_vision_last_hidden_state: torch.Tensor | None = None
+    high_res_vision_hidden_states: tuple[torch.Tensor] | None = None
+    high_res_vision_attentions: tuple[torch.Tensor] | None = None
 
 
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -220,7 +211,7 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLHybridConfig):
         self.output_size = config.vision_config.image_size // config.vision_config.patch_size
         self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
 
@@ -233,15 +224,15 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         super().__init__(config)
 
-    def get_low_res_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
 
+    @select_hidden_states(lambda self: self.global_attn_index + 1)
     def get_high_res_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        kwargs["output_hidden_states"] = True
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
             return_dict=True,
@@ -268,8 +259,8 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        high_res_pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
+        high_res_pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithHighResVisionEncodings:
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
@@ -291,12 +282,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        high_res_pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        high_res_pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
@@ -352,12 +343,12 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        high_res_pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        high_res_pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -377,9 +368,8 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -431,17 +421,17 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
-        if kwargs.get("image_mean") is None:
-            background_color = (127, 127, 127)
-        else:
-            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        if kwargs.get("high_res_image_mean") is None:
-            high_res_background_color = (127, 127, 127)
-        else:
-            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
         PilBackend.__init__(self, **kwargs)
-        self.background_color = tuple(background_color)
-        self.high_res_background_color = tuple(high_res_background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
+        high_res_image_mean = getattr(self, "high_res_image_mean", None)
+        if high_res_image_mean is None:
+            self.high_res_background_color = (127, 127, 127)
+        else:
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     def _standardize_kwargs(
         self,
@@ -542,17 +532,17 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
-        if kwargs.get("image_mean") is None:
-            background_color = (127, 127, 127)
-        else:
-            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        if kwargs.get("high_res_image_mean") is None:
-            high_res_background_color = (127, 127, 127)
-        else:
-            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
         TorchvisionBackend.__init__(self, **kwargs)
-        self.background_color = tuple(background_color)
-        self.high_res_background_color = tuple(high_res_background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
+        high_res_image_mean = getattr(self, "high_res_image_mean", None)
+        if high_res_image_mean is None:
+            self.high_res_background_color = (127, 127, 127)
+        else:
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     def _standardize_kwargs(
         self,
@@ -679,13 +669,11 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         )
 
 
-class DeepseekVLHybridProcessorKwargs(DeepseekVLProcessorKwargs):
-    pass
-
-
 class DeepseekVLHybridProcessor(DeepseekVLProcessor):
     pass
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLHybridProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "DeepseekVLHybridConfig",

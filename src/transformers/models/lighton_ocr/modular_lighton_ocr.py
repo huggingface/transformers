@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
@@ -28,7 +28,8 @@ from ...processing_utils import (
     Unpack,
 )
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ...utils.deprecation import deprecate_attr
+from ..auto import AutoConfig, AutoModel
 from ..mistral3.modeling_mistral3 import (
     Mistral3ForConditionalGeneration,
     Mistral3Model,
@@ -59,7 +60,48 @@ class LightOnOcrConfig(PreTrainedConfig):
     """
 
     model_type = "lighton_ocr"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pixtral",
+            init_kwargs={
+                "attention_dropout": 0.0,
+                "head_dim": 64,
+                "hidden_act": "silu",
+                "hidden_size": 1024,
+                "image_size": 1540,
+                "initializer_range": 0.02,
+                "intermediate_size": 4096,
+                "model_type": "pixtral",
+                "num_attention_heads": 16,
+                "num_channels": 3,
+                "num_hidden_layers": 24,
+                "patch_size": 14,
+                "rope_parameters": {"rope_type": "default", "rope_theta": 10000},
+            },
+        ),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3",
+            init_kwargs={
+                "attention_dropout": 0.0,
+                "head_dim": 128,
+                "hidden_act": "silu",
+                "hidden_size": 1024,
+                "initializer_range": 0.02,
+                "intermediate_size": 3072,
+                "max_position_embeddings": 40960,
+                "num_attention_heads": 16,
+                "num_hidden_layers": 28,
+                "num_key_value_heads": 8,
+                "rms_norm_eps": 1e-6,
+                "rope_theta": 1000000,
+                "sliding_window": None,
+                "use_cache": True,
+                "vocab_size": 151936,
+            },
+        ),
+    }
 
     spatial_merge_size: int = 2
     image_token_id: int = 151655
@@ -67,69 +109,15 @@ class LightOnOcrConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
 
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["pixtral"](
-                attention_dropout=0.0,
-                head_dim=64,
-                hidden_act="silu",
-                hidden_size=1024,
-                image_size=1540,
-                initializer_range=0.02,
-                intermediate_size=4096,
-                model_type="pixtral",
-                num_attention_heads=16,
-                num_channels=3,
-                num_hidden_layers=24,
-                patch_size=14,
-                rope_theta=10000,
-            )
-        elif isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "pixtral")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                attention_dropout=0.0,
-                head_dim=128,
-                hidden_act="silu",
-                hidden_size=1024,
-                initializer_range=0.02,
-                intermediate_size=3072,
-                max_position_embeddings=40960,
-                num_attention_heads=16,
-                num_hidden_layers=28,
-                num_key_value_heads=8,
-                rms_norm_eps=1e-6,
-                rope_theta=1000000,
-                sliding_window=None,
-                use_cache=True,
-                vocab_size=151936,
-            )
-        elif isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-
-        super().__post_init__(**kwargs)
-
-
-class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "do_pad": True,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
-
 
 class LightOnOcrProcessor(ProcessorMixin):
-    valid_processor_kwargs = LightOnOcrProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "do_pad": True,
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -179,8 +167,7 @@ class LightOnOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LightOnOcrProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
@@ -248,11 +235,11 @@ class LightOnOcrModel(Mistral3Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -303,10 +290,12 @@ class LightOnOcrModel(Mistral3Model):
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LightOnOcrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "LightOnOcrPreTrainedModel",  # noqa

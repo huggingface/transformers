@@ -15,10 +15,12 @@
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...processing_utils import ProcessingKwargs
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoMetadata
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vModel, Glm4vPreTrainedModel
@@ -53,7 +55,10 @@ class Glm46VConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm46v"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="glm4v_text"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="glm4v_vision"),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -66,21 +71,6 @@ class Glm46VConfig(PreTrainedConfig):
     video_end_token_id: int = 151362
     tie_word_embeddings: bool = False
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm4v_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["glm4v_vision"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "glm4v_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["glm4v_text"]()
-
-        super().__post_init__(**kwargs)
-
 
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
     _can_record_outputs = None
@@ -90,7 +80,7 @@ class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
 class Glm46VModel(Glm4vModel):
     _no_split_modules = None
 
-    def __init__(self, config):
+    def __init__(self, config: Glm46VConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -180,6 +170,8 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
 
         return np.array(uniq, dtype=int)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Glm46VProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Glm46VConfig",

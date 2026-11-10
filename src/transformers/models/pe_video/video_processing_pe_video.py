@@ -17,10 +17,12 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor, VideoMetadata
 from ...video_utils import VideoInput
 
 
+@auto_docstring
 class PeVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
 

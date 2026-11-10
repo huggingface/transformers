@@ -23,14 +23,17 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...processing_utils import Unpack
+from ...modeling_utils import slice_logits_to_keep
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ...utils.output_capturing import select_hidden_states
+from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
@@ -63,9 +66,9 @@ class Granite4VisionModelOutputWithPast(LlavaNextModelOutputWithPast):
 
 class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
         List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
@@ -124,7 +127,21 @@ class Granite4VisionConfig(LlavaNextConfig):
     """
 
     model_type = "granite4_vision"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": Granite4VisionTextConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
+        "qformer_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="blip_2_qformer",
+            init_kwargs={
+                "num_hidden_layers": 1,
+                "intermediate_size": 3072,
+                "cross_attention_frequency": 1,
+                "max_position_embeddings": 2048,
+                "use_qformer_text_input": False,
+            },
+        ),
+    }
 
     multimodal_projector_bias = AttributeError()
     projector_hidden_act = AttributeError()
@@ -137,46 +154,16 @@ class Granite4VisionConfig(LlavaNextConfig):
     qformer_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        self.image_grid_pinpoints = (
-            self.image_grid_pinpoints
-            if self.image_grid_pinpoints is not None
-            else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-        )
+        super().__post_init__(**kwargs)
+        self.qformer_config.hidden_size = self.vision_config.hidden_size
+        self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
 
         if self.deepstack_layer_map is not None:
             self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
 
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "granite4_vision_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if isinstance(self.qformer_config, dict):
-            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
-            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
-        if self.qformer_config is None:
-            vision_hidden_size = self.vision_config.hidden_size
-            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
-                num_hidden_layers=1,
-                intermediate_size=3072,
-                cross_attention_frequency=1,
-                max_position_embeddings=2048,
-                use_qformer_text_input=False,
-                hidden_size=vision_hidden_size,
-                num_attention_heads=vision_hidden_size // 64,
-                encoder_hidden_size=vision_hidden_size,
-            )
-        PreTrainedConfig.__post_init__(**kwargs)
 
 
 # ── Processor ───────────────────────────────────────────────────────────────
@@ -386,7 +373,7 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
-    config_class = Granite4VisionTextConfig
+    config: Granite4VisionTextConfig
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -397,7 +384,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         vision_mask: torch.BoolTensor | None = None,
         deepstack_features: dict[int, torch.Tensor] | None = None,
@@ -462,7 +449,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
 
 
 class Granite4VisionModel(LlavaNextModel):
-    config_class = Granite4VisionConfig
+    config: Granite4VisionConfig
 
     def __init__(self, config: Granite4VisionConfig):
         super().__init__(config)
@@ -548,19 +535,25 @@ class Granite4VisionModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states(
+        lambda self: [
+            *(vision_layer for vision_layer, _ in self.config.deepstack_layer_map),
+            self.config.spatial_vision_layer,
+        ]
+    )
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -588,7 +581,6 @@ class Granite4VisionModel(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
@@ -636,12 +628,12 @@ class Granite4VisionModel(LlavaNextModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
@@ -714,12 +706,12 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
@@ -746,9 +738,8 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         hidden_states = outputs.last_hidden_state
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         logits = logits / self.config.text_config.logits_scaling
 
         loss = None
@@ -819,6 +810,8 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         return mm_encoder_output
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Granite4VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Granite4VisionConfig",

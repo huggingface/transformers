@@ -31,7 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -68,14 +68,14 @@ class T5GemmaModelTester:
         vocab_size=99,
         # decoder-specific
         seq_length=7,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
         # encoder-specific
         encoder_seq_length=7,
-        encoder_hidden_size=32,
+        encoder_hidden_size=64,
         encoder_num_hidden_layers=2,
         encoder_num_attention_heads=4,
         encoder_num_key_value_heads=2,
@@ -214,8 +214,8 @@ class T5GemmaModelTester:
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+            decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         lm_labels = None
         if self.use_labels:
@@ -598,8 +598,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     _torch_compile_train_cls = T5GemmaForConditionalGeneration if is_torch_available() else None
     # `t5gemma` will give warning or raise error if it is not `eager` during training.
     _torch_compile_train_attn_implementation = "eager"
-
-    # won't fix
 
     def setUp(self):
         self.model_tester = T5GemmaModelTester(self)
@@ -1224,7 +1222,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
             if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
 
@@ -1409,7 +1406,7 @@ class T5GemmaEncoderOnlyModelTester:
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
 
@@ -1534,41 +1531,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
-
-    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
-    # Update hidden size for encoder
-    @require_torch_accelerator
-    def test_flex_attention_with_grads(self):
-        for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
-                self.skipTest(reason="This model does not support flex attention")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config._attn_implementation = "flex_attention"
-            # Flex Attention cannot use dropout
-            config.encoder.attention_dropout = 0
-
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            config.encoder.hidden_size *= max(
-                16
-                // getattr(
-                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
-                ),
-                1,
-            )
-            config.encoder.head_dim = max(16, config.encoder.head_dim)
-
-            model = model_class(config).to(device=torch_device)
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
-
-            # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-
-            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(**dummy_inputs)
 
 
 # Based on tests.models.t5.test_modeling_t5.TestAsymmetricT5

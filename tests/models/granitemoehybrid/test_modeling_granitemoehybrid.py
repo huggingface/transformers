@@ -40,8 +40,10 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...models.bamba.test_modeling_bamba import BambaModelTester
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -83,7 +85,14 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
 
 @require_torch
-class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GraniteMoeHybridModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     model_tester_class = GraniteMoeHybridModelTester
     all_model_classes = (
         (

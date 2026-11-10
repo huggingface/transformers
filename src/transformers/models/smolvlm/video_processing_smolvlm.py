@@ -25,7 +25,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
@@ -98,9 +98,16 @@ def get_resize_output_image_size(
 
 
 class SmolVLMVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    max_image_size (`dict[str, int]`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the frames accepted by the model. This is a dictionary containing the key
+        "longest_edge".
+    """
+
     max_image_size: dict[str, int]
 
 
+@auto_docstring
 class SmolVLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     size = {"longest_edge": 4 * 364}

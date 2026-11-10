@@ -402,13 +402,6 @@ class DeiTModel(DeiTPreTrainedModel):
 @auto_docstring(
     custom_intro="""
     DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
@@ -576,21 +569,21 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 @dataclass
 class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores as the average of the cls_logits and distillation logits.
-    cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    cls_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
         class token).
-    distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    distillation_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
         distillation token).
     """
 
-    logits: torch.FloatTensor | None = None
-    cls_logits: torch.FloatTensor | None = None
-    distillation_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    logits: torch.Tensor | None = None
+    cls_logits: torch.Tensor | None = None
+    distillation_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(

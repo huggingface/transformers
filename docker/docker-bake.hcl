@@ -32,7 +32,7 @@ target "ci-base" {
 target "ci-image" {
   name       = image
   matrix     = {
-    image = ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "examples-torch", "pipeline-torch"]
+    image = ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "pipeline-torch"]
   }
   context    = "docker"
   dockerfile = "${image}.dockerfile"

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MuseGlimmer model."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -23,7 +22,6 @@ from transformers import (
     MuseGlimmerModel,
     is_torch_available,
 )
-from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -44,44 +42,40 @@ if is_torch_available():
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
     base_model_class = MuseGlimmerModel
     config_class = MuseGlimmerConfig
-    text_config_class = MuseGlimmerTextConfig
-    vision_config_class = MuseGlimmerVisionConfig
+
     conditional_generation_class = MuseGlimmerForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
         kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("patch_temporal", 2)
         kwargs.setdefault("merge_size", 1)
         kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
+        kwargs.setdefault("vision_layer_types", ["window_attention", "full_attention"])
         kwargs.setdefault("pos_emb_height", 4)
         kwargs.setdefault("pos_emb_width", 4)
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("projector_hidden_size", 32)
         super().__init__(parent, **kwargs)
-        self.image_grid_thw = (1, 1, 1)
+        self.image_grid_thw = (1, 2, 2)
         self.out_hidden_size = self.hidden_size * self.merge_size**2
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id}
 
-    def get_vision_config(self):
-        # `layer_types` is shared with the text config by name, but the vision tower uses
-        # "window_attention" instead of "sliding_attention".
-        config = super().get_vision_config()
-        config.layer_types = ["window_attention"] * (config.num_hidden_layers - 1) + ["full_attention"]
-        return config
-
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         grid_t, grid_h, grid_w = self.image_grid_thw
-        num_patches = self.batch_size * grid_t * grid_h * grid_w
+        num_patches = batch_size * grid_t * grid_h * grid_w
         return floats_tensor([num_patches, self.patch_temporal * self.num_channels * self.patch_size**2])
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
-        return {"image_grid_thw": torch.tensor([list(self.image_grid_thw)] * self.batch_size, device=torch_device)}
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([list(self.image_grid_thw)] * batch_size, device=torch_device)}
 
 
 @require_torch
@@ -92,22 +86,6 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
         # The vendor checkpoint layout is defined relative to the `model.` prefix, which the base
         # MuseGlimmerModel serializes without.
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    def test_mismatching_num_image_tokens(self):
-        # Overwritten -- MuseGlimmer packs patches along the first `pixel_values` dim, so removing an image
-        # means dropping its patch rows and its `image_grid_thw` row together.
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        patches_per_image = input_dict["pixel_values"].shape[0] // input_dict["image_grid_thw"].shape[0]
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)
-
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][:-patches_per_image]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][:-1]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
 
 
 # `meta-models/Muse-Glimmer-30B` is 29.8B parameters -- 55.5 GiB of bfloat16 weights, so it does not fit on the

@@ -14,7 +14,7 @@
 
 """
 Trainer evaluation and prediction tests: evaluate, predict, batched metrics, dynamic shapes,
-iterable datasets, early stopping, FP16/BF16 full eval memory, torch.compile, and MRPC/LM eval.
+iterable datasets, early stopping, FP16/BF16 full eval memory, torch.compile, and LM eval.
 """
 
 import gc
@@ -30,7 +30,6 @@ from transformers import (
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
-    get_tests_dir,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -56,9 +55,6 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
-        AutoModelForSequenceClassification,
-        GlueDataset,
-        GlueDataTrainingArguments,
         Trainer,
     )
 
@@ -470,22 +466,6 @@ class TrainerFullEvalMemoryTest(TestCasePlus):
 
 @require_torch
 class TrainerSlowEvalTest(TestCasePlus):
-    @slow
-    def test_trainer_eval_mrpc(self):
-        MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-        data_args = GlueDataTrainingArguments(
-            task_name="mrpc", data_dir=f"{get_tests_dir()}/fixtures/tests_samples/MRPC", overwrite_cache=True
-        )
-        eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            training_args = TrainingArguments(output_dir=tmp_dir, use_cpu=True)
-            trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
-            result = trainer.evaluate()
-            self.assertLess(result["eval_loss"], 0.2)
-
     @slow
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"

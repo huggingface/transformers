@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import gelu_pytorch_tanh
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -37,11 +37,10 @@ from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attentio
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
-    get_vision_merged_shape,
     get_vision_nearest_position_ids,
     get_vision_window_index,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
 from ..qwen2_vl.modeling_qwen2_vl import VisionAttention, eager_attention_forward
@@ -62,6 +61,7 @@ class MiniCPMV4_6VisionConfig(SiglipVisionConfig):
     model_type = "minicpmv4_6_vision"
     insert_layer_id: int = 6
     window_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    vision_use_head = AttributeError()
 
     @property
     def window_hidden_size(self) -> int:
@@ -95,7 +95,10 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     """
 
     model_type = "minicpmv4_6"
-    sub_configs = {"text_config": AutoConfig, "vision_config": MiniCPMV4_6VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
+        "vision_config": MiniCPMV4_6VisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -110,27 +113,15 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     merger_times: int = 1
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-            self.vision_config = MiniCPMV4_6VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MiniCPMV4_6VisionConfig()
-
+        super().__post_init__(**kwargs)
         self.vision_config.insert_layer_id = self.insert_layer_id
         self.patch_size = self.vision_config.patch_size
-
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
-
-        super().__post_init__(**kwargs)
 
 
 class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         target_sizes: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -325,33 +316,30 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
             cu_seqlens=window_cu_seqlens.to(device),
             max_seqlen=window_max_seqlens,
         )
-        hidden_states = hidden_states[:, torch.argsort(window_index), :]
-        hidden_states = residual + hidden_states
+        hidden_states = residual[:, window_index, :] + hidden_states
 
-        # Vectorised window merge: reshape (1, batch*seq_per_img, D) → (batch, seq_per_img, D)
-        # and lift per-image (h, w) from target_sizes[0]. This assumes the input batch was
-        # packed with uniform per-image sizes (the standard NaViT preprocessing output).
-        batch_size = target_sizes.shape[0]
         window_h, window_w = self.window_kernel_size
+        window_size = window_h * window_w
         embed_dim = hidden_states.shape[-1]
-        seq_per_img = hidden_states.shape[1] // batch_size
-        patch = hidden_states.view(batch_size, seq_per_img, embed_dim)
-        merged_h, merged_w = get_vision_merged_shape(target_sizes, self.window_kernel_size, kwargs=kwargs)
-
-        patch_5d = patch.view(batch_size, merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 1, 3, 2, 4, 5)
-        flat = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w * embed_dim)
-        residual = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
+        torch_compilable_check(
+            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
+            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
+        )
+        patch = hidden_states.reshape(-1, window_size, embed_dim)
+        flat = patch.flatten(1)
+        patch_residual = patch.mean(dim=1)
 
         hidden_state = self.pre_norm(flat)
         hidden_state = self.linear_1(hidden_state)
         hidden_state = self.act(hidden_state)
         hidden_state = self.linear_2(hidden_state)
+        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
 
-        return (hidden_state + residual).unsqueeze(0)
+        return hidden_state
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_6VisionConfig
+    config: MiniCPMV4_6VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
     supports_gradient_checkpointing = True
@@ -528,7 +516,7 @@ class MiniCPMV4_6Merger(nn.Module):
 
 
 class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_6Config
+    config: MiniCPMV4_6Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
@@ -556,7 +544,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -590,13 +578,13 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     )
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
+        pixel_values_videos (`torch.Tensor` of shape `(1, channels, patch_size, seq_len)`):
             NaViT-packed pixel patches for all video frames. The video processor concatenates
             every frame's patches along the last dimension into a single sequence with dim-0 = 1,
             identical to the image packing format.
@@ -621,8 +609,8 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
+        features: torch.Tensor,
         token_id: int,
     ):
         if input_ids is None:
@@ -647,25 +635,25 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -727,6 +715,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
 @auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MiniCPMV4_6Config):
         super().__init__(config)
@@ -740,14 +729,14 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
@@ -755,11 +744,11 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.

@@ -240,7 +240,6 @@ pipeline(
 
 - Bu kütüphane, sinir ağları için yapı taşlarından oluşan modüler bir araç kutusu değildir. Model dosyalarındaki kod, araştırmacıların ek soyutlamalara/dosyalara dalmadan her bir model üzerinde hızlıca yineleme yapabilmesi için kasıtlı olarak ek soyutlamalarla yeniden düzenlenmemiştir.
 - Eğitim API'si, Transformers tarafından sağlanan PyTorch modelleriyle çalışmak üzere optimize edilmiştir. Genel amaçlı makine öğrenimi döngüleri için [Accelerate](https://huggingface.co/docs/accelerate) gibi başka bir kütüphane kullanmalısınız.
-- [Örnek kodlar](https://github.com/huggingface/transformers/tree/main/examples) yalnızca *örnektir*. Sizin özel kullanım durumunuzda doğrudan çalışmayabilir ve çalışması için kodu uyarlamanız gerekebilir.
 
 ## Transformers kullanan 100 proje
 

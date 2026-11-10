@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pixtral import PixtralVisionConfig
 
@@ -77,14 +77,9 @@ class PixtralVisionRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, ...].float()
-        position_ids_expanded = position_ids[..., None].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded @ inv_freq_expanded
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -281,9 +276,9 @@ class PixtralAttentionLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
+            attention_mask (`torch.Tensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
@@ -323,7 +318,7 @@ class PixtralTransformer(nn.Module):
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Embeddings which serve as input to the Transformer.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -384,7 +379,7 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
 class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
 
-    def __init__(self, config):
+    def __init__(self, config: PixtralVisionConfig):
         super().__init__(config)
         self.config = config
         self.patch_conv = nn.Conv2d(
@@ -442,7 +437,17 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):
-            # We only rely on position_ids when using flash attention
+            # Axial RoPE positions have two coordinates per patch, so they cannot
+            # describe the packed image boundaries expected by Flash Attention.
+            sequence_lengths = [p.shape[-2] * p.shape[-1] for p in patch_embeds_list]
+            cu_seqlens = torch.tensor([0, *sequence_lengths], device=patch_embeds.device, dtype=torch.int32)
+            cu_seqlens = cu_seqlens.cumsum(dim=0, dtype=torch.int32)
+            kwargs.update(
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max(sequence_lengths),
+                max_length_k=max(sequence_lengths),
+            )
             attention_mask = None
         else:
             attention_mask = generate_block_attention_mask(
@@ -453,7 +458,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            position_ids=position_ids,
             **kwargs,
         )
 
