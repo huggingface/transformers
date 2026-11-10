@@ -40,7 +40,6 @@ from ..idefics3.image_processing_idefics3 import (
 )
 from ..modernvbert.configuration_modernvbert import ModernVBertConfig
 from ..modernvbert.modeling_modernvbert import (
-    ModernVBertBaseModelOutput,
     ModernVBertConnector,
     ModernVBertForMaskedLM,
     ModernVBertForSequenceClassification,
@@ -273,10 +272,6 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
         if num_rows * num_cols == 1:
             return 0, 0, 0
         return num_rows * num_cols + 1, num_rows, num_cols
-
-
-class UltraVBertBaseModelOutput(ModernVBertBaseModelOutput):
-    pass
 
 
 class UltraVBertMaskedLMOutput(ModernVBertMaskedLMOutput):

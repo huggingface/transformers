@@ -275,6 +275,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             past_key_values=vlm_output.past_key_values,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
+            modality_outputs=vlm_output.modality_outputs,
         )
 
 

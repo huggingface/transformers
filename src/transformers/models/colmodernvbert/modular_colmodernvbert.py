@@ -362,10 +362,10 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
 
         return ColModernVBertForRetrievalOutput(
             embeddings=embeddings,
-            last_hidden_state=vlm_output.last_hidden_state,
+            past_key_values=vlm_output.past_key_values,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_pooler_output=vlm_output.image_pooler_output,
+            modality_outputs=vlm_output.modality_outputs,
         )
 
 

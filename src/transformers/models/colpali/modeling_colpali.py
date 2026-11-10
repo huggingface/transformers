@@ -22,7 +22,7 @@ from transformers import AutoModel
 
 from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -49,11 +49,12 @@ class ColPaliPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Base class for ColPali embeddings output.
+    Base class for ColPali embeddings output. Contains the outputs of the language model backbone and the
+    outputs of vision encoder.
     """
 )
 @dataclass
-class ColPaliForRetrievalOutput(ModelOutput):
+class ColPaliForRetrievalOutput(MultimodalModelOutput):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -61,11 +62,11 @@ class ColPaliForRetrievalOutput(ModelOutput):
         The embeddings of the model.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_pooler_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        The embeddings of the embedded images from vision backbone.
+    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
+        encoder. Contains only the modalities that were processed.
     """
 
     loss: torch.Tensor | None = None
@@ -73,7 +74,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
-    image_pooler_output: torch.Tensor | None = None
+    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
 
 @auto_docstring(
@@ -136,11 +137,10 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         return ColPaliForRetrievalOutput(
             embeddings=embeddings,
-            last_hidden_state=vlm_output.last_hidden_state,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
             past_key_values=vlm_output.past_key_values,
-            image_pooler_output=vlm_output.image_pooler_output,
+            modality_outputs=vlm_output.modality_outputs,
         )
 
 
