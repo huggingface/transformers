@@ -168,6 +168,8 @@ class Question:
             raise ValueError(f"Question {name!r}: a {kind} question needs `criteria` with its options.")
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
+        elif kind == "choice" and config.sort_choices:
+            criteria = dict(sorted(criteria.items()))
         elif kind == "score":
             criteria = {str(index): level for index, level in enumerate(criteria)}
 

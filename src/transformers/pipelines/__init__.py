@@ -1135,7 +1135,9 @@ def pipeline(
         model_classes = targeted_task["pt"]
         # A decision model reading the checkpoint, which builds its config from the files of the checkpoint itself
         if task == "decision" and type(config) in MODEL_FOR_DECISION_MAPPING:
-            model_classes = (MODEL_FOR_DECISION_MAPPING[type(config)],)
+            # The decision models whose heads can ship next to this model, each tried on the files of the repo
+            model_classes = MODEL_FOR_DECISION_MAPPING[type(config)]
+            model_classes = model_classes if isinstance(model_classes, tuple) else (model_classes,)
             hub_kwargs.pop("code_revision", None)  # for remote code, which only the auto classes read
         model = load_model(
             adapter_path if adapter_path is not None else model,

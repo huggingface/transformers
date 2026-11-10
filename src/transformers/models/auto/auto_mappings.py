@@ -89,6 +89,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapConfig"),
         ("clap_audio_model", "ClapAudioConfig"),
         ("clap_text_model", "ClapTextConfig"),
+        ("clef", "ClefConfig"),
         ("clip", "CLIPConfig"),
         ("clip_text_model", "CLIPTextConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
