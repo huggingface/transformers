@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ...cache_utils import Cache, DynamicCache
@@ -37,7 +36,7 @@ from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
-from ..auto import AutoConfig, AutoModel
+from ..auto import AutoConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
@@ -634,15 +633,6 @@ class MiniMaxVL01PreTrainedModel(LlavaNextPreTrainedModel):
     custom_intro="The MiniMax-VL-01 model, consisting of a CLIP vision encoder and a MiniMax language backbone."
 )
 class MiniMaxVL01Model(LlavaNextModel):
-    def __init__(self, config: MiniMaxVL01Config):
-        MiniMaxVL01PreTrainedModel.__init__(self, config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multi_modal_projector = MiniMaxVL01MultiModalProjector(config)
-        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = MiniMaxVL01TextModel(config.text_config)
-        self.post_init()
-
     @staticmethod
     def _flatten_pixel_values(pixel_values):
         if not isinstance(pixel_values, (list, tuple)):

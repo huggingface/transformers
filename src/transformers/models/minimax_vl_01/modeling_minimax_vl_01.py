@@ -929,10 +929,13 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
     def __init__(self, config: MiniMaxVL01Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
+
         self.multi_modal_projector = MiniMaxVL01MultiModalProjector(config)
-        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
+        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
+
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = MiniMaxVL01TextModel(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     def pack_image_features(self, image_features, image_sizes, image_newline=None):

@@ -470,8 +470,8 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         logits = model(**self._image_inputs(), logits_to_keep=3).logits
         expected_slice = torch.tensor(
             [
-                [[-0.101953, 0.019430, 0.007517], [0.181610, 0.051723, -0.147496], [0.308670, -0.122409, -0.094961]],
-                [[0.153198, 0.031881, 0.072750], [0.045287, -0.029863, -0.156537], [-0.031201, -0.085948, 0.008906]],
+                [[0.043018, -0.140558, 0.122684], [-0.112334, -0.081162, -0.004151], [0.013292, 0.107908, -0.186869]],
+                [[-0.027265, -0.132032, 0.167542], [-0.069453, 0.046494, -0.200256], [0.124182, -0.002037, -0.107000]],
             ],
             device=torch_device,
         )
@@ -483,7 +483,7 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=5, do_sample=False)
         self.assertEqual(
             generated_ids[:, inputs["input_ids"].shape[1] :].tolist(),
-            [[94, 93, 63, 89, 8], [23, 85, 93, 63, 38]],
+            [[60, 87, 65, 68, 53], [21, 82, 7, 60, 87]],
         )
 
 
