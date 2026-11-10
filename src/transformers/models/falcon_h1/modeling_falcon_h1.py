@@ -43,6 +43,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_falcon_h1 import FalconH1Config
@@ -193,6 +194,7 @@ class FalconH1Attention(nn.Module):
         )
         self.key_multiplier = config.key_multiplier
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mimo_v2_flash import MiMoV2FlashConfig
@@ -360,6 +361,7 @@ class MiMoV2FlashAttention(nn.Module):
         self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -416,12 +418,13 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -433,7 +436,7 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -454,7 +457,7 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiMoV2FlashDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True  # not compatible because of asymmetric qk/v head dims and/or sinks (for most FAs)
     _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
     _supports_flex_attn = False  # asymmetric head dim + not being a power of 2
@@ -510,6 +513,7 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

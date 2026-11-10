@@ -55,15 +55,6 @@ def flash_attention_forward(
             "Please check your input shapes or use SDPA instead."
         )
 
-    # If there is a paged cache, now is the time to update it and the kwargs
-    if isinstance(cache, PagedAttentionCache):
-        key, value = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,  # this makes torch.compile recompile for each layer. Fine for now (cf. #49101)
-            kwargs=kwargs,  # is updated in place
-        )
-
     # FA uses non-transposed inputs. After this, shape is [batch_size, seq_len, num_heads, head_dim]
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)

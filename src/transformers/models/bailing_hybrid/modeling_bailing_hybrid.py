@@ -45,6 +45,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_bailing_hybrid import BailingHybridConfig
@@ -848,6 +849,7 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = BailingHybridRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.block_type = config.layer_types[layer_idx]
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

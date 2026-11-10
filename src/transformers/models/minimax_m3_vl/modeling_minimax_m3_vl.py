@@ -42,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -417,6 +418,7 @@ class MiniMaxM3VLAttention(nn.Module):
             MiniMaxM3VLIndexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
         )
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -671,7 +673,7 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -869,6 +871,7 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

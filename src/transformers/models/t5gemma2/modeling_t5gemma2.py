@@ -45,6 +45,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -265,6 +266,7 @@ class T5Gemma2SelfAttention(nn.Module):
         self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -344,6 +346,7 @@ class T5Gemma2MergedAttention(nn.Module):
         self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         # decoder self-attention inputs
@@ -637,7 +640,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
 
     # Mask creation is incompatible
     # FA due to non-default creation / SWA

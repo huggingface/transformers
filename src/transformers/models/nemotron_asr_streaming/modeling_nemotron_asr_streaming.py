@@ -43,6 +43,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -566,6 +567,7 @@ class NemotronAsrStreamingEncoderAttention(nn.Module):
         # global positional bias
         self.bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

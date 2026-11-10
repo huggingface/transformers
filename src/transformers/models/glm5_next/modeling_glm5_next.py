@@ -50,6 +50,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -1297,6 +1298,7 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
         self.attn_hc = Glm5NextTextHyperConnection(config)
         self.ffn_hc = Glm5NextTextHyperConnection(config)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

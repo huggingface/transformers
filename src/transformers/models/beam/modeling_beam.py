@@ -38,6 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_beam import BeamConfig
@@ -232,6 +233,7 @@ class BeamAttention(nn.Module):
         # One gate bias per head, broadcast over `head_dim`.
         self.gate_bias = nn.Parameter(torch.zeros(config.num_attention_heads))
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -414,6 +416,7 @@ class BeamDecoderLayer(GradientCheckpointingLayer):
         self.attn_residual_add_idx = 2 * (layer_idx + 1)
         self.mlp_residual_add_idx = self.attn_residual_add_idx + 1
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -454,7 +457,7 @@ class BeamPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BeamDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -34,6 +34,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -114,6 +115,7 @@ class FunAsrNanoAttention(nn.Module):
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.fsmn = FunAsrNanoFSMN(config) if use_fsmn else None
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -245,6 +247,7 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if add_norm else nn.Identity()
         )
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -55,6 +55,7 @@ from ...utils import (
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -837,6 +838,7 @@ class Qwen4ExpTextAttention(nn.Module):
         self.k_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = Qwen4ExpTextQSAIndexer(config, layer_idx)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1592,6 +1594,7 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -115,15 +115,6 @@ def sdpa_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
 
-    # If there is a paged cache, it is updated before the KV heads are repeated.
-    if isinstance(cache, PagedAttentionCache):
-        key, value = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,
-            kwargs=kwargs,
-        )
-
     sdpa_kwargs = {}
     q_length = query.shape[2]
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:

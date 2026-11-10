@@ -49,6 +49,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
@@ -586,6 +587,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

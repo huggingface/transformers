@@ -822,7 +822,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

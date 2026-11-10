@@ -34,6 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_muse_glimmer_assistant import MuseGlimmerAssistantConfig
 
 
@@ -241,6 +242,7 @@ class MuseGlimmerAssistantDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MuseGlimmerAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.input_layernorm = MuseGlimmerAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -275,7 +277,7 @@ class MuseGlimmerAssistantPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MuseGlimmerAssistantDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_granite_swa import GraniteSWAConfig
@@ -151,6 +152,7 @@ class GraniteSWAAttention(nn.Module):
         # Learnable per-head attention sink (applied as an auxiliary softmax logit).
         self.sinks = nn.Parameter(torch.zeros(config.num_attention_heads))
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -243,6 +245,7 @@ class GraniteSWADecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = GraniteSWARMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.residual_multiplier = config.residual_multiplier
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -302,7 +305,7 @@ class GraniteSWAPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteSWADecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = False
     _supports_flex_attn = True

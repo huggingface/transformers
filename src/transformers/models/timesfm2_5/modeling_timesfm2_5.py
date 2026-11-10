@@ -36,6 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_timesfm2_5 import TimesFm2_5Config
@@ -282,6 +283,7 @@ class TimesFm2_5Attention(nn.Module):
         self.q_norm = TimesFm2_5RMSNorm(self.head_dim, config.rms_norm_eps)
         self.k_norm = TimesFm2_5RMSNorm(self.head_dim, config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -345,6 +347,7 @@ class TimesFm2_5DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = TimesFm2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = TimesFm2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
