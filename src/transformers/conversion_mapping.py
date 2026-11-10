@@ -110,6 +110,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
+    "minimax_vl_01": "llava_next",
     # class-based mappings
     "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
@@ -123,6 +124,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "LlavaNextModel": "LlavaModel",
     "LlavaNextVideoModel": "LlavaModel",
     "LlavaOnevisionModel": "LlavaModel",
+    "MiniMaxVL01Model": "LlavaModel",
     "FuyuModel": "LlavaModel",
     "MllamaModel": "LlavaModel",
     "VoxtralModel": "Qwen2AudioModel",
@@ -808,15 +810,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-            WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
-        ],
-        "minimax_vl_01": [
-            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
-            WeightRenaming(source_patterns=r"^vision_tower\.", target_patterns="model.vision_tower."),
-            WeightRenaming(
-                source_patterns=r"^multi_modal_projector\.", target_patterns="model.multi_modal_projector."
-            ),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
         # Important to refer to classes by name, not model-type! Several classes share the same model type
