@@ -1641,7 +1641,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"(?<![^.])word_embeddings\.", r"(?<![^.])embed_tokens\."),
             WeightRenaming(r"(?<![^.])ln_f\.", r"(?<![^.])norm\."),
             WeightRenaming(r"self_attention\.query\.", r"self_attn\.q_proj\."),
-            WeightRenaming(r"self_attention\.key_value\.", r"self_attn\.kv_proj\."),
+            # Keys and values are fused per head, i.e. `[k_0, v_0, k_1, v_1, ...]`
+            WeightConverter(
+                "self_attention.key_value.weight",
+                ["self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Interleave(dim=0, block_size_attribute="head_dim"), Chunk(dim=0)],
+            ),
             WeightRenaming(r"self_attention\.dense\.", r"self_attn\.o_proj\."),
         ],
         "sapiens2": [

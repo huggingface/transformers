@@ -31,6 +31,7 @@ from transformers.core_model_loading import (
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
+    Interleave,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
@@ -1380,6 +1381,26 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             key: value for key, value in saved.items() if any(x in key for x in ["q_proj", "k_proj", "v_proj"])
         }
         self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
+
+
+class TestInterleave(unittest.TestCase):
+    def test_block_size_splits_fused_heads(self):
+        # Keys and values fused per head of size 2: `[k_0, v_0, k_1, v_1]`
+        k = torch.arange(4, dtype=torch.float32).reshape(4, 1)
+        v = 10 + k
+        fused = torch.cat([k.view(2, 2, 1), v.view(2, 2, 1)], dim=1).reshape(8, 1)
+        config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(head_dim=2))
+        targets = ["k_proj.weight", "v_proj.weight"]
+
+        interleave = Interleave(dim=0, block_size_attribute="head_dim")
+        deinterleaved = interleave.convert({"kv": fused}, ["kv"], targets, config=config)
+        split = Chunk(dim=0).convert(deinterleaved, ["kv"], targets)
+        torch.testing.assert_close(split["k_proj.weight"], k)
+        torch.testing.assert_close(split["v_proj.weight"], v)
+
+        merged = Concatenate(dim=0).convert(split, targets, ["kv"])
+        restored = interleave.reverse_op.convert(merged, targets, ["kv"], config=config)
+        torch.testing.assert_close(restored["kv"], fused)
 
 
 class TestConversionMapping(unittest.TestCase):

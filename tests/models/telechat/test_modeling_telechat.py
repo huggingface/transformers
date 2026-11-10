@@ -106,6 +106,18 @@ class TeleChatModelTest(CausalLMModelTest, unittest.TestCase):
                 "transformer.ln_f.weight",
             ]:
                 self.assertIn(key, saved)
+            # Keys and values are fused per head, i.e. `[k_0, v_0, k_1, v_1, ...]`
+            attn = model.model.layers[0].self_attn
+            head_dim = config.head_dim
+            expected = torch.cat(
+                [
+                    attn.k_proj.weight.view(-1, head_dim, config.hidden_size),
+                    attn.v_proj.weight.view(-1, head_dim, config.hidden_size),
+                ],
+                dim=1,
+            ).reshape(-1, config.hidden_size)
+            key_value = load_file(f"{tmpdir}/model.safetensors")["transformer.h.0.self_attention.key_value.weight"]
+            torch.testing.assert_close(key_value.to(torch_device), expected)
             reloaded = TeleChatForCausalLM.from_pretrained(tmpdir).to(torch_device)
         for (name, param), (_, reloaded_param) in zip(model.named_parameters(), reloaded.named_parameters()):
             torch.testing.assert_close(param, reloaded_param, msg=name)

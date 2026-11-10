@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 
 import torch
@@ -203,9 +204,9 @@ class TeleChatAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
-        # Keys and values are fused and laid out per head, i.e. `[k_0, v_0, k_1, v_1, ...]`
-        self.kv_proj = nn.Linear(config.hidden_size, 2 * config.num_key_value_heads * self.head_dim, bias=False)
 
     def forward(
         self,
@@ -219,8 +220,8 @@ class TeleChatAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_value_states = self.kv_proj(hidden_states).view(*input_shape, -1, 2 * self.head_dim)
-        key_states, value_states = key_value_states.transpose(1, 2).chunk(2, dim=-1)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

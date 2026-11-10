@@ -226,22 +226,32 @@ class Concatenate(ConversionOps):
 
 
 class Interleave(ConversionOps):
-    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
+    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size.
 
-    def __init__(self, dim: int = 0, inverse: bool = False):
+    By default the two halves alternate element by element. With `block_size_attribute`, a config field, they alternate
+    in blocks of that size instead, e.g. `[k_0, v_0, k_1, v_1, ...]` for keys and values fused per head of `head_dim`.
+    """
+
+    def __init__(self, dim: int = 0, inverse: bool = False, block_size_attribute: str | None = None):
         self.dim = dim
         self.inverse = inverse
+        self.block_size_attribute = block_size_attribute
 
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
         tensor = next(iter(input_dict.values()))
         tensor = tensor[0] if isinstance(tensor, list) else tensor
 
+        block_size = 1
+        if self.block_size_attribute is not None:
+            block_size = getattr(kwargs["config"].get_text_config(), self.block_size_attribute)
+
         # Split into two in given dim and transpose to interleave along it
         shape = list(tensor.shape)
+        num_blocks = shape[self.dim] // (2 * block_size)
         if self.inverse:
-            shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
+            shape[self.dim : self.dim + 1] = [2, num_blocks, block_size]
         else:
-            shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
+            shape[self.dim : self.dim + 1] = [num_blocks, 2, block_size]
 
         tensor = tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
         return {target_patterns[0]: tensor}
@@ -249,7 +259,7 @@ class Interleave(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         # can use the same dim and it will inverse it back
-        return Interleave(self.dim, inverse=not self.inverse)
+        return Interleave(self.dim, inverse=not self.inverse, block_size_attribute=self.block_size_attribute)
 
 
 class MergeModulelist(ConversionOps):
