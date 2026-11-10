@@ -179,6 +179,7 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
                     offset += height * width
 
 
+@unittest.skip(reason="Update after release, the Hub checkpoint still points at remote code")
 @require_torch_accelerator
 @slow
 class Lfm3VlIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
