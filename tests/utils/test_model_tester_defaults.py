@@ -23,15 +23,13 @@ from ..vlm_tester import VLMModelTester
 class SmallConfigDefaultsTest(unittest.TestCase):
     def _tester_class(self, base):
         class Tester(base):
-            @staticmethod
-            def get_small_config_defaults():
-                return {
-                    "hidden_size": 64,
-                    "image_size": 16,
-                    "patch_size": 4,
-                    "num_mel_bins": 24,
-                    "no_rope_layers": [1, 0],
-                }
+            small_config_overrides = {
+                "hidden_size": 64,
+                "image_size": 16,
+                "patch_size": 4,
+                "num_mel_bins": 24,
+                "no_rope_layers": [1, 0],
+            }
 
             def _check_required_attributes(self):
                 # These tests exercise constructor defaults without choosing model classes.
@@ -84,9 +82,7 @@ class SmallConfigDefaultsTest(unittest.TestCase):
 class CausalLMSmallConfigDefaultsTest(unittest.TestCase):
     def _tester_class(self, defaults):
         class Tester(CausalLMModelTester):
-            @staticmethod
-            def get_small_config_defaults():
-                return dict(defaults)
+            small_config_overrides = defaults
 
             @classmethod
             def _verify_and_infer_model_attributes(cls):
@@ -121,3 +117,69 @@ class CausalLMSmallConfigDefaultsTest(unittest.TestCase):
         self.assertEqual(tester.mamba_chunk_size, 16)
         self.assertFalse(tester.tie_word_embeddings)
         self.assertIsNone(tester.scope)
+
+
+class MergedSmallConfigDefaultsTest(unittest.TestCase):
+    def test_merged_values_do_not_require_a_tester_instance(self):
+        # These bases cannot be instantiated without model classes, but their
+        # merged defaults are useful independently of any model or test case.
+        for base in (CausalLMModelTester, MultiModalModelTester, VLMModelTester, ALMModelTester):
+            with self.subTest(base=base.__name__):
+                values = base.get_small_config_defaults(hidden_size=64, num_attention_heads=4)
+                self.assertEqual(values["hidden_size"], 64)
+                self.assertEqual(values["vocab_size"], 99)
+                if base in (CausalLMModelTester, VLMModelTester):
+                    self.assertEqual(values["head_dim"], 16)
+        self.assertEqual(VLMModelTester.get_small_config_defaults()["seq_length"], 11)
+        self.assertEqual(ALMModelTester.get_small_config_defaults()["seq_length"], 32)
+
+    def test_inherited_model_overrides_and_explicit_derived_values(self):
+        class Parent(VLMModelTester):
+            small_config_overrides = {"image_size": 16, "hidden_size": 64, "seq_length": 29}
+
+        class Child(Parent):
+            small_config_overrides = {"patch_size": 8, "head_dim": 24}
+
+        values = Child.get_small_config_defaults()
+        self.assertEqual(values["image_size"], 16)
+        self.assertEqual(values["num_image_tokens"], 4)
+        self.assertEqual(values["seq_length"], 29)
+        self.assertEqual(values["head_dim"], 24)
+        caller = Child.get_small_config_defaults(seq_length=41, head_dim=8, num_image_tokens=2)
+        self.assertEqual((caller["seq_length"], caller["head_dim"], caller["num_image_tokens"]), (41, 8, 2))
+
+    def test_mutable_defaults_and_overrides_are_isolated(self):
+        class Tester(VLMModelTester):
+            small_config_overrides = {"no_rope_layers": [1, 0]}
+
+        values = Tester.get_small_config_defaults()
+        values["vision_rope_parameters"]["rope_theta"] = 1
+        values["no_rope_layers"].append(1)
+        fresh = Tester.get_small_config_defaults()
+        self.assertEqual(fresh["vision_rope_parameters"]["rope_theta"], 10_000)
+        self.assertEqual(fresh["no_rope_layers"], [1, 0])
+        self.assertEqual(Tester.small_config_overrides["no_rope_layers"], [1, 0])
+
+    def test_mistral_overrides_are_a_literal_and_preserve_test_dimensions(self):
+        import ast
+        from pathlib import Path
+
+        from ..models.mistral_large4.test_modeling_mistral_large4 import MistralLarge4VisionText2TextModelTester
+
+        path = Path(__file__).parents[1] / "models/mistral_large4/test_modeling_mistral_large4.py"
+        tree = ast.parse(path.read_text())
+        cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name.endswith("ModelTester"))
+        overrides = next(
+            node.value
+            for node in cls.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "small_config_overrides" for target in node.targets)
+        )
+        self.assertEqual(ast.literal_eval(overrides), MistralLarge4VisionText2TextModelTester.small_config_overrides)
+        values = MistralLarge4VisionText2TextModelTester.get_small_config_defaults()
+        self.assertEqual(values["hidden_size"], 32)
+        self.assertEqual(values["qk_rope_head_dim"], 8)
+        self.assertEqual(values["n_routed_experts"], 8)
+        tester = MistralLarge4VisionText2TextModelTester(self)
+        for name, value in values.items():
+            self.assertEqual(getattr(tester, name), value)

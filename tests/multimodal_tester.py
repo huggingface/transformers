@@ -17,8 +17,8 @@ from inspect import signature
 import torch
 
 from transformers import PreTrainedConfig
-from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
+from .model_tester_config import ModelTesterConfigMixin
 from .test_configuration_common import ConfigTester
 from .test_expert_parallel_mixin import ExpertParallelTesterMixin
 from .test_modeling_common import (
@@ -32,7 +32,7 @@ from .test_pipeline_mixin import PipelineTesterMixin
 from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
-class MultiModalModelTester:
+class MultiModalModelTester(ModelTesterConfigMixin):
     """Shared tester base for VLM (vision-language) and ALM (audio-language) models.
 
     Concrete subclasses (e.g. `VLMModelTester`, `ALMModelTester`) supply:
@@ -72,37 +72,17 @@ class MultiModalModelTester:
             if model_class is not None
         ]
 
-    @staticmethod
-    def get_small_config_defaults():
-        """Return model-specific overrides of the shared text and modality tester defaults.
-
-        Override with a fresh literal dictionary so tools can extract the values
-        without importing test modules. Explicit constructor kwargs take precedence.
-        These are test defaults, not a complete checkpoint or quantization config.
-        """
-        return {}
+    defaults = {
+        "batch_size": 3,
+        "moe_intermediate_size": 12,
+        "ignore_index": -100,
+        "scope": None,
+    }
 
     def __init__(self, parent, **kwargs):
-        kwargs = {**self.get_small_config_defaults(), **kwargs}
         self.parent = parent
-
-        # Multimodal-specific overrides of shared defaults (applied before the shared
-        # defaults so they take precedence, but after any subclass setdefault calls).
-        kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("moe_intermediate_size", 12)
-
-        # Apply shared text-model defaults for anything not already set.
-        # Subclasses are expected to `setdefault` their modality-specific kwargs
-        # (and any differing values such as `pad_token_id`) *before* calling super.
-        for key, default in _TEXT_MODEL_TESTER_DEFAULTS.items():
-            kwargs.setdefault(key, default)
-
-        kwargs.setdefault("ignore_index", -100)
-        kwargs.setdefault("scope", None)
-
-        for key, value in kwargs.items():
+        for key, value in self.get_small_config_defaults(**kwargs).items():
             setattr(self, key, value)
-
         self._check_required_attributes()
 
     def _check_required_attributes(self):

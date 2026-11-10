@@ -21,13 +21,13 @@ from transformers import AutoModelForCausalLM, set_seed
 from transformers.models.auto.auto_factory import getattribute_from_module
 from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
-    _TEXT_MODEL_TESTER_DEFAULTS,
     is_flaky,
     require_flash_attn,
     require_torch_accelerator,
     slow,
 )
 
+from .model_tester_config import ModelTesterConfigMixin
 from .test_configuration_common import ConfigTester
 from .test_expert_parallel_mixin import ExpertParallelTesterMixin
 from .test_fsdp_mixin import FSDPTesterMixin
@@ -48,29 +48,27 @@ if is_torch_available():
     import torch
 
 
-# CausalLM-specific defaults (not shared with multimodal testers)
-_CAUSAL_LM_TESTER_DEFAULTS = {
-    "use_token_type_ids": False,
-    "hidden_dropout_prob": 0.1,
-    "attention_probs_dropout_prob": 0.1,
-    "type_vocab_size": 16,
-    "type_sequence_label_size": 2,
-    "initializer_range": 0.02,
-    "num_labels": 3,
-    "num_choices": 4,
-    "is_decoder": False,
-    "scope": None,
-    "mamba_n_groups": 1,
-    "mamba_n_heads": 16,
-    "mamba_d_state": 16,
-    "mamba_d_conv": 4,
-    "mamba_expand": 2,
-    "mamba_chunk_size": 16,
-    "tie_word_embeddings": False,
-}
+class CausalLMModelTester(ModelTesterConfigMixin):
+    defaults = {
+        "use_token_type_ids": False,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "is_decoder": False,
+        "scope": None,
+        "mamba_n_groups": 1,
+        "mamba_n_heads": 16,
+        "mamba_d_state": 16,
+        "mamba_d_conv": 4,
+        "mamba_expand": 2,
+        "mamba_chunk_size": 16,
+        "tie_word_embeddings": False,
+    }
 
-
-class CausalLMModelTester:
     # If the model follows the standard naming conventions, only `base_model_class` needs to be set (the others are
     # inferred from available public classes).
     base_model_class = None
@@ -187,28 +185,17 @@ class CausalLMModelTester:
             mapping["zero-shot"] = self.sequence_classification_class
         return mapping
 
-    @staticmethod
-    def get_small_config_defaults():
-        """Return model-specific overrides of the shared text and causal LM tester defaults.
-
-        Override with a fresh literal dictionary so tools can extract the values
-        without importing test modules. Explicit constructor kwargs take precedence.
-        These are test defaults, not a complete checkpoint or quantization config.
-        """
-        return {}
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if "head_dim" not in values:
+            values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
 
     def __init__(self, parent, **kwargs):
         self._verify_and_infer_model_attributes()
         self.parent = parent
-
-        # Precedence: caller kwargs > model `get_small_config_defaults()` > CausalLM defaults > shared text defaults
-        kwargs = {**self.get_small_config_defaults(), **kwargs}
-        for key, default in {**_TEXT_MODEL_TESTER_DEFAULTS, **_CAUSAL_LM_TESTER_DEFAULTS}.items():
-            kwargs.setdefault(key, default)
-        # Derived from the final widths unless set explicitly.
-        kwargs.setdefault("head_dim", kwargs["hidden_size"] // kwargs["num_attention_heads"])
-
-        for key, value in kwargs.items():
+        for key, value in self.get_small_config_defaults(**kwargs).items():
             setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
