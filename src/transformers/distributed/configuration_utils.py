@@ -61,8 +61,8 @@ class DistributedConfig:
             Whether to enable mixed precision for FSDP2.
         cp_size (`int`, *optional*):
             Number of devices that split each sequence (context parallelism). The ranks of a cp group get the same
-            batch, and each runs on a contiguous slice of every sequence. The ranks of a tp group get the same batch
-            and the same slice. Requires `torch>=2.10`.
+            batch, and each runs on a contiguous slice of every sequence, padded at its end to a multiple of `cp_size`.
+            The ranks of a tp group get the same batch and the same slice. Requires `torch>=2.10`.
         cp_plan (`dict[str, str]`, *optional*):
             Context parallel plan. Leave as `None` to use the model's predefined `base_model_cp_plan` and class-level
             `_cp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept, so

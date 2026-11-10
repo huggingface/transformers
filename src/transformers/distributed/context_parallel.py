@@ -214,10 +214,17 @@ def context_parallel_styles() -> list[str]:
 SOFTMAX_ATTENTION_LAYER_TYPES = ("full_attention", "sliding_attention", "chunked_attention")
 
 
+def pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
+    """`tensor` with `pad_len` copies of `value` appended along its sequence dimension 1."""
+    padding = tensor.new_full((tensor.shape[0], pad_len, *tensor.shape[2:]), value)
+    return torch.cat([tensor, padding], dim=1)
+
+
 class ModelContextParallel(ContextParallelLayer):
     """
     The model itself, outside the plan since no plan key names the root module: `check` refuses what context
     parallelism would silently get wrong, the forward refuses a cache, which context parallelism does not split, and
+    pads every sequence at the end to a multiple of `cp_size`, before the model builds its masks from them, and
     `loss_function` reports the loss of the whole sequences on every rank.
     """
 
@@ -256,6 +263,32 @@ class ModelContextParallel(ContextParallelLayer):
         kwargs["use_cache"] = False
         # a hub kernel loaded since may have registered another function under the attention key
         wrap_attention_function(module.config._attn_implementation)
+
+        tokens = args[0] if args else kwargs.get("input_ids")
+        if tokens is None:
+            tokens = kwargs["inputs_embeds"]
+        pad_len = -tokens.shape[1] % cp_mesh.size()
+        if pad_len == 0:
+            return args, kwargs
+
+        pad_token_id = getattr(module.config, "pad_token_id", None) or 0
+        if args:
+            args = (pad_sequence(args[0], pad_len, pad_token_id),) + args[1:]
+        padding_values = {
+            "input_ids": pad_token_id,
+            "inputs_embeds": 0,
+            "attention_mask": 0,
+            "labels": -100,
+            "shift_labels": -100,
+        }
+        for name, value in padding_values.items():
+            if kwargs.get(name) is not None:
+                kwargs[name] = pad_sequence(kwargs[name], pad_len, value)
+        if kwargs.get("position_ids") is not None:
+            # the padding continues the positions of the last document of every row
+            position_ids = kwargs["position_ids"]
+            steps = torch.arange(1, pad_len + 1, device=position_ids.device)
+            kwargs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
         return args, kwargs
 
     def loss(
@@ -295,7 +328,7 @@ def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: di
     """
     Let the ranks of `cp_mesh` split every sequence: `ModelContextParallel` on the model, then the plan, whose
     `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention modules run their attention over
-    the whole sequence.
+    the whole sequence. The model's own forward refuses a cache and pads the sequences to a multiple of `cp_size`.
     """
     ModelContextParallel().install_forward(model, cp_mesh)
     modules = dict(model.named_modules())
