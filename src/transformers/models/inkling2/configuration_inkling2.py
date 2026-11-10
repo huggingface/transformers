@@ -18,13 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2TextConfig(PreTrainedConfig):
     r"""
@@ -42,7 +44,7 @@ class Inkling2TextConfig(PreTrainedConfig):
         Per-head dimension of the relative states that are mixed into the relative position bias.
     rel_extent (`int`, *optional*, defaults to 1024):
         Backward distance, in tokens, over which the relative position bias is applied in the full-attention layers.
-    log_scaling_n_floor (`int`, *optional*, defaults to 8192):
+    log_scaling_n_floor (`int`, *optional*, defaults to 128000):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
@@ -58,6 +60,8 @@ class Inkling2TextConfig(PreTrainedConfig):
         Softcap applied to the experts' up projection.
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         Softcap applied to the output logits.
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Activation turning the router logits into expert scores.
     """
 
     model_type = "inkling2_text"
@@ -79,6 +83,7 @@ class Inkling2TextConfig(PreTrainedConfig):
         "sconv_kernel_size": "conv_kernel_size",
         "model_max_length": "max_position_embeddings",
         "intermediate_size": "moe_intermediate_size",
+        "routed_scaling_factor": "route_scale",
     }
 
     vocab_size: int = 201024
@@ -95,7 +100,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     sliding_window_size: int = 1024
     d_rel: int = 16
     rel_extent: int = 1024
-    log_scaling_n_floor: int = 8192
+    log_scaling_n_floor: int = 128000
     log_scaling_alpha: float = 0.1
     layer_types: list[str] | None = None
     max_position_embeddings: int = 1048576
@@ -105,7 +110,6 @@ class Inkling2TextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 2304
     n_routed_experts: int = 384
     num_experts_per_tok: int = 8
-    n_shared_experts: int = 0
     route_scale: float = 8.0
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
@@ -118,6 +122,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float = 30.0
+    scoring_func: str = "sigmoid"
     use_cache: bool = True
     number_of_conv_states = 4
 
@@ -129,12 +134,10 @@ class Inkling2TextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2VisionConfig(PreTrainedConfig):
     r"""
-    mlp_ratio (`float`, *optional*, defaults to 4.0):
-        Ratio of the MLP intermediate size to the hidden size.
     spatial_merge_size (`int`, *optional*, defaults to 2):
         Side, in native patches, of the square of patch features concatenated into one language model token.
     posemb_grid_size (`int`, *optional*, defaults to 32):
@@ -143,34 +146,32 @@ class Inkling2VisionConfig(PreTrainedConfig):
         Hidden size of the MLP projecting merged patch features to the language model.
     projector_bias (`bool`, *optional*, defaults to `False`):
         Whether the projection MLP uses biases.
-    layer_scale_init_value (`float`, *optional*, defaults to 0.1):
-        Initial value of the LayerScale factors.
     text_hidden_size (`int`, *optional*, defaults to 4608):
         Hidden size of the language model the image features are projected to.
     """
 
     model_type = "inkling2_vision"
     base_config_key = "vision_config"
-    default_rope_type = "axial"
-    attribute_map = {"native_patch_size": "patch_size", "adapter_merge_size": "spatial_merge_size"}
 
     hidden_size: int = 1024
     intermediate_size: int | None = None
     num_hidden_layers: int = 23
     num_attention_heads: int = 16
-    mlp_ratio: float = 4.0
+    num_channels: int = 3
+    patch_size: int = 20
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-5
     attention_dropout: float | int = 0.0
-    num_channels: int = 3
-    patch_size: int = 20
+    default_rope_type = "axial"
+    mlp_ratio: float = 4.0
+    layer_scale_init_value: float = 0.1
+    rope_parameters: dict | None = None
+    attribute_map = {"native_patch_size": "patch_size", "adapter_merge_size": "spatial_merge_size"}
     spatial_merge_size: int = 2
     posemb_grid_size: int = 32
     projection_hidden_dim: int = 4096
     projector_bias: bool = False
-    layer_scale_init_value: float = 0.1
     text_hidden_size: int = 4608
-    rope_parameters: dict | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -179,7 +180,21 @@ class Inkling2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+# Missing from the hub config
+INKLING2_QUANTIZATION_CONFIG = {
+    "*.layers.(?:40|41|42|43|44|45|46|47).mlp.experts.*": {
+        "quant_method": "fp8",
+        "weight_block_size": [1, 32],
+        "dequantize": True,
+    },
+    "*.layers.(?:0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39).mlp.experts.*": {
+        "quant_method": "nvfp4",
+        "dequantize": True,
+    },
+}
+
+
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2Config(PreTrainedConfig):
     r"""
@@ -187,12 +202,20 @@ class Inkling2Config(PreTrainedConfig):
         Token index of the image placeholders, each replaced by one image feature.
     """
 
-    model_type = "inkling2_mm_model"
+    model_type = "inkling2"
     sub_configs_defaults = {"text_config": Inkling2TextConfig, "vision_config": Inkling2VisionConfig}
 
     text_config: Inkling2TextConfig | dict | None = None
     vision_config: Inkling2VisionConfig | dict | None = None
     image_token_id: int = 200054
+
+    @classmethod
+    def from_dict(cls, config_dict: dict, **kwargs):
+        # Quantization config is missing from the hub config. We cannot set it in `__post_init__` because the model
+        # dequantizes on load and the config must not have a quantization config after that.
+        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
+            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
+        return super().from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:

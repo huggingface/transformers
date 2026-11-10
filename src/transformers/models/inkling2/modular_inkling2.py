@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from collections.abc import Callable
 
@@ -28,7 +29,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, ImageType, SizeDict, get_image_type
-from ...integrations import use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -37,9 +38,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4TopKRouter, DeepseekV4UnweightedRMSNorm
 from ..inkling.configuration_inkling import InklingConfig, InklingTextConfig
 from ..inkling.modeling_inkling import (
     InklingAttention,
@@ -49,23 +51,23 @@ from ..inkling.modeling_inkling import (
     InklingForConditionalGeneration,
     InklingModel,
     InklingModelOutputWithPast,
-    InklingMoE,
     InklingPreTrainedModel,
     InklingRelativeLogits,
-    InklingRMSNorm,
     InklingShortConvolution,
     InklingTextModel,
-    InklingTopkRouter,
 )
 from ..llama.modeling_llama import repeat_kv
 from ..llava.modeling_llava import LlavaMultiModalProjector
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
+from ..step3p7.configuration_step3p7 import Step3p7VisionConfig
 from ..step3p7.modeling_step3p7 import Step3p7VisionEncoderLayer
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionAttention
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2TextConfig(InklingTextConfig):
     r"""
@@ -83,7 +85,7 @@ class Inkling2TextConfig(InklingTextConfig):
         Per-head dimension of the relative states that are mixed into the relative position bias.
     rel_extent (`int`, *optional*, defaults to 1024):
         Backward distance, in tokens, over which the relative position bias is applied in the full-attention layers.
-    log_scaling_n_floor (`int`, *optional*, defaults to 8192):
+    log_scaling_n_floor (`int`, *optional*, defaults to 128000):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
@@ -99,6 +101,8 @@ class Inkling2TextConfig(InklingTextConfig):
         Softcap applied to the experts' up projection.
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         Softcap applied to the output logits.
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Activation turning the router logits into expert scores.
     """
 
     model_type = "inkling2_text"
@@ -120,6 +124,7 @@ class Inkling2TextConfig(InklingTextConfig):
         "sconv_kernel_size": "conv_kernel_size",
         "model_max_length": "max_position_embeddings",
         "intermediate_size": "moe_intermediate_size",
+        "routed_scaling_factor": "route_scale",
     }
 
     unpadded_vocab_size: int = 200058
@@ -129,12 +134,11 @@ class Inkling2TextConfig(InklingTextConfig):
     swa_num_attention_heads: int = 48
     swa_num_key_value_heads: int = 8
     sliding_window_size: int = 1024
-    log_scaling_n_floor: int = 8192
+    log_scaling_n_floor: int = 128000
     max_position_embeddings: int = 1048576
     moe_intermediate_size: int = 2304
     n_routed_experts: int = 384
     num_experts_per_tok: int = 8
-    n_shared_experts: int = 0
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
@@ -142,9 +146,11 @@ class Inkling2TextConfig(InklingTextConfig):
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float = 30.0
+    scoring_func: str = "sigmoid"
     use_cache: bool = True
 
     intermediate_size = AttributeError()
+    n_shared_experts = AttributeError()
     mlp_layer_types = AttributeError()
     shared_expert_sink = AttributeError()
     logits_mup_width_multiplier = AttributeError()
@@ -170,12 +176,10 @@ class Inkling2TextConfig(InklingTextConfig):
         raise AttributeError("Not needed for Inkling2")
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
-class Inkling2VisionConfig(PreTrainedConfig):
+class Inkling2VisionConfig(Step3p7VisionConfig):
     r"""
-    mlp_ratio (`float`, *optional*, defaults to 4.0):
-        Ratio of the MLP intermediate size to the hidden size.
     spatial_merge_size (`int`, *optional*, defaults to 2):
         Side, in native patches, of the square of patch features concatenated into one language model token.
     posemb_grid_size (`int`, *optional*, defaults to 32):
@@ -184,43 +188,50 @@ class Inkling2VisionConfig(PreTrainedConfig):
         Hidden size of the MLP projecting merged patch features to the language model.
     projector_bias (`bool`, *optional*, defaults to `False`):
         Whether the projection MLP uses biases.
-    layer_scale_init_value (`float`, *optional*, defaults to 0.1):
-        Initial value of the LayerScale factors.
     text_hidden_size (`int`, *optional*, defaults to 4608):
         Hidden size of the language model the image features are projected to.
     """
 
     model_type = "inkling2_vision"
-    base_config_key = "vision_config"
-    default_rope_type = "axial"
     attribute_map = {"native_patch_size": "patch_size", "adapter_merge_size": "spatial_merge_size"}
 
     hidden_size: int = 1024
     intermediate_size: int | None = None
     num_hidden_layers: int = 23
-    num_attention_heads: int = 16
-    mlp_ratio: float = 4.0
-    hidden_act: str = "gelu"
-    layer_norm_eps: float = 1e-5
-    attention_dropout: float | int = 0.0
-    num_channels: int = 3
     patch_size: int = 20
+    hidden_act: str = "gelu"
+    mlp_ratio: float = 4.0
     spatial_merge_size: int = 2
     posemb_grid_size: int = 32
     projection_hidden_dim: int = 4096
     projector_bias: bool = False
-    layer_scale_init_value: float = 0.1
     text_hidden_size: int = 4608
-    rope_parameters: dict | None = None
     initializer_range: float = 0.02
+
+    image_size = AttributeError()
+    max_position_embeddings = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.intermediate_size is None:
             self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+# Missing from the hub config
+INKLING2_QUANTIZATION_CONFIG = {
+    "*.layers.(?:40|41|42|43|44|45|46|47).mlp.experts.*": {
+        "quant_method": "fp8",
+        "weight_block_size": [1, 32],
+        "dequantize": True,
+    },
+    "*.layers.(?:0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39).mlp.experts.*": {
+        "quant_method": "nvfp4",
+        "dequantize": True,
+    },
+}
+
+
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2Config(InklingConfig):
     r"""
@@ -228,7 +239,7 @@ class Inkling2Config(InklingConfig):
         Token index of the image placeholders, each replaced by one image feature.
     """
 
-    model_type = "inkling2_mm_model"
+    model_type = "inkling2"
     sub_configs_defaults = {"text_config": Inkling2TextConfig, "vision_config": Inkling2VisionConfig}
 
     audio_config = AttributeError()
@@ -238,6 +249,14 @@ class Inkling2Config(InklingConfig):
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not needed for Inkling2")
+
+    @classmethod
+    def from_dict(cls, config_dict: dict, **kwargs):
+        # Quantization config is missing from the hub config. We cannot set it in `__post_init__` because the model
+        # dequantizes on load and the config must not have a quantization config after that.
+        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
+            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
+        return PreTrainedConfig.from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:
@@ -255,28 +274,38 @@ class Inkling2CausalLMOutputWithPast(InklingCausalLMOutputWithPast):
     pass
 
 
-class Inkling2RMSNorm(InklingRMSNorm):
+# Different rounding order than original Inkling
+class Inkling2RMSNorm(Olmo2RMSNorm):
     pass
 
 
 class Inkling2L2Clip(nn.Module):
     """Scales each head vector down to `threshold` when its L2 norm is larger; shorter vectors are unchanged."""
 
-    def __init__(self, num_heads: int, head_dim: int, threshold: float, learnable_scale: bool):
+    def __init__(self, threshold: float):
         super().__init__()
         self.threshold = threshold
-        self.scale = nn.Parameter(torch.ones(num_heads, head_dim)) if learnable_scale else None
 
-    def forward(self, hidden_states: torch.Tensor, tau: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
-        if self.scale is not None:
-            hidden_states = hidden_states * self.scale.float()
         norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
-        hidden_states = (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
-        if tau is not None:
-            hidden_states = (hidden_states.float() * tau).to(input_dtype)
-        return hidden_states
+        return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
+
+
+class Inkling2ScaledL2Clip(nn.Module):
+    """`Inkling2L2Clip` applied after a learned scale."""
+
+    def __init__(self, num_heads: int, head_dim: int, threshold: float):
+        super().__init__()
+        self.threshold = threshold
+        self.scale = nn.Parameter(torch.ones(num_heads, head_dim))
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float() * self.scale.float()
+        norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
+        return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
 
 
 class Inkling2RelativeLogits(InklingRelativeLogits):
@@ -325,6 +354,7 @@ class Inkling2ShortConvolution(InklingShortConvolution):
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
+        # Different from Inkling which has no output scale
         hidden_states = (hidden_states + residual) / math.sqrt(self.conv_kernel_size + 1)
         return hidden_states.to(dtype=input_dtype)
 
@@ -345,7 +375,7 @@ class Inkling2DynamicShortConvolution(nn.Module):
         self.num_heads = num_heads
         # tap index is the backward distance: `static_weight[0]` weights the current token
         self.static_weight = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
-        self.weight_proj = nn.Parameter(torch.empty(num_heads * conv_kernel_size, input_size))
+        self.weight_proj = nn.Linear(input_size, num_heads * conv_kernel_size, bias=False)
 
     def forward(
         self,
@@ -357,7 +387,7 @@ class Inkling2DynamicShortConvolution(nn.Module):
     ):
         input_dtype = hidden_states.dtype
         batch_size, seq_len, hidden_size = hidden_states.shape
-        dynamic_weights = F.linear(dynamic_input, self.weight_proj.to(dynamic_input.dtype)).float()
+        dynamic_weights = self.weight_proj(dynamic_input).float()
         dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
         weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
 
@@ -411,96 +441,35 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Inkling2Attention(InklingAttention):
+class Inkling2SlidingAttention(InklingAttention):
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.is_sliding = config.layer_types[self.layer_idx] == "hybrid_sliding"
-        self.head_dim = config.swa_head_dim if self.is_sliding else config.head_dim
-        self.num_heads = config.swa_num_attention_heads if self.is_sliding else config.num_attention_heads
-        self.num_key_value_heads = config.swa_num_key_value_heads if self.is_sliding else config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.sliding_window = config.sliding_window_size if self.is_sliding else None
-        self.relative_extent = config.sliding_window_size if self.is_sliding else config.rel_extent
+        super().__init__(config, layer_idx)
         self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.relative_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        if self.is_sliding:
-            self.key_convolution = Inkling2ShortConvolution(
-                self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
-            )
-            self.value_convolution = Inkling2ShortConvolution(
-                self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-            )
-        else:
-            self.key_convolution = Inkling2DynamicShortConvolution(
-                self.num_key_value_heads * self.head_dim,
-                config.hidden_size,
-                self.num_key_value_heads,
-                config.sconv_kernel_size,
-                layer_idx,
-                conv_idx=0,
-            )
-            self.value_convolution = Inkling2DynamicShortConvolution(
-                self.num_key_value_heads * self.head_dim,
-                config.hidden_size,
-                self.num_key_value_heads,
-                config.sconv_kernel_size,
-                layer_idx,
-                conv_idx=1,
-            )
-        self.q_l2_clip = Inkling2L2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold, True)
-        self.k_l2_clip = Inkling2L2Clip(self.num_key_value_heads, self.head_dim, config.qk_l2_clip_threshold, False)
-        self.relative_l2_clip = Inkling2L2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold, True)
-        self.relative_logits_proj = Inkling2RelativeLogits(config.d_rel, self.relative_extent)
+        self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
+        self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        del self.q_norm
+        del self.k_norm
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        key_hidden_states: torch.Tensor | None = None,
-        value_hidden_states: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        key_hidden_states (`torch.Tensor`, *optional*):
-            Input of the key projection and of the key convolution weights. Defaults to `hidden_states`.
-        value_hidden_states (`torch.Tensor`, *optional*):
-            Input of the value projection and of the value convolution weights. Defaults to `hidden_states`.
-        """
-        key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
-        value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_hidden_states)
-        value_states = self.v_proj(value_hidden_states)
-        relative_states = self.relative_proj(hidden_states)
+        key_states = self.k_sconv(self.k_proj(hidden_states), past_key_values=past_key_values, conv_mask=conv_mask)
+        value_states = self.v_sconv(self.v_proj(hidden_states), past_key_values=past_key_values, conv_mask=conv_mask)
+        relative_states = self.r_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
-
-        if self.is_sliding:
-            key_states = self.key_convolution(key_states, past_key_values=past_key_values, conv_mask=conv_mask)
-            value_states = self.value_convolution(value_states, past_key_values=past_key_values, conv_mask=conv_mask)
-        else:
-            key_states = self.key_convolution(
-                key_states, key_hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
-            )
-            value_states = self.value_convolution(
-                value_states, value_hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
-            )
 
         q_length = query_states.shape[1]
         if past_key_values is not None:
@@ -512,23 +481,16 @@ class Inkling2Attention(InklingAttention):
         kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
         q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
 
-        tau = None
-        if not self.is_sliding:
-            tau = 1.0 + self.config.log_scaling_alpha * torch.log(
-                ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
-            )
-            tau = tau[..., None, None]
-
-        query_states = self.q_l2_clip(query_states.view(hidden_shape), tau).transpose(1, 2)
+        query_states = self.q_l2_clip(query_states.view(hidden_shape)).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
         value_states = value_states.transpose(1, 2)
-        relative_states = self.relative_l2_clip(relative_states.view(*input_shape, self.num_heads, -1), tau)
+        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        position_bias = self.relative_logits_proj(relative_states, q_positions, kv_positions)
+        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -549,9 +511,133 @@ class Inkling2Attention(InklingAttention):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = attn_output * torch.sigmoid(gate)
+        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class Inkling2FullAttention(InklingAttention):
+    def __init__(self, config: Inkling2TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.scaling = self.head_dim**-0.5
+        self.k_sconv = Inkling2DynamicShortConvolution(
+            self.num_key_value_heads * self.head_dim,
+            config.hidden_size,
+            self.num_key_value_heads,
+            config.sconv_kernel_size,
+            layer_idx,
+            conv_idx=0,
+        )
+        self.v_sconv = Inkling2DynamicShortConvolution(
+            self.num_key_value_heads * self.head_dim,
+            config.hidden_size,
+            self.num_key_value_heads,
+            config.sconv_kernel_size,
+            layer_idx,
+            conv_idx=1,
+        )
+        self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
+        self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        del self.q_norm
+        del self.k_norm
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_hidden_states: torch.Tensor,
+        value_hidden_states: torch.Tensor,
+        position_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None,
+        conv_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        r"""
+        key_hidden_states (`torch.Tensor`):
+            Input of the key projection and of the key convolution weights.
+        value_hidden_states (`torch.Tensor`):
+            Input of the value projection and of the value convolution weights.
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_sconv(
+            self.k_proj(key_hidden_states), key_hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
+        )
+        value_states = self.v_sconv(
+            self.v_proj(value_hidden_states),
+            value_hidden_states,
+            past_key_values=past_key_values,
+            conv_mask=conv_mask,
+        )
+        relative_states = self.r_proj(hidden_states)
+        gate = self.gate_proj(hidden_states)
+        sinks = self.sink_proj(hidden_states)
+
+        q_length = query_states.shape[1]
+        if past_key_values is not None:
+            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
+            q_offset = past_key_values.get_query_offset(self.layer_idx)
+        else:
+            kv_length = q_length
+            q_offset, kv_offset = 0, 0
+        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
+
+        # log scaling of the queries and relative states, in fp32 as in the original
+        tau = 1.0 + self.config.log_scaling_alpha * torch.log(
+            ((position_ids + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
+        )
+        tau = tau[..., None, None]
+
+        query_states = self.q_l2_clip(query_states.view(hidden_shape))
+        query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
+        key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
+        value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
+        value_states = value_states.transpose(1, 2)
+        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
+        relative_states = (relative_states.float() * tau).to(relative_states.dtype)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            position_bias=position_bias,
+            sinks=sinks.transpose(1, 2).unsqueeze(-1),
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Inkling2Softcap(nn.Module):
+    def __init__(self, softcap: float):
+        super().__init__()
+        self.softcap = softcap
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return torch.tanh(hidden_states / self.softcap) * self.softcap
 
 
 class Inkling2SoftcappedSwiGLU(nn.Module):
@@ -559,17 +645,16 @@ class Inkling2SoftcappedSwiGLU(nn.Module):
 
     def __init__(self, config: Inkling2TextConfig):
         super().__init__()
-        self.gate_softcap = config.mlp_gate_softcap
-        self.up_softcap = config.mlp_up_softcap
+        self.gate_softcap = Inkling2Softcap(config.mlp_gate_softcap)
+        self.up_softcap = Inkling2Softcap(config.mlp_up_softcap)
 
     def forward(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
         input_dtype = gate.dtype
         gate, up = gate.float(), up.float()
-        gate_linear = self.gate_softcap * torch.tanh(gate / self.gate_softcap)
-        up = self.up_softcap * torch.tanh(up / self.up_softcap)
-        return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
+        return (self.gate_softcap(gate) * torch.sigmoid(gate) * self.up_softcap(up)).to(input_dtype)
 
 
+@use_experts_implementation(is_concatenated=False)
 class Inkling2Experts(InklingExperts):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
@@ -582,6 +667,7 @@ class Inkling2Experts(InklingExperts):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
+        # accumulate the top-k expert outputs in fp32, as in the original
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
@@ -601,87 +687,53 @@ class Inkling2Experts(InklingExperts):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class Inkling2TopkRouter(InklingTopkRouter):
-    def __init__(self, config):
-        super().__init__(config)
-        del self.global_scale
-
-    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = F.linear(hidden_states.reshape(-1, self.hidden_dim).float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        topk_indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(-1, topk_indices)
-        topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True) * self.route_scale
-        return router_logits, topk_weights, topk_indices
+class Inkling2TopKRouter(DeepseekV4TopKRouter):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # routing runs in fp32, as in the original
+        hidden_states = hidden_states.float()
+        return super().forward(hidden_states)
 
 
-class Inkling2MoE(InklingMoE):
-    def __init__(self, config):
-        super().__init__(config)
-        del self.shared_experts
+class Inkling2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    pass
 
-    def forward(self, hidden_states) -> torch.Tensor:
-        input_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states.view(-1, input_shape[-1]), topk_indices, topk_weights)
-        return hidden_states.view(*input_shape)
+
+class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
+    pass
 
 
 class Inkling2BlockAttentionResidual(nn.Module):
-    """
-    Block attention residual: attention over depth that mixes the completed blocks and the current partial block into
-    the input of the next sublayer. At each position, every learned pseudo-query attends to that position's block
-    states. Keys and values are the RMS-normalized block states.
-    """
-
     def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
         self.query = nn.Parameter(
             torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
+        self.norm = Inkling2UnweightedRMSNorm()
 
-    def forward(
-        self, block_states: list[torch.Tensor], partial_block_states: torch.Tensor
-    ) -> tuple[torch.Tensor, ...]:
-        """
-        Returns one `(batch_size, seq_len, hidden_size)` float32 tensor per query: the block states (completed blocks
-        and the partial block) weighted by that query's attention. Full-attention layers use three queries for separate
-        query, key and value inputs, all other sublayers use one.
-        """
-        # with a device map, earlier blocks live on the devices of the layers that produced them
-        device = partial_block_states.device
-        stacked_states = torch.stack(
-            [*(state.to(device) for state in block_states), partial_block_states], dim=-2
-        ).float()
-        stacked_states = stacked_states * torch.rsqrt(stacked_states.square().mean(dim=-1, keepdim=True) + 1e-6)
+    def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
+        stacked_states = self.norm(stacked_states)
 
         hidden_size = stacked_states.shape[-1]
         # (batch, seq_len, num_queries, hidden_size), the same queries at every position
-        query_states = self.query.to(device).float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
+        query_states = self.query.float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
         attn_output = F.scaled_dot_product_attention(
             query_states, stacked_states, stacked_states, scale=hidden_size**-0.5
         )
         return attn_output.unbind(-2)
 
 
-class Inkling2DecoderLayer(GradientCheckpointingLayer):
+class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
+    attention_type = "sliding_attention"
+
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
         super().__init__()
-        self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
-        self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
         self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
-        self.attention_input = (
-            Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
-        )
+        self.attention_input = Inkling2BlockAttentionResidual(config) if layer_idx > 0 else None
         self.mlp_input = Inkling2BlockAttentionResidual(config)
-        self.self_attn = Inkling2Attention(config, layer_idx)
-        self.mlp = Inkling2MoE(config)
-        if self.is_sliding:
-            self.input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        else:
-            self.q_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
-            self.k_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
-            self.v_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.self_attn = Inkling2SlidingAttention(config, layer_idx)
+        self.mlp = Inkling2SparseMoeBlock(config)
+        self.input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
@@ -693,7 +745,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        block_states: list[torch.Tensor],
+        block_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
@@ -701,21 +753,11 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if self.attention_input is None:
-            qkv_hidden_states = (hidden_states,) * (1 if self.is_sliding else 3)
-        else:
-            qkv_hidden_states = self.attention_input(block_states, hidden_states)
+        if self.attention_input is not None:
+            hidden_states = self.attention_input(block_states, hidden_states)[0]
 
-        if self.is_sliding:
-            attention_inputs = {"hidden_states": self.input_layernorm(qkv_hidden_states[0]).to(dtype)}
-        else:
-            attention_inputs = {
-                "hidden_states": self.q_input_layernorm(qkv_hidden_states[0]).to(dtype),
-                "key_hidden_states": self.k_input_layernorm(qkv_hidden_states[1]).to(dtype),
-                "value_hidden_states": self.v_input_layernorm(qkv_hidden_states[2]).to(dtype),
-            }
         hidden_states, _ = self.self_attn(
-            **attention_inputs,
+            hidden_states=self.input_layernorm(hidden_states).to(dtype),
             attention_mask=attention_mask,
             conv_mask=conv_mask,
             past_key_values=past_key_values,
@@ -727,7 +769,77 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         if self.is_block_boundary:
-            block_states = [*block_states, block_residual]
+            block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
+        else:
+            hidden_states = block_residual.float() + hidden_states.float()
+
+        hidden_states = self.mlp_input(block_states, hidden_states)[0]
+        hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
+        hidden_states = self.post_mlp_convolution(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+
+        if not self.is_block_boundary:
+            residual = block_residual + residual
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
+    attention_type = "full_attention"
+
+    def __init__(self, config: Inkling2TextConfig, layer_idx: int):
+        super().__init__()
+        self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
+        self.attention_input = Inkling2BlockAttentionResidual(config, num_queries=3) if layer_idx > 0 else None
+        self.mlp_input = Inkling2BlockAttentionResidual(config)
+        self.self_attn = Inkling2FullAttention(config, layer_idx)
+        self.mlp = Inkling2SparseMoeBlock(config)
+        self.q_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.k_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.v_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_convolution = Inkling2ShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
+        )
+        self.post_mlp_convolution = Inkling2ShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        block_states: torch.Tensor,
+        position_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        conv_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        dtype = hidden_states.dtype
+        block_residual = hidden_states
+        if self.attention_input is None:
+            query_hidden_states = key_hidden_states = value_hidden_states = hidden_states
+        else:
+            query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(
+                block_states, hidden_states
+            )
+
+        hidden_states, _ = self.self_attn(
+            hidden_states=self.q_input_layernorm(query_hidden_states).to(dtype),
+            key_hidden_states=self.k_input_layernorm(key_hidden_states).to(dtype),
+            value_hidden_states=self.v_input_layernorm(value_hidden_states).to(dtype),
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            conv_mask=conv_mask,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+        hidden_states = self.post_attention_convolution(
+            hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
+        )
+        residual = hidden_states
+
+        if self.is_block_boundary:
+            block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
         else:
             hidden_states = block_residual.float() + hidden_states.float()
 
@@ -859,15 +971,21 @@ class Inkling2VisionMerger(LlavaMultiModalProjector):
 @auto_docstring
 class Inkling2PreTrainedModel(InklingPreTrainedModel):
     config: Inkling2Config
-    _no_split_modules = ["Inkling2DecoderLayer", "Inkling2VisionEncoderLayer"]
+    _no_split_modules = ["Inkling2SlidingDecoderLayer", "Inkling2FullDecoderLayer", "Inkling2VisionEncoderLayer"]
     _supports_sdpa = False
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": [Inkling2SlidingDecoderLayer, Inkling2FullDecoderLayer],
+        "attentions": [Inkling2SlidingAttention, Inkling2FullAttention],
+        "router_logits": OutputRecorder(Inkling2TopKRouter, index=0),
+    }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "mlp.gate.weight",
         "post_attention_convolution",
         "post_mlp_convolution",
-        "key_convolution",
-        "value_convolution",
+        "k_sconv.conv1d",
+        "v_sconv.conv1d",
         "attention_input",
         "mlp_input",
         "final_input",
@@ -883,14 +1001,13 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         elif isinstance(module, Inkling2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2TopkRouter):
+        elif isinstance(module, Inkling2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Inkling2L2Clip) and module.scale is not None:
+        elif isinstance(module, Inkling2ScaledL2Clip):
             init.ones_(module.scale)
         elif isinstance(module, Inkling2DynamicShortConvolution):
             init.zeros_(module.static_weight)
-            init.normal_(module.weight_proj, mean=0.0, std=std)
         elif isinstance(module, Inkling2BlockAttentionResidual):
             init.zeros_(module.query)
         elif isinstance(module, Inkling2VisionEmbeddings):
@@ -905,6 +1022,14 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
 class Inkling2TextModel(InklingTextModel):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [
+                Inkling2SlidingDecoderLayer(config, layer_idx)
+                if config.layer_types[layer_idx] == "hybrid_sliding"
+                else Inkling2FullDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
+        )
         self.final_input = Inkling2BlockAttentionResidual(config)
 
     @merge_with_config_defaults
@@ -949,11 +1074,11 @@ class Inkling2TextModel(InklingTextModel):
             }
 
         hidden_states = inputs_embeds
-        block_states = []
+        block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
         for decoder_layer in self.layers:
             new_hidden_states = decoder_layer(
                 hidden_states,
-                block_states=block_states,
+                block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
@@ -961,7 +1086,7 @@ class Inkling2TextModel(InklingTextModel):
                 **kwargs,
             )
             if decoder_layer.is_block_boundary:
-                block_states = [*block_states, hidden_states]
+                block_states = torch.cat([block_states, hidden_states.unsqueeze(-2)], dim=-2)
             hidden_states = new_hidden_states
 
         hidden_states = self.final_input(block_states, hidden_states)[0]
@@ -973,6 +1098,10 @@ class Inkling2TextModel(InklingTextModel):
 
 
 class Inkling2ForCausalLM(InklingForCausalLM):
+    def __init__(self, config: Inkling2TextConfig):
+        super().__init__(config)
+        self.logit_softcap = Inkling2Softcap(config.final_logit_softcapping)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -993,12 +1122,21 @@ class Inkling2ForCausalLM(InklingForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
-        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/model-share")
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/model-share")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/Inkling-2-Small", device_map="auto")
 
-        >>> inputs = tokenizer("What is your favorite condiment?", return_tensors="pt")
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
+        >>> inputs = tokenizer.apply_chat_template(
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+        >>> input_len = inputs["input_ids"].shape[-1]
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=256)
+        >>> print(tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True))
         ```"""
         outputs = self.model(
             input_ids=input_ids,
@@ -1012,8 +1150,7 @@ class Inkling2ForCausalLM(InklingForCausalLM):
 
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        softcap = self.config.final_logit_softcapping
-        logits = torch.tanh(logits / softcap) * softcap
+        logits = self.logit_softcap(logits)
         logits = logits[..., : self.config.unpadded_vocab_size]
 
         loss = None
@@ -1035,6 +1172,8 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
     config: Inkling2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _supports_flash_attn = True
+    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": Inkling2VisionEncoderLayer,
         "attentions": Inkling2VisionAttention,
@@ -1133,6 +1272,39 @@ class Inkling2Model(InklingModel):
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             Temporal, height and width of each image, counted in language model image tokens.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Inkling2Model
+
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> model = Inkling2Model.from_pretrained("thinkingmachines/Inkling-2-Small", device_map="auto")
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        ...             },
+        ...             {"type": "text", "text": "What animal is in this image, and where is it?"},
+        ...         ],
+        ...     },
+        ... ]
+
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        ```
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1177,6 +1349,10 @@ class Inkling2Model(InklingModel):
 class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
     input_modalities = ("image", "text")
 
+    def __init__(self, config: Inkling2Config):
+        super().__init__(config)
+        self.logit_softcap = Inkling2Softcap(config.text_config.final_logit_softcapping)
+
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
@@ -1203,6 +1379,42 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             Temporal, height and width of each image, counted in language model image tokens.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Inkling2ForConditionalGeneration
+
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> model = Inkling2ForConditionalGeneration.from_pretrained(
+        ...     "thinkingmachines/Inkling-2-Small", device_map="auto"
+        ... )
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        ...             },
+        ...             {"type": "text", "text": "What animal is in this image, and where is it?"},
+        ...         ],
+        ...     },
+        ... ]
+
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+        >>> input_len = inputs["input_ids"].shape[-1]
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=256)
+        >>> print(processor.decode(outputs[0][input_len:], skip_special_tokens=True))
+        ```
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1220,8 +1432,7 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         text_config = self.config.text_config
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        softcap = text_config.final_logit_softcapping
-        logits = torch.tanh(logits / softcap) * softcap
+        logits = self.logit_softcap(logits)
         logits = logits[..., : text_config.unpadded_vocab_size]
 
         loss = None
@@ -1298,7 +1509,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
             channels, height, width = image.shape
             rows, columns = math.ceil(height / size.height), math.ceil(width / size.width)
             # pad to the grid with -1 on the 0-255 scale, then cut it into one patch per image token
-            image = F.pad(image.float(), (0, columns * size.width - width, 0, rows * size.height - height), value=-1.0)
+            pad_size = SizeDict(height=rows * size.height, width=columns * size.width)
+            image = self.pad([image.float()], pad_size=pad_size, fill_value=-1.0)[0]
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             image = image.reshape(channels, rows, size.height, columns, size.width).permute(1, 3, 2, 4, 0)
             patches.append(image.flatten(0, 1))
@@ -1309,6 +1521,124 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         )
 
 
+# Missing from the hub checkpoint
+INKLING2_CHAT_TEMPLATE = """{%- macro block(role_token, kind, payload, name='') -%}
+    {{- role_token ~ name ~ '<|content_' ~ kind ~ '|>' ~ payload ~ '<|end_message|>' -}}
+{%- endmacro -%}
+{%- macro render_message(message, role_token, name) -%}
+    {%- set turn = namespace(blocks=0) -%}
+    {%- set reasoning = message.reasoning_content -%}
+    {%- if message.role == 'assistant' and reasoning -%}
+        {{- block(role_token, 'thinking', reasoning) -}}
+        {%- set turn.blocks = turn.blocks + 1 -%}
+    {%- endif -%}
+    {%- if message.content is string -%}
+        {%- if not (message.role == 'assistant' and message.content == '' and (reasoning or message.tool_calls)) -%}
+            {{- block(role_token, 'text', message.content, name) -}}
+            {%- set turn.blocks = turn.blocks + 1 -%}
+        {%- endif -%}
+    {%- elif message.content is iterable -%}
+        {%- for part in message.content -%}
+            {%- if part.type == 'text' -%}
+                {{- block(role_token, 'text', part.text, name) -}}
+            {%- elif part.type in ['image', 'image_url'] -%}
+                {{- block(role_token, 'image', '<|unused_200054|>', name) -}}
+            {%- elif part.type == 'thinking' -%}
+                {{- block(role_token, 'thinking', part.thinking, name) -}}
+            {%- elif part.type == 'tool_error' -%}
+                {{- block(role_token, 'tool_error', part.text, name) -}}
+            {%- else -%}
+                {{- raise_exception('Unsupported content type for ' ~ message.role ~ ': ' ~ part.type) -}}
+            {%- endif -%}
+            {%- set turn.blocks = turn.blocks + 1 -%}
+        {%- endfor -%}
+    {%- endif -%}
+    {%- if message.role == 'assistant' and message.tool_calls -%}
+        {%- for tool_call in message.tool_calls -%}
+            {%- set function = tool_call.function if tool_call.function is defined else tool_call -%}
+            {%- if function.arguments is string -%}
+                {%- set arguments = function.arguments -%}
+            {%- else -%}
+                {%- set arguments = (function.arguments or {}) | tojson(separators=(',', ':'), sort_keys=true) -%}
+            {%- endif -%}
+            {{- block(role_token, 'invoke_tool_json', '{"name":' ~ (function.name | tojson) ~ ',"args":' ~ arguments ~ '}') -}}
+            {%- set turn.blocks = turn.blocks + 1 -%}
+        {%- endfor -%}
+    {%- endif -%}
+    {%- if message.role == 'assistant' and turn.blocks > 0 -%}
+        {{- '<|content_model_end_sampling|>' -}}
+    {%- endif -%}
+{%- endmacro -%}
+{%- set role_tokens = {
+    'system': '<|message_system|>',
+    'developer': '<|message_system|>',
+    'user': '<|message_user|>',
+    'assistant': '<|message_model|>',
+    'tool': '<|message_tool|>',
+} -%}
+{%- set effort_levels = {'none': 0.0, 'minimal': 0.1, 'low': 0.2, 'medium': 0.7, 'high': 0.9, 'xhigh': 0.99, 'max': 0.99} -%}
+{%- if reasoning_effort is not defined or reasoning_effort is none -%}
+    {%- if enable_thinking is defined and enable_thinking is false -%}
+        {%- set effort = 0.0 -%}
+    {%- else -%}
+        {%- set effort = 0.9 -%}
+    {%- endif -%}
+{%- elif reasoning_effort is boolean -%}
+    {%- set effort = -1.0 -%}
+{%- elif reasoning_effort is string and reasoning_effort in effort_levels -%}
+    {%- set effort = effort_levels[reasoning_effort] -%}
+{%- else -%}
+    {%- set effort = reasoning_effort | float(-1.0) -%}
+{%- endif -%}
+{%- if effort < 0 or effort > 0.99 -%}
+    {{- raise_exception('reasoning_effort must be none, minimal, low, medium, high, xhigh, max, or a number in [0, 0.99]') -}}
+{%- endif -%}
+{%- set effort = effort | round(2) -%}
+{%- set effort_text = (effort | int | string) if effort == (effort | int) else (effort | string) -%}
+{%- set leading = namespace(count=0, done=false) -%}
+{%- for message in messages -%}
+    {%- if not leading.done and message.role in ['system', 'developer'] -%}
+        {%- set leading.count = leading.count + 1 -%}
+    {%- else -%}
+        {%- set leading.done = true -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- if tools -%}
+    {%- set declarations = namespace(items=[]) -%}
+    {%- for tool in tools -%}
+        {%- set function = tool.function if tool.function is defined else tool -%}
+        {%- set declarations.items = declarations.items + [{
+            'description': function.description or '',
+            'name': function.name,
+            'parameters': function.parameters or {},
+            'type': tool.type or 'function',
+        }] -%}
+    {%- endfor -%}
+    {{- block('<|message_system|>', 'xml', declarations.items | tojson(separators=(',', ':'), sort_keys=true), 'tool_declare') -}}
+{%- endif -%}
+{%- for message in messages -%}
+    {%- if loop.index0 == leading.count -%}
+        {{- block('<|message_system|>', 'text', 'Thinking effort level: ' ~ effort_text) -}}
+    {%- endif -%}
+    {%- if message.role not in role_tokens -%}
+        {{- raise_exception('Unsupported role: ' ~ message.role) -}}
+    {%- endif -%}
+    {%- set role_token = role_tokens[message.role] -%}
+    {%- set name = message.name if message.role == 'tool' and message.name else '' -%}
+    {%- if message.role == 'assistant' -%}
+        {%- generation -%}
+            {{- render_message(message, role_token, name) -}}
+        {%- endgeneration -%}
+    {%- else -%}
+        {{- render_message(message, role_token, name) -}}
+    {%- endif -%}
+{%- endfor -%}
+{%- if leading.count == messages | length -%}
+    {{- block('<|message_system|>', 'text', 'Thinking effort level: ' ~ effort_text) -}}
+{%- endif -%}
+"""
+
+
 @auto_docstring
 class Inkling2Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, image_token="<|unused_200054|>"):
@@ -1316,8 +1646,10 @@ class Inkling2Processor(ProcessorMixin):
         image_token (`str`, *optional*, defaults to `"<|unused_200054|>"`):
             Placeholder token for each image soft-token slot, replaced by image features.
         """
-        self.image_token = image_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        if chat_template is None:
+            chat_template = INKLING2_CHAT_TEMPLATE
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
