@@ -18,7 +18,9 @@ rendered properly in your Markdown viewer.
 
 # LFM3-Omni
 
-LFM3-Omni combines the [LFM3](./lfm3.md) language model, the [LFM3-Audio](./lfm3_audio.md) speech encoder and
+## Overview
+
+LFM3-Omni, by [Liquid AI](https://liquid.ai/), combines the [LFM3](./lfm3.md) language model, the [LFM3-Audio](./lfm3_audio.md) speech encoder and
 codec depth decoder, and the [LFM3-VL](./lfm3_vl.md) image encoder. It accepts interleaved text, images,
 and audio, and generates text, speech, or interleaved text and speech.
 

@@ -78,28 +78,27 @@ def tiny_config():
     return Lfm3OmniConfig(**values)
 
 
-def mixed_inputs():
-    return {
-        "input_ids": torch.tensor(
-            [[1, 4, IMAGE_TOKEN_ID, AUDIO_TOKEN_ID, AUDIO_TOKEN_ID, 8, AUDIO_OUT_TOKEN_ID, AUDIO_OUT_TOKEN_ID, 9]],
-            device=torch_device,
-        ),
-        "pixel_values": torch.randn(4, 24, device=torch_device),
-        "image_grid_thw": torch.tensor([[1, 2, 2]], device=torch_device),
-        "input_features": torch.randn(1, 16, 9, device=torch_device),
-        "feature_attention_mask": torch.ones(1, 9, device=torch_device, dtype=torch.long),
-        "audio_out_codes": torch.randint(0, 6, (2, 4), device=torch_device),
-    }
-
-
 @require_torch
 class Lfm3OmniModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
     def setUp(self):
         torch.manual_seed(42)
         self.model = Lfm3OmniForConditionalGeneration(tiny_config()).to(torch_device).eval()
-        self.inputs = mixed_inputs()
+        self.inputs = self.mixed_inputs()
         # the released checkpoints ask for the output object, which carries the speech frames
         self.model.generation_config.return_dict_in_generate = True
+
+    def mixed_inputs(self):
+        return {
+            "input_ids": torch.tensor(
+                [[1, 4, IMAGE_TOKEN_ID, AUDIO_TOKEN_ID, AUDIO_TOKEN_ID, 8, AUDIO_OUT_TOKEN_ID, AUDIO_OUT_TOKEN_ID, 9]],
+                device=torch_device,
+            ),
+            "pixel_values": torch.randn(4, 24, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 2, 2]], device=torch_device),
+            "input_features": torch.randn(1, 16, 9, device=torch_device),
+            "feature_attention_mask": torch.ones(1, 9, device=torch_device, dtype=torch.long),
+            "audio_out_codes": torch.randint(0, 6, (2, 4), device=torch_device),
+        }
 
     def test_modalities_match_explicit_embedding_assembly(self):
         model, inputs = self.model, dict(self.inputs)

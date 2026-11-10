@@ -24,6 +24,7 @@ from transformers import (
     Qwen3VLVideoProcessor,
 )
 from transformers.testing_utils import require_torch, require_torchcodec, require_vision
+from transformers.video_utils import VideoMetadata
 
 from ...test_processing_common import ProcessorTesterMixin
 from ..lfm3_audio.test_processing_lfm3_audio import (
@@ -54,42 +55,41 @@ CHAT_TEMPLATE = (
 )
 
 
-def assert_offsets_rebuild_the_prompts(test, processor, texts, outputs):
-    """Every record slices its `text` from the caller's prompt, applying them in order rebuilds the tokenized prompt,
-    and every `new_span` slices its `replacement` from the rebuilt one."""
-    for text, row, ids in zip(texts, outputs["text_replacement_offsets"], outputs["input_ids"]):
-        pieces, last = [], 0
-        for record in row:
-            start, end = record["span"]
-            test.assertGreaterEqual(start, last)
-            test.assertEqual(text[start:end], record["text"])
-            pieces.extend((text[last:start], record["replacement"]))
-            last = end
-        pieces.append(text[last:])
-        rebuilt = "".join(pieces)
-        for record in row:
-            test.assertEqual(rebuilt[record["new_span"][0] : record["new_span"][1]], record["replacement"])
-        ids = ids.tolist() if hasattr(ids, "tolist") else list(ids)
-        pad = processor.tokenizer.pad_token_id
-        test.assertEqual(processor.tokenizer(rebuilt)["input_ids"], [token for token in ids if token != pad])
-
-
-def tiny_image_processor():
-    # the released patch, merge and normalization values with a small pixel budget
-    return Qwen2VLImageProcessor(
-        size={"shortest_edge": 1024, "longest_edge": 4096},
-        patch_size=16,
-        temporal_patch_size=2,
-        merge_size=2,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    )
-
-
 @require_torch
 @require_vision
 class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm3OmniProcessor
+
+    def assert_offsets_rebuild_the_prompts(self, processor, texts, outputs):
+        """Every record slices its `text` from the caller's prompt, applying them in order rebuilds the tokenized prompt,
+        and every `new_span` slices its `replacement` from the rebuilt one."""
+        for text, row, ids in zip(texts, outputs["text_replacement_offsets"], outputs["input_ids"]):
+            pieces, last = [], 0
+            for record in row:
+                start, end = record["span"]
+                self.assertGreaterEqual(start, last)
+                self.assertEqual(text[start:end], record["text"])
+                pieces.extend((text[last:start], record["replacement"]))
+                last = end
+            pieces.append(text[last:])
+            rebuilt = "".join(pieces)
+            for record in row:
+                self.assertEqual(rebuilt[record["new_span"][0] : record["new_span"][1]], record["replacement"])
+            ids = ids.tolist() if hasattr(ids, "tolist") else list(ids)
+            pad = processor.tokenizer.pad_token_id
+            self.assertEqual(processor.tokenizer(rebuilt)["input_ids"], [token for token in ids if token != pad])
+
+    @staticmethod
+    def tiny_image_processor():
+        # the released patch, merge and normalization values with a small pixel budget
+        return Qwen2VLImageProcessor(
+            size={"shortest_edge": 1024, "longest_edge": 4096},
+            patch_size=16,
+            temporal_patch_size=2,
+            merge_size=2,
+            image_mean=[0.5, 0.5, 0.5],
+            image_std=[0.5, 0.5, 0.5],
+        )
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -97,7 +97,7 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        return tiny_image_processor()
+        return cls.tiny_image_processor()
 
     @classmethod
     def _setup_video_processor(cls):
@@ -132,8 +132,6 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     def test_model_input_names(self):
-        from transformers.video_utils import VideoMetadata
-
         self.processor.audio_tokenizer = tiny_codec()
         inputs = self.processor(
             text="<|image|><|video|><|audio|><|audio_out|>",
@@ -148,7 +146,7 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.processor = Lfm3OmniProcessor(
-            tiny_image_processor(),
+            self.tiny_image_processor(),
             Lfm3AudioFeatureExtractor(),
             tiny_tokenizer(),
             video_processor=Qwen3VLVideoProcessor(size={"shortest_edge": 1024, "longest_edge": 4096}),
@@ -182,8 +180,6 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("audio_out_codes", proc.model_input_names)
 
     def test_truncated_speech_placeholders_are_rejected(self):
-        from transformers.video_utils import VideoMetadata
-
         self.processor.audio_tokenizer = tiny_codec()
         clips = [np.zeros(1920 * 3, dtype=np.float32)]
         frames = np.zeros((4, 32, 64, 3), dtype=np.uint8)
@@ -214,7 +210,6 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(ids[audio_positions[-1] + 1], end)
         # a video is one timestamped, wrapped group per temporal patch, wrapped again as a whole
         frames = np.zeros((4, 32, 64, 3), dtype=np.uint8)
-        from transformers.video_utils import VideoMetadata
 
         metadata = VideoMetadata(
             total_num_frames=4, fps=2.0, duration=2.0, video_backend="np", frames_indices=[0, 1, 2, 3]
@@ -232,8 +227,6 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(self.processor._calculate_timestamps([0, 1, 2, 3], 2.0, 2), [0.25, 1.25])
 
     def test_video_soundtrack_is_split_across_frame_groups(self):
-        from transformers.video_utils import VideoMetadata
-
         frames = np.zeros((4, 32, 64, 3), dtype=np.uint8)
         metadata = VideoMetadata(
             total_num_frames=4, fps=2.0, duration=2.0, video_backend="np", frames_indices=[0, 1, 2, 3]
@@ -343,8 +336,6 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(encode([video, text], load_audio_from_video=True), encode([video, clip, text]))
 
     def test_replacement_offsets_index_the_caller_text_through_every_rewrite(self):
-        from transformers.video_utils import VideoMetadata
-
         self.processor.audio_tokenizer = tiny_codec()
         start, end = self.processor.vision_start_token, self.processor.vision_end_token
         frames = np.zeros((4, 32, 64, 3), dtype=np.uint8)
@@ -375,11 +366,9 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 if "<|audio_out|>" in text:
                     kwargs = {**kwargs, "audio_out": speech}
                 outputs = self.processor(text=text, return_text_replacement_offsets=True, **kwargs)
-                assert_offsets_rebuild_the_prompts(self, self.processor, [text], outputs)
+                self.assert_offsets_rebuild_the_prompts(self.processor, [text], outputs)
 
     def test_assistant_mask_covers_the_answer_around_speech_frames(self):
-        from transformers.video_utils import VideoMetadata
-
         self.processor.audio_tokenizer = tiny_codec()
         template = GENERATION_TEMPLATE.replace(
             "{%- elif content['type'] == 'audio' -%}",
