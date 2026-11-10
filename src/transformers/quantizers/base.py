@@ -399,7 +399,8 @@ class HfQuantizer(ABC):
             return []
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
 
-    # A checkpoint's names for ours, renamed on the layers of the format when the model lacks them, see `rename_layer`
+    # Globs of a checkpoint's keys (the first one naming a key wins) to our name, on the format's layers, see
+    # `rename_layer`. E.g. `{"scale": "weight_scale_inv"}` renames `*.scale`
     renamed_names: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):
