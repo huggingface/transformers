@@ -520,14 +520,13 @@ class MultimodalModelOutput(ModelOutput):
     that are absent.
     """
 
-    _ALLOWED_MODALITY_FIELDS = ("pooler_output", "last_hidden_state", "hidden_states", "attentions")
     _ALLOWED_MODALITIES = ("image", "video", "audio")
 
     def __getattr__(self, name: str):
         # called when normal lookup fails to give easy access `out.image_hidden_states`
         if not name.startswith("_") and name != "modality_outputs":
             modality, _, field = name.partition("_")
-            if modality in self._ALLOWED_MODALITIES and field in self._ALLOWED_MODALITY_FIELDS:
+            if modality in self._ALLOWED_MODALITIES:
                 outputs = self.__dict__.get("modality_outputs") or {}
                 encoder_output = outputs.get(modality)
                 return getattr(encoder_output, field) if encoder_output is not None else None
@@ -543,8 +542,6 @@ class MultimodalModelOutput(ModelOutput):
                         continue
                     for field in encoder_output.keys():  # keys() skips None fields, like ModelOutput.to_tuple
                         items.append((f"{modality}_{field}", encoder_output[field]))
-            elif k in ["text_model_output", "vision_model_output"]:
-                items.append((k, getattr(self, k).to_tuple()))
             else:
                 items.append((k, self[k]))
         return tuple(v for _, v in items)

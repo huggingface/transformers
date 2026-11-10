@@ -39,6 +39,8 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
@@ -98,8 +100,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
 )
 from ..qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeVisionConfig
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
-    Qwen3VLMoeBaseModelOutputWithPast,
-    Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeTextModel,
     Qwen3VLMoeTextRotaryEmbedding,
     Qwen3VLMoeVisionAttention,
@@ -1155,14 +1155,6 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
 
-class Qwen3OmniMoeThinkerBaseModelOutputWithPast(Qwen3VLMoeBaseModelOutputWithPast):
-    pass
-
-
-class Qwen3OmniMoeThinkerCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
-    pass
-
-
 class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
     _no_split_modules = [
@@ -1255,7 +1247,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Qwen3OmniMoeThinkerBaseModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -1365,7 +1357,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             **kwargs,
         )
 
-        return Qwen3OmniMoeThinkerBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
@@ -1406,11 +1398,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
-        outputs: Qwen3OmniMoeThinkerBaseModelOutputWithPast = self.model(
+        outputs: MultimodalMoeBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             input_features=input_features,
             pixel_values=pixel_values,
@@ -1451,7 +1443,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return Qwen3OmniMoeThinkerCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             aux_loss=aux_loss,

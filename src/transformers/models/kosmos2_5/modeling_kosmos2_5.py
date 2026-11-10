@@ -1143,6 +1143,10 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         flattened_patches: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kosmos2_5BaseModelOutputWithPooling:
+        r"""
+        flattened_patches (`torch.Tensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+            Flattened patches of the images.
+        """
         vision_model_output = self.vision_model(
             flattened_patches=flattened_patches,
             **kwargs,
@@ -1420,6 +1424,10 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         flattened_patches: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kosmos2_5BaseModelOutputWithPooling:
+        r"""
+        flattened_patches (`torch.Tensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+            Flattened patches of the images.
+        """
         vision_model_output = self.vision_model(
             flattened_patches=flattened_patches,
             **kwargs,

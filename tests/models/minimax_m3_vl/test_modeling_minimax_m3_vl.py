@@ -179,10 +179,6 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         # As in llava, the base model has no `model.` prefix to reverse the `^language_model\.model\.` rename onto
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    @unittest.skip("Vision attention is wrong - has to be packed attention and fixed in #50346!")
-    def test_batching_equivalence(self):
-        pass
-
     @unittest.skip(
         reason=(
             "This model lists the Lightning-indexer MSA kernel in `_compatible_flash_implementations`, so "
