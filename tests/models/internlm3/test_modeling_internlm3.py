@@ -11,11 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch InternLM3 model."""
+"""Testing suite for InternLM3, which uses the Llama implementation."""
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, InternLM3Config, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -24,27 +26,26 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import InternLM3ForCausalLM, InternLM3Model
+    from transformers import LlamaModel
 
 
 class InternLM3ModelTester(CausalLMModelTester):
+    config_class = InternLM3Config
     if is_torch_available():
-        base_model_class = InternLM3Model
+        base_model_class = LlamaModel
 
 
 @require_torch
 class InternLM3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = InternLM3ModelTester
 
-    def test_qkv_bias_is_independent_of_bias(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.qkv_bias = True
-        config.bias = False
-        layer = InternLM3Model(config).layers[0]
-        for proj in (layer.self_attn.q_proj, layer.self_attn.k_proj, layer.self_attn.v_proj):
-            self.assertIsNotNone(proj.bias)
-        for proj in (layer.self_attn.o_proj, layer.mlp.gate_proj, layer.mlp.up_proj, layer.mlp.down_proj):
-            self.assertIsNone(proj.bias)
+    def test_original_bias_names(self):
+        # The original config names, as found in the released checkpoints
+        config = InternLM3Config(qkv_bias=True, bias=True)
+        self.assertTrue(config.attention_bias)
+        self.assertTrue(config.mlp_bias)
+        with self.assertRaises(StrictDataclassClassValidationError):
+            InternLM3Config(qkv_bias=True, bias=False)
 
 
 @slow
@@ -56,7 +57,7 @@ class InternLM3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_8b_logits(self):
-        model = InternLM3ForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
         with torch.no_grad():
             logits = model(input_ids).logits.float().cpu()
@@ -70,7 +71,7 @@ class InternLM3IntegrationTest(unittest.TestCase):
 
     def test_model_8b_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        model = InternLM3ForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)

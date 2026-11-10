@@ -35,13 +35,13 @@ logger = logging.get_logger(__name__)
 class TeleChat3Config(PreTrainedConfig):
     r"""
     ```python
-    >>> from transformers import TeleChat3Model, TeleChat3Config
+    >>> from transformers import AutoModelForCausalLM, TeleChat3Config
 
     >>> # Initializing a TeleChat3-36B style configuration
     >>> configuration = TeleChat3Config()
 
-    >>> # Initializing a model from the TeleChat3-36B style configuration
-    >>> model = TeleChat3Model(configuration)
+    >>> # Initializing a model (which uses the Llama implementation) from that configuration
+    >>> model = AutoModelForCausalLM.from_config(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

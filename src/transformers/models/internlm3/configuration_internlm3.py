@@ -29,19 +29,14 @@ from ...utils import auto_docstring
 @strict
 class InternLM3Config(PreTrainedConfig):
     r"""
-    qkv_bias (`bool`, *optional*, defaults to `False`):
-        Whether to use a bias in the query, key and value projection layers.
-    bias (`bool`, *optional*, defaults to `False`):
-        Whether to use a bias in the attention output projection and MLP layers.
-
     ```python
-    >>> from transformers import InternLM3Model, InternLM3Config
+    >>> from transformers import AutoModelForCausalLM, InternLM3Config
 
     >>> # Initializing an InternLM3-8B style configuration
     >>> configuration = InternLM3Config()
 
-    >>> # Initializing a model from the InternLM3-8B style configuration
-    >>> model = InternLM3Model(configuration)
+    >>> # Initializing a model (which uses the Llama implementation) from that configuration
+    >>> model = AutoModelForCausalLM.from_config(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -81,10 +76,11 @@ class InternLM3Config(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
     attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
     head_dim: int | None = 128
-    qkv_bias: bool = False
-    bias: bool = False
+    attribute_map = {"qkv_bias": "attention_bias", "bias": "mlp_bias"}
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:
@@ -100,6 +96,11 @@ class InternLM3Config(PreTrainedConfig):
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
+            )
+        if self.attention_bias != self.mlp_bias:
+            raise ValueError(
+                "InternLM3 with `qkv_bias` different from `bias` is not supported, because the Llama implementation "
+                "uses the same bias setting for the query, key, value and output projections."
             )
 
 

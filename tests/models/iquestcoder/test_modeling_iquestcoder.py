@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch IQuestCoder model."""
+"""Testing suite for IQuestCoder, which uses the Llama implementation."""
 
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import AutoTokenizer, IQuestCoderConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, IQuestCoderConfig, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -26,12 +26,13 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import IQuestCoderForCausalLM, IQuestCoderModel
+    from transformers import LlamaModel
 
 
 class IQuestCoderModelTester(CausalLMModelTester):
+    config_class = IQuestCoderConfig
     if is_torch_available():
-        base_model_class = IQuestCoderModel
+        base_model_class = LlamaModel
 
 
 @require_torch
@@ -56,7 +57,7 @@ class IQuestCoderIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_7b_logits(self):
-        model = IQuestCoderForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
         with torch.no_grad():
             logits = model(input_ids).logits.float().cpu()
@@ -70,7 +71,7 @@ class IQuestCoderIntegrationTest(unittest.TestCase):
 
     def test_model_7b_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        model = IQuestCoderForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer("def fibonacci(n):", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)

@@ -20,11 +20,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import (
-    LlamaForCausalLM,
-    LlamaModel,
-    LlamaPreTrainedModel,
-)
 
 
 logger = logging.get_logger(__name__)
@@ -35,13 +30,13 @@ logger = logging.get_logger(__name__)
 class TeleChat3Config(LlamaConfig):
     r"""
     ```python
-    >>> from transformers import TeleChat3Model, TeleChat3Config
+    >>> from transformers import AutoModelForCausalLM, TeleChat3Config
 
     >>> # Initializing a TeleChat3-36B style configuration
     >>> configuration = TeleChat3Config()
 
-    >>> # Initializing a model from the TeleChat3-36B style configuration
-    >>> model = TeleChat3Model(configuration)
+    >>> # Initializing a model (which uses the Llama implementation) from that configuration
+    >>> model = AutoModelForCausalLM.from_config(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -105,22 +100,4 @@ class TeleChat3Config(LlamaConfig):
         return PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
 
 
-class TeleChat3PreTrainedModel(LlamaPreTrainedModel):
-    pass
-
-
-class TeleChat3Model(LlamaModel):
-    pass
-
-
-@auto_docstring(checkpoint="Tele-AI/TeleChat3-36B-Thinking")
-class TeleChat3ForCausalLM(LlamaForCausalLM):
-    pass
-
-
-__all__ = [
-    "TeleChat3Config",
-    "TeleChat3ForCausalLM",
-    "TeleChat3Model",
-    "TeleChat3PreTrainedModel",
-]
+__all__ = ["TeleChat3Config"]

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-08.*
+*This model was contributed to Hugging Face Transformers on 2026-11-10.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -23,7 +23,9 @@ rendered properly in your Markdown viewer.
 
 # InternLM3
 
-[InternLM3](https://huggingface.co/internlm/internlm3-8b-instruct) is an 8B instruction-tuned language model developed by [Shanghai AI Laboratory](https://huggingface.co/internlm). Its architecture is the same as [Llama](./llama), except that the biases of the query, key and value projections (`qkv_bias`) are configured separately from the biases of the attention output projection and MLP layers (`bias`).
+[InternLM3](https://huggingface.co/internlm/internlm3-8b-instruct) is an 8B instruction-tuned language model developed by [Shanghai AI Laboratory](https://huggingface.co/internlm). Its architecture is the same as [Llama](./llama). Its config names the biases of the query, key and value projections `qkv_bias` and those of the attention output projection and MLP layers `bias`; [`InternLM3Config`] loads them as `attention_bias` and `mlp_bias`, and requires them to be equal, as they are in the released checkpoints.
+
+The auto classes load it with the Llama implementation ([`LlamaModel`], [`LlamaForCausalLM`], [`LlamaForSequenceClassification`], [`LlamaForQuestionAnswering`] and [`LlamaForTokenClassification`]), so only [`InternLM3Config`] is specific to InternLM3.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
@@ -43,13 +45,3 @@ print(tokenizer.decode(output[0][inputs["input_ids"].shape[1] :], skip_special_t
 ## InternLM3Config
 
 [[autodoc]] InternLM3Config
-
-## InternLM3Model
-
-[[autodoc]] InternLM3Model
-    - forward
-
-## InternLM3ForCausalLM
-
-[[autodoc]] InternLM3ForCausalLM
-    - forward

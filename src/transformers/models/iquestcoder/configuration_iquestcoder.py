@@ -30,13 +30,13 @@ from ...utils import auto_docstring
 class IQuestCoderConfig(PreTrainedConfig):
     r"""
     ```python
-    >>> from transformers import IQuestCoderModel, IQuestCoderConfig
+    >>> from transformers import AutoModelForCausalLM, IQuestCoderConfig
 
     >>> # Initializing an IQuest-Coder-V1-40B style configuration
     >>> configuration = IQuestCoderConfig()
 
-    >>> # Initializing a model from the IQuest-Coder-V1-40B style configuration
-    >>> model = IQuestCoderModel(configuration)
+    >>> # Initializing a model (which uses the Llama implementation) from that configuration
+    >>> model = AutoModelForCausalLM.from_config(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

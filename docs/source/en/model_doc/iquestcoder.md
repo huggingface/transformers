@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-08.*
+*This model was contributed to Hugging Face Transformers on 2026-11-10.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -28,6 +28,8 @@ rendered properly in your Markdown viewer.
 The looped `IQuest-Coder-V1-*-Loop-*` checkpoints use a different architecture and aren't supported by this model.
 
 The tokenizer is built from the checkpoints' SentencePiece model. Many of its pieces share the same score, and SentencePiece breaks those ties by position, which the `tokenizers` library can't reproduce, so a small fraction of texts tokenize differently from the original remote code.
+
+The auto classes load it with the Llama implementation ([`LlamaModel`], [`LlamaForCausalLM`], [`LlamaForSequenceClassification`], [`LlamaForQuestionAnswering`] and [`LlamaForTokenClassification`]), so only [`IQuestCoderConfig`] is specific to IQuestCoder.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
@@ -47,28 +49,3 @@ print(tokenizer.decode(output[0][inputs["input_ids"].shape[1] :], skip_special_t
 ## IQuestCoderConfig
 
 [[autodoc]] IQuestCoderConfig
-
-## IQuestCoderModel
-
-[[autodoc]] IQuestCoderModel
-    - forward
-
-## IQuestCoderForCausalLM
-
-[[autodoc]] IQuestCoderForCausalLM
-    - forward
-
-## IQuestCoderForSequenceClassification
-
-[[autodoc]] IQuestCoderForSequenceClassification
-    - forward
-
-## IQuestCoderForQuestionAnswering
-
-[[autodoc]] IQuestCoderForQuestionAnswering
-    - forward
-
-## IQuestCoderForTokenClassification
-
-[[autodoc]] IQuestCoderForTokenClassification
-    - forward

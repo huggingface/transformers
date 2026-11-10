@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-08.*
+*This model was contributed to Hugging Face Transformers on 2026-11-10.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -26,6 +26,8 @@ rendered properly in your Markdown viewer.
 [TeleChat3](https://huggingface.co/Tele-AI/TeleChat3-36B-Thinking) is a family of 36B reasoning language models developed by [China Telecom Artificial Intelligence Technology](https://huggingface.co/Tele-AI), including the general-purpose TeleChat3-36B-Thinking and the code-focused TeleChat3-Coder-36B-Thinking. Its architecture is the same as [Llama](./llama).
 
 The original checkpoints use a custom `"telechat3-yarn"` RoPE type, which is YaRN with 0.07 instead of 0.1 as the coefficient of its default attention factor. [`TeleChat3Config`] converts it to `"yarn"` with an explicit `attention_factor` when the config is loaded.
+
+The auto classes load it with the Llama implementation ([`LlamaModel`], [`LlamaForCausalLM`], [`LlamaForSequenceClassification`], [`LlamaForQuestionAnswering`] and [`LlamaForTokenClassification`]), so only [`TeleChat3Config`] is specific to TeleChat3.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
@@ -45,13 +47,3 @@ print(tokenizer.decode(output[0][inputs["input_ids"].shape[1] :], skip_special_t
 ## TeleChat3Config
 
 [[autodoc]] TeleChat3Config
-
-## TeleChat3Model
-
-[[autodoc]] TeleChat3Model
-    - forward
-
-## TeleChat3ForCausalLM
-
-[[autodoc]] TeleChat3ForCausalLM
-    - forward

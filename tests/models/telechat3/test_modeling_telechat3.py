@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch TeleChat3 model."""
+"""Testing suite for TeleChat3, which uses the Llama implementation."""
 
 import math
 import unittest
 
-from transformers import AutoTokenizer, TeleChat3Config, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, TeleChat3Config, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -25,12 +25,13 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import TeleChat3ForCausalLM, TeleChat3Model
+    from transformers import LlamaModel
 
 
 class TeleChat3ModelTester(CausalLMModelTester):
+    config_class = TeleChat3Config
     if is_torch_available():
-        base_model_class = TeleChat3Model
+        base_model_class = LlamaModel
 
 
 @require_torch
@@ -83,7 +84,7 @@ class TeleChat3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_36b_logits(self):
-        model = TeleChat3ForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
         with torch.no_grad():
             logits = model(input_ids).logits.float().cpu()
@@ -97,7 +98,7 @@ class TeleChat3IntegrationTest(unittest.TestCase):
 
     def test_model_36b_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        model = TeleChat3ForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)
