@@ -23,6 +23,8 @@
 #                             second run's results cover both.
 #   ONLY_IN=IMPORTANT_MODELS  which models to run, `IMPORTANT_MODELS` or a space-separated list.
 #   RUN_SLOW=1                also run the tests marked slow.
+#   CPU_TESTS=1               also run the tests that never touch the device (`not_device_test`),
+#                             which the NVIDIA and AMD runs include.
 #   TMP_CACHE=<prefix>        run with a throwaway hub cache under that prefix.
 #   UPLOAD=1                  upload the results as well as writing them out. Needs RESULTS_REPO_ID.
 #   RESULTS_REPO_ID=<repo>    the dataset repo an upload publishes to.
@@ -58,6 +60,7 @@ python3 -m utils.get_test_reports tests/ --suite models \
     --only-in ${ONLY_IN:-IMPORTANT_MODELS} \
     --machine-type "${MACHINE_TYPE:-multi-gpu}" \
     ${RUN_SLOW:+--run-slow} \
+    ${CPU_TESTS:+--cpu-tests} \
     ${TMP_CACHE:+--tmp-cache "$TMP_CACHE"}
 
 python3 utils/tpu_ci/make_model_results.py reports/ --summary model_results.md ${UPLOAD:+--upload}
