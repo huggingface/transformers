@@ -755,7 +755,6 @@ class MiniMaxVL01ModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: torch.FloatTensor | None = None
-
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
@@ -779,7 +778,6 @@ class MiniMaxVL01CausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
-
     router_logits: tuple[torch.FloatTensor] | None = None
 
 

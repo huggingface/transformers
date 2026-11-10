@@ -36,6 +36,7 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoConfig, AutoModel
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
@@ -45,10 +46,8 @@ from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
 from ..llava_next.image_processing_pil_llava_next import LlavaNextImageProcessorPil
 from ..llava_next.modeling_llava_next import (
-    LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
-    LlavaNextModelOutputWithPast,
     LlavaNextMultiModalProjector,
     LlavaNextPreTrainedModel,
     get_anyres_image_grid_shape,
@@ -594,7 +593,7 @@ def unpad_image(tensor, original_size):
 
 @auto_docstring(custom_intro="Base class for MiniMax-VL-01 model outputs.")
 @dataclass
-class MiniMaxVL01ModelOutputWithPast(LlavaNextModelOutputWithPast):
+class MiniMaxVL01ModelOutputWithPast(AriaModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`, *optional*):
         Packed and projected image features inserted at image placeholder positions.
@@ -602,12 +601,10 @@ class MiniMaxVL01ModelOutputWithPast(LlavaNextModelOutputWithPast):
         Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
 
-    router_logits: tuple[torch.FloatTensor] | None = None
-
 
 @auto_docstring(custom_intro="Base class for MiniMax-VL-01 causal language model outputs.")
 @dataclass
-class MiniMaxVL01CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
+class MiniMaxVL01CausalLMOutputWithPast(AriaCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Causal language modeling loss, returned when `labels` are provided.
@@ -618,8 +615,6 @@ class MiniMaxVL01CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
-
-    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class MiniMaxVL01MultiModalProjector(LlavaNextMultiModalProjector):
