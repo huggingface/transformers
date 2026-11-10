@@ -486,6 +486,10 @@ class MMGroundingDinoFusionLayer(nn.Module):
         return (vision_features, vision_attn), (text_features, text_attn)
 
 
+# these correspond to [CLS], [SEP], . and ?
+SPECIAL_TOKENS = [101, 102, 1012, 1029]
+
+
 @auto_docstring
 class MMGroundingDinoPreTrainedModel(PreTrainedModel):
     config: MMGroundingDinoConfig
@@ -499,6 +503,8 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
         if isinstance(module, MMGroundingDinoLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
+        elif isinstance(module, MMGroundingDinoModel):
+            init.copy_(module.special_tokens, torch.tensor(SPECIAL_TOKENS))
         elif isinstance(module, MMGroundingDinoMultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -998,20 +1004,16 @@ class MMGroundingDinoEncoderLayer(nn.Module):
         text_position_embedding: torch.Tensor | None,
         text_position_ids: torch.Tensor | None,
     ) -> Tensor:
-        batch_size, seq_length, _ = text_features.shape
-        if text_position_embedding is None and text_position_ids is None:
-            text_position_embedding = torch.arange(seq_length, device=text_features.device)
-            text_position_embedding = text_position_embedding.float()
-            text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
-            text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
-            text_position_embedding = encode_sinusoidal_position_embedding(
-                text_position_embedding, num_pos_feats=self.d_model
-            )
-        if text_position_ids is not None:
-            text_position_embedding = encode_sinusoidal_position_embedding(
-                text_position_ids[..., None], num_pos_feats=self.d_model
-            )
+        if text_position_embedding is not None:
+            return text_position_embedding
 
+        if text_position_ids is None:
+            batch_size, seq_length, _ = text_features.shape
+            text_position_ids = torch.arange(seq_length, device=text_features.device)
+            text_position_ids = text_position_ids.expand(batch_size, -1)
+        text_position_embedding = encode_sinusoidal_position_embedding(
+            text_position_ids[..., None].to(text_features.dtype), num_pos_feats=self.d_model
+        )
         return text_position_embedding
 
     def forward(
@@ -1723,15 +1725,15 @@ def build_position_encoding(config):
     return position_embedding
 
 
-# these correspond to [CLS], [SEP], . and ?
-SPECIAL_TOKENS = [101, 102, 1012, 1029]
-
-
-def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> tuple[Tensor, Tensor]:
+def generate_masks_with_special_tokens_and_transfer_map(
+    input_ids: torch.LongTensor, special_tokens: torch.LongTensor
+) -> tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
+        special_tokens (`torch.LongTensor` of shape `(num_special_tokens,)`):
+            Ids of the delimiter tokens that split the text into phrases.
     Returns:
         `tuple(torch.Tensor)` comprising attention mask between each special tokens and position_ids:
         - **attention_mask** (`torch.BoolTensor` of shape `(batch_size, sequence_length, sequence_length)`)
@@ -1741,7 +1743,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     device = input_ids.device
 
     # Identify special token positions
-    special_mask = torch.isin(input_ids, torch.tensor(SPECIAL_TOKENS, device=device))
+    special_mask = torch.isin(input_ids, special_tokens)
 
     # For each position, find the previous and next special token indices
     indices = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
@@ -1749,6 +1751,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     # Previous special token: cummax of special token indices
     prev_special = torch.where(special_mask, indices, torch.full((), -1, device=device))
     prev_special = torch.cummax(prev_special, dim=1)[0]
+    prev_special = torch.cat([prev_special.new_full((batch_size, 1), -1), prev_special[:, :-1]], dim=1)
 
     # Next special token: flip, cummin, flip back
     next_special = torch.where(special_mask, indices, torch.tensor(seq_len, device=device))
@@ -1830,6 +1833,10 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         )
         self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
 
+        self.special_tokens = nn.Buffer(
+            torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
+            persistent=False,
+        )
         self.post_init()
 
     def freeze_backbone(self):
@@ -1957,7 +1964,9 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
+        text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(
+            input_ids, special_tokens=self.special_tokens
+        )
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)

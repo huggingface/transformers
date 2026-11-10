@@ -3137,6 +3137,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        # Normalize: drop the keys whose value is None.
+        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
+        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
+        conversations = [
+            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
+        ]
+
         if continue_final_message:
             if add_generation_prompt:
                 raise ValueError(
