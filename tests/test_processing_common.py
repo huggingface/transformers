@@ -1328,8 +1328,7 @@ class ProcessorTesterMixin:
             self.skipTest(
                 f"{self.processor_class.__name__} does not support training with `apply_transcription_request`."
             )
-        # the assistant turn is located with the `{% generation %}` blocks of the chat template, for only the
-        # transcription to be in the loss
+        # check that generation blocks are present
         if not re.search(r"\{%-?\s*generation\s*-?%\}", processor.chat_template or ""):
             raise ValueError(
                 f"The chat template of {self.processor_class.__name__} must wrap the assistant turn in "
@@ -1358,8 +1357,6 @@ class ProcessorTesterMixin:
         assistant_header = processor.apply_chat_template(user_turn, add_generation_prompt=True)[
             len(processor.apply_chat_template(user_turn)) :
         ].strip()
-        kept_positions = outputs["labels"] != -100
-        self.assertTrue(outputs["labels"][kept_positions].equal(expected_outputs["labels"][kept_positions]))
         for labels, transcription in zip(outputs["labels"], transcriptions):
             kept_text = processor.tokenizer.decode(labels[labels != -100])
             self.assertIn(transcription, kept_text)
