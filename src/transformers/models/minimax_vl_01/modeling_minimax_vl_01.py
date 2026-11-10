@@ -1093,8 +1093,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
         """
-        if pixel_values is not None and pixel_values.numel() == 0:
-            pixel_values = None
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1131,6 +1129,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
             **kwargs,
         )
 
+        # Extend the standard LLaVA-NeXT forward output with the text backbone's MoE router logits.
         return MiniMaxVL01ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
