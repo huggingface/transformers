@@ -22,31 +22,28 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class UdopTextKwargs(TextKwargs, total=False):
+class DeprecatedUdopTextKwargs(TextKwargs, total=False):
+    """
+    boxes (`list[list[int]]`, `list[list[list[int]]]`, *optional*):
+        Deprecated, pass directly as `boxes` to [`UdopProcessor.__call__`] instead.
+        Word-level bounding boxes normalized to the range [0, 1000].
+    word_labels (`list[int]`, `list[list[int]]`, *optional*):
+        Deprecated, pass directly as `word_labels` to [`UdopProcessor.__call__`] instead.
+        Word-level integer labels for token classification tasks.
+    """
+
     word_labels: list[int] | list[list[int]] | None
     boxes: list[list[int]] | list[list[list[int]]] | None
 
 
-class UdopProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: UdopTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "truncation": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
+class DeprecatedUdopProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: DeprecatedUdopTextKwargs
 
 
 @auto_docstring
@@ -66,6 +63,10 @@ class UdopProcessor(ProcessorMixin):
     prepare labels for language modeling tasks.
     """
 
+    text_kwargs = {
+        "truncation": False,
+    }
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -74,17 +75,33 @@ class UdopProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[UdopProcessorKwargs],
+        boxes: list[list[int]] | list[list[list[int]]] | None = None,
+        word_labels: list[int] | list[list[int]] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
+        r"""
+        boxes (`list[list[int]]`, `list[list[list[int]]]`, *optional*):
+            Word-level bounding boxes normalized to the range [0, 1000].
+        word_labels (`list[int]`, `list[list[int]]`, *optional*):
+            Word-level integer labels for token classification tasks.
+        """
         # verify input
         output_kwargs = self._merge_kwargs(
-            UdopProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        boxes = output_kwargs["text_kwargs"].pop("boxes", None)
-        word_labels = output_kwargs["text_kwargs"].pop("word_labels", None)
+        for key in ("boxes", "word_labels"):
+            if key in output_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+
+        # "text_kwargs" has priority for backwards compatibility
+        boxes = output_kwargs["text_kwargs"].pop("boxes", boxes)
+        word_labels = output_kwargs["text_kwargs"].pop("word_labels", word_labels)
         text_pair = output_kwargs["text_kwargs"].pop("text_pair", None)
         return_overflowing_tokens = output_kwargs["text_kwargs"].get("return_overflowing_tokens", False)
         return_offsets_mapping = output_kwargs["text_kwargs"].get("return_offsets_mapping", False)
@@ -164,5 +181,13 @@ class UdopProcessor(ProcessorMixin):
 
         return list(tokenizer_input_names + image_processor_input_names + ["bbox"])
 
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "UdopProcessorKwargs": (DeprecatedUdopProcessorKwargs, "5.29.0"),
+        "UdopTextKwargs": (DeprecatedUdopTextKwargs, "5.29.0"),
+    },
+)
 
 __all__ = ["UdopProcessor"]
