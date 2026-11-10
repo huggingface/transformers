@@ -22,7 +22,6 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, resolve_revision
 from ...utils.deprecation import deprecate_attr
-
 from ...video_utils import VideoInput
 from ..auto.video_processing_auto import AutoVideoProcessor
 
