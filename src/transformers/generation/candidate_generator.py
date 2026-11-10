@@ -1357,7 +1357,7 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
 
 class MTPCandidateGenerator(CandidateGenerator):
     requires_model_outputs: bool = True
-    # We always need to pass the hidden states from the main model - it will be overriden in the __init__ to capture only the
+    # We always need to pass the hidden states from the main model - it will be overridden in the __init__ to capture only the
     # last layer's hidden_states
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
