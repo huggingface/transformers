@@ -47,7 +47,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_minimax_vl_01 import MiniMaxVL01Config, MiniMaxVL01TextConfig
 
@@ -599,7 +599,7 @@ class MiniMaxVL01TextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         hidden_states = self.input_layernorm(hidden_states)
         residual = hidden_states
         hidden_states, _ = self.self_attn(
@@ -683,7 +683,7 @@ class MiniMaxVL01TextModel(MiniMaxVL01TextPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: MiniMaxVL01TextCache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
@@ -753,8 +753,8 @@ class MiniMaxVL01ModelOutputWithPast(BaseModelOutputWithPast):
         Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(custom_intro="Base class for MiniMax-VL-01 causal language model outputs.")
@@ -771,13 +771,13 @@ class MiniMaxVL01CausalLMOutputWithPast(ModelOutput):
         Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class MiniMaxVL01MultiModalProjector(nn.Module):
@@ -994,6 +994,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image hidden states from the vision tower and applies multimodal projection."
     )
@@ -1025,7 +1026,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expected 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         if isinstance(vision_feature_layer, int):
             selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
@@ -1047,7 +1047,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         return image_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is

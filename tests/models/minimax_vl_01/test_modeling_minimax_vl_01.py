@@ -49,8 +49,6 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniMaxVL01Model
     config_class = MiniMaxVL01Config
     conditional_generation_class = MiniMaxVL01ForConditionalGeneration
-    text_config_class = MiniMaxVL01TextConfig
-    vision_config_class = CLIPVisionConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
@@ -59,6 +57,9 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("head_dim", 8)
         kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("vision_hidden_size", 16)
+        kwargs.setdefault("vision_intermediate_size", 32)
+        kwargs.setdefault("vision_hidden_act", "gelu")
         kwargs.setdefault("max_position_embeddings", 64)
         kwargs.setdefault("num_experts", 2)
         kwargs.setdefault("layer_types", ["linear_attention", "full_attention"])
@@ -72,19 +73,6 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
         # The thumbnail and crop each contribute a patch grid, with one newline per crop row.
         kwargs.setdefault("num_image_tokens", patches_per_side**2 + patches_per_side * (patches_per_side + 1))
         super().__init__(parent, **kwargs)
-
-    def get_vision_config(self):
-        return CLIPVisionConfig(
-            hidden_size=16,
-            intermediate_size=32,
-            projection_dim=self.hidden_size,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            hidden_act="gelu",
-        )
 
     def get_config(self):
         config = super().get_config()
@@ -153,7 +141,7 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(cache.layers[1].values, expected_full)
 
     def test_text_lightning_attention_slope_handles_single_layer(self):
-        config = self.model_tester.get_text_config()
+        config = self.model_tester.get_config().text_config
         config.num_hidden_layers = 1
         config.layer_types = ["linear_attention"]
         attention = MiniMaxVL01TextLightningAttention(config, layer_idx=0)

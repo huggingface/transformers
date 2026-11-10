@@ -20,14 +20,12 @@
 
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import SizeDict
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring
 class MiniMaxVL01Processor(ProcessorMixin):
-    valid_processor_kwargs = ProcessingKwargs
-
     def __init__(
         self,
         image_processor=None,

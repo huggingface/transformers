@@ -732,8 +732,8 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "qwen2_audio": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
@@ -741,8 +741,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
         "granite_speech": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
         ],
@@ -792,8 +792,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="decoder.decoder.layers"),
         ],
         "vibevoice_asr": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(
                 source_patterns=r"^acoustic_tokenizer_encoder", target_patterns="model.acoustic_tokenizer_encoder"
             ),
@@ -1108,6 +1108,7 @@ def _build_checkpoint_conversion_mapping():
         "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
+            PrefixChange(prefix_to_remove="model"),
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
             WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
             WeightRenaming(
@@ -1264,6 +1265,9 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=".experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "lfm3": [
+            WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],
         "lfm2_moe": [
             WeightConverter(
@@ -2017,6 +2021,12 @@ def _build_checkpoint_conversion_mapping():
             source_patterns=".weight_v",
             target_patterns=".parametrizations.weight.original1",
         ),
+        # Regression compatibility for ALM checkpoints saved with duplicate .model.model in v5.10.0-v5.23.0 (#45534)
+        # Like other legacy renamings, it is reverted on save when used at load: re-saving such a checkpoint keeps its layout.
+        WeightRenaming(
+            source_patterns=[r"^model\.language_model\.model", r"^language_model\.model\.model"],
+            target_patterns="model.language_model",
+        ),
     ]
     # Base DetrModel/ConditionalDetrModel transforms are picked up automatically as
     # scoped sub-module transforms; only the segmentation-specific patterns are needed here.
@@ -2204,6 +2214,9 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
+
+    # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
+    mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
 
     # Gradium's runtime checkpoint (`model.safetensors` next to the runtime's files). Its codec (`mimi.`) and its
     # training-only tensors are left unexpected: the codec is the processor's audio tokenizer.

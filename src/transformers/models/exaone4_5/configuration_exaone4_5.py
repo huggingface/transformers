@@ -40,7 +40,7 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -64,7 +64,7 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4_5_vision"),
+        "vision_config": Exaone4_5_VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
     }
     keys_to_ignore_at_inference = ["past_key_values"]

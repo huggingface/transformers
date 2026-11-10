@@ -31,10 +31,10 @@ from ...image_utils import (
     get_image_size,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
+from ...processing_utils import MultiModalData, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, select_hidden_states
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoConfig
 from ..glm4_moe.modeling_glm4_moe import (
@@ -474,7 +474,7 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
 
 
 class MiniMaxVL01Processor(LlavaNextProcessor):
-    valid_processor_kwargs = ProcessingKwargs
+    images_kwargs = AttributeError()
 
     def __init__(
         self,
@@ -689,6 +689,7 @@ class MiniMaxVL01Model(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image hidden states from the vision tower and applies multimodal projection."
     )
@@ -720,7 +721,6 @@ class MiniMaxVL01Model(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expected 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         if isinstance(vision_feature_layer, int):
             selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
