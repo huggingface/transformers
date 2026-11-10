@@ -33,6 +33,7 @@ from transformers import (
     LlamaForSequenceClassification,
     LlamaModel,
     MistralConfig,
+    Qwen3MoeConfig,
 )
 from transformers.distributed import DistributedConfig
 from transformers.distributed.context_parallel import (
@@ -615,6 +616,9 @@ class TestContextParallelStyles(unittest.TestCase):
 
 CP_RTOL = 1e-5
 CP_ATOL = 1e-5
+# The all-reduce plan of `Qwen3Moe`, which overrides the token-dispatch rules of its own `ep_plan`: the router masks the
+# experts of the other ranks and the partial expert outputs are all-reduced.
+ALL_REDUCE_EP_PLAN = {"model.layers.*.mlp.gate": "ep_router", "model.layers.*.mlp.experts": "moe_tp_experts"}
 
 
 def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):
@@ -722,6 +726,7 @@ def _compare_with_unsharded(init_dir, batch, distributed_config, keep=None):
             continue
         grad = _average_over_group(grad, groups, group_size)
         torch.testing.assert_close(grad, expected, rtol=CP_RTOL, atol=CP_ATOL, msg=f"Gradient mismatch for {name}")
+    return model
 
 
 def _test_matches_unsharded_with_tp(rank, tp_size, cp_size, fsdp_size, packed):
@@ -798,6 +803,64 @@ def _test_padded(rank, cp_size, config=None, packed=False, seq_len=8):
         if position_ids is not None:
             batch["position_ids"] = position_ids
         _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size), keep=attention_mask)
+        dist.barrier()
+
+
+def _tiny_moe_config(**kwargs):
+    """A `Qwen3MoeConfig` small enough for CPU tests, whose default `ep_plan` dispatches the tokens to the experts."""
+    return Qwen3MoeConfig(
+        **{
+            "hidden_size": 32,
+            "moe_intermediate_size": 16,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 4,
+            "vocab_size": 99,
+            "num_experts": 8,
+            "num_experts_per_tok": 2,
+            "attn_implementation": "sdpa",
+            **kwargs,
+        }
+    )
+
+
+def _test_matches_unsharded_with_ep(rank, cp_size, fsdp_size, ep_size, tp_size=1, dp_replicate_size=1):
+    """
+    Token dispatch with context parallelism: every rank sends the tokens of its own slice to the owners of the experts
+    they selected, and the experts' gradients reduce over the ranks that hold a copy of them.
+    """
+    config = _tiny_moe_config()
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        rows = batch_size * fsdp_size * dp_replicate_size
+        input_ids, _ = _tiny_batch(config, rows, seq_len)
+        distributed_config = DistributedConfig(
+            cp_size=cp_size,
+            fsdp_size=fsdp_size,
+            ep_size=ep_size,
+            tp_size=tp_size,
+            dp_replicate_size=dp_replicate_size,
+        )
+        batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
+        model = _compare_with_unsharded(init_dir, batch, distributed_config)
+        assert model.model.layers[0].mlp.experts.num_experts == config.num_experts // ep_size
+        dist.barrier()
+
+
+def _test_matches_unsharded_with_all_reduce_ep(rank, cp_size, ep_size, tp_size):
+    """
+    All-reduce experts need every rank of an ep group to see the same tokens: with `ep_size == tp_size` that group is
+    the tp group, whose ranks hold the same cp slice.
+    """
+    config = _tiny_moe_config()
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, _ = _tiny_batch(config, batch_size, seq_len)
+        distributed_config = DistributedConfig(
+            cp_size=cp_size, ep_size=ep_size, tp_size=tp_size, ep_plan=ALL_REDUCE_EP_PLAN
+        )
+        batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
+        _compare_with_unsharded(init_dir, batch, distributed_config)
         dist.barrier()
 
 
@@ -895,7 +958,7 @@ def _test_save_load_distributed_checkpoint(rank, cp_size):
 @unittest.skipUnless(is_torch_greater_or_equal("2.10"), "Context parallelism requires torch>=2.10")
 class TestContextParallelConfig(unittest.TestCase):
     def test_refuses_pipeline_parallelism(self):
-        with self.assertRaisesRegex(ValueError, "not supported yet with `pp_size`"):
+        with self.assertRaisesRegex(ValueError, "not supported yet with pipeline parallelism"):
             DistributedConfig(cp_size=2, pp_size=2)
 
     def test_refuses_a_model_without_a_cp_plan(self):
@@ -1006,6 +1069,29 @@ class TestContextParallelModel(unittest.TestCase):
 
     def test_tensor_parallelism_and_context_parallelism_compose(self):
         run_distributed(world_size=4, backend="gloo")(_test_tp_and_cp_compose)(2, 2)
+
+    def test_matches_unsharded_with_expert_parallelism(self):
+        run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded_with_ep)(2, 1, 2)
+
+    def test_matches_unsharded_with_fsdp_and_expert_parallelism(self):
+        # ep_size = fsdp_size * cp_size, so efsdp_size is 1 and every expert lives whole on a single rank
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_ep)(2, 2, 4)
+
+    def test_matches_unsharded_with_expert_fsdp(self):
+        # efsdp_size = fsdp_size * cp_size * tp_size / ep_size = 2: pairs of ranks hold the same experts, sharded
+        # between them
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_ep)(2, 2, 2)
+
+    def test_matches_unsharded_with_tensor_parallelism_and_expert_parallelism(self):
+        # ep_size = 2 * tp_size puts both cp slices of the batch, two ranks each, in the same ep group
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_ep)(2, 1, 4, 2)
+
+    def test_matches_unsharded_with_hsdp_and_expert_parallelism(self):
+        # the expert gradient reduces over efsdp and then over the two replicas: dp_size = 2 * 1 * 2 ranks
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_ep)(2, 1, 2, 1, 2)
+
+    def test_matches_unsharded_with_all_reduce_expert_parallelism(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_all_reduce_ep)(2, 2, 2)
 
     def test_inputs_embeds(self):
         run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2)
