@@ -155,7 +155,7 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     np.testing.assert_array_equal(output.pixel_values, expected)
 
     def test_resize_for_patching_floors_aspect_ratio(self):
-        # LLaVA-NeXT rounds the resized side up; the released MiniMax-VL-01 processor floors it.
+        # The released MiniMax-VL-01 processor floors the resized side.
         wide = np.ones((3, 7, 3), dtype=np.uint8)
         tall = np.ones((7, 3, 3), dtype=np.uint8)
 
