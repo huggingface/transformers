@@ -485,8 +485,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model):
         """
-        The model's conversions, then the formats' own converters. A model converter's `weight` also takes its scales
-        (see `PerName`), named by `rename_layer`.
+        The model's conversions, then the formats' own converters. A model converter's `weight` also takes the scales
+        named after it (`weight_scale_inv`, see `rename_layer`), into its target's (`gate_up_proj_scale_inv`).
         """
         if not self.module_quantizers:
             self.match_modules(model)
@@ -508,10 +508,10 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def update_weight_transform(self, transform, model, name):
         """
         The ops of the param `name`, once its first key matched a converter, from its layer's quantizer: a
-        deserialization (after the converter's ops, once per serialized name for a model converter), a dequantization
-        (before them), or a quantization of a full precision checkpoint.
+        deserialization (after the converter's ops), a dequantization (before them), or a quantization of a full
+        precision checkpoint.
         """
-        from ..core_model_loading import PerName, WeightConverter
+        from ..core_model_loading import WeightConverter
 
         quantizer = self.get_quantizer(name)
         if quantizer is None:
@@ -533,9 +533,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             return transform
         if getattr(quantizer.quantization_config, "dequantize", False):  # the scales fold into the weight first
             transform.operations = [operation(quantizer), *ops]
-        elif sources[0].endswith(f".{stored}"):  # a model converter: its ops run once per serialized name
-            transform.operations = [PerName(ops, quantizer.serialized_names, stored), operation(quantizer)]
-        else:  # a format's general converter: its names load together
+        else:
             transform.operations = [*ops, operation(quantizer)]
         return transform
 
