@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import pytest
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
@@ -213,6 +214,41 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = torch.compile(model.eval(), dynamic=True)
             with torch.no_grad():
                 model(**inputs)
+
+    @slow
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    @with_grad
+    def test_torch_compile_for_training(self):
+        """The common test builds language-model inputs, so check the same eager-vs-compiled gradients here."""
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
+        config = model.config
+        inputs = {
+            "grid_features": floats_tensor(
+                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
+            ),
+            "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]),
+            "noise": floats_tensor([2, config.noise_channels]),
+            "labels": floats_tensor([1, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes]),
+        }
+        inputs = {name: value.to(torch_device) for name, value in inputs.items()}
+        inputs["attention_mask"] = WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask
+        inputs["attention_mask"] = inputs["attention_mask"].to(torch_device)
+
+        model(**inputs).loss.backward()
+        expected = {
+            name: None if parameter.grad is None else parameter.grad.detach().cpu()
+            for name, parameter in model.named_parameters()
+        }
+        model.zero_grad()
+
+        compiled = torch.compile(model, fullgraph=True, mode="reduce-overhead")
+        compiled(**inputs).loss.backward()
+        for name, parameter in model.named_parameters():
+            if expected[name] is None:
+                self.assertIsNone(parameter.grad, name)
+            else:
+                torch.testing.assert_close(parameter.grad.cpu(), expected[name], rtol=1e-4, atol=1e-4, msg=name)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

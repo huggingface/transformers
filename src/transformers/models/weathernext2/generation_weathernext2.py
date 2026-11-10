@@ -174,7 +174,8 @@ class WeatherNext2GenerationMixin:
         state = repeat_members(state, feature_extractor.static_variables, num_members)
         valid_time = valid_time.repeat_interleave(num_members)
         total_batch_size = valid_time.shape[0]
-        batch_size = total_batch_size if batch_size is None else batch_size
+        if batch_size is None:
+            batch_size = total_batch_size
         if batch_size < 1:
             raise ValueError(f"`batch_size` must be at least 1, got {batch_size}.")
 
@@ -186,7 +187,8 @@ class WeatherNext2GenerationMixin:
         current_state = state
         forecasts = []
         step_seconds = feature_extractor.time_step_hours * 3600
-        attention_mask = feature_extractor.attention_mask if attention_mask is None else attention_mask
+        if attention_mask is None:
+            attention_mask = feature_extractor.attention_mask
         if attention_mask is not None:
             attention_mask = attention_mask.to(device=self.device)
 

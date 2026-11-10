@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -129,7 +129,8 @@ class WeatherNext2GridToMeshEdgeUpdate(nn.Module):
             projected_senders = self.sender_proj(sender_states)
 
         messages = self.edge_proj(edge_states) + projected_senders[:, senders]
-        messages = self.out_proj(self.act_fn(messages))
+        messages = self.act_fn(messages)
+        messages = self.out_proj(messages)
         return self.norm(messages, conditioning), projected_senders
 
 
@@ -160,7 +161,8 @@ class WeatherNext2MeshToGridEdgeUpdate(nn.Module):
 
         messages = self.edge_proj(edge_states) + projected_senders[:, senders]
         messages = messages + self.receiver_proj(receiver_states)[:, receivers]
-        messages = self.out_proj(self.act_fn(messages))
+        messages = self.act_fn(messages)
+        messages = self.out_proj(messages)
         return self.norm(messages, conditioning), projected_senders
 
 
@@ -314,8 +316,10 @@ class WeatherNext2Attention(nn.Module):
 
         # [batch, blocks, block, hidden] -> [batch, blocks, heads, block, head_dim]
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(2, 3)
-        key_states = self._gather_neighbouring_blocks(self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3))
-        value_states = self._gather_neighbouring_blocks(self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3))
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3)
+        key_states = self._gather_neighbouring_blocks(key_states)
+        value_states = self._gather_neighbouring_blocks(value_states)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -377,6 +381,8 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     # Modules whose forward mixes their children's outputs or reads their own buffers.
     _no_split_modules = [
+        "WeatherNext2ConditionedNorm",
+        "WeatherNext2ConditionedMlp",
         "WeatherNext2GridToMesh",
         "WeatherNext2MeshToGrid",
         "WeatherNext2Layer",
@@ -465,27 +471,26 @@ class WeatherNext2MeshEncoder(nn.Module):
             hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
 
         hidden_states = hidden_states.reshape(batch_size, num_blocks * block_size, hidden_size)
-        return self.norm(hidden_states[:, :num_nodes], conditioning)
+        hidden_states = hidden_states[:, :num_nodes]
+
+        return self.norm(hidden_states, conditioning)
 
 
 @auto_docstring(custom_intro="Latent representation of the atmosphere on the lat/lon grid.")
 @dataclass
-class WeatherNext2ModelOutput(ModelOutput):
+class WeatherNext2ModelOutput(BaseModelOutput):
     r"""
-    mesh_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_mesh_nodes, hidden_size)`):
-        Mesh-node features after the transformer.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Mesh-node features entering the transformer and leaving each of its layers, shaped
         `(batch_size, num_blocks, block_size, hidden_size)`. The tail of the last block is padding.
     attentions (`tuple(torch.FloatTensor)`, *optional*):
         Attention weights of each block over its neighbouring blocks, shaped
         `(batch_size * num_blocks, num_attention_heads, block_size, 3 * block_size)`.
+    mesh_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_mesh_nodes, hidden_size)`):
+        Mesh-node features after the transformer.
     """
 
-    last_hidden_state: torch.FloatTensor = None
     mesh_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring(custom_intro="A single forecast step.")
@@ -656,10 +661,13 @@ class WeatherNext2ForecastHead(nn.Module):
         grid_states = self.fc1(grid_states)
         grid_states = self.activation_fn(grid_states)
         prediction = self.fc2(grid_states)
-        prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
-        return prediction.transpose(1, 2).reshape(
-            prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
-        )
+        shifted = torch.sigmoid(prediction - self.sigmoid_shift)
+        prediction = torch.where(self.sigmoid_gate, shifted, prediction)
+
+        # [batch, lat * lon, channels] -> [batch, channels, lat, lon]
+        prediction = prediction.transpose(1, 2)
+
+        return prediction.reshape(prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes)
 
 
 @auto_docstring(
