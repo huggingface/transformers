@@ -19,6 +19,7 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import os
+import re
 import warnings
 from collections.abc import Collection
 
@@ -639,22 +640,55 @@ class SpmConverter(Converter):
     @staticmethod
     def build_tokenizer_from_spm_proto(proto, vocab, merges=None):
         """
-        Similar to convert_from_spm method, but used only when there is no `model_type` class, i.e. there is no matching class in `TOKENIZERS_MAPPING` and we just create a tokenizer instead of extracting stuff from the sentencepiece file
+        Similar to convert_from_spm method, but used only when there is no `model_type` class, i.e. there is no matching
+        class in `TOKENIZERS_MAPPING` and we just create a tokenizer instead of extracting stuff from the sentencepiece
+        file.
+
+        Follows the SentencePiece model's own settings, so the result encodes like `SentencePieceProcessor.encode`:
+        the normalizer spec (extra whitespace removal, dummy prefix, whitespace escaping), BPE merges ranked by piece
+        score, and user-defined pieces, which SentencePiece always emits whole and never merges. When `merges` is
+        `None`, they are generated from `vocab` and the piece scores.
         """
         byte_fallback = proto.trainer_spec.byte_fallback
         unk_piece = proto.trainer_spec.unk_piece
-        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        normalizer_spec = proto.normalizer_spec
+        precompiled_charsmap = normalizer_spec.precompiled_charsmap
+        # `vocab` may rename pieces (from `added_tokens_decoder`), so look pieces up by id
+        if isinstance(vocab, dict):
+            id_to_token = {token_id: token for token, token_id in vocab.items()}
+        else:
+            id_to_token = {token_id: item[0] for token_id, item in enumerate(vocab or [])}
+        user_defined = [id_to_token[i] for i, piece in enumerate(proto.pieces) if piece.type == 4 and i in id_to_token]
+        # A normalized added token's content is normalized too, so with a dummy prefix user-defined pieces would only
+        # match at the start of the text. Isolate them in the pre-tokenizer instead, after the prefix is added.
+        isolate_user_defined = bool(user_defined) and normalizer_spec.add_dummy_prefix
 
         # model
         if isinstance(vocab, dict):
+            if merges is None:
+                # Only normal pieces (type 1) are merged
+                normal = {
+                    id_to_token[i]: (piece.score, i)
+                    for i, piece in enumerate(proto.pieces)
+                    if piece.type == 1 and i in id_to_token
+                }
+                ranked = []
+                for token, rank in normal.items():
+                    for split in range(1, len(token)):
+                        left, right = token[:split], token[split:]
+                        if left in normal and right in normal:
+                            ranked.append((-rank[0], rank[1], left, right))
+                merges = [(left, right) for _, _, left, right in sorted(ranked)]
             tokenizer = Tokenizer(
                 BPE(
                     vocab=vocab,
-                    merges=merges or [],
+                    merges=merges,
                     unk_token=unk_piece,
                     fuse_unk=True,
                     byte_fallback=byte_fallback,
                     dropout=None,
+                    # Isolated user-defined pieces aren't reachable through merges, so look whole words up first
+                    ignore_merges=isolate_user_defined,
                 )
             )
         elif isinstance(vocab, list) and vocab and isinstance(vocab[0], tuple | list):
@@ -668,19 +702,36 @@ class SpmConverter(Converter):
         else:
             return None
 
-        # normalizer
-        _normalizers = [normalizers.Replace(" ", "▁")]
+        # normalizer, in SentencePiece's order
+        _normalizers = []
         if precompiled_charsmap:
-            _normalizers.insert(0, normalizers.Precompiled(precompiled_charsmap))
+            _normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        if normalizer_spec.remove_extra_whitespaces:
+            # Only spaces count: SentencePiece leaves other whitespace, such as newlines, alone
+            _normalizers += [normalizers.Replace(Regex(r"\A +| +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
+        if normalizer_spec.add_dummy_prefix:
+            _normalizers.append(normalizers.Prepend("▁"))
+        if normalizer_spec.escape_whitespaces:
+            _normalizers.append(normalizers.Replace(" ", "▁"))
         tokenizer.normalizer = normalizers.Sequence(_normalizers)
 
+        # user-defined pieces
+        if isolate_user_defined:
+            pattern = "|".join(re.escape(piece) for piece in sorted(user_defined, key=len, reverse=True))
+            tokenizer.pre_tokenizer = pre_tokenizers.Split(Regex(pattern), behavior="isolated")
+        elif user_defined:
+            tokenizer.add_tokens([AddedToken(piece, normalized=True, special=False) for piece in user_defined])
+
         # decoder
+        _decoders = [decoders.Replace("▁", " ")]
         if byte_fallback:
-            tokenizer.decoder = decoders.Sequence(
-                [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
-            )
-        else:
-            tokenizer.decoder = decoders.Sequence([decoders.Replace("▁", " ")])
+            _decoders.append(decoders.ByteFallback())
+        if normalizer_spec.add_dummy_prefix:
+            # `Strip` applies to each token, so fuse them first to strip only the start of the text
+            _decoders += [decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+        elif byte_fallback:
+            _decoders.append(decoders.Fuse())
+        tokenizer.decoder = decoders.Sequence(_decoders)
 
         return tokenizer
 
