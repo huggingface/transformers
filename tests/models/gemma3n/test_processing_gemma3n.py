@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.models.gemma3n import Gemma3nProcessor
 from transformers.testing_utils import (
     require_sentencepiece,
@@ -36,12 +38,54 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/namespace-google-repo_name-gemma-3n-E4B-it"
     tiny_model_id = "hf-internal-testing/tiny-processor-gemma3n"
 
+    @staticmethod
+    def prepare_processor_dict():
+        """Override this method to provide custom kwargs for processor initialization."""
+        return {"audio_seq_length": 7, "image_seq_length": 5}
+
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         return super().prepare_images_inputs(batch_size=batch_size, nested=True)
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.boi_token
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+
+        # Overwritten because Gemma3n needs nested image inputs and its own token type ids
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append([np.random.randint(255, size=(h, w, 3), dtype=np.uint8)])
+
+        text = [f"This is an image {processor.image_token}"] * len(image_inputs)
+        inputs = processor(
+            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `token_type_ids`")
+
+        num_image_tokens_from_call = inputs.token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+        sampling_rate = processor.feature_extractor.sampling_rate
+        audio_lengths = [sampling_rate, 4 * sampling_rate]
+        inputs = processor(
+            text=[f"This is an audio {processor.audio_token}"] * len(audio_lengths),
+            audio=[np.zeros(length, dtype=np.float32) for length in audio_lengths],
+            padding=True,
+            return_tensors="pt",
+        )
+        num_audio_tokens_from_call = inputs.token_type_ids.eq(3).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
     def test_audio_feature_extractor(self):
         processor = self.get_processor()
@@ -49,7 +93,7 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         raw_speech = floats_list((3, 1000))
         input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
-        input_processor = processor(text="Transcribe:", audio=raw_speech, return_tensors="pt")
+        input_processor = processor(text=f"Transcribe: {self.audio_token * 3}", audio=raw_speech, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

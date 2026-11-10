@@ -28,8 +28,9 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
@@ -374,6 +375,8 @@ class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
         result = super().get_text_with_replacements(text, images_replacements, videos_replacements, audio_replacements)
         return result
 
+
+__getattr__ = deprecate_attr(__name__, rename={"HyperCLOVAXVisionV2_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "HyperCLOVAXVisionV2Config",

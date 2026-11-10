@@ -22,7 +22,6 @@ from transformers import (
     MuseGlimmerModel,
     is_torch_available,
 )
-from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -43,36 +42,29 @@ if is_torch_available():
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
     base_model_class = MuseGlimmerModel
     config_class = MuseGlimmerConfig
-    text_config_class = MuseGlimmerTextConfig
-    vision_config_class = MuseGlimmerVisionConfig
+
     conditional_generation_class = MuseGlimmerForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
         kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("patch_temporal", 2)
         kwargs.setdefault("merge_size", 1)
         kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
+        kwargs.setdefault("vision_layer_types", ["window_attention", "full_attention"])
         kwargs.setdefault("pos_emb_height", 4)
         kwargs.setdefault("pos_emb_width", 4)
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("projector_hidden_size", 32)
         super().__init__(parent, **kwargs)
-        self.image_grid_thw = (1, 1, 1)
+        self.image_grid_thw = (1, 2, 2)
         self.out_hidden_size = self.hidden_size * self.merge_size**2
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id}
-
-    def get_vision_config(self):
-        # `layer_types` is shared with the text config by name, but the vision tower uses
-        # "window_attention" instead of "sliding_attention".
-        config = super().get_vision_config()
-        config.layer_types = ["window_attention"] * (config.num_hidden_layers - 1) + ["full_attention"]
-        return config
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
