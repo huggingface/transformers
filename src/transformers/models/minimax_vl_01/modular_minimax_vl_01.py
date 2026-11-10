@@ -741,9 +741,6 @@ class MiniMaxVL01Model(LlavaNextModel):
         image_outputs.pooler_output = image_features
         return image_outputs
 
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -823,9 +820,6 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             image_newline=image_newline,
         )
 
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -846,9 +840,6 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             **kwargs,
         )
 
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
