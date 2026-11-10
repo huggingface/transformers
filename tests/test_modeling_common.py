@@ -1743,6 +1743,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+                pre_hook_mock = unittest.mock.Mock(return_value=None)
+                checkpointing_layer.register_forward_pre_hook(pre_hook_mock)
 
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
                 with unittest.mock.patch.object(
@@ -1757,6 +1759,9 @@ class ModelTesterMixin(ExportTesterMixin):
 
                     # test that gradient checkpointing is active, i.e. the layer goes through the checkpoint function
                     checkpoint_mock.assert_called()
+                    # module hooks run outside the checkpoint, so the backward recomputation does not replay them.
+                    # FSDP2 relies on this (#50424)
+                    self.assertEqual(pre_hook_mock.call_count, checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
