@@ -949,7 +949,8 @@ class Fp8Deserialize(ConversionOps):
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
         module = get_module_from_name(model, full_layer_name)[0]
-        if len(input_dict) == 1:  # a param of its own, e.g. merged experts' `gate_up_proj_scale_inv`: named by its target
+        # A param of its own, e.g. merged experts' `gate_up_proj_scale_inv`: named by its target
+        if len(input_dict) == 1:
             input_dict = {full_layer_name: next(iter(input_dict.values()))}
         output = {}
         for key, value in input_dict.items():
@@ -969,8 +970,8 @@ class Fp8Dequantize(ConversionOps):
     """Dequantize FP8 weights using their per-block ``weight_scale_inv``.
 
     Designed to run as the *first* op in any :class:`WeightConverter` chain when
-    loading with ``dequantize=True`` — :meth:`update_weight_conversions` on the
-    FP8 quantizer attaches it to each existing model-specific converter so that
+    loading with ``dequantize=True`` — the quantization plan's :meth:`update_weight_transform`
+    prepends it to the converter of each weight, which reads its scales along, so that
     per-expert (weight, scale) pairs are folded into full-precision tensors before
     the chain's merge / concat ops collapse the per-expert structure.
 

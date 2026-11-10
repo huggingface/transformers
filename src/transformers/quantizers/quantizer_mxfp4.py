@@ -242,7 +242,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return Mxfp4Quantize(self)
 
     serialized_names = {
-        # `Mxfp4Experts` (DeepSeek-V4): the model's converters merge the experts' weights, index-aligned
+        # `Mxfp4Experts` (DeepSeek-V4): the model's converters merge the experts' weights and their scales
         "weight": ["weight", "weight_scale_inv"],
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
         "down_proj": ["down_proj", "down_proj_scale_inv"],

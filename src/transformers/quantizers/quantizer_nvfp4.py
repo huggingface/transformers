@@ -115,8 +115,7 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         return NVFP4Quantize(self.quantization_device)
 
-    # As ModelOpt saves them
-    # Index-aligned: a scale merged like its weight loads into the experts' name at its index
+    # As ModelOpt saves them, and the fused experts' params they merge into (`w1.weight_scale` -> `gate_up_proj_scale`)
     serialized_names = {
         "weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"],
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale", "gate_up_proj_scale_2", "gate_up_proj_input_scale"],

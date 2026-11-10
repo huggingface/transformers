@@ -379,8 +379,8 @@ class HfQuantizer(ABC):
     def get_load_operations(self) -> dict:
         """
         Op classes loading the serialized tensors, e.g. `{"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}`.
-        A deserialization builds the params of one module, so it only runs on the general converters. A dequantization
-        also runs before the ops of the model's converters, e.g. before a per-expert merge.
+        A deserialization runs after the ops of a param's converter, a dequantization before them (e.g. before a
+        per-expert merge).
         """
         return {}
 
