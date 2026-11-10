@@ -1289,6 +1289,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],
         "lfm3_audio": _LFM3_SPEECH_CONVERSIONS,
+        "lfm3_omni": _LFM3_SPEECH_CONVERSIONS,
         "lfm3_vl_vision": [
             WeightRenaming(source_patterns="patchifier", target_patterns="patch_embed"),
             WeightRenaming(source_patterns="q_layernorm", target_patterns="q_norm"),
