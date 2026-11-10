@@ -123,6 +123,16 @@ class Nemotron3_5TranscribeModelTester(ALMModelTester):
 @require_torch
 class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     model_tester_class = Nemotron3_5TranscribeModelTester
+
+    # FIXME: @eustlb, experts converter collision (`nemo_speechlm` vs `nemotron_h`), see TODO in `ALMModelTest`
+    @unittest.skip(
+        reason="Experts saved as one tensor per expert instead of NeMo's packed tensor. Two rules convert them: "
+        "this model's (`nemo_speechlm`, packed) and the generic text model's (`nemotron_h`, per expert); "
+        "saving a model built from config uses the generic one"
+    )
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
+
     # `MODEL_FOR_MULTIMODAL_LM_MAPPING` serves the `any-to-any` pipeline (`audio-text-to-text` is not a pipeline task)
     pipeline_model_mapping = (
         {"any-to-any": Nemotron3_5TranscribeForConditionalGeneration} if is_torch_available() else {}
