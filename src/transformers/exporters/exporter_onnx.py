@@ -67,6 +67,7 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
+    from torch.fx.experimental.symbolic_shapes import guard_or_false
     from torch.onnx import ONNXProgram
 
 
@@ -296,7 +297,8 @@ def _patch_sdpa(original):
         torch._check(key.shape[-2] == value.shape[-2])
         if attn_mask is None:
             return original(query, key, value, attn_mask, *args, **kwargs)
-        if attn_mask.shape[-1] != 1:
+        # A mask width that's data-dependent (SAM 3's) can't be compared to 1: left unchecked.
+        if guard_or_false(attn_mask.shape[-1] != 1):
             torch._check(attn_mask.shape[-1] == key.shape[-2])
         # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
