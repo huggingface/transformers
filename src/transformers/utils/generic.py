@@ -525,11 +525,19 @@ class ModelOutput(OrderedDict):
     def __getitem__(self, k):
         if isinstance(k, str):
             inner_dict = dict(self.items())
+            # For BC
+            if k in ("past_key_values", "cache_params"):
+                logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+                k = "cache"
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
+        # For BC
+        if name in ("past_key_values", "cache_params"):
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+            name = "cache"
         field_names = {field.name for field in fields(self)}
         if name in field_names and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
@@ -537,6 +545,10 @@ class ModelOutput(OrderedDict):
         super().__setattr__(name, value)
 
     def __setitem__(self, key, value):
+        # For BC
+        if key in ("past_key_values", "cache_params"):
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+            key = "cache"
         # Will raise a KeyException if needed
         super().__setitem__(key, value)
         # Don't call self.__setattr__ to avoid recursion errors
