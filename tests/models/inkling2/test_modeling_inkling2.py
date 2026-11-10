@@ -17,15 +17,32 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import Inkling2Config, Inkling2TextConfig, Inkling2VisionConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import (
+    AutoProcessor,
+    Inkling2Config,
+    Inkling2TextConfig,
+    Inkling2VisionConfig,
+    is_torch_available,
+)
+from transformers.testing_utils import (
+    Expectations,
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_accelerator_memory,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_batched_and_grouped_inference,
     floats_tensor,
 )
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -38,30 +55,6 @@ if is_torch_available():
         Inkling2Model,
         Inkling2TextModel,
     )
-
-
-class Inkling2ModelTestMixin:
-    def _get_conv_state_shape(self, batch_size: int, config):
-        # key and value convolutions, then the attention output and MLP output convolutions
-        kv_size = config.num_key_value_heads * config.head_dim
-        return [(batch_size, kv_size, config.conv_kernel_size)] * 2 + [
-            (batch_size, config.hidden_size, config.conv_kernel_size)
-        ] * 2
-
-    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
-    def test_reverse_loading_mapping(self):
-        pass
-
-    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
-    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-        # batched_mm runs one matrix-vector product per token, whose float32 sums round differently in low precision
-        if dtype in ("fp16", "bf16"):
-            self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
-        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
-
-    @unittest.skip("Decoder layers read earlier block states from a list, which reentrant checkpointing cannot track")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
 
 class Inkling2TextModelTester(CausalLMModelTester):
@@ -80,8 +73,26 @@ class Inkling2TextModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Inkling2TextModelTest(Inkling2ModelTestMixin, CausalLMModelTest, unittest.TestCase):
+class Inkling2TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2TextModelTester
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        # key and value convolutions, then the attention output and MLP output convolutions
+        kv_size = config.num_key_value_heads * config.head_dim
+        return [(batch_size, kv_size, config.conv_kernel_size)] * 2 + [
+            (batch_size, config.hidden_size, config.conv_kernel_size)
+        ] * 2
+
+    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
+    def test_reverse_loading_mapping(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+        # batched_mm runs one matrix-vector product per token, whose float32 sums round differently in low precision
+        if dtype in ("fp16", "bf16"):
+            self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
+        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
 
 class Inkling2VisionText2TextModelTester(VLMModelTester):
@@ -118,11 +129,249 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
 
 
 @require_torch
-class Inkling2VisionText2TextModelTest(Inkling2ModelTestMixin, VLMModelTest, unittest.TestCase):
+class Inkling2VisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2VisionText2TextModelTester
     # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
     skip_test_image_features_output_shape = True
 
-    @unittest.skip("Inkling2 text attention is eager only: it adds a relative position bias and a sink")
+    def _get_conv_state_shape(self, batch_size: int, config):
+        # key and value convolutions, then the attention output and MLP output convolutions
+        kv_size = config.num_key_value_heads * config.head_dim
+        return [(batch_size, kv_size, config.conv_kernel_size)] * 2 + [
+            (batch_size, config.hidden_size, config.conv_kernel_size)
+        ] * 2
+
+    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
+    def test_reverse_loading_mapping(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+        # batched_mm runs one matrix-vector product per token, whose float32 sums round differently in low precision
+        if dtype in ("fp16", "bf16"):
+            self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
+        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+
+    @unittest.skip(
+        "Inkling2Model does not support SDPA: text attention adds a relative position bias and a per-token sink"
+    )
     def test_can_set_attention_dynamically_composite_model(self):
         pass
+
+
+# Tests with a tiny checkpoint sliced from the real one (~1.5 TB with dequantized experts, too large for CI): every
+# tensor is a leading slice of the real one (first heads, experts and channels), in the real serialized layout.
+#
+# Differences to the original checkpoint:
+# - decoder layers: 12 instead of 48 (original layers 0-5 with NVFP4 experts and 42-47 with MXFP8 experts)
+# - text: hidden size 256 instead of 6144, 16 experts (top-4) instead of 384
+# - vision: hidden size 128, 2 layers instead of 23
+#
+# Expectations are gibberish as the slices are not a trained model. Their logits are nearly flat, so greedy
+# completions depend on the hardware, whereas the logits are checked against the reference implementation's (sglang).
+@slow
+@require_torch_accelerator
+class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "hf-internal-testing/tiny-inkling2"
+
+    MAX_NEW_TOKENS = 20
+
+    image_url = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        # loaded on first use and shared by the whole class
+        if cls.model is None:
+            cls.model = Inkling2ForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype=torch.bfloat16, device_map=torch_device
+            )
+        return cls.model
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+
+    def _generate(self, messages, **kwargs):
+        model = self.get_model()
+        inputs = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
+        )
+        inputs = inputs.to(model.device).to(model.dtype)
+        output = model.generate(
+            **inputs,
+            max_new_tokens=self.MAX_NEW_TOKENS,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+        completion = self.processor.decode(
+            output.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False
+        )
+        return output, completion
+
+    @require_deterministic_for_xpu
+    def test_small_model_integration_test_text(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Explain in one sentence why the sky is usually blue."}],
+            }
+        ]
+        output, completion = self._generate(messages, reasoning_effort="none")
+
+        # the reference implementation's (sglang) first-step logits, up to bfloat16 differences between the two
+        EXPECTED_LOGITS = Expectations(
+            {
+                (None, None): [0.4891934692859650, 0.7332950234413147, 1.3132780790328980, 0.2853657603263855, 0.4583785533905029],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=0.2, rtol=0)
+
+        EXPECTED_COMPLETION = Expectations(
+            {
+                ("cuda", 10): "Susie積臧臧臧臧臧臧芃Susie積臧臧臧臧芃SusieWdwasiduncan",
+            }
+        )  # fmt: skip
+        self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
+
+    @require_vision
+    @require_deterministic_for_xpu
+    def test_small_model_integration_test_image(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": url_to_local_path(self.image_url)},
+                    {"type": "text", "text": "What animal is in this image, and where is it?"},
+                ],
+            }
+        ]
+        output, completion = self._generate(messages)
+
+        # the reference implementation's (sglang) first-step logits, up to bfloat16 differences between the two
+        EXPECTED_LOGITS = Expectations(
+            {
+                (None, None): [0.8647998571395874, 0.5721962451934814, 1.2725003957748413, -0.1632459312677383, 0.6191671490669250],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=0.2, rtol=0)
+
+        EXPECTED_COMPLETION = Expectations(
+            {
+                ("cuda", 10): "audreyانہAdelaide盅природ瑮YanYanYanYanYanYanYanYanYanYanYanYanYanYan",
+            }
+        )  # fmt: skip
+        self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
+
+
+@slow
+@require_torch_accelerator
+@require_torch_accelerator_memory(memory=1400)  # 8x B200, with the experts dequantized to bfloat16
+class Inkling2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    r"""Greedy completions agree with the reference implementation's (sglang, TP=8, EP=8) on the same prompts: the
+    image one for all 30 tokens, the text one for the first 24 ("... than longer red wavelengths"), where sglang ends
+    the sentence and Transformers continues (", a process known as") on a near tie. Their logits differ by ~0.2 on
+    average (bfloat16 rounding, amplified through the 48 layers), so the logits expectations are Transformers' own.
+
+    Run from the repository root on a node with eight B200 GPUs::
+
+        RUN_SLOW=1 pytest tests/models/inkling2/test_modeling_inkling2.py::Inkling2IntegrationTest -s
+    """
+
+    model_id = "thinkingmachines/Inkling-2-Small"
+
+    MAX_NEW_TOKENS = 30
+
+    image_url = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = Inkling2ForConditionalGeneration.from_pretrained(
+            cls.model_id, dtype=torch.bfloat16, device_map="auto"
+        ).eval()
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+
+    def _generate(self, messages, **kwargs):
+        inputs = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
+        )
+        inputs = inputs.to(self.model.device).to(self.model.dtype)
+        output = self.model.generate(
+            **inputs,
+            max_new_tokens=self.MAX_NEW_TOKENS,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+        completion = self.processor.decode(
+            output.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False
+        )
+        return output, completion
+
+    def test_integration_text(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Explain in one sentence why the sky is usually blue."}],
+            }
+        ]
+        output, completion = self._generate(messages, reasoning_effort="none")
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 10): [-16.20023536682129, -15.387210845947266, -17.97154998779297, -13.765021324157715, -17.400745391845703],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        EXPECTED_COMPLETION = Expectations(
+            {
+                ("cuda", 10): (
+                    "<|message_model|><|content_text|>The sky appears blue because air molecules scatter shorter blue "
+                    "wavelengths of sunlight more effectively than longer red wavelengths, a process known as "
+                ),
+            }
+        )  # fmt: skip
+        self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
+
+    @require_vision
+    def test_integration_image(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": url_to_local_path(self.image_url)},
+                    {"type": "text", "text": "What animal is in this image, and where is it?"},
+                ],
+            }
+        ]
+        output, completion = self._generate(messages)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 10): [-17.81046485900879, -17.483488082885742, -12.295145034790039, -14.302041053771973, -13.014372825622559],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        EXPECTED_COMPLETION = Expectations(
+            {
+                ("cuda", 10): (
+                    "<|message_model|><|content_thinking|>The user is asking to identify the animal and location in "
+                    "the image. Need answer based on visible content. The animal looks like a Pallas"
+                ),
+            }
+        )  # fmt: skip
+        self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
