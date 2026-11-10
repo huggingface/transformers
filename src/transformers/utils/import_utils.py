@@ -934,7 +934,8 @@ def is_soynlp_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_multipart_available() -> bool:
-    return _is_package_available("multipart")[0]
+    # `python-multipart` >= 0.0.13 ships `python_multipart` and deprecates the legacy `multipart` import shim.
+    return _is_package_available("python_multipart")[0] or _is_package_available("multipart")[0]
 
 
 @lru_cache

@@ -22,6 +22,7 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_multipart_available,
     is_torchcodec_usable,
 )
 
@@ -122,6 +123,28 @@ def test_candidate_distribution_names():
         # An unmapped import name falls back on itself, normalized first, without duplicates.
         assert _candidate_distribution_names("torch") == ["torch"]
         assert _candidate_distribution_names("torch_xla") == ["torch-xla", "torch_xla"]
+
+
+@parameterized.expand(
+    [
+        ("python_multipart_only", {"python_multipart"}, True),
+        ("legacy_multipart_only", {"multipart"}, True),
+        ("both_installed", {"python_multipart", "multipart"}, True),
+        ("neither_installed", set(), False),
+    ]
+)
+def test_is_multipart_available(_, installed_packages: set[str], expected: bool):
+    is_multipart_available.cache_clear()
+    try:
+        with patch(
+            "transformers.utils.import_utils.importlib.util.find_spec",
+            side_effect=lambda name: object() if name in installed_packages else None,
+        ) as find_spec:
+            assert is_multipart_available() is expected
+            if "python_multipart" in installed_packages:
+                find_spec.assert_called_once_with("python_multipart")
+    finally:
+        is_multipart_available.cache_clear()
 
 
 @contextmanager
