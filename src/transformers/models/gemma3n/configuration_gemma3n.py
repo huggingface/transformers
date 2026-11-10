@@ -116,6 +116,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     final_logit_softcapping: float = 30.0
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
+    # the decoder layers also take per-layer inputs of the whole sequence, which context parallelism does not cut
+    base_model_cp_plan = None
     vocab_size_per_layer_input: int = 262_144
     hidden_size_per_layer_input: int = 256
     altup_active_idx: int = 0

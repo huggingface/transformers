@@ -664,7 +664,7 @@ def resolve_parallel_plans(
         "`resolve_parallel_plans` is deprecated and will be removed in v5.23: the model resolves its plans itself "
         "in `_resolve_parallel_plans`, which also returns the FSDP plan."
     )
-    tp_plan, ep_plan, _ = model._resolve_parallel_plans(distributed_config)
+    tp_plan, ep_plan, _, _ = model._resolve_parallel_plans(distributed_config)
     return tp_plan, ep_plan
 
 
