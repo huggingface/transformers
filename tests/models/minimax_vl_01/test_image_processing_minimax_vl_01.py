@@ -87,20 +87,6 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         )
 
     @staticmethod
-    def _processor_kwargs(grid_pinpoints):
-        return {
-            "size": {"height": 2, "width": 2},
-            "patch_size": 1,
-            "image_grid_pinpoints": grid_pinpoints,
-            "resample": PILImageResampling.NEAREST,
-            "do_resize": True,
-            "do_center_crop": False,
-            "do_rescale": False,
-            "do_normalize": False,
-            "do_convert_rgb": True,
-        }
-
-    @staticmethod
     def _fixture_images():
         square = np.array(
             [
@@ -150,11 +136,18 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         grid_pinpoints = [[2, 2], [4, 2], [2, 4]]
 
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self._processor_kwargs(grid_pinpoints))
+            image_processor = image_processing_class(**self.image_processor_dict)
             for return_tensors in (None, "np", "pt"):
                 with self.subTest(backend=backend_name, return_tensors=return_tensors):
                     output = image_processor(
-                        list(images), input_data_format=ChannelDimension.LAST, return_tensors=return_tensors
+                        list(images),
+                        size={"height": 2, "width": 2},
+                        image_grid_pinpoints=grid_pinpoints,
+                        resample=PILImageResampling.NEAREST,
+                        do_rescale=False,
+                        do_normalize=False,
+                        input_data_format=ChannelDimension.LAST,
+                        return_tensors=return_tensors,
                     )
 
                     self.assertEqual(tuple(output.pixel_values.shape), (8, 3, 2, 2))
@@ -168,9 +161,7 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
         for backend_name, image_processing_class in self.image_processing_classes.items():
             with self.subTest(backend=backend_name):
-                processor_kwargs = self._processor_kwargs([[4, 4]])
-                processor_kwargs["size"] = {"height": 4, "width": 4}
-                image_processor = image_processing_class(**processor_kwargs)
+                image_processor = image_processing_class(**self.image_processor_dict)
                 if backend_name == "torchvision":
                     wide_input = torch.from_numpy(self._channels_first(wide))
                     tall_input = torch.from_numpy(self._channels_first(tall))
