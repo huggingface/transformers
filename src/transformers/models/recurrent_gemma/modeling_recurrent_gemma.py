@@ -465,7 +465,10 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
 
 
-TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
+TEMPORAL_BLOCK_CLASSES = {
+    "linear_attention": RecurrentGemmaRecurrentBlock,
+    "sliding_attention": RecurrentGemmaAttention,
+}
 
 
 class RecurrentGemmaMlp(nn.Module):
