@@ -11,26 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fuses an exported ONNX graph into ONNX Runtime's own ops for one of its providers (`OnnxConfig(ort_fusions="cpu" |
-"cuda" | "webgpu")`): `fuse_for_onnxruntime`, on a model set up by `prepare_for_ort_fusions`.
+"""Fuses an exported ONNX graph into ONNX Runtime's own ops for one of its providers (`OnnxConfig(ort_fusions=...)`).
 
-onnxscript's ORT fusions (`optimize_for_ort`) do most of it: RMS / layer norms and their skip variants, attention,
-GELU. Around them, in order (`_STEPS`, which also says which provider each step is for):
-
-1. **Prepare**: write the graph in the forms those fusions match (Gemma's `Pow(x, -0.5)` norms, grouped-query keys).
-2. **Rotary embeddings**: fuse the ones onnxscript leaves (cos / sin folded to constants, or computed with a
-   broadcast, or the `[batch, length, heads, head_dim]` layout), and attentions sharing a key (Gemma 4's).
-3. **onnxscript's ORT fusions.**
-4. **Repair**: undo the fusions of theirs ONNX Runtime rejects.
-5. **More fusions**: norms without a scale, norms a float16 model computes in float32; `GroupQueryAttention` over a
-   key-value cache (on CUDA, decode only, with the per-head q/k norms; on WebGPU, rotating before it); on CUDA,
-   `MoE`; on the CPU, the attentions left back to plain ops (its `MultiHeadAttention` is slower); the layout
-   transposes around each attention cancelled; the projections reading one input as one `MatMul`, which
-   `GroupQueryAttention` reads packed.
-6. **CUDA provider**: rewrite what CUDA graphs can't replay.
-7. **Clean up**: what every layer computes alike, computed once.
-
-Every rewrite matches exactly what it replaces: the fused graph's outputs are the unfused one's.
+onnxscript's ORT fusions (`optimize_for_ort`) do most of it: norms, attention, GELU. `_STEPS` runs them, in order,
+between the rewrites they need: the graph prepared in the forms they match, the fusions ONNX Runtime rejects undone,
+and the fusions they don't cover (rotary embeddings, `GroupQueryAttention` over a cache, `MoE`, packed projections).
+Every rewrite computes exactly what it replaces.
 """
 
 from __future__ import annotations
@@ -45,10 +31,9 @@ from onnxscript.rewriter.ort_fusions import optimize_for_ort
 from onnxscript.rewriter.ort_fusions.rotary_embedding import RotaryEmbeddingFusion, fuse_rotary_embedding
 from onnxscript.rewriter.ort_fusions.sdpa import fuse_sdpa
 from onnxscript.rewriter.ort_fusions.skip_normalization import fuse_skip_rms_normalization
-from packaging import version
 
 from ..utils import logging
-from ..utils.import_utils import _is_package_available
+from ..utils.import_utils import is_onnxruntime_available
 
 
 logger = logging.get_logger(__name__)
@@ -543,19 +528,13 @@ def _narrow_norms(model: ir.Model) -> int:
     return count
 
 
-class _HeadsSecond:
-    """New cache states in `[batch, length, heads, head_dim]`, not the cache's `[batch, heads, length, head_dim]`."""
-
-    def __init__(self, value: ir.Value):
-        self.value = value
-
-
 def _cache_update(value: ir.Value):
-    """`(past, new, start, present)`, the key-value cache update a fused attention's key or value reads, through its
+    """`(past, new, start, present, heads_second)`, the key-value cache update a fused attention's key or value reads, through its
     merge into `[batch, length, heads * head_dim]` and, for grouped-query attention, its repeat over the heads. A
     dynamic cache appends (`Concat(past, new, axis=2)`, no `start`); a static one writes at `start` into its buffer
     (`ScatterND` on its `[length, batch, heads, head_dim]` view); a prefill, with no past, returns the new states as
-    they are (no `past`)."""
+    they are (no `past`). `heads_second` when the new states are `[batch, length, heads, head_dim]`, not the cache's
+    `[batch, heads, length, head_dim]`."""
     if (states := _merged_heads(value)) is None:
         return None
     if (repeat := _producer(states, "Reshape")) is not None:
@@ -567,13 +546,13 @@ def _cache_update(value: ir.Value):
     if (concat := _producer(states, "Concat")) is not None:
         if concat.attributes.get_int("axis") not in (2, -2) or len(concat.inputs) != 2:
             return None
-        return concat.inputs[0], concat.inputs[1], None, concat.outputs[0]
+        return concat.inputs[0], concat.inputs[1], None, concat.outputs[0], False
     back = _producer(states, "Transpose")
     scatter = _producer(back.inputs[0], "ScatterND") if back is not None else None
     if scatter is None or _perm(back) != [1, 2, 0, 3] or scatter.attributes.get_string("reduction", "none") != "none":
         # No past: the new states are the present themselves.
         if states.is_graph_output() and states.shape is not None and len(states.shape) == 4:
-            return None, states, None, states
+            return None, states, None, states, False
         return None
     indices = scatter.inputs[1]
     past, new = (_producer(item, "Transpose") for item in (scatter.inputs[0], scatter.inputs[2]))
@@ -583,9 +562,9 @@ def _cache_update(value: ir.Value):
         return None
     # A key comes rotated, `[batch, heads, length, head_dim]`; a value straight from its projection.
     if _perm(new) == [2, 0, 1, 3]:
-        return past.inputs[0], new.inputs[0], indices, back.outputs[0]
+        return past.inputs[0], new.inputs[0], indices, back.outputs[0], False
     if _perm(new) == [1, 0, 2, 3]:
-        return past.inputs[0], _HeadsSecond(new.inputs[0]), indices, back.outputs[0]
+        return past.inputs[0], new.inputs[0], indices, back.outputs[0], True
     return None
 
 
@@ -633,13 +612,13 @@ def _query_states(query: ir.Value, kv_heads: int, num_heads: int):
     return fold.inputs[0], groups
 
 
-def _shared_rotation(query_states: ir.Value, new_key, head_size: int, prefill: bool):
+def _shared_rotation(query_states: ir.Value, new_key: ir.Value | None, head_size: int, prefill: bool):
     """`((query, key, (positions, cos_cache, sin_cache)), interleaved)`, the attention's query and new key before
     ONNX Runtime's `RotaryEmbedding` rotated them (`[batch, heads, length, head_dim]`), if one cache and the same
     positions rotate both whole; the positions None when they're the cache's default (0 on, no past)."""
     rotations = (
         _producer(query_states, "RotaryEmbedding"),
-        _producer(new_key, "RotaryEmbedding") if isinstance(new_key, ir.Value) else None,
+        _producer(new_key, "RotaryEmbedding"),
     )
     if None in rotations or any(node.domain != "com.microsoft" for node in rotations):
         return None
@@ -679,6 +658,56 @@ def _head_norm(states: ir.Value):
     return x, norm.inputs[1], norm.attributes.get_float("epsilon", 1e-5)
 
 
+def _tape_constant(tape: ir.tape.Tape, prefix: str, values, dtype=np.int64) -> ir.Value:
+    return tape.initializer(ir.tensor(np.array(values, dtype=dtype)), name=f"{prefix}_{len(tape.initializers)}")
+
+
+def _merge_heads(tape: ir.tape.Tape, states: ir.Value, heads_second: bool, merge: ir.Value) -> ir.Value:
+    """`states` to `[batch, length, heads * head_dim]`."""
+    if not heads_second:
+        states = tape.op("Transpose", [states], attributes={"perm": [0, 2, 1, 3]})
+    return tape.op("Reshape", [states, merge])
+
+
+def _sequence_lengths(tape, constant, sized, length_axis, past_key, start, known_total):
+    """`(length, seqlens_k, total_length)`, `GroupQueryAttention`'s lengths: each sequence's length after this step
+    (`seqlens_k` is its last key, where the new keys and values go), and the total length, a constant when it's known.
+    ONNX Runtime's shape inference reads a total computed from shapes as int64 (microsoft/onnxruntime#33865), and its
+    CUDA kernel reads one computed on the GPU as 0 (microsoft/onnxruntime#33867)."""
+    batch = tape.op("Shape", [sized], attributes={"start": 0, "end": 1})
+    new_length = tape.op("Shape", [sized], attributes={"start": length_axis, "end": length_axis + 1})
+    if past_key is None:
+        length = new_length
+    elif start is None:
+        # Appended after the past.
+        length = tape.op("Add", [tape.op("Shape", [past_key], attributes={"start": 2, "end": 3}), new_length])
+    else:
+        # Written in place from the first index on, and the mask, spanning the whole buffer, read up to there.
+        offset = tape.op("Gather", [tape.op("Reshape", [start, constant([-1])]), constant([0])])
+        length = tape.op("Add", [offset, new_length])
+    written = tape.op("Cast", [length], attributes={"to": ir.DataType.INT32})
+    seqlens_k = tape.op("Expand", [tape.op("Sub", [written, constant([1], np.int32)]), batch])
+    if known_total is not None:
+        total_length = constant(known_total, np.int32)
+    else:
+        total_length = tape.op("Squeeze", [written])
+    return length, seqlens_k, total_length
+
+
+def _padded_rotary_caches(tape, constant, caches, total, dtype):
+    """The rotary `caches` with zero rows, never read, appended up to `total` rows: `GroupQueryAttention` takes a cache
+    of at least the total length, and a per-token cache (`b * length + s`) has `batch * length` (a `Concat`: there's
+    no bfloat16 `Pad`, microsoft/onnxruntime#33874)."""
+    rows = tape.op("Shape", [caches[0]], attributes={"start": 0, "end": 1})
+    missing = tape.op("Max", [tape.op("Sub", [total, rows]), constant([0])])
+    rest = tape.op("Shape", [caches[0]], attributes={"start": 1})
+    zeros = tape.op("Expand", [constant(0, dtype.numpy()), tape.op("Concat", [missing, rest], attributes={"axis": 0})])
+    padded = []
+    for cache in caches:
+        padded.append(tape.op("Concat", [cache, zeros], attributes={"axis": 0}))
+    return padded
+
+
 def _fuse_group_query_attention(
     model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True
 ) -> int:
@@ -706,13 +735,14 @@ def _fuse_group_query_attention(
             continue
         if any(readers[update[3]] > 1 for update in updates):
             continue
-        (past_key, new_key, start, key_present), (past_value, new_value, _, value_present) = updates
-        cached = [states for states in (past_key, new_key) if isinstance(states, ir.Value)]
+        (past_key, new_key, start, key_present, key_heads_second) = updates[0]
+        (past_value, new_value, _, value_present, value_heads_second) = updates[1]
+        cached = [states for states in (past_key, None if key_heads_second else new_key) if states is not None]
         kv_heads = next((heads for states in cached if (heads := _static_dim(states, 1)) is not None), None)
         # Head sizes in multiples of 8, and self-attention only: the new key as long as the query.
         head_size = _static_dim(cached[0], 3)
-        states, length_axis = (new_key.value, 1) if isinstance(new_key, _HeadsSecond) else (new_key, 2)
-        new_length = states.shape[length_axis] if states.shape is not None else None
+        length_axis = 1 if key_heads_second else 2
+        new_length = new_key.shape[length_axis] if new_key.shape is not None else None
         if kv_heads is None or head_size is None or head_size % 8 or query.shape is None:
             continue
         num_heads = attention.attributes.get_int("num_heads")
@@ -735,92 +765,67 @@ def _fuse_group_query_attention(
         if past_key is None and not prefill:
             continue
         tape = ir.tape.Tape(graph)
+        constant = partial(_tape_constant, tape, f"group_query_attention_{count}")
+        merge = constant([0, 0, -1])
 
-        def constant(values, dtype=np.int64, tape=tape, count=count):
-            name = f"group_query_attention_{count}_{len(tape.initializers)}"
-            return tape.initializer(ir.tensor(np.array(values, dtype=dtype)), name=name)
-
-        def merged(states, tape=tape, merge=constant([0, 0, -1])):
-            # To `[batch, length, heads * head_dim]`.
-            if isinstance(states, _HeadsSecond):
-                return tape.op("Reshape", [states.value, merge])
-            return tape.op("Reshape", [tape.op("Transpose", [states], attributes={"perm": [0, 2, 1, 3]}), merge])
-
-        # The total length as a constant when it's known: ONNX Runtime's shape inference reads one computed from shapes
-        # as int64 (microsoft/onnxruntime#33865), and its CUDA kernel reads one computed on the GPU as 0
-        # (microsoft/onnxruntime#33867). A static cache attends over its whole buffer, the bias masking the slots not
-        # written yet; appended to a past, it's the past and the new tokens.
+        # A static cache attends over its whole buffer, the bias masking the slots not written yet; appended to a
+        # past, it's the past and the new tokens.
         past_length = 0 if past_key is None else _static_dim(past_key, 2)
         known_total = None
         if start is not None:
             known_total = past_length
         elif isinstance(query_length, int) and past_length is not None:
             known_total = query_length + past_length
-        rotary_inputs, dtype, rotary_attributes = [None, None, None], query.dtype, {}
-        rotation = _shared_rotation(query_states, new_key, head_size, past_key is None) if rotary else None
+        rotary_inputs, dtype, attributes = [None, None, None], query.dtype, {}
+        rotation = None
+        if rotary and not key_heads_second:
+            rotation = _shared_rotation(query_states, new_key, head_size, past_key is None)
         if rotation is not None:
             # Rotated by the attention itself, which stores the key rotated.
-            (query_states, key_states, (positions, cos_cache, sin_cache)), interleaved = rotation
-            new_key, rotary_inputs = key_states, [cos_cache, sin_cache, positions]
-            rotary_attributes = {"do_rotary": 1, "rotary_interleaved": interleaved}
+            (query_states, new_key, (positions, cos_cache, sin_cache)), interleaved = rotation
+            rotary_inputs = [cos_cache, sin_cache, positions]
+            attributes = {"do_rotary": 1, "rotary_interleaved": interleaved}
         if rotation is not None or groups is not None:
-            query = merged(query_states)
+            query = _merge_heads(tape, query_states, False, merge)
         # The lengths are read off the query's heads, which keep their shape, rather than off their merge built here.
         sized, length_axis = query_states, 2
-        key_states, norms = merged(new_key), []
+        key_states, norms = _merge_heads(tape, new_key, key_heads_second, merge), []
         # CUDA's kernel takes half precision only: a float32 one runs on the CPU, which has no norms.
         half = dtype in (ir.DataType.FLOAT16, ir.DataType.BFLOAT16)
-        if head_norms and half and isinstance(new_key, ir.Value):
+        if head_norms and half and not key_heads_second:
             found = _head_norm(query_states), _head_norm(new_key)
             if None not in found and found[0][2] == found[1][2]:
                 # Normalized by the attention itself, before its rotary.
                 (query, query_norm, epsilon), (key_states, key_norm, _) = found
-                weights = (constant(_constant(w).astype(dtype.numpy()), dtype.numpy()) for w in (query_norm, key_norm))
-                norms = [None, None, None, *weights]
-                rotary_attributes["qk_norm_epsilon"] = epsilon
+                norms = [None, None, None]
+                for weight in (query_norm, key_norm):
+                    norms.append(constant(_constant(weight).astype(dtype.numpy()), dtype.numpy()))
+                attributes["qk_norm_epsilon"] = epsilon
                 sized, length_axis = query, 1
-        batch = tape.op("Shape", [sized], attributes={"start": 0, "end": 1})
-        new_length = tape.op("Shape", [sized], attributes={"start": length_axis, "end": length_axis + 1})
-        if past_key is None:
-            length = new_length
-        elif start is None:
-            # Appended after the past.
-            length = tape.op("Add", [tape.op("Shape", [past_key], attributes={"start": 2, "end": 3}), new_length])
-        else:
-            # Written in place from the first index on, and the mask, spanning the whole buffer, read up to there.
-            offset = tape.op("Gather", [tape.op("Reshape", [start, constant([-1])]), constant([0])])
-            length = tape.op("Add", [offset, new_length])
-        # Each sequence's length after this step, the last key it attends to: where the new keys and values go.
-        written = tape.op("Cast", [length], attributes={"to": ir.DataType.INT32})
-        seqlens_k = tape.op("Expand", [tape.op("Sub", [written, constant([1], np.int32)]), batch])
-        if known_total is not None:
-            total_length = constant(known_total, np.int32)
-        else:
-            total_length = tape.op("Squeeze", [written])
+        length, seqlens_k, total_length = _sequence_lengths(
+            tape, constant, sized, length_axis, past_key, start, known_total
+        )
         if rotary_inputs[2] is not None:
-            # It takes a cache of at least the total rows; a per-token cache (`b * length + s`) has
-            # `batch * length`, so zero rows, never read, are appended up to that (a `Concat`: there's no bfloat16
-            # `Pad`, microsoft/onnxruntime#33874).
             total = constant([known_total]) if known_total is not None else length
-            rows = tape.op("Shape", [rotary_inputs[0]], attributes={"start": 0, "end": 1})
-            missing = tape.op("Max", [tape.op("Sub", [total, rows]), constant([0])])
-            shape = tape.op(
-                "Concat",
-                [missing, tape.op("Shape", [rotary_inputs[0]], attributes={"start": 1})],
-                attributes={"axis": 0},
-            )
-            zeros = tape.op("Expand", [constant(0, dtype.numpy()), shape])
-            rotary_inputs[:2] = (
-                tape.op("Concat", [cache, zeros], attributes={"axis": 0}) for cache in rotary_inputs[:2]
-            )
-        attributes = {"num_heads": num_heads, "kv_num_heads": kv_heads}
+            rotary_inputs[:2] = _padded_rotary_caches(tape, constant, rotary_inputs[:2], total, dtype)
+        attributes.update(num_heads=num_heads, kv_num_heads=kv_heads)
         if "scale" in attention.attributes:
             attributes["scale"] = attention.attributes["scale"].as_float()
-        attributes.update(rotary_attributes)
+        value_states = _merge_heads(tape, new_value, value_heads_second, merge)
         outputs = tape.op_multi_out(
             "GroupQueryAttention",
-            [query, key_states, merged(new_value), past_key, past_value, seqlens_k, total_length]
-            + [*rotary_inputs, bias, *norms],
+            [
+                query,
+                key_states,
+                value_states,
+                past_key,
+                past_value,
+                seqlens_k,
+                total_length,
+                *rotary_inputs,
+                bias,
+                *norms,
+            ],
             attributes=attributes,
             domain="com.microsoft",
             num_outputs=3,
@@ -988,11 +993,10 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
         half = fc1.shape[1] // 2
         gate_rows, up_rows = (slice(0, half), slice(half, None)) if gate_first else (slice(half, None), slice(0, half))
         biases = (up_biases[:, gate_rows], up_biases[:, up_rows]) if up_biases is not None else (None, None)
-        weights = [fc1[:, gate_rows], biases[0], fc2, down_biases, fc1[:, up_rows], biases[1]]
-        weights = [
-            _initializer(graph, f"mixture_of_experts_{count}_{index}", array) if array is not None else None
-            for index, array in enumerate(weights)
-        ]
+        weights = []
+        for index, array in enumerate([fc1[:, gate_rows], biases[0], fc2, down_biases, fc1[:, up_rows], biases[1]]):
+            name = f"mixture_of_experts_{count}_{index}"
+            weights.append(_initializer(graph, name, array) if array is not None else None)
         combined = combine.outputs[0]
         attributes = {"k": k, "normalize_routing_weights": normalize, "activation_type": "silu"}
         output = _add_node(
@@ -1157,13 +1161,16 @@ def _pack_sibling_matmuls(model: ir.Model) -> int:
     projections; an MLP's gate and up ones) into one, their weights concatenated, its output split back: one kernel
     for several. Returns how many packs."""
     graph, count = model.graph, 0
-    for value in [*graph.inputs, *(output for node in graph.all_nodes() for output in node.outputs)]:
-        siblings = [
-            user
-            for user, index in value.uses()
-            if user.op_type == "MatMul" and index == 0 and _constant(user.inputs[1]) is not None
-        ]
-        weights = [_constant(user.inputs[1]) for user in siblings]
+    values = list(graph.inputs)
+    for node in graph.all_nodes():
+        values.extend(node.outputs)
+    for value in values:
+        siblings, weights = [], []
+        for user, index in value.uses():
+            weight = _constant(user.inputs[1]) if user.op_type == "MatMul" and index == 0 else None
+            if weight is not None:
+                siblings.append(user)
+                weights.append(weight)
         if len(siblings) < 2 or len({(weight.ndim, weight.shape[0], weight.dtype) for weight in weights}) != 1:
             continue
         if weights[0].ndim != 2 or len({sibling.graph for sibling in siblings}) != 1:
@@ -1278,83 +1285,54 @@ def _ort_fusions(model: ir.Model) -> int:
     return sum(fused.values())
 
 
-_ANY = frozenset({"cpu", "cuda", "webgpu"})
-_CPU, _CUDA, _WEBGPU = frozenset({"cpu"}), frozenset({"cuda"}), frozenset({"webgpu"})
-
-# The pipeline, step by step: `(name, step(model) -> how many times it applied, the providers it's for)`.
+# The pipeline, step by step: `(name, step(model) -> how many times it applied, the providers it's for, or None for all)`.
 _STEPS = (
     # 1. Prepare.
-    ("rsqrt_from_pow", _RSQRT_FROM_POW.apply_to_model, _ANY),
-    ("key_transposes", _KEY_TRANSPOSE.apply_to_model, _ANY),
+    ("rsqrt_from_pow", _RSQRT_FROM_POW.apply_to_model, None),
+    ("key_transposes", _KEY_TRANSPOSE.apply_to_model, None),
     # 2. Rotary embeddings, and attentions sharing a key.
-    ("rotary_embeddings", _fuse_rotary_embeddings, _ANY),
-    ("shared_key_attentions", _fuse_shared_key_attentions, _ANY),
+    ("rotary_embeddings", _fuse_rotary_embeddings, None),
+    ("shared_key_attentions", _fuse_shared_key_attentions, None),
     # 3. onnxscript's ORT fusions: norms, skip norms, attention, GELU.
-    ("ort_fusions", _ort_fusions, _ANY),
+    ("ort_fusions", _ort_fusions, None),
     # 4. Repair.
-    ("unfused_mixed_dtype_skip_norms", _unfuse_mixed_dtype_skip_norms, _ANY),
-    ("untransposed_batch_matmuls", _untranspose_batch_matmuls, _CPU | _CUDA),
-    ("unfused_matmuls", partial(_untranspose_batch_matmuls, matmuls=True), _WEBGPU),
+    ("unfused_mixed_dtype_skip_norms", _unfuse_mixed_dtype_skip_norms, None),
+    ("untransposed_batch_matmuls", _untranspose_batch_matmuls, ("cpu", "cuda")),
+    ("unfused_matmuls", partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",)),
     # 5. More fusions.
-    ("weightless_rms_norms", _WEIGHTLESS_RMS_NORMS.apply_to_model, _ANY),
-    ("narrowed_norms", _narrow_norms, _ANY),
+    ("weightless_rms_norms", _WEIGHTLESS_RMS_NORMS.apply_to_model, None),
+    ("narrowed_norms", _narrow_norms, None),
     # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
-    ("narrowed_skip_norms", fuse_skip_rms_normalization, _ANY),
+    ("narrowed_skip_norms", fuse_skip_rms_normalization, None),
     # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
     # `MultiHeadAttention`'s (microsoft/onnxruntime#33869).
-    ("group_query_attention", _fuse_group_query_attention, _CPU),
-    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False, head_norms=True), _CUDA),
+    ("group_query_attention", _fuse_group_query_attention, ("cpu",)),
+    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False, head_norms=True), ("cuda",)),
     # WebGPU's rotates at the positions after the past, ignoring `position_ids`: rotary stays its own op.
-    ("group_query_attention_unrotated", partial(_fuse_group_query_attention, rotary=False), _WEBGPU),
-    ("mixture_of_experts", _fuse_mixture_of_experts, _CUDA),
+    ("group_query_attention_unrotated", partial(_fuse_group_query_attention, rotary=False), ("webgpu",)),
+    ("mixture_of_experts", _fuse_mixture_of_experts, ("cuda",)),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused (microsoft/onnxruntime#33873): the ones
     # left, unfused.
-    ("unfused_attentions", _unfuse_attentions, _CPU),
-    ("head_transposes", _sink_head_transposes, _ANY),
-    ("packed_matmuls", _pack_sibling_matmuls, _ANY),
-    ("packed_group_query_attentions", _pack_group_query_attention_inputs, _ANY),
+    ("unfused_attentions", _unfuse_attentions, ("cpu",)),
+    ("head_transposes", _sink_head_transposes, None),
+    ("packed_matmuls", _pack_sibling_matmuls, None),
+    ("packed_group_query_attentions", _pack_group_query_attention_inputs, None),
     # 6. CUDA provider.
-    ("constant_gather_nds", _CONSTANT_GATHER_ND.apply_to_model, _CUDA),
+    ("constant_gather_nds", _CONSTANT_GATHER_ND.apply_to_model, ("cuda",)),
 )
 
 
-def fuse_for_onnxruntime(
-    model: ir.Model, ort_fusions: str = "cpu", steps: int | None = None, original_model=None
-) -> dict[str, int]:
-    """Fuse `model` in place into ONNX Runtime's own ops, for the device it runs on, `ort_fusions` (`"cpu"`,
-    `"cuda"`, which has more ops, `MoE`, or `"webgpu"`). Returns how many times each step applied. `steps` runs only the first ones
-    (to measure each step's share). `original_model`, the model `model` was exported from, says how many
-    mixture-of-experts blocks should fuse into `MoE`."""
-    if ort_fusions == "cuda":
-        installed, installed_version = _is_package_available("onnxruntime", return_version=True)
-        if installed and version.parse(installed_version) < version.parse("1.28.0"):
-            logger.warning(
-                f"Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0 (installed: "
-                f"{installed_version}): before it, `GroupQueryAttention` has no query and key norms and float16 skip "
-                "norms overflow on large activations."
-            )
-    counts = {name: step(model) if ort_fusions in providers else 0 for name, step, providers in _STEPS[:steps]}
-    # 7. What every layer computes alike (its mask's unattended rows), computed once.
-    _merge_equal_computations(model)
-    if ort_fusions == "cuda" and original_model is not None:
-        blocks = sum(
-            hasattr(module, "has_gate") and hasattr(module, "is_concatenated") for module in original_model.modules()
+def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str) -> dict[str, int]:
+    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, `ort_fusions` (`"cpu"`, `"cuda"`
+    or `"webgpu"`). Returns how many times each step applied."""
+    if ort_fusions == "cuda" and not is_onnxruntime_available("1.28.0"):
+        logger.warning(
+            "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "
+            "has no query and key norms and float16 skip norms overflow on large activations."
         )
-        if counts["mixture_of_experts"] < blocks:
-            logger.warning(
-                f"Only {counts['mixture_of_experts']} of {blocks} mixture-of-experts blocks fused into ONNX Runtime's "
-                "`MoE` (it takes SiLU-gated experts behind a softmax / top-k router): the others run as `batched_mm`, "
-                "whose prefill is slow. Export with `ort_fusions='cpu'` or `None` to keep them as `grouped_mm`."
-            )
+    counts = {}
+    for name, step, providers in _STEPS:
+        counts[name] = step(model) if providers is None or ort_fusions in providers else 0
+    # What every layer computes alike (its mask's unattended rows), computed once.
+    _merge_equal_computations(model)
     return counts
-
-
-def prepare_for_ort_fusions(model, ort_fusions: str):
-    """Set `model` up to trace in the forms `fuse_for_onnxruntime(ort_fusions=...)` fuses.
-
-    For `"cuda"`, the mixture-of-experts layers run as `batched_mm`, which fuses into `MoE`: a graph a fraction of the
-    size of `grouped_mm`'s per-expert one, so faster to export and to fuse. Elsewhere `MoE` doesn't fuse, and
-    `grouped_mm` keeps the prefill fast.
-    """
-    if ort_fusions == "cuda" and getattr(model, "_can_set_experts_implementation", lambda: False)():
-        model.set_experts_implementation("batched_mm")

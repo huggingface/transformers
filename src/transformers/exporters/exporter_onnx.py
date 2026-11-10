@@ -75,7 +75,7 @@ if is_onnxscript_available():
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
-    from .onnxruntime_fusions import fuse_for_onnxruntime, prepare_for_ort_fusions
+    from .onnxruntime_fusions import fuse_for_onnxruntime
 
     # torch.dtype -> onnx_ir.DataType, mirroring torch.onnx's private _TORCH_DTYPE_TO_ONNX so we
     # don't depend on that path. Only the dtypes a `Cast` target can realistically be; exotic
@@ -137,15 +137,14 @@ class OnnxExporter(DynamoExporter):
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
         quantizer = config.quantizer
-        ort_fusions = (
-            config.ort_fusions if config.optimize and (quantizer is None or not quantizer.quantizes_fx_graph) else None
-        )
-
-        if ort_fusions:
-            prepare_for_ort_fusions(model, ort_fusions)
+        # A model quantized before export has no ops the fusions match.
+        ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
+        # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
+        experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
 
         with (
             apply_patches("onnx"),
+            use_experts_implementation(model, experts_implementation),
             patch_model_outputs(model) as (inputs_names, outputs_names),
         ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
@@ -165,7 +164,7 @@ class OnnxExporter(DynamoExporter):
         apply_onnx_ir_fixes(onnx_program)
 
         if ort_fusions:
-            fuse_for_onnxruntime(onnx_program.model, ort_fusions=ort_fusions, original_model=model)
+            fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
@@ -183,6 +182,20 @@ class OnnxExporter(DynamoExporter):
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
 # Model forward wrapper and I/O naming used by OnnxExporter.export.
+
+
+@contextmanager
+def use_experts_implementation(model, experts_implementation: str | None):
+    """Run the model's experts with `experts_implementation` inside the block, then restore its own."""
+    if experts_implementation is None or not getattr(model, "_can_set_experts_implementation", lambda: False)():
+        yield
+        return
+    original = model.get_experts_implementation()
+    model.set_experts_implementation(experts_implementation)
+    try:
+        yield
+    finally:
+        model.set_experts_implementation(original)
 
 
 @contextmanager
@@ -273,14 +286,10 @@ def _patch_sdpa(original):
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
 
-    A boolean mask goes in as an additive one: torchlib guards its boolean softmax with an `IsNaN`/`Where`
-    over the whole `(query, key)` weight matrix, which the zeroing here already makes redundant. Its unattended
-    rows are counted with a sum: `any` exports as a bool `ReduceMax`, which ONNX Runtime's CUDA provider runs on the
-    CPU (microsoft/onnxruntime#33876), copying the mask over and waiting every call.
-
-    The key, value and mask lengths are checked equal, which SDPA requires but doesn't check under export: a dynamic
-    export otherwise gives each cache's keys and values their own length symbols, and onnxscript's attention fusion,
-    matching on shapes, skips every layer.
+    A boolean mask goes in as an additive one (torchlib's boolean softmax adds a redundant `IsNaN`/`Where`), and
+    unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
+    microsoft/onnxruntime#33876). The key, value and mask lengths are checked equal, so a dynamic export gives them
+    one symbol, which onnxscript's attention fusion needs.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
@@ -1058,13 +1067,10 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     mat_a[r] @ mat_b[group(r)]` where rows are sorted by group and `offs` holds the
     cumulative end index per group.
 
-    Per-group `Slice + MatMul + Concat`. `G` (number of experts) is static for any
-    concrete model, so unroll at translation time: one `MatMul` per group and a final
-    `Concat`. Avoids the `(M, K, N)` materialisation a naive `weight[group_idx]` gather
-    would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`. No `Slice`: onnxscript's
-    `SlicesSplit` rule tries every pair of `Slice`s in the graph, which a `Slice` per group
-    and layer makes the bulk of the export's time. The group ends and weights come from one
-    `Split` each, and each group's rows are gathered from a `Range`.
+    `G` (number of experts) is static, so it unrolls into one `MatMul` per group and a final
+    `Concat`, avoiding the `(M, K, N)` materialisation of a `weight[group_idx]` gather. The group
+    ends and weights come from one `Split` each, not a `Slice` per group: onnxscript's
+    `SlicesSplit` rule tries every pair of `Slice`s, which dominated the export time.
     """
     G = mat_b.shape[0]
     if not isinstance(G, int):

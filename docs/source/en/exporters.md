@@ -828,9 +828,7 @@ runs the fused graph much faster than the plain one. The fusions cover RMS and l
 (`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
 projections that share an input. Each fusion gives the same result as the ops it replaces.
 
-Set `ort_fusions` to the execution provider the graph will run on. Each provider gets the fused ops it supports. Two
-fusions are skipped for now because ONNX Runtime's kernel runs slower than the plain ops, and come back once that's
-fixed.
+Set `ort_fusions` to the execution provider the graph will run on. Each provider gets the fused ops it supports.
 
 ```python
 config = OnnxConfig(ort_fusions="cpu")
@@ -844,7 +842,6 @@ config = OnnxConfig(ort_fusions="webgpu")
 | Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` |
 | Mixture of experts | unfused | `MoE` | unfused |
 | CUDA graphs | — | static exports can replay | — |
-| onnxruntime | any | 1.28 or later | any |
 
 A `"cuda"` graph with `MoE` doesn't run on CPU, since ONNX Runtime's `MoE` only exists for CUDA. A `"webgpu"` graph runs
 in the browser with onnxruntime-web, or natively with onnxruntime-webgpu.
@@ -854,7 +851,8 @@ is `ort_fusions=None`, which keeps the graph standard. If you need the model on 
 each.
 
 The fusions run before [`~exporters.OnnxRuntimeQuantizer`] quantizes the graph, as ONNX Runtime recommends. They're
-skipped when the model is quantized before export, and they require `optimize=True` (the default).
+skipped when the model is quantized before export, and they require `optimize=True` (the default). The `"cuda"` fusions
+need onnxruntime 1.28 or later.
 
 ## Quantization
 
