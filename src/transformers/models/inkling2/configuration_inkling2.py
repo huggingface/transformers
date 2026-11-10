@@ -114,7 +114,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
     pad_token_id: int | None = None
-    bos_token_id: int | None = 1
+    bos_token_id: int | None = None
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
