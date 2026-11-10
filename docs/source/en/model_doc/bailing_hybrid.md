@@ -23,6 +23,10 @@ embeddings and a head-wise output gate, while the feed-forward blocks combine ro
 The native Transformers architecture is exposed as `BailingHybridForCausalLM` and uses the checkpoint model type
 `bailing_hybrid`. Native support means the model can be loaded without `trust_remote_code=True`.
 
+The checkpoint's `expert_swiglu_limit_list` and `share_expert_swiglu_limit_list` control per-layer clipping in routed
+and shared experts. Positive limits clip the gate after SiLU and bound the up projection symmetrically; zero or
+omitted limits disable clipping.
+
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
