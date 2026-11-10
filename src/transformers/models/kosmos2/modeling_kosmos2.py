@@ -163,15 +163,12 @@ class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
 @auto_docstring
 @dataclass
 class Kosmos2ModelOutput(MultimodalBaseModelOutputWithPast):
-    r"""
-    projection_attentions (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-        the weighted average in the self-attention heads.
-    """
-
-    projection_attentions: tuple[torch.Tensor] | None = None
+    @property
+    def projection_attentions(self):
+        logger.warning_once(
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+        )
+        return self.image_projection_attentions
 
     @property
     def vision_model_output(self):
@@ -191,15 +188,12 @@ class Kosmos2ModelOutput(MultimodalBaseModelOutputWithPast):
 @auto_docstring
 @dataclass
 class Kosmos2ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithPast):
-    r"""
-    projection_attentions (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-        the weighted average in the self-attention heads.
-    """
-
-    projection_attentions: tuple[torch.Tensor] | None = None
+    @property
+    def projection_attentions(self):
+        logger.warning_once(
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+        )
+        return self.image_projection_attentions
 
     @property
     def vision_model_output(self):
@@ -1441,7 +1435,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         [1, 91, 2048]
         ```"""
         image_outputs = None
-        projection_attentions = None
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
@@ -1449,7 +1442,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
                 pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True, **kwargs
             )
             image_embeds = image_outputs.pooler_output
-            projection_attentions = image_outputs.projection_attentions
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -1465,8 +1457,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         )
 
         return Kosmos2ModelOutput(
-            **outputs,
-            projection_attentions=projection_attentions,
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             modality_outputs={"image": image_outputs},
         )
 
@@ -1504,6 +1498,38 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.text_model.set_output_embeddings(new_embeddings)
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        interpolate_pos_encoding: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithProjectionAttentions:
+        if "return_attentions" in kwargs:
+            warnings.warn(
+                "`return_attentions` is deprecated and will be removed in a future version. Please use `return_dict`"
+                " and access `projection_attentions` from the returned `ModelOutput` instead.",
+                FutureWarning,
+            )
+            kwargs.pop("return_attentions", None)
+
+        vision_output: BaseModelOutputWithProjectionAttentions = self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
+        )
+        # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+        image_embeds = self.vision_model.model.post_layernorm(vision_output[0])
+        # normalized features
+        image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+        image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        vision_output.pooler_output = image_embeds
+        vision_output.projection_attentions = projection_attentions
+
+        return vision_output
 
     @can_return_tuple
     @auto_docstring
@@ -1577,17 +1603,11 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
         ```"""
         image_outputs = None
-        projection_attentions = None
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
-
-            image_outputs = self.vision_model(pixel_values=pixel_values)
-            # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_embeds = self.vision_model.model.post_layernorm(image_outputs[0])
-            # normalized features
-            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
-            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            image_embeds = image_outputs.pooler_output
 
         lm_outputs: CausalLMOutputWithCrossAttentions = self.text_model(
             input_ids=input_ids,
@@ -1609,7 +1629,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             past_key_values=lm_outputs.past_key_values,
             hidden_states=lm_outputs.hidden_states,
             attentions=lm_outputs.attentions,
-            projection_attentions=projection_attentions,
             modality_outputs={"image": image_outputs},
         )
 

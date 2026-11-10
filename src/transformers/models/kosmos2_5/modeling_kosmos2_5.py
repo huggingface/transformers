@@ -250,12 +250,8 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
 
 @auto_docstring
 @dataclass
-class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
+class Kosmos2_5BaseModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    width (`torch.Tensor` of shape `(batch_size,)`):
-        The original width (before resizing) of each image in the batch.
-    height (`torch.Tensor` of shape `(batch_size,)`):
-        The original height (before resizing) of each image in the batch.
     projection_attentions (`tuple(torch.Tensor)`, *optional*):
         Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`.
@@ -263,9 +259,21 @@ class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
         the weighted average in the self-attention heads.
     """
 
+    projection_attentions: tuple[torch.Tensor] | None = None
+
+
+@auto_docstring
+@dataclass
+class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
+    r"""
+    width (`torch.Tensor` of shape `(batch_size,)`):
+        The original width (before resizing) of each image in the batch.
+    height (`torch.Tensor` of shape `(batch_size,)`):
+        The original height (before resizing) of each image in the batch.
+    """
+
     width: torch.Tensor | None = None
     height: torch.Tensor | None = None
-    projection_attentions: tuple[torch.Tensor] | None = None
 
     @property
     def vision_model_output(self):
@@ -280,6 +288,13 @@ class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
             "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
         )
         return self.image_pooler_output
+
+    @property
+    def projection_attentions(self):
+        logger.warning_once(
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+        )
+        return self.image_projection_attentions
 
 
 @auto_docstring
@@ -290,16 +305,10 @@ class Kosmos2_5ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithP
         The original width (before resizing) of each image in the batch.
     height (`torch.Tensor` of shape `(batch_size,)`):
         The original height (before resizing) of each image in the batch.
-    projection_attentions (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-        the weighted average in the self-attention heads.
     """
 
     width: torch.Tensor | None = None
     height: torch.Tensor | None = None
-    projection_attentions: tuple[torch.Tensor] | None = None
 
     @property
     def vision_model_output(self):
@@ -314,6 +323,13 @@ class Kosmos2_5ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithP
             "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
         )
         return self.image_pooler_output
+
+    @property
+    def projection_attentions(self):
+        logger.warning_once(
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+        )
+        return self.image_projection_attentions
 
 
 # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm with Pix2Struct->Kosmos2_5
@@ -1121,6 +1137,24 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         self.text_model.model.embed_tokens = value
 
     @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        flattened_patches: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Kosmos2_5BaseModelOutputWithPooling:
+        vision_model_output = self.vision_model(
+            flattened_patches=flattened_patches,
+            **kwargs,
+        )
+        # normalized features
+        image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
+        image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        return Kosmos2_5BaseModelOutputWithPooling(
+            **vision_model_output, pooler_output=image_embeds, projection_attentions=projection_attentions
+        )
+
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2_5ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1174,16 +1208,12 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         [1, 91, 2048]
         ```"""
         vision_model_output = None
-        projection_attentions = None
-        if image_embeds is None:
-            if flattened_patches is not None:
-                vision_model_output = self.vision_model(
-                    flattened_patches=flattened_patches,
-                    **kwargs,
-                )
-                # normalized features
-                image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
-                image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        if image_embeds is None and flattened_patches is not None:
+            vision_model_output = self.get_image_features(
+                flattened_patches=flattened_patches,
+                **kwargs,
+            )
+            image_embeds = vision_model_output.pooler_output
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -1198,10 +1228,12 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         )
 
         return Kosmos2_5ModelOutput(
-            **outputs,
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             width=width,
             height=height,
-            projection_attentions=projection_attentions,
             modality_outputs={"image": vision_model_output},
         )
 
@@ -1382,6 +1414,24 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         self.text_model.set_output_embeddings(new_embeddings)
 
     @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        flattened_patches: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Kosmos2_5BaseModelOutputWithPooling:
+        vision_model_output = self.vision_model(
+            flattened_patches=flattened_patches,
+            **kwargs,
+        )
+        # normalized features
+        image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
+        image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        return Kosmos2_5BaseModelOutputWithPooling(
+            **vision_model_output, pooler_output=image_embeds, projection_attentions=projection_attentions
+        )
+
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=Kosmos2_5ForConditionalGenerationModelOutput,
@@ -1445,16 +1495,12 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         '<ocr><bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_612></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_810><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_648></bbox>1\n<bbox><x_79><y_614><x_468><y_650></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_609><x_812><y_644></bbox>0\n<bbox><x_50><y_658><x_69><y_693></bbox>1\n<bbox><x_79><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_814><y_687></bbox>0\n<bbox><x_31><y_742><x_820><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_781><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_872></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_921></bbox>Total 50,000\n<bbox><x_17><y_1056><x_836><y_1108></bbox>Card Payment 50,000\n'
         ```"""
         vision_model_output = None
-        projection_attentions = None
-
-        if image_embeds is None:
-            if flattened_patches is not None:
-                vision_model_output = self.vision_model(
-                    flattened_patches=flattened_patches,
-                    **kwargs,
-                )
-                image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
-                image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        if image_embeds is None and flattened_patches is not None:
+            vision_model_output = self.get_image_features(
+                flattened_patches=flattened_patches,
+                **kwargs,
+            )
+            image_embeds = vision_model_output.pooler_output
 
         lm_outputs: CausalLMOutputWithCrossAttentions = self.text_model(
             input_ids=input_ids,
@@ -1478,7 +1524,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             attentions=lm_outputs.attentions,
             width=width,
             height=height,
-            projection_attentions=projection_attentions,
             modality_outputs={"image": vision_model_output},
         )
 
