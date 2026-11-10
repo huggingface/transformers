@@ -656,8 +656,6 @@ class MiniMaxVL01Model(LlavaNextModel):
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-                if height * width != base_image_feature.shape[0]:
-                    raise ValueError("The number of vision features is inconsistent with the configured image size.")
 
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
