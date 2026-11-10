@@ -99,5 +99,11 @@ class RecurrentGemmaConfig(PreTrainedConfig):
     def layers_block_type(self):
         return (self.block_types * 100)[: self.num_hidden_layers]
 
+    @property
+    def layer_types(self):
+        # Describes the layers for the generic cache / mask utilities (the modeling itself uses `layers_block_type`):
+        # recurrent blocks keep their own state (no KV cache), attention blocks always use local (sliding window) attention
+        return ["linear_attention" if x == "recurrent" else "sliding_attention" for x in self.layers_block_type]
+
 
 __all__ = ["RecurrentGemmaConfig"]

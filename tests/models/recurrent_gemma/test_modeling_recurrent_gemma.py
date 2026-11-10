@@ -181,6 +181,13 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_left_padding_compatibility(self):
         pass
 
+    @unittest.skip(
+        "RecurrentGemma's recurrent block has no chunked-continuation support: a cached multi-token forward is "
+        "treated as a new prefill, so the split-vs-single comparison cannot match regardless of padding masking."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
     @pytest.mark.generate
     @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
