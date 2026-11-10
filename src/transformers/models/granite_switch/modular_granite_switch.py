@@ -17,10 +17,14 @@ from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
 from ..granitemoehybrid.configuration_granitemoehybrid import GraniteMoeHybridConfig
+from .switch_codes import KerdockDGCodeGenerator, recover_count_from_signal
 
 
 # Decoder-layer cache slots the switch reserves at the front of the model when adapters are
@@ -33,6 +37,11 @@ SWITCH_CACHE_LAYERS = 2
 # all-`"linear_attention"` (mamba), which would size the per-layer cache wrongly, so the value
 # is pinned here instead. It must be a key of the dynamic-cache layer-type mapping.
 ATTENTION_LAYER_TYPE = "full_attention"
+
+# Narrowest head the attention kernels accept. Both switch heads carry their signal in a handful
+# of components and pad the rest, so this floor -- not the signal -- is what sets the counting
+# head's width, and the memory head's when a codeword is narrower than it.
+_MIN_ATTENTION_HEAD_DIM = 32
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-switch-4.1-3b-preview")
@@ -376,6 +385,290 @@ def apply_token_exchange(lut: torch.Tensor | None, input_ids: torch.Tensor) -> t
     substitute_per_position = lut[input_ids]
     is_control = substitute_per_position >= 0
     return torch.where(is_control, substitute_per_position, input_ids)
+
+
+class GraniteSwitchCountingAttention(nn.Module):
+    """Attribute carrier for the counting head's `sdpa_attention_forward` call.
+
+    Holds no parameters and defines no `forward`. The attention interface reads its geometry off
+    the module it is handed (`num_key_value_groups`, `is_causal`, `layer_idx`), so the head needs
+    an object with those attributes; `MultiSwitch` builds the Q/K/V tensors itself.
+
+    One query head over one KV head, at `counting_head_dim`, which is independent of the
+    backbone's `head_dim`. Only component 0 of each vector carries signal; the rest is zero
+    padding to reach the minimum width the attention kernels accept.
+    """
+
+    def __init__(self, head_dim: int, layer_idx: int):
+        super().__init__()
+        self.num_heads = 1
+        self.num_key_value_heads = 1
+        self.num_key_value_groups = 1
+        self.head_dim = head_dim
+        self.scaling = 1.0
+        self.attention_dropout = 0.0
+        self.is_causal = True
+        self.layer_idx = layer_idx
+
+
+class GraniteSwitchMemoryAttention(nn.Module):
+    """Attribute carrier for the memory head's `sdpa_attention_forward` call.
+
+    Same role as `GraniteSwitchCountingAttention`, at `memory_head_dim`, which must be wide enough
+    to hold a whole codeword.
+    """
+
+    def __init__(self, head_dim: int, layer_idx: int):
+        super().__init__()
+        self.num_heads = 1
+        self.num_key_value_heads = 1
+        self.num_key_value_groups = 1
+        self.head_dim = head_dim
+        self.scaling = 1.0
+        self.attention_dropout = 0.0
+        self.is_causal = True
+        self.layer_idx = layer_idx
+
+
+class MultiSwitch(nn.Module):
+    """Picks one adapter per token from the control tokens seen so far, latest wins.
+
+    Two single-head attention passes do the work. A counting head turns "how many control tokens
+    precede this position" into a write address, and a coded-memory head reads back the adapter id
+    written at that address. Addresses are Kerdock/Delsarte-Goethals codewords, whose bounded
+    coherence is what makes retrieval land on an exact integer rather than a blend of the adapters
+    in scope. A request may therefore switch adapters any number of times, and -- on a checkpoint
+    composed with a base-reset token -- switch back to no adapter at all.
+
+    Index 0 always means base/no adapter, so valid indices are `0..num_adapters`.
+    """
+
+    def __init__(self, config: GraniteSwitchConfig, layer_idx: int = 0):
+        super().__init__()
+        self.config = config
+        self.num_adapters = config.num_adapters
+        self.control_token_gain = config.control_token_gain
+        self.layer_idx = layer_idx
+        self.counting_layer_idx = layer_idx
+        self.memory_layer_idx = layer_idx + 1
+
+        # Two accepted `adapter_token_ids` layouts, distinguished by length alone:
+        #   * `num_adapters` entries -- entry i fires adapter i + 1, so the id is argmax + 1.
+        #   * `num_adapters + 1` entries -- entry 0 is a base-reset token that fires 0 and the
+        #     rest fire 1.., so the id is the argmax unshifted. This is what lets a request
+        #     transition back to base, which matters when one sequence holds several control
+        #     tokens: ordinary chat emits a control token for the current turn only, so earlier
+        #     turns carry none and already route to base.
+        # Derived from a length once here, rather than per step, so `forward` stays branch-free.
+        if len(config.adapter_token_ids) == self.num_adapters + 1:
+            self._expert_id_offset = 0
+        else:
+            self._expert_id_offset = 1
+
+        # `precompute_codebook` returns `[capacity, N]` unit-norm codewords; N is both the code
+        # and the memory dimension. For the m=6 Kerdock default that is 2048 addresses of width 64.
+        self.code_gen = KerdockDGCodeGenerator(m=config.ms_code_m, code_type=config.ms_code_type)
+        self.capacity = self.code_gen.capacity
+        self.memory_dim = self.code_gen.N
+        self.memory_gain = config.ms_memory_gain
+
+        # Must be persistent. `from_pretrained` materializes modules on the meta device and then
+        # fills only the tensors the checkpoint carries, so a non-persistent buffer is absent from
+        # the state dict and comes back all zeros -- whatever `__init__` computed is discarded. A
+        # zeroed codebook makes every memory key and query zero, which collapses the retrieval
+        # logits to a uniform softmax: each position then averages the adapter ids in scope
+        # instead of selecting the most recent one, and routes to a blend with no error raised.
+        # Keeping it in the state dict also turns an incompatible checkpoint into a loud missing
+        # key. The cost is ~512 KB against a multi-GB checkpoint.
+        self.codebook = nn.Buffer(self.code_gen.precompute_codebook(dtype=torch.float32), persistent=True)
+
+        # Counting carries its one-hot signal in component 0 and pads the rest, so its width is
+        # set by what the attention kernels accept rather than by the signal.
+        self.counting_head_dim = max(config.ms_counting_head_dim, _MIN_ATTENTION_HEAD_DIM)
+
+        # Memory must hold a whole codeword. Prefer the backbone's `head_dim` when it is wide
+        # enough, so every attention layer in the model shares one head width; otherwise take the
+        # code dimension directly. Surplus components are zero-padded.
+        if config.head_dim >= self.memory_dim:
+            self.memory_head_dim = config.head_dim
+        else:
+            self.memory_head_dim = max(self.memory_dim, _MIN_ATTENTION_HEAD_DIM)
+
+        self.counting_attn_module = GraniteSwitchCountingAttention(
+            head_dim=self.counting_head_dim,
+            layer_idx=self.counting_layer_idx,
+        )
+        self.memory_attn_module = GraniteSwitchMemoryAttention(
+            head_dim=self.memory_head_dim,
+            layer_idx=self.memory_layer_idx,
+        )
+
+        # Persistent for the same reason as `codebook`, and the consequence is worse here: this
+        # table uses -1 for "not a control token", so an all-zero table would rewrite every token
+        # id in the sequence to 0.
+        lut = build_control_to_substitute_lut(config)
+        self.control_to_substitute_lut = None if lut is None else nn.Buffer(lut, persistent=True)
+
+    def _apply(self, *args, **kwargs):
+        """Hold `codebook` at fp32 across `.to()` / `.half()` / `.bfloat16()`.
+
+        `nn.Module._apply` casts every float buffer, so casting the model would take the codebook
+        with it and make save/load non-idempotent: `__init__` rebuilds this buffer as fp32 on every
+        load, so a cast model serializes bf16 while a reload of that same model serializes fp32 --
+        the same model writing two different byte counts, differing by exactly the codebook.
+
+        Serialization is the only reason, and the forward path must not be cited as another. The
+        entries are +/-1/sqrt(N), exact in bf16, and the memory key they feed is assigned into an
+        fp32 destination which upcasts whatever arrives.
+        """
+        out = super()._apply(*args, **kwargs)
+        if self.codebook.dtype != torch.float32:
+            self.codebook = self.codebook.to(torch.float32)
+        return out
+
+    @property
+    def num_cache_layers(self) -> int:
+        return SWITCH_CACHE_LAYERS
+
+    def _causal_mask(self, q_len: int, kv_len: int, device: torch.device) -> torch.Tensor:
+        """Build the heads' own fp32 causal mask, spanning the key length.
+
+        Deliberately not the model's `attention_mask`. That one is created in the model dtype,
+        and handing a bf16 mask to these fp32 attention calls makes the whole op run in bf16,
+        whose resolution corrupts the counting head's `1/(1+n)` recovery: the recovered index
+        comes out off by one and routing lags a position. Which keys actually count is already
+        encoded in the fp32 key masking, so this only has to be causal and fp32.
+
+        The span is `kv_len`, not `q_len`. With a cache the heads attend over the whole history,
+        so a `q_len x q_len` mask is the wrong shape -- a decode step of one query over six keys
+        gets a (1,1,1,1) bias and SDPA rejects it. The cached prefix is entirely in the past, so
+        the causal offset shifts by `kv_len - q_len`; at prefill that is 0 and this reduces to a
+        plain causal mask.
+        """
+        return torch.triu(
+            torch.full((q_len, kv_len), torch.finfo(torch.float32).min, device=device, dtype=torch.float32),
+            diagonal=1 + (kv_len - q_len),
+        ).view(1, 1, q_len, kv_len)
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Select an adapter per token, then rewrite the control tokens.
+
+        Selection reads the original `input_ids`; the rewrite happens last, so the returned ids
+        are what the decoder embeds and the control tokens never reach it.
+
+        Returns `(adapter_indices, modified_input_ids)`, both `[batch, seq_len]`, where index 0
+        means base.
+        """
+        bsz, q_len = input_ids.shape
+        device = input_ids.device
+
+        # Position 0 anchors the counting signal, taking the place of a dedicated init token.
+        # The switch owns its two cache slots, so their length is the number of positions already
+        # seen and is what places the anchor during generation.
+        past_len = 0 if past_key_values is None else past_key_values.get_seq_length(self.counting_layer_idx)
+        positions = torch.arange(past_len, past_len + q_len, device=device)
+        is_counting_anchor = (positions == 0).unsqueeze(0).expand(bsz, -1)
+
+        control_token_ids = torch.tensor(self.config.adapter_token_ids, device=device)
+        matches = input_ids.unsqueeze(2) == control_token_ids.unsqueeze(0).unsqueeze(0)
+        is_control_token = matches.any(dim=2)
+        expert_ids = torch.where(
+            is_control_token,
+            matches.long().argmax(dim=2) + self._expert_id_offset,
+            torch.zeros_like(input_ids, dtype=torch.long),
+        )
+
+        # Counting head: recover the write address from a 1/(1+n) attention average.
+        # Masked-out keys use the fp32 floor rather than a magic sentinel.
+        key_states_count = torch.full(
+            (bsz, 1, q_len, self.counting_head_dim),
+            torch.finfo(torch.float32).min,
+            device=device,
+            dtype=torch.float32,
+        )
+        anchor_or_control = is_counting_anchor | is_control_token
+        key_states_count[:, 0, :, 0] = torch.where(
+            anchor_or_control,
+            torch.zeros_like(key_states_count[:, 0, :, 0]),
+            key_states_count[:, 0, :, 0],
+        )
+
+        value_states_count = torch.zeros((bsz, 1, q_len, self.counting_head_dim), device=device, dtype=torch.float32)
+        value_states_count[:, 0, :, 0] = is_counting_anchor.to(torch.float32)
+
+        query_states_count = torch.zeros((bsz, 1, q_len, self.counting_head_dim), device=device, dtype=torch.float32)
+        query_states_count[:, 0, :, 0] = 1.0
+
+        if past_key_values is not None:
+            key_states_count, value_states_count = past_key_values.update(
+                key_states_count, value_states_count, self.counting_layer_idx
+            )
+
+        # Both heads force SDPA rather than the model's configured backend, because both build
+        # fp32 Q/K/V and both need that precision. The memory read is a softmax over coded keys
+        # whose low mutual coherence only survives in fp32, and dispatching fp32 tensors through
+        # a backend that requires fp16/bf16 silently corrupts the read and routes every token to
+        # base -- isolated switch tests still pass while the full model returns all zeros.
+        attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+
+        # Autocast off for the same reason. Under an enclosing bf16 autocast, SDPA would cast the
+        # fp32 Q/K/V and the fp32 mask down to bf16; for the memory head that is fatal, since its
+        # keys are `code(n) * memory_gain` and the mask is the fp32 floor, which together overflow
+        # the bf16 softmax to NaN and clamp to base.
+        autocast_device = device.type if device.type in ("cuda", "cpu") else "cuda"
+        with torch.autocast(device_type=autocast_device, enabled=False):
+            count_output, _ = attention_interface(
+                self.counting_attn_module,
+                query_states_count,
+                key_states_count,
+                value_states_count,
+                self._causal_mask(q_len, key_states_count.shape[2], device),
+                dropout=0.0,
+                scaling=self.counting_attn_module.scaling,
+            )
+        counting_signal = count_output[:, :, 0, 0]
+        write_addresses = recover_count_from_signal(counting_signal, capacity=self.capacity)
+
+        # Memory head: write the adapter id at each control token's coded address, then have
+        # every position query its own address to read back the most recent one.
+        code_vectors = self.codebook[write_addresses.reshape(-1)].reshape(bsz, q_len, self.memory_dim)
+        write_mask = is_control_token.unsqueeze(2).to(torch.float32)
+
+        key_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
+        key_states_memory[:, 0, :, : self.memory_dim] = code_vectors * self.memory_gain * write_mask
+
+        value_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
+        value_states_memory[:, 0, :, 0] = expert_ids.to(torch.float32) * is_control_token.to(torch.float32)
+
+        if past_key_values is not None:
+            key_states_memory, value_states_memory = past_key_values.update(
+                key_states_memory, value_states_memory, self.memory_layer_idx
+            )
+
+        query_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
+        query_states_memory[:, 0, :, : self.memory_dim] = code_vectors
+
+        with torch.autocast(device_type=autocast_device, enabled=False):
+            memory_output, _ = attention_interface(
+                self.memory_attn_module,
+                query_states_memory,
+                key_states_memory,
+                value_states_memory,
+                # The memory slot is cached separately from the counting slot and was updated
+                # just above, so its key length is tracked independently.
+                self._causal_mask(q_len, key_states_memory.shape[2], device),
+                dropout=0.0,
+                scaling=self.memory_attn_module.scaling,
+            )
+
+        adapter_indices = torch.clamp(torch.round(memory_output[:, :, 0, 0]).long(), 0, self.num_adapters)
+        modified_input_ids = apply_token_exchange(self.control_to_substitute_lut, input_ids)
+        return adapter_indices, modified_input_ids
 
 
 __all__ = ["GraniteSwitchConfig"]
