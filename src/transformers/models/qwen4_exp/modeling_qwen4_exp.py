@@ -279,11 +279,16 @@ def torch_chunk_gated_delta_rule(
         - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
+    batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
     recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
     padded_output_shape = (batch_size, num_v_heads, -1, v_head_dim)  # -1 is the padded sequence length
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if num_k_heads != num_v_heads:
+        query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, decay = [
@@ -401,9 +406,14 @@ def torch_recurrent_gated_delta_rule(
     Same args and return value as torch_chunk_gated_delta_rule, except for `chunk_size` because the sequence dim is not
     chunked."""
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
+    batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if num_k_heads != num_v_heads:
+        query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, decay = [
@@ -570,9 +580,6 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
-            query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
-            key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
         if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
@@ -2520,11 +2527,14 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
 
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        # Early exit in case we are continuing generation from past kv
+        # Early exit in case we are continuing generation from past kv. The stored `rope_deltas` come from an earlier
+        # call, so if the uncached tokens hold new images or videos their 3D positions have to be computed below.
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.model.rope_deltas is not None:
+        mm_token_type_ids = model_kwargs.get("mm_token_type_ids")
+        has_new_vision_tokens = mm_token_type_ids is not None and bool(mm_token_type_ids[:, past_length:].any())
+        if past_length != 0 and self.model.rope_deltas is not None and not has_new_vision_tokens:
             position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 

@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.14.0'
+ARG PYTORCH='2.15.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu130'
+ARG CUDA='cu132'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.16.0'
+ARG TORCHCODEC='0.17.0'
 
 ARG FLASH_ATTN='false'
 
@@ -41,8 +41,8 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
-# 4. Warning: torchaudio only publishes wheels for the CUDA version it was released with (e.g. 2.11.0
-#    only has a cu130 build). If torch is installed with a different CUDA suffix (e.g. cu132), pip
+# 4. Warning: torchaudio only publishes wheels for the CUDA versions it was released with (e.g. 2.11.0
+#    has no cu132 build, 2.11.1 does). If torch is installed with a different CUDA suffix, pip
 #    will keep the torchaudio installed in the previous step and torchaudio will raise a RuntimeError on import due to the
 #    CUDA version mismatch. When upgrading CUDA, make sure torchaudio has a wheel for the new version.
 RUN set -e; \
@@ -51,9 +51,10 @@ RUN set -e; \
         VERSION="torch==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
         # torchaudio is in maintenance mode: 2.11 is the final release, compatible with torch 2.11+
-        # (no need to upgrade it with torch; it does not pin torch to a specific version)
+        # (no need to upgrade it with torch; it does not pin torch to a specific version). Use `2.11.*` to get the
+        # latest patch release, which has the newer CUDA builds (see note 4 above).
         if printf '%s\n' "2.11.0" "${PYTORCH}" | sort -V | head -1 | grep -qx "2.11.0"; then \
-            TORCHAUDIO_VERSION="torchaudio==2.11.0"; \
+            TORCHAUDIO_VERSION="torchaudio==2.11.*"; \
         else \
             TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         fi; \
