@@ -244,6 +244,7 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .iquestcoder import *
     from .jais2 import *
     from .jamba import *
     from .janus import *

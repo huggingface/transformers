@@ -341,6 +341,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("instructblipvideo_vision_model", "InstructBlipVideoVisionConfig"),
         ("internvl", "InternVLConfig"),
         ("internvl_vision", "InternVLVisionConfig"),
+        ("iquestcoder", "IQuestCoderConfig"),
         ("jais2", "Jais2Config"),
         ("jamba", "JambaConfig"),
         ("janus", "JanusConfig"),
