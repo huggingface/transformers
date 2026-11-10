@@ -29,6 +29,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import LlamaMLP, eager_attention_forward
@@ -47,17 +48,13 @@ from .configuration_moonshine_streaming import MoonshineStreamingConfig, Moonshi
 logger = logging.get_logger(__name__)
 
 
-class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "pad_to_multiple_of": 80,
-            "padding": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+class MoonshineStreamingProcessor(Wav2Vec2Processor):
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "pad_to_multiple_of": 80,
+        "padding": True,
+        "return_tensors": "pt",
     }
-
-
-class MoonshineStreamingProcessor(Wav2Vec2Processor): ...
 
 
 @auto_docstring(
@@ -411,6 +408,8 @@ class MoonshineStreamingModel(MoonshineModel):
 
 class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration): ...
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MoonshineStreamingProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "MoonshineStreamingPreTrainedModel",

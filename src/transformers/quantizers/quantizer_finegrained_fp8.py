@@ -103,10 +103,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         renamings = get_model_conversion_mapping(model)
         remapped = []
         for name in skip:
-            renamed = name
+            # Renamings are written for weight names (`self_attn\.f_a_proj\.` for `self_attn.f_a_proj.weight`)
+            renamed = name + "."
             for rename in renamings:
                 renamed, _ = rename.rename_source_key(renamed)
-            remapped.append(renamed)
+            remapped.append(renamed.removesuffix("."))
         self.quantization_config.modules_to_not_convert = remapped
 
     def _process_model_before_weight_loading(
