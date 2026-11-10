@@ -1052,8 +1052,8 @@ def pipeline(
             )
         task = get_task(model, token)
 
-    # Retrieve the task
-    if task in custom_tasks:
+    # Retrieve the task: the repo's own pipeline, unless remote code is refused for a task we implement
+    if task in custom_tasks and not (trust_remote_code is False and task in SUPPORTED_TASKS):
         targeted_task, task_options = clean_custom_task(custom_tasks[task])
         if pipeline_class is None:
             if not trust_remote_code:

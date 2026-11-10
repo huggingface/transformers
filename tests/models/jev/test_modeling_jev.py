@@ -30,7 +30,7 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 if is_torch_available():
     import torch
 
-    from transformers import JevForDecision
+    from transformers import AutoModelForDecision, JevForDecision
 
 
 @require_torch
@@ -70,6 +70,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             Path(tmp, "decision_config.json").write_text(json.dumps(settings), encoding="utf-8")
             save_file({"weight": readout}, f"{tmp}/readout.safetensors", metadata={"format": "pt"})
             model = JevForDecision.from_pretrained(tmp)
+            eager = AutoModelForDecision.from_pretrained(tmp, attn_implementation="eager")
             decide = pipeline("decision", model=tmp)
         with tempfile.TemporaryDirectory() as tmp:  # saved as a decision model, with its decision config
             model.save_pretrained(tmp)
@@ -78,6 +79,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         torch.testing.assert_close(reloaded.proj.weight, readout)
         self.assertEqual(model.config.num_verbalizers, 3)
         self.assertFalse(model.config.text_config.is_causal)
+        self.assertEqual(eager.model.config._attn_implementation, "eager")  # not lost to the config of its head
         torch.testing.assert_close(model.proj.weight, readout)
         self.assertIsInstance(decide.model, JevForDecision)
         self.assertEqual(decide.decision_config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))

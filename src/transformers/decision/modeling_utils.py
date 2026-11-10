@@ -85,6 +85,8 @@ class DecisionMixin:
             head_config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
             if head_config is None and config is not None:
                 raise ValueError(f"{pretrained_model_name_or_path} has no {cls.__name__} head next to its weights.")
+            if head_config is not None and config is not None:  # the auto classes set `attn_implementation` on it
+                kwargs.setdefault("attn_implementation", config._attn_implementation_internal)
             config = head_config or config
         model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
         if decision_config is None:  # the decision config of the repo, read now like `generation_config`

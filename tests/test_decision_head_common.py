@@ -119,8 +119,14 @@ def check_decision(
     """The answers to the request of `decision_test.json` (probabilities in order, or `noul`) match `expected`."""
     test = json.loads(Path(hf_hub_download(decision_repo, "decision_test.json")).read_bytes())
     # By default the original checkpoint, which the decision files are converted from
+    # Some checkpoints ship their own remote-code decision pipeline: this one is ours
     decide = pipeline(
-        "decision", model=model or test["model"], decision_config=decision_repo, device=torch_device, **pipeline_kwargs
+        "decision",
+        model=model or test["model"],
+        decision_config=decision_repo,
+        device=torch_device,
+        trust_remote_code=False,
+        **pipeline_kwargs,
     )
     answers = decide(test["request"])
     for name, value in expected.items():
