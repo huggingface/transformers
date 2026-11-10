@@ -44,7 +44,6 @@ class Lfm3AudioFeatureExtractorKwargs(TypedDict, total=False):
 
 class Lfm3AudioProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: Lfm3AudioFeatureExtractorKwargs
-    _defaults = {}
 
 
 @auto_docstring

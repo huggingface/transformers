@@ -20,9 +20,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-LFM3-Audio is the speech-and-text model built on [LFM3](lfm3) by [Liquid AI](https://liquid.ai/). One LFM3 language
+LFM3-Audio is the speech-and-text model built on [LFM3](./lfm3) by [Liquid AI](https://liquid.ai/). One LFM3 language
 model reads speech through a Liquid speech encoder and writes speech as frames of 12 codebook codes through a depth
-decoder, alongside text. Speech frames are turned into audio by the [Liquid codec](liquid_codec).
+decoder, alongside text. Speech frames are turned into audio by the [Liquid codec](./liquid_codec).
 
 ## Architecture
 
@@ -33,7 +33,7 @@ decoder, alongside text. Speech frames are turned into audio by the [Liquid code
   depth decoder projects the language model's hidden state into one slot per codebook and a 3-layer bidirectional
   LFM3 model fills the codebooks in a random order over 3 passes (MaskGIT): in training a random subset of each
   frame's codebooks is hidden and predicted from the others.
-- **Codec**: the [Liquid codec](liquid_codec), 12 codebooks of 2016 codes at 12.5 frames per second, 24 kHz.
+- **Codec**: the [Liquid codec](./liquid_codec), 12 codebooks of 2016 codes at 12.5 frames per second, 24 kHz.
 
 Generation is text by default. `<|audio_start|>` switches to speech until an end-of-audio frame. `<|mixed_start|>`
 alternates blocks of 6 text tokens and 12 speech frames; `<|text_end|>` closes the text side and the speech goes on
