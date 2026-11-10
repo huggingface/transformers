@@ -25,9 +25,11 @@ rendered properly in your Markdown viewer.
 
 [IQuest-Coder-V1](https://huggingface.co/IQuestLab/IQuest-Coder-V1-40B-Instruct) is a family of code language models developed by [IQuest Lab](https://huggingface.co/IQuestLab), available in 7B, 14B and 40B sizes with base, instruct and thinking variants. Its architecture is the same as [Llama](./llama).
 
-The looped `IQuest-Coder-V1-*-Loop-*` checkpoints use a different architecture and aren't supported by this model.
+> [!NOTE]
+> The looped `IQuest-Coder-V1-*-Loop-*` checkpoints use a different architecture and aren't supported by this model.
 
-The tokenizer is built from the checkpoints' SentencePiece model. Many of its pieces share the same score, and SentencePiece breaks those ties by position, which the `tokenizers` library can't reproduce, so a small fraction of texts tokenize differently from the original remote code.
+> [!WARNING]
+> The tokenizer is built from the checkpoints' SentencePiece model. Many of its pieces share the same score, and SentencePiece breaks those ties by position, which the `tokenizers` library can't reproduce, so a small fraction of texts tokenize differently from the original remote code.
 
 The auto classes load it with the Llama implementation ([`LlamaModel`], [`LlamaForCausalLM`], [`LlamaForSequenceClassification`], [`LlamaForQuestionAnswering`] and [`LlamaForTokenClassification`]), so only [`IQuestCoderConfig`] is specific to IQuestCoder.
 

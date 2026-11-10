@@ -28,6 +28,7 @@ from .core_model_loading import (
     PermuteForRope,
     PrefixChange,
     Split,
+    TeleChatInterleaveKeyValue,
     Transpose,
     WeightConverter,
     WeightRenaming,
@@ -1645,7 +1646,7 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 "self_attention.key_value.weight",
                 ["self_attn.k_proj.weight", "self_attn.v_proj.weight"],
-                operations=[Interleave(dim=0, block_size_attribute="head_dim"), Chunk(dim=0)],
+                operations=[TeleChatInterleaveKeyValue(), Chunk(dim=0)],
             ),
             WeightRenaming(r"self_attention\.dense\.", r"self_attn\.o_proj\."),
         ],

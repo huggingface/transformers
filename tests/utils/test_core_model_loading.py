@@ -31,12 +31,12 @@ from transformers.core_model_loading import (
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
-    Interleave,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
     Split,
+    TeleChatInterleaveKeyValue,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -1383,8 +1383,8 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
 
 
-class TestInterleave(unittest.TestCase):
-    def test_block_size_splits_fused_heads(self):
+class TestTeleChatInterleaveKeyValue(unittest.TestCase):
+    def test_splits_fused_heads(self):
         # Keys and values fused per head of size 2: `[k_0, v_0, k_1, v_1]`
         k = torch.arange(4, dtype=torch.float32).reshape(4, 1)
         v = 10 + k
@@ -1392,7 +1392,7 @@ class TestInterleave(unittest.TestCase):
         config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(head_dim=2))
         targets = ["k_proj.weight", "v_proj.weight"]
 
-        interleave = Interleave(dim=0, block_size_attribute="head_dim")
+        interleave = TeleChatInterleaveKeyValue()
         deinterleaved = interleave.convert({"kv": fused}, ["kv"], targets, config=config)
         split = Chunk(dim=0).convert(deinterleaved, ["kv"], targets)
         torch.testing.assert_close(split["k_proj.weight"], k)

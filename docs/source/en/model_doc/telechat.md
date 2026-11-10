@@ -28,11 +28,10 @@ rendered properly in your Markdown viewer.
 Its architecture is the same as [Llama](./llama), except that:
 
 - only the attention output projection and the down projection of the MLP have biases;
-- once the sequence grows beyond `training_seqlen`, RoPE is rescaled with a stepwise NTK scaling of its base and the cos/sin are scaled by `0.1 * ln(seq_len / training_seqlen) + 1`.
+- once the sequence grows beyond the training length (`original_max_position_embeddings` in `rope_parameters`), RoPE is rescaled with a stepwise NTK scaling of its base and the cos/sin are scaled by `0.1 * ln(seq_len / original_max_position_embeddings) + 1`.
 
-The original checkpoints use different parameter names and fuse the key and value projections per head (`[k_0, v_0, k_1, v_1, ...]`). They are converted when the model is loaded, and `save_pretrained` writes the original layout back.
-
-TeleChat-52B uses a different architecture and isn't supported by this model.
+> [!NOTE]
+> TeleChat-52B uses a different architecture and isn't supported by this model.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 

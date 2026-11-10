@@ -226,32 +226,22 @@ class Concatenate(ConversionOps):
 
 
 class Interleave(ConversionOps):
-    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size.
+    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
 
-    By default the two halves alternate element by element. With `block_size_attribute`, a config field, they alternate
-    in blocks of that size instead, e.g. `[k_0, v_0, k_1, v_1, ...]` for keys and values fused per head of `head_dim`.
-    """
-
-    def __init__(self, dim: int = 0, inverse: bool = False, block_size_attribute: str | None = None):
+    def __init__(self, dim: int = 0, inverse: bool = False):
         self.dim = dim
         self.inverse = inverse
-        self.block_size_attribute = block_size_attribute
 
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
         tensor = next(iter(input_dict.values()))
         tensor = tensor[0] if isinstance(tensor, list) else tensor
 
-        block_size = 1
-        if self.block_size_attribute is not None:
-            block_size = getattr(kwargs["config"].get_text_config(), self.block_size_attribute)
-
         # Split into two in given dim and transpose to interleave along it
         shape = list(tensor.shape)
-        num_blocks = shape[self.dim] // (2 * block_size)
         if self.inverse:
-            shape[self.dim : self.dim + 1] = [2, num_blocks, block_size]
+            shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
         else:
-            shape[self.dim : self.dim + 1] = [num_blocks, 2, block_size]
+            shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
 
         tensor = tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
         return {target_patterns[0]: tensor}
@@ -259,7 +249,34 @@ class Interleave(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         # can use the same dim and it will inverse it back
-        return Interleave(self.dim, inverse=not self.inverse, block_size_attribute=self.block_size_attribute)
+        return Interleave(self.dim, inverse=not self.inverse)
+
+
+class TeleChatInterleaveKeyValue(ConversionOps):
+    """
+    TeleChat fuses its key and value projections per head, i.e. `[k_0, v_0, k_1, v_1, ...]` along dim 0 with heads of
+    `head_dim`. This regroups them as `[k_0, k_1, ..., v_0, v_1, ...]` so that `Chunk` can split keys from values, or
+    does the opposite when `inverse` is set.
+    """
+
+    def __init__(self, inverse: bool = False):
+        self.inverse = inverse
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, config, **kwargs):
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+        head_dim = config.get_text_config().head_dim
+
+        rest = list(tensor.shape[1:])
+        num_heads = tensor.shape[0] // (2 * head_dim)
+        shape = [2, num_heads, head_dim] if self.inverse else [num_heads, 2, head_dim]
+        tensor = tensor.reshape(shape + rest).transpose(0, 1).reshape(tensor.shape).contiguous()
+        return {target_patterns[0]: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return TeleChatInterleaveKeyValue(inverse=not self.inverse)
 
 
 class MergeModulelist(ConversionOps):

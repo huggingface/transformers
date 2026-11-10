@@ -30,10 +30,11 @@ from ...utils import auto_docstring
 @strict
 class TeleChatConfig(PreTrainedConfig):
     r"""
-    training_seqlen (`int`, *optional*, defaults to 8192):
-        Sequence length the model was trained with. Beyond it, RoPE is rescaled with stepwise NTK scaling.
-    base_seqlen (`int`, *optional*, defaults to 4096):
-        Sequence length the stepwise NTK scaling factor is computed relative to.
+    TeleChat applies its own stepwise NTK scaling of RoPE, described by `rope_parameters` with `"rope_type": "telechat_ntk"`:
+
+    - `original_max_position_embeddings` (`training_seqlen` in the original configs, defaults to 8192): the sequence
+      length the model was trained with. Beyond it, the RoPE base and the cos/sin are rescaled.
+    - `base_seqlen` (defaults to 4096): the sequence length the NTK scaling factor of the base is computed relative to.
 
     ```python
     >>> from transformers import TeleChatModel, TeleChatConfig
@@ -85,22 +86,22 @@ class TeleChatConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_dropout: float | int = 0.0
     head_dim: int | None = None
-    attribute_map = {
-        "n_layer": "num_hidden_layers",
-        "n_head": "num_attention_heads",
-        "ffn_hidden_size": "intermediate_size",
-        "layer_norm_epsilon": "rms_norm_eps",
-    }
-    training_seqlen: int = 8192
-    base_seqlen: int = 4096
 
     def __post_init__(self, **kwargs):
-        # Resolve the aliases now, otherwise `head_dim` and `num_key_value_heads` get derived from the defaults
-        for alias, attribute in self.attribute_map.items():
-            if alias in kwargs:
-                setattr(self, attribute, kwargs.pop(alias))
+        # The original configs use different names for these. Resolve them now, otherwise `head_dim` and
+        # `num_key_value_heads` get derived from the defaults
+        if "n_layer" in kwargs:
+            self.num_hidden_layers = kwargs.pop("n_layer")
+        if "n_head" in kwargs:
+            self.num_attention_heads = kwargs.pop("n_head")
+        if "ffn_hidden_size" in kwargs:
+            self.intermediate_size = kwargs.pop("ffn_hidden_size")
+        if "layer_norm_epsilon" in kwargs:
+            self.rms_norm_eps = kwargs.pop("layer_norm_epsilon")
+        if "seq_length" in kwargs:
+            self.max_position_embeddings = kwargs.pop("seq_length")
         if self.max_position_embeddings is None:
-            self.max_position_embeddings = kwargs.get("seq_length") or self.training_seqlen
+            self.max_position_embeddings = kwargs.get("training_seqlen", 8192)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -128,7 +129,22 @@ class TeleChatConfig(PreTrainedConfig):
     def convert_rope_params_to_dict(self, **kwargs):
         # The original code ignores `rope_scaling` and always applies its own stepwise NTK scaling instead
         kwargs.pop("rope_scaling", None)
+        rope_parameters = self.rope_parameters or {}
+        self.rope_parameters = {
+            "rope_type": "telechat_ntk",
+            "rope_theta": rope_parameters.get("rope_theta", kwargs.pop("rope_theta", self.default_theta)),
+            "original_max_position_embeddings": rope_parameters.get(
+                "original_max_position_embeddings", kwargs.pop("training_seqlen", 8192)
+            ),
+            "base_seqlen": rope_parameters.get("base_seqlen", kwargs.pop("base_seqlen", 4096)),
+        }
+        kwargs.pop("training_seqlen", None)
+        kwargs.pop("base_seqlen", None)
         return super().convert_rope_params_to_dict(**kwargs)
+
+    def _validate_telechat_ntk_rope_parameters(self, rope_parameters: dict, ignore_keys: set[str] | None = None):
+        required_keys = {"rope_type", "rope_theta", "original_max_position_embeddings", "base_seqlen"}
+        self._check_received_keys("telechat_ntk", set(rope_parameters), required_keys, ignore_keys=ignore_keys)
 
 
 __all__ = ["TeleChatConfig"]

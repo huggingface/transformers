@@ -31,77 +31,85 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_telechat import TeleChatConfig
 
 
 class TeleChatRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: TeleChatConfig):
         super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+        # Within the training length the frequencies are fixed, beyond it they depend on the sequence length
+        self.original_max_seq_len = config.rope_parameters["original_max_position_embeddings"]
+        self.max_seq_len_cached = self.original_max_seq_len
+        # `_init_weights` recomputes the buffers with `compute_default_rope_parameters`
+        self.rope_type = "default"
+        inv_freq, _ = self.compute_default_rope_parameters(config)
+        # The cos/sin are only scaled beyond the training length
+        self.attention_scaling = 1.0
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: TeleChatConfig, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(
+        config: TeleChatConfig, device: torch.device | None = None, seq_len: int | torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        Computes the inverse frequencies and attention scaling for the stepwise NTK scaling of the original code,
+        given the current total sequence length `seq_len` (the training length if `None`).
         """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        rope_parameters = config.rope_parameters
+        training_seqlen = rope_parameters["original_max_position_embeddings"]
+        dim = config.head_dim
+        seq_len = training_seqlen if seq_len is None else seq_len
+        seq_len = torch.as_tensor(seq_len, device=device).clamp(min=training_seqlen).float()
+        # Equal to `2 ** ceil(log2(seq_len / base_seqlen) + 1) - 1` from the original code, but exact for powers of 2
+        doublings = torch.ceil(torch.log2(torch.ceil(seq_len / rope_parameters["base_seqlen"])))
+        ntk_alpha = (2 ** (doublings + 1) - 1).clamp(min=1)
+        base = rope_parameters["rope_theta"] * ntk_alpha ** (dim / (dim - 2))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=device) / dim))
+        attention_scaling = 0.1 * torch.log(seq_len / training_seqlen) + 1.0
+        return inv_freq, attention_scaling
 
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
+    def ntk_frequency_update(self, position_ids: torch.Tensor, device: torch.device):
+        """
+        Like `dynamic_rope_update`, but the original code rescales for the exact sequence length rather than the
+        longest one seen so far, so the frequencies are recomputed whenever it changes beyond the training length.
+        """
+        seq_len = max(int(position_ids.max()) + 1, self.original_max_seq_len)
+        if seq_len == self.max_seq_len_cached:
+            return
+        if seq_len == self.original_max_seq_len:
+            # The buffer is moved with the model, but not the original copy
+            inv_freq, self.attention_scaling = self.original_inv_freq.to(device), 1.0
+        else:
+            inv_freq, self.attention_scaling = self.compute_default_rope_parameters(self.config, device, seq_len)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.max_seq_len_cached = seq_len
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        inv_freq, attention_scaling = self.compute_ntk_parameters(self.config, position_ids.max() + 1)
-        freqs = position_ids[..., None].float() * inv_freq.to(x.device)
+        if is_torchdynamo_compiling():
+            # The cache lookup depends on the data, which can't be traced, so recompute the parameters instead
+            inv_freq, attention_scaling = self.compute_default_rope_parameters(
+                self.config, x.device, position_ids.max() + 1
+            )
+        else:
+            self.ntk_frequency_update(position_ids, x.device)
+            inv_freq, attention_scaling = self.inv_freq, self.attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * attention_scaling
         sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    @staticmethod
-    def compute_ntk_parameters(config: TeleChatConfig, seq_len: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Computes the inverse frequencies and attention scaling for the stepwise NTK scaling of the original code,
-        given the current total sequence length `seq_len`.
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = config.head_dim
-        seq_len = seq_len.clamp(min=config.training_seqlen).float()
-        # Equal to `2 ** ceil(log2(seq_len / base_seqlen) + 1) - 1` from the original code, but exact for powers of 2
-        doublings = torch.ceil(torch.log2(torch.ceil(seq_len / config.base_seqlen)))
-        ntk_alpha = (2 ** (doublings + 1) - 1).clamp(min=1)
-        base = base * ntk_alpha ** (dim / (dim - 2))
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=seq_len.device) / dim))
-        attention_scaling = 0.1 * torch.log(seq_len / config.training_seqlen) + 1.0
-        return inv_freq, attention_scaling
 
 
 class TeleChatMLP(nn.Module):

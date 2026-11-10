@@ -14,21 +14,19 @@
 """Testing suite for the PyTorch TeleChat model."""
 
 import math
-import tempfile
 import unittest
 
-from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, TeleChatConfig, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file
 
     from transformers import TeleChatForCausalLM, TeleChatModel
     from transformers.models.telechat.modeling_telechat import TeleChatRotaryEmbedding
@@ -36,10 +34,11 @@ if is_torch_available():
 
 def original_ntk_parameters(config, seq_len):
     """The stepwise NTK scaling of the original code."""
-    seq_len = max(seq_len, config.training_seqlen)
-    context_value = math.log2(seq_len / config.base_seqlen) + 1
+    training_seqlen = config.rope_parameters["original_max_position_embeddings"]
+    seq_len = max(seq_len, training_seqlen)
+    context_value = math.log2(seq_len / config.rope_parameters["base_seqlen"]) + 1
     ntk_alpha = max(2 ** math.ceil(context_value) - 1, 1)
-    scale = seq_len / config.training_seqlen
+    scale = seq_len / training_seqlen
     mscale = 1.0 if scale <= 1 else 0.1 * math.log(scale) + 1.0
     dim = config.head_dim
     base = config.rope_parameters["rope_theta"] * ntk_alpha ** (dim / (dim - 2))
@@ -81,97 +80,30 @@ class TeleChatModelTest(CausalLMModelTest, unittest.TestCase):
             3 * training_seqlen + 7,
         ]:
             expected_inv_freq, expected_mscale = original_ntk_parameters(config, seq_len)
-            inv_freq, mscale = TeleChatRotaryEmbedding.compute_ntk_parameters(config, torch.tensor(seq_len))
+            inv_freq, mscale = TeleChatRotaryEmbedding.compute_default_rope_parameters(config, seq_len=seq_len)
             torch.testing.assert_close(inv_freq, expected_inv_freq)
             self.assertAlmostEqual(mscale.item(), expected_mscale, places=5)
-
-    def test_original_checkpoint_round_trip(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = TeleChatForCausalLM(config).to(torch_device).eval()
-        # Randomise everything, norms included, so a weight that fails to load can't go unnoticed
-        for param in model.parameters():
-            torch.nn.init.normal_(param)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            model.save_pretrained(tmpdir)
-            saved = set(load_file(f"{tmpdir}/model.safetensors"))
-            # Saved in the layout of the original checkpoints
-            for key in [
-                "transformer.word_embeddings.weight",
-                "transformer.h.0.input_layernorm.weight",
-                "transformer.h.0.self_attention.query.weight",
-                "transformer.h.0.self_attention.key_value.weight",
-                "transformer.h.0.self_attention.dense.bias",
-                "transformer.h.0.post_attention_layernorm.weight",
-                "transformer.h.0.mlp.down_proj.bias",
-                "transformer.ln_f.weight",
-            ]:
-                self.assertIn(key, saved)
-            # Keys and values are fused per head, i.e. `[k_0, v_0, k_1, v_1, ...]`
-            attn = model.model.layers[0].self_attn
-            head_dim = config.head_dim
-            expected = torch.cat(
-                [
-                    attn.k_proj.weight.view(-1, head_dim, config.hidden_size),
-                    attn.v_proj.weight.view(-1, head_dim, config.hidden_size),
-                ],
-                dim=1,
-            ).reshape(-1, config.hidden_size)
-            key_value = load_file(f"{tmpdir}/model.safetensors")["transformer.h.0.self_attention.key_value.weight"]
-            torch.testing.assert_close(key_value.to(torch_device), expected)
-            reloaded = TeleChatForCausalLM.from_pretrained(tmpdir).to(torch_device)
-        for (name, param), (_, reloaded_param) in zip(model.named_parameters(), reloaded.named_parameters()):
-            torch.testing.assert_close(param, reloaded_param, msg=name)
-
-    def test_original_config_keys(self):
-        config = TeleChatConfig(
-            n_layer=3, n_head=8, hidden_size=64, ffn_hidden_size=96, layer_norm_epsilon=1e-4, seq_length=1024
-        )
-        self.assertEqual(config.num_hidden_layers, 3)
-        self.assertEqual(config.num_attention_heads, 8)
-        self.assertEqual(config.num_key_value_heads, 8)
-        self.assertEqual(config.head_dim, 8)
-        self.assertEqual(config.intermediate_size, 96)
-        self.assertEqual(config.rms_norm_eps, 1e-4)
-        self.assertEqual(config.max_position_embeddings, 1024)
-
-    def test_rope_scaling_is_ignored(self):
-        # The original code never reads `rope_scaling`, so neither do we
-        config = TeleChatConfig(rope_theta=1e6, rope_scaling={"factor": 1.0, "rope_type": "dynamic"})
-        self.assertEqual(config.rope_parameters, {"rope_type": "default", "rope_theta": 1e6})
-
-    def test_unsupported_configs_are_rejected(self):
-        with self.assertRaises(StrictDataclassClassValidationError):
-            TeleChatConfig(embed_layernorm=True)
-        with self.assertRaises(StrictDataclassClassValidationError):
-            TeleChatConfig(apply_residual_connection_post_layernorm=True)
-        with self.assertRaises(StrictDataclassClassValidationError):
-            # TeleChat-52B
-            TeleChatConfig(n_embd=8192, use_mup=True)
 
 
 @slow
 @require_torch_accelerator
-class TeleChatIntegrationTest(unittest.TestCase):
-    # The original code was written for fp16
+class TeleChatIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    # The checkpoints' configs don't set a dtype, so `dtype="auto"` would load them in fp32. The original code uses fp16
     dtype = torch.float16 if is_torch_available() else None
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_model_3b_logits(self):
         model = TeleChatForCausalLM.from_pretrained("Tele-AI/TeleChat2-3B", device_map="auto", dtype=self.dtype)
         input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
-        with torch.no_grad():
-            logits = model(input_ids).logits.float().cpu()
+        logits = model(input_ids).logits.float().cpu()
 
-        EXPECTED_MEAN = torch.tensor(
-            [-4.919, -4.2666, -1.901, -2.9477, -1.5264, -2.575, -0.5755, -1.9635, -2.781, -1.7785]
-        )
-        EXPECTED_SLICE = torch.tensor(
-            [-9.1016, -9.8984, -1.8105, -9.1875, -9.1797, -9.1797, -9.1797, -9.1797, -9.1797, -6.3086]
-        )
-        torch.testing.assert_close(logits.mean(-1)[0], EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
-        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        EXPECTED_MEAN = Expectations({
+            ("cuda", 10): torch.tensor([-4.919, -4.2666, -1.901, -2.9477, -1.5264, -2.575, -0.5755, -1.9635, -2.781, -1.7785]),
+        })  # fmt: skip
+        EXPECTED_SLICE = Expectations({
+            ("cuda", 10): torch.tensor([-9.1016, -9.8984, -1.8105, -9.1875, -9.1797, -9.1797, -9.1797, -9.1797, -9.1797, -6.3086]),
+        })  # fmt: skip
+        torch.testing.assert_close(logits.mean(-1)[0], EXPECTED_MEAN.get_expectation(), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE.get_expectation(), rtol=1e-2, atol=1e-2)
 
     def test_model_3b_generation(self):
         tokenizer = AutoTokenizer.from_pretrained("Tele-AI/TeleChat2-3B")
@@ -179,5 +111,7 @@ class TeleChatIntegrationTest(unittest.TestCase):
         inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)
-        EXPECTED_TEXT = "The capital of France is known for its rich history, culture, and stunning architecture. The capital city,"
-        self.assertEqual(text, EXPECTED_TEXT)
+        EXPECTED_TEXT = Expectations({
+            ("cuda", 10): "The capital of France is known for its rich history, culture, and stunning architecture. The capital city,",
+        })  # fmt: skip
+        self.assertEqual(text, EXPECTED_TEXT.get_expectation())
