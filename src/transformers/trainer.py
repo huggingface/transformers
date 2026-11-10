@@ -467,13 +467,6 @@ class Trainer:
         # Sharded at load time by `from_pretrained(distributed_config=...)`, whatever the parallelism: the model owns
         # its placement and gradient reduction, so Accelerate must not wrap or shard it again.
         self.is_distributed_loading_by_transformers = getattr(model, "is_distributed_loading_by_transformers", False)
-        model_distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
-        if model_distributed_config is not None and model_distributed_config.cp_size > 1:
-            raise ValueError(
-                "Context parallelism (`cp_size > 1`) is not supported by `Trainer` yet: its dataloader would give a "
-                "different batch to the ranks of a cp group, which need the same one. Use a plain training loop."
-            )
-
         self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
         if args.fsdp:
             if self.is_deepspeed_enabled:
@@ -781,9 +774,10 @@ class Trainer:
             args["parallelism_config"] = self.args.parallelism_config
 
         model_tp_size = getattr(self.model, "tp_size", None) or 1
-        if model_tp_size > 1:
+        if model_tp_size > 1 and self._model_cp_size == 1:
             # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 or HSDP on more mesh
             # dimensions): accelerate has to know the TP size and the data parallel size, HSDP replicas included.
+            # With context parallelism, the device mesh is set after the accelerator is created instead.
             model_dp_size = self.model.config.distributed_config.dp_size
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
@@ -868,6 +862,17 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
+
+        # The ranks of a cp group and of a tp group share a batch: the dataloader shards over the other ranks only.
+        if self._model_cp_size > 1:
+            model_tp_size = getattr(self.model, "tp_size", None) or 1
+            data_parallel_size = self.accelerator.num_processes // (self._model_cp_size * model_tp_size)
+            self.accelerator.state.device_mesh = dist.init_device_mesh(
+                self.accelerator.device.type,
+                (data_parallel_size, self._model_cp_size, model_tp_size),
+                mesh_dim_names=("dp_shard", "cp", "tp"),
+            )
+
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 
@@ -2208,8 +2213,9 @@ class Trainer:
             and num_items_in_batch is not None
         ):
             # TP ranks (and the expert-parallel ranks sharing their batch) see replicated batches; `num_processes`
-            # over-counts them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes // self.get_tp_size()
+            # over-counts them by `tp_size`, and the ranks of a cp group by `cp_size` (the model already scales its
+            # gradient by `cp_size`). Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes // (self.get_tp_size() * self._model_cp_size)
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2358,9 +2364,11 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                num_items_in_batch = num_items_in_batch / (
-                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
-                )
+                replicas = self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                if self._model_cp_size > 1 and not self.args.average_tokens_across_devices:
+                    # not gathered: this is already the count of the batch the cp group shares
+                    replicas //= self._model_cp_size
+                num_items_in_batch = num_items_in_batch / replicas
 
         return num_items_in_batch
 
@@ -2410,6 +2418,10 @@ class Trainer:
             tuple: (context_manager, prepared_inputs) where context_manager is either
                    the context parallelism wrapper or a no-op context
         """
+        if self._model_cp_size > 1:
+            # a model loaded with `DistributedConfig(cp_size=N)` splits its own inputs
+            return contextlib.nullcontext, inputs
+
         if (
             getattr(self.accelerator, "parallelism_config", None) is not None
             and self.accelerator.parallelism_config.cp_enabled
@@ -2587,12 +2599,24 @@ class Trainer:
             return pc.sp_size
 
     def get_cp_size(self) -> int:
-        """Get the context parallel size"""
+        """Get the context parallel size, from the model sharded at load time or from `parallelism_config`."""
+        if self._model_cp_size > 1:
+            return self._model_cp_size
         if getattr(self.accelerator, "parallelism_config", None) is None:
             return 1
-        else:
-            pc = self.accelerator.parallelism_config
-            return pc.cp_size
+        return self.accelerator.parallelism_config.cp_size
+
+    @property
+    def _model_cp_size(self) -> int:
+        """The `cp_size` of a model sharded at load time by `DistributedConfig(cp_size=N)`, 1 otherwise."""
+        return getattr(self.model, "_cp_size", None) or 1
+
+    @property
+    def _model_batch_replicas(self) -> int:
+        """How many ranks share each batch of a model loaded with `DistributedConfig(cp_size=N)`: `cp_size * tp_size`."""
+        if self._model_cp_size == 1:
+            return 1
+        return self._model_cp_size * self.get_tp_size()
 
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
@@ -2743,7 +2767,8 @@ class Trainer:
             input_tokens = inputs[main_input_name].numel()
 
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-        self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+        input_tokens = self.accelerator.gather(input_tokens) // self._model_batch_replicas
+        self.state.num_input_tokens_seen += input_tokens.sum().item()
 
     def _mixed_mesh_grad_norm(self, model, max_norm):
         """
@@ -2915,6 +2940,13 @@ class Trainer:
         args = self.args
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
+
+        if self._model_cp_size > 1 and not prediction_loss_only:
+            raise ValueError(
+                "Context parallelism (`cp_size > 1`) only supports evaluating the loss: each rank only holds the logits "
+                "of its own slice of the sequences, and gathering them would repeat the batch of every cp group. Pass "
+                "`prediction_loss_only=True`, or disable context parallelism."
+            )
 
         # if eval is called w/o train, handle model prep here
         if self.is_deepspeed_enabled and self.deepspeed is None:
@@ -4207,9 +4239,8 @@ class Trainer:
     def store_flos(self) -> None:
         """Store the number of floating-point operations that went into the model."""
         if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-            self.state.total_flos += (
-                distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
-            )
+            total_flos = distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
+            self.state.total_flos += total_flos / self._model_batch_replicas
             self.current_flos = 0
         else:
             self.state.total_flos += self.current_flos
