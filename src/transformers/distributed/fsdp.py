@@ -186,11 +186,17 @@ def apply_fully_sharded_data_parallelism(
     are asserted upstream by `initialize_distributed_mesh`.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
-    fsdp_mesh = mesh_manager.get_mesh("fsdp")
+    if distributed_config is not None and distributed_config.dp_replicate_size > 1:
+        fsdp_mesh = mesh_manager.get_mesh(("dp_replicate", "fsdp"))
+    else:
+        fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
     if distributed_config is not None and distributed_config.ep_size > 1:
-        expert_mesh = mesh_manager.get_mesh("efsdp")
+        if distributed_config.dp_replicate_size > 1:
+            expert_mesh = mesh_manager.get_mesh(("dp_replicate", "efsdp"))
+        else:
+            expert_mesh = mesh_manager.get_mesh("efsdp")
         for module_name, module in model.named_modules():
             if ep_plan.get(module_name) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
@@ -198,10 +204,13 @@ def apply_fully_sharded_data_parallelism(
                 # the efsdp reduce the sums on efsdp_size copies of that expert.
                 # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
                 # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * tp_size / ep_size)
-                module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
+                # With HSDP, the all-reduce across replicas adds dp_replicate_size times more: dp_size batches.
+                module.set_gradient_divide_factor(float(distributed_config.dp_size))
                 # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
                 # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
-                module.set_force_sum_reduction_for_comms(True)
+                if distributed_config.efsdp_size > 1:
+                    # No reduce-scatter if efsdp_size == 1: FSDP2 already divides, so a forced sum would divide twice.
+                    module.set_force_sum_reduction_for_comms(True)
 
     reshard_targets, no_reshard_targets = [], []
     for name, style in fsdp_plan.items():

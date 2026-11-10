@@ -243,7 +243,11 @@ class OwlViTTextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size)
+        # The text model pools at `input_ids.argmax(-1)` (the EOS token has the highest id). Put a unique highest id at
+        # the last position, so the pooled token never lands on the left-padded positions used in
+        # `test_eager_matches_sdpa_inference`: such a token attends to nothing (causal mask) and eager/SDPA diverge.
+        input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size - 1)
+        input_ids[:, -1] = self.vocab_size - 1
         input_mask = None
 
         if self.use_input_mask:
