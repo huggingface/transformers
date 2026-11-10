@@ -103,20 +103,23 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
 
 
 class MambaRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
-
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
         return self.weight * hidden_states.to(input_dtype)
 
 
@@ -424,7 +427,9 @@ class Mamba2Mixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = MambaRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.empty(self.num_heads))
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
             self.init_mamba2_weights()
@@ -696,9 +701,9 @@ class Mamba2Output(ModelOutput):
         Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     cache_params: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -710,9 +715,9 @@ class Mamba2Output(ModelOutput):
 # Copied from transformers.models.mamba.modeling_mamba.MambaCausalLMOutput with Mamba->Mamba2
 class Mamba2CausalLMOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     cache_params (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
@@ -721,15 +726,15 @@ class Mamba2CausalLMOutput(ModelOutput):
         Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     cache_params: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class Mamba2Model(Mamba2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Mamba2Config):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -834,7 +839,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Mamba2Config):
         super().__init__(config)
         self.backbone = Mamba2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -876,7 +881,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         cache_params: Cache | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,

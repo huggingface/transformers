@@ -69,6 +69,9 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
         The strategy used to cut the total number of sampled frames down to fit into the budget.
         Can be set only to "uniform" or "truncate". Applied after FPS-based sampling, and on its
         own when FPS-based sampling is off or not applicable.
+    load_audio_from_video (`bool`, *optional*):
+        Deprecated, use [`OmniModalProcessingKwargs.load_audio_from_video`] instead.
+        Whether to load the audio track of an input video or not.
     """
 
     patch_size: int
@@ -78,6 +81,7 @@ class EmbeddingGemma2VideoProcessorKwargs(VideosKwargs, total=False):
     add_timestamps: bool
     max_frames: int | None
     overflow_strategy: str | None
+    load_audio_from_video: bool
 
 
 _SUPPORTED_SOFT_TOKENS = (70, 140, 280, 560, 1120)

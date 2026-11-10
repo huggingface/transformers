@@ -23,7 +23,7 @@ import pytest
 
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -47,10 +47,6 @@ if is_torch_available():
         Pix2StructTextModel,
         Pix2StructVisionModel,
     )
-
-
-if is_vision_available():
-    pass
 
 
 class Pix2StructVisionModelTester:
@@ -539,7 +535,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 

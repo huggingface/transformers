@@ -29,7 +29,9 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
+from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -66,16 +68,14 @@ LANGUAGE_CODE_TO_NAME = {
 }
 
 
-class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class FunAsrNanoProcessor(AudioFlamingo3Processor):
-    valid_processor_kwargs = FunAsrNanoProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
+
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "sampling_rate": 16000,
+    }
 
     def __init__(
         self,
@@ -96,6 +96,38 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         )
         del self.max_audio_len
         del self.default_transcription_prompt
+
+    def __call__(
+        self,
+        text: TextInput | list[TextInput],
+        audio: AudioInput | None = None,
+        # Should be a processor kwarg but needs to stay for BC.
+        output_labels: bool | None = False,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        r"""
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
+
+        Returns:
+            [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
+            audio features (`input_features`, `input_features_mask`).
+        """
+        # Check only if passed explicitly as another value since by default we'll use `pt`
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        if output_labels:
+            kwargs["return_mm_token_type_ids"] = True
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
+
+        if output_labels:
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            model_inputs["labels"] = labels
+        return BatchFeature(data=model_inputs, tensor_type="pt")
 
     def _get_audio_token_length(self, audio_lengths):
         raise AttributeError("Not needed for Fun-ASR-Nano")
@@ -118,8 +150,9 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
+        tokenize: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature | list[str]:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
 
         Args:
@@ -134,12 +167,18 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             keywords (`str`, `list[str]`, or `list[list[str]]`, *optional*):
                 Hotwords to bias recognition. A string or flat list is shared across the batch; a nested list
                 supplies separate hotwords for each audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`]
                 and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`FunAsrNanoForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
@@ -167,7 +206,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -466,12 +505,12 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.FloatTensor`):
+        input_features (`torch.Tensor`):
             Audio features `(batch, time, feature_dim)` produced by the feature extractor (after LFR stacking).
         input_features_mask (`torch.Tensor`):
             Padding mask for the audio feature sequence, as returned by the processor.
@@ -525,6 +564,8 @@ class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
         ```"""
         return super().forward(**super_kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "FunAsrNanoProcessor",

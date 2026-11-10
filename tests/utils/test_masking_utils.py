@@ -363,6 +363,43 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
 
+    def test_chunked_mask_with_packed_sequences(self):
+        # Make sure we have an attention_chunk_size in the config
+        config = LlamaConfig(attn_implementation="sdpa", attention_chunk_size=3)
+
+        batch_size = 1
+        sequence_length = 11
+        # This corresponds to 3 packed sequences, with the 1st and 3rd being of length 4 which is larger than the chunk_size.
+        # It also makes sure that without correct re-mapping of indices, the offsets of the chunks would be wrong
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3]])
+        inputs_embeds = torch.empty((batch_size, sequence_length))
+
+        chunked_attention_mask = create_chunked_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+
+        # fmt: off
+        EXPECTED_CHUNKED_MASK = torch.tensor(
+             [[[[ True, False, False, False, False, False, False, False, False, False, False],
+                [ True,  True, False, False, False, False, False, False, False, False, False],
+                [ True,  True,  True, False, False, False, False, False, False, False, False],
+                [False, False, False,  True, False, False, False, False, False, False, False],
+                [False, False, False, False,  True, False, False, False, False, False, False],
+                [False, False, False, False,  True,  True, False, False, False, False, False],
+                [False, False, False, False,  True,  True,  True, False, False, False, False],
+                [False, False, False, False, False, False, False,  True, False, False, False],
+                [False, False, False, False, False, False, False,  True,  True, False, False],
+                [False, False, False, False, False, False, False,  True,  True,  True, False],
+                [False, False, False, False, False, False, False, False, False, False, True]]]],
+            dtype=torch.bool)
+        # fmt: on
+
+        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
     @staticmethod
     def _run_bidirectional_mask(mask_fn, attn_implementation):
         def run_mask_creation(mask_fn, config, inputs_embeds, encoder_mask, cross_mask, encoder_hidden_states):
@@ -511,3 +548,61 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertIsNone(
             create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
         )
+
+    def test_causal_mask_default_layer_skips_linear_layers(self):
+        """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
+        config = LlamaConfig(
+            num_hidden_layers=4,
+            hidden_size=32,
+            sliding_window=4,
+            attn_implementation="sdpa",
+            layer_types=["sliding_attention", "conv", "conv", "full_attention"],
+        )
+        cache = DynamicCache(config=config)
+        self.assertEqual(cache.is_sliding, [True, False, False, False])
+        self.assertEqual(cache.is_linear, [False, True, True, False])
+
+        # 10 cached tokens on both attention layers, then decode a single token at position 10
+        prefill_size = 10
+        inputs_embeds = torch.zeros(1, prefill_size, config.hidden_size)
+        attention_mask = torch.ones(1, prefill_size, dtype=torch.long)
+        position_ids = torch.arange(prefill_size)[None, :]
+
+        # This must not raise saying that the methods get_seq_length/get_mask_sizes do not exist because they were called on index 1
+        # (first non-sliding layer), which is a linear layer that does not have them -> instead it must go to index 3 (full_attention)
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache,
+            position_ids=position_ids,
+            allow_is_causal_skip=False,
+        )
+        # This must be correct
+        self.assertEqual(causal_mask.shape, (1, 1, prefill_size, prefill_size))
+        self.assertTrue((causal_mask == torch.tril(torch.ones(prefill_size, prefill_size))[None, None, :, :]).all())
+
+        # During prefill beyond sliding_window, both sliding and full layers were expected to have the full mask, so now check that after
+        # 1 forward, we are still using the full_attention, i.e. the size must not be the sliding_window (i.e. 4)
+        fake_kv = torch.rand(1, 2, prefill_size, 8)
+        fake_conv_state = torch.rand(1, 8, prefill_size)
+        cache.update(fake_kv, fake_kv, layer_idx=0)
+        cache.update_conv_state(conv_states=fake_conv_state, layer_idx=1)
+        cache.update_conv_state(conv_states=fake_conv_state, layer_idx=2)
+        cache.update(fake_kv, fake_kv, layer_idx=3)
+
+        # Mimic decoding 1 token after prefill
+        inputs_embeds = torch.zeros(1, 1, config.hidden_size)
+        attention_mask = torch.ones(1, prefill_size + 1, dtype=torch.long)
+        position_ids = torch.tensor([[prefill_size]])
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache,
+            position_ids=position_ids,
+            allow_is_causal_skip=False,
+        )
+        # This must be correct
+        self.assertEqual(causal_mask.shape, (1, 1, 1, prefill_size + 1))
+        self.assertTrue(causal_mask.all())

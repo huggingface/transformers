@@ -289,8 +289,10 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         input_text = {"role": "user", "content": "What's the meaning of life?"}
+        # The template writes today's date into the system prompt unless `date_string` is set; pin the
+        # date the expectation was recorded with so the prompt is the same every day.
         inputs = tokenizer.apply_chat_template(
-            [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True
+            [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True, date_string="26 Jun 2026"
         ).to(model.device)
 
         out_sdpa = model.generate(
