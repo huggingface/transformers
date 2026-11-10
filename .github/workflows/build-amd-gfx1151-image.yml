@@ -49,7 +49,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-amd-gpu-gfx1151
           build-args: |
-            REF=main
+            REF=6280bfe74f
           secrets: |
             hf_token=${{ secrets.HF_HUB_READ_TOKEN }}
           push: true
