@@ -410,7 +410,7 @@ def _fuse_shared_key_attentions(model: ir.Model) -> None:
 def _unfuse_mixed_dtype_skip_norms(model: ir.Model) -> None:
     """Turn each `SkipSimplifiedLayerNormalization` whose input, skip and scale dtypes differ (a norm computed in
     float32 on a float16 residual), which ONNX Runtime rejects, back into the `Add` and `SimplifiedLayerNormalization`
-    it fused."""
+    it fused (microsoft/onnxscript#3155)."""
     for node in _nodes(model, "SkipSimplifiedLayerNormalization"):
         input, skip, scale = node.inputs[:3]
         if len({input.dtype, skip.dtype, scale.dtype}) == 1:
@@ -523,8 +523,8 @@ def _unfuse_group_norms(model: ir.Model) -> None:
 
 def _untranspose_batch_matmuls(model: ir.Model, matmuls: bool = False) -> None:
     """Put back, as a `Transpose`, each batch transpose (`transBatchA` / `transBatchB`) fused into a `FusedMatMul`
-    whose inputs ONNX Runtime can't batch-transpose (they must share one rank, at least 3). With `matmuls`, every
-    `FusedMatMul` goes back to a `MatMul` (WebGPU has none: it would run on the CPU)."""
+    whose inputs ONNX Runtime can't batch-transpose (they must share one rank, at least 3; microsoft/onnxscript#3156).
+    With `matmuls`, every `FusedMatMul` goes back to a `MatMul` (WebGPU has none: it would run on the CPU)."""
     for node in _nodes(model, "FusedMatMul"):
         ranks = [len(value.shape) if value.shape is not None else None for value in node.inputs[:2]]
         if None in ranks or (not matmuls and ranks[0] == ranks[1] and ranks[0] >= 3):
