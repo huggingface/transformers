@@ -475,17 +475,8 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
         )
 
 
-class MiniMaxVL01ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-    }
-
-
 class MiniMaxVL01Processor(LlavaNextProcessor):
-    valid_processor_kwargs = MiniMaxVL01ProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,
@@ -531,10 +522,7 @@ class MiniMaxVL01Processor(LlavaNextProcessor):
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = MiniMaxVL01ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
-
-            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = kwargs.get("size") or self.image_processor.size
             if isinstance(size, SizeDict):
                 size = (
                     (size.shortest_edge, size.shortest_edge)

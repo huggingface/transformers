@@ -24,18 +24,9 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 
 
-class MiniMaxVL01ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-    }
-
-
 @auto_docstring
 class MiniMaxVL01Processor(ProcessorMixin):
-    valid_processor_kwargs = MiniMaxVL01ProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,
@@ -131,10 +122,7 @@ class MiniMaxVL01Processor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = MiniMaxVL01ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
-
-            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = kwargs.get("size") or self.image_processor.size
             if isinstance(size, SizeDict):
                 size = (
                     (size.shortest_edge, size.shortest_edge)
