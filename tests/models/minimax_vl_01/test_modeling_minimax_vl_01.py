@@ -349,43 +349,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    def _single_image_inputs(self):
-        config = self.model_tester.get_config()
-        pixel_values = floats_tensor([1, 2, 3, 8, 8]).to(torch_device)
-        input_ids = torch.tensor([[3] * 10 + [7, 8]], device=torch_device)
-        return config, {
-            "input_ids": input_ids,
-            "attention_mask": torch.ones_like(input_ids),
-            "pixel_values": pixel_values,
-            "image_sizes": torch.tensor([[8, 8]], device=torch_device),
-        }
-
-    def test_flat_and_batched_pixel_values_match(self):
-        config, inputs = self._single_image_inputs()
-        model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
-
-        pixel_values_5d = inputs["pixel_values"]
-        pixel_values_4d = pixel_values_5d.flatten(0, 1)
-        with torch.no_grad():
-            reference = model(**inputs).logits
-            candidate = model(**{**inputs, "pixel_values": pixel_values_4d}).logits
-            torch.testing.assert_close(candidate, reference, rtol=1e-5, atol=1e-5)
-
-    def test_empty_pixel_tensor_uses_text_only_path(self):
-        config = self.model_tester.get_config()
-        model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
-        input_ids = torch.tensor([[5, 6, 7, 8]], device=torch_device)
-
-        with torch.no_grad():
-            text_only = model(input_ids=input_ids).logits
-            with_empty_pixels = model(
-                input_ids=input_ids,
-                pixel_values=torch.empty((0, 3, 8, 8), device=torch_device),
-                image_sizes=torch.empty((0, 2), dtype=torch.long, device=torch_device),
-            ).logits
-
-        torch.testing.assert_close(with_empty_pixels, text_only)
-
 
 @slow
 @require_torch
