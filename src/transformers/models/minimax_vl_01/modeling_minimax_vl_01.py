@@ -151,10 +151,10 @@ class MiniMaxVL01TextLightningAttention(nn.Module):
         slope_rate = self.get_slope_rate()
         query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
 
-        self.slope_rate = nn.Buffer(slope_rate)
-        self.query_decay = nn.Buffer(query_decay)
-        self.key_decay = nn.Buffer(key_decay)
-        self.diagonal_decay = nn.Buffer(diagonal_decay)
+        self.slope_rate = nn.Buffer(slope_rate, persistent=False)
+        self.query_decay = nn.Buffer(query_decay, persistent=False)
+        self.key_decay = nn.Buffer(key_decay, persistent=False)
+        self.diagonal_decay = nn.Buffer(diagonal_decay, persistent=False)
 
         self.layer_type = config.layer_types[layer_idx]
 
@@ -637,7 +637,6 @@ class MiniMaxVL01TextPreTrainedModel(PreTrainedModel):
         "hidden_states": MiniMaxVL01TextDecoderLayer,
         "attentions": [MiniMaxVL01TextAttention, MiniMaxVL01TextLightningAttention],
     }
-    _keep_in_fp32_modules_strict = ["slope_rate", "query_decay", "key_decay", "diagonal_decay"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -817,10 +816,8 @@ class MiniMaxVL01PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _no_split_modules = ["MiniMaxVL01TextDecoderLayer"]
-    # The remote checkpoint does not store MiniMax's deterministic Lightning-Attention buffers. Its custom CLIP also
-    # omits the final pooling LayerNorm, which is unused because MiniMax-VL-01 consumes encoder hidden states.
+    # The checkpoint's custom CLIP omits the final pooling LayerNorm, which is unused because VL-01 consumes hidden states.
     _keys_to_ignore_on_load_missing = [
-        r"(?:model\.)?language_model\.layers\.\d+\.self_attn\.(slope_rate|query_decay|key_decay|diagonal_decay)",
         r"(?:model\.)?vision_tower\.post_layernorm\.(weight|bias)",
     ]
 

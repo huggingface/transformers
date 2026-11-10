@@ -128,10 +128,10 @@ class MiniMaxLightningAttention(nn.Module):
         slope_rate = self.get_slope_rate()
         query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
 
-        self.slope_rate = nn.Buffer(slope_rate)
-        self.query_decay = nn.Buffer(query_decay)
-        self.key_decay = nn.Buffer(key_decay)
-        self.diagonal_decay = nn.Buffer(diagonal_decay)
+        self.slope_rate = nn.Buffer(slope_rate, persistent=False)
+        self.query_decay = nn.Buffer(query_decay, persistent=False)
+        self.key_decay = nn.Buffer(key_decay, persistent=False)
+        self.diagonal_decay = nn.Buffer(diagonal_decay, persistent=False)
 
         self.layer_type = config.layer_types[layer_idx]
 
@@ -600,7 +600,6 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
-    _keep_in_fp32_modules_strict = ["slope_rate", "query_decay", "key_decay", "diagonal_decay"]
 
     @torch.no_grad()
     def _init_weights(self, module):

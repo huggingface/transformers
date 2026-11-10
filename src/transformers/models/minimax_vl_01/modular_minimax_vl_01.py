@@ -624,10 +624,8 @@ class MiniMaxVL01MultiModalProjector(LlavaNextMultiModalProjector):
 class MiniMaxVL01PreTrainedModel(LlavaNextPreTrainedModel):
     _no_split_modules = ["MiniMaxVL01TextDecoderLayer"]
     _can_compile_fullgraph = False
-    # The remote checkpoint does not store MiniMax's deterministic Lightning-Attention buffers. Its custom CLIP also
-    # omits the final pooling LayerNorm, which is unused because MiniMax-VL-01 consumes encoder hidden states.
+    # The checkpoint's custom CLIP omits the final pooling LayerNorm, which is unused because VL-01 consumes hidden states.
     _keys_to_ignore_on_load_missing = [
-        r"(?:model\.)?language_model\.layers\.\d+\.self_attn\.(slope_rate|query_decay|key_decay|diagonal_decay)",
         r"(?:model\.)?vision_tower\.post_layernorm\.(weight|bias)",
     ]
 
