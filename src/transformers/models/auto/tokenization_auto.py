@@ -421,6 +421,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "qwen3_5_moe_text",
     "qwen4_exp",
     "step3_vl",
+    "telechat3",
     "vipllava",
     "cohere_asr",
     "camembertv2-base",

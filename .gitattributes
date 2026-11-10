@@ -569,6 +569,7 @@ src/transformers/models/t5gemma/configuration_*.py linguist-generated=true
 src/transformers/models/t5gemma/modeling_*.py linguist-generated=true
 src/transformers/models/t5gemma2/configuration_*.py linguist-generated=true
 src/transformers/models/t5gemma2/modeling_*.py linguist-generated=true
+src/transformers/models/telechat3/configuration_*.py linguist-generated=true
 src/transformers/models/timesfm/modeling_*.py linguist-generated=true
 src/transformers/models/timesfm2_5/configuration_*.py linguist-generated=true
 src/transformers/models/timesfm2_5/modeling_*.py linguist-generated=true
