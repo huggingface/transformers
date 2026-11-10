@@ -35,7 +35,6 @@ class Lfm3VlVisionConfig(PreTrainedConfig):
     model_type = "lfm3_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {}
 
     hidden_size: int = 1024
     intermediate_size: int = 2560

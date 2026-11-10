@@ -22,10 +22,10 @@ from transformers import (
     Lfm3VlModel,
     is_torch_available,
 )
-from transformers.image_utils import load_image
 from transformers.models.lfm3_vl.modeling_lfm3_vl import Lfm3VlVisionModel
 from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
+from ...test_image_processing_common import load_test_image
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -82,6 +82,10 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
         input_ids[:, 1 + self.num_image_tokens] = self.vision_end_token_id
         return input_ids
 
+    def create_patches(self, grid_thw):
+        patch_dim = self.in_channels * self.temporal_patch_size * self.patch_size**2
+        return floats_tensor([int(grid_thw.prod(-1).sum()), patch_dim])
+
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         grid = self.image_size // self.patch_size
@@ -126,21 +130,13 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
     def _video_features_get_expected_num_hidden_states(self, model_tester=None):
         return self.model_tester.num_hidden_layers + 1
 
-    def _random_patches(self, config, grid_thw):
-        patch_dim = (
-            config.vision_config.in_channels
-            * config.vision_config.temporal_patch_size
-            * config.vision_config.patch_size**2
-        )
-        return floats_tensor([int(grid_thw.prod(-1).sum()), patch_dim])
-
     def test_image_and_video_forward(self):
         """Image and multi-frame video features land on their own placeholders, as a manual merge of the embeddings."""
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         merge = config.vision_config.spatial_merge_size
         video_grid_thw = torch.tensor([[2, 2, 4]], device=torch_device)
         num_video_tokens = int(video_grid_thw.prod()) // merge**2
-        pixel_values_videos = self._random_patches(config, video_grid_thw)
+        pixel_values_videos = self.model_tester.create_patches(video_grid_thw)
 
         input_ids = inputs["input_ids"].clone()
         video_start = self.model_tester.num_image_tokens + 2
@@ -168,7 +164,7 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         vision_tower = Lfm3VlVisionModel(config.vision_config).to(torch_device).eval()
         grid_thw = torch.tensor([[2, 2, 4], [1, 4, 2]], device=torch_device)
-        pixel_values = self._random_patches(config, grid_thw)
+        pixel_values = self.model_tester.create_patches(grid_thw)
 
         with torch.no_grad():
             packed = vision_tower(pixel_values, grid_thw=grid_thw).last_hidden_state
@@ -191,7 +187,7 @@ class Lfm3VlIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-        image = load_image(
+        image = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
         )
         conversation = [

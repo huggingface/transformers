@@ -32,13 +32,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import (
-    accepts_precomputed_kwargs,
-    can_return_tuple,
-    is_flash_attention_requested,
-    merge_with_config_defaults,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoModel
@@ -245,6 +240,7 @@ class Lfm3VlVisionAttention(nn.Module):
         )
 
         if is_flash_attention_requested(self.config):
+            # Flash Attention 2: Use cu_seqlens for variable length attention
             max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
@@ -262,11 +258,15 @@ class Lfm3VlVisionAttention(nn.Module):
                 **kwargs,
             )
         else:
-            lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-            splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
             attn_outputs, attn_weights = [], []
             for q, k, v in zip(*splits):
-                output, weights = attention_interface(
+                attn_output, attn_weight = attention_interface(
                     self,
                     q,
                     k,
@@ -277,14 +277,16 @@ class Lfm3VlVisionAttention(nn.Module):
                     is_causal=False,
                     **kwargs,
                 )
-                attn_outputs.append(output)
-                attn_weights.append(weights)
+                attn_outputs.append(attn_output)
+                attn_weights.append(attn_weight)
+
             attn_output = torch.cat(attn_outputs, dim=1)
             # frames of different shapes have differently sized maps: one entry per frame, or None under sdpa
             attn_weights = None if attn_weights[0] is None else tuple(attn_weights)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
+
         return attn_output, attn_weights
 
 
@@ -314,12 +316,12 @@ class Lfm3VlVisionShortConv(nn.Module):
         conv_outputs = []
         channels = gated.shape[-1]
         lengths = [temporal * height * width for temporal, height, width in grid_thw]
-        for item, (temporal, height, width) in zip(torch.split(gated, lengths, dim=0), grid_thw):
-            item = item.view(temporal, height // merge, width // merge, merge, merge, channels)
-            item = item.permute(0, 5, 1, 3, 2, 4).reshape(temporal, channels, height, width)
-            item = self.spatial_conv(item)
-            item = item.view(temporal, channels, height // merge, merge, width // merge, merge)
-            conv_outputs.append(item.permute(0, 2, 4, 3, 5, 1).reshape(temporal * height * width, channels))
+        for frames, (temporal, height, width) in zip(torch.split(gated, lengths, dim=0), grid_thw):
+            frames = frames.view(temporal, height // merge, width // merge, merge, merge, channels)
+            frames = frames.permute(0, 5, 1, 3, 2, 4).reshape(temporal, channels, height, width)
+            frames = self.spatial_conv(frames)
+            frames = frames.view(temporal, channels, height // merge, merge, width // merge, merge)
+            conv_outputs.append(frames.permute(0, 2, 4, 3, 5, 1).reshape(temporal * height * width, channels))
         hidden_states = torch.cat(conv_outputs, dim=0)
         hidden_states = output_gate * hidden_states
         return self.out_proj(hidden_states)
@@ -434,7 +436,7 @@ class Lfm3VlVisionModel(Lfm3VlPreTrainedModel):
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         # diff -> the convolution reshapes each frame to its grid, which needs host-side sizes
-        grid_thw_list = grid_thw.tolist()
+        grid_thw_list = grid_thw.tolist()  # trf-ignore: TRF056
 
         hidden_states = self.patch_embed(pixel_values)
         hidden_states = self.embedding_norm(hidden_states)
@@ -458,20 +460,17 @@ class Lfm3VlMultiModalProjector(nn.Module):
 
     def __init__(self, config: Lfm3VlConfig):
         super().__init__()
+        self.merged_hidden_size = config.vision_config.hidden_size * config.vision_config.spatial_merge_size**2
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=1e-6)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * config.vision_config.spatial_merge_size**2,
-            config.projector_hidden_size,
-            bias=config.projector_bias,
-        )
+        self.linear_1 = nn.Linear(self.merged_hidden_size, config.projector_hidden_size, bias=config.projector_bias)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
             config.projector_hidden_size, config.text_config.hidden_size, bias=config.projector_bias
         )
 
     def forward(self, image_features: torch.Tensor):
-        # diff -> normalize each vision token before merging the blocks
-        hidden_states = self.layer_norm(image_features).reshape(-1, self.linear_1.in_features)
+        # normalize each vision token before merging the blocks
+        hidden_states = self.layer_norm(image_features).reshape(-1, self.merged_hidden_size)
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
