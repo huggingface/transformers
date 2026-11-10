@@ -20,9 +20,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Liquid Codec is the speech codec of [LFM3-Audio](./lfm3_audio) by [Liquid AI](https://liquid.ai/). It turns 24 kHz audio
+Liquid Codec is the speech codec of [LFM3-Audio](./lfm3_audio.md) by [Liquid AI](https://liquid.ai/). It turns 24 kHz audio
 into 12 parallel codebooks of 2016 codes at 12.5 frames per second and back: an STFT front end, a causal
-[LFM3](./lfm3) encoder, finite scalar quantization, and a causal LFM3 decoder followed by an inverse STFT. The decoder is
+[LFM3](./lfm3.md) encoder, finite scalar quantization, and a causal LFM3 decoder followed by an inverse STFT. The decoder is
 causal, so audio can be synthesized frame by frame as the codes arrive.
 
 ## Usage
