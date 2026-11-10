@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelForDecision, Qwen2Config, Qwen2ForCausalLM
+    from transformers.decision.modeling_utils import batch_prompts
 
 
 def render(processor, request, config=None):
@@ -89,14 +90,13 @@ class DecisionHeadTesterMixin:
         sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in self.prompts]
         self.assertEqual(sequences, self.test["sequences"])
 
-    def scores(self, model):
+    def scores(self, model, prompts=None):
+        """The scores of each question of each prompt, from one batch of `prompts` (all of them by default)."""
+        prompts = prompts or self.prompts
+        batch = batch_prompts([(prompt.inputs, prompt.questions) for prompt in prompts])
+        questions = [prompt.questions for prompt in prompts]
         with torch.no_grad():
-            return [
-                model.decide(
-                    **prompt.inputs, decision_questions=prompt.questions, decision_config=self.decision_config
-                )
-                for prompt in self.prompts
-            ]
+            return model.decide(**batch, decision_questions=questions, decision_config=self.decision_config)
 
     def test_scores_and_save_load(self):
         for model_class in self.all_model_classes:
@@ -108,6 +108,9 @@ class DecisionHeadTesterMixin:
             for prompt, scores, loaded_scores in zip(self.prompts, self.scores(model), self.scores(loaded)):
                 torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
+            # The padded batch scores each prompt like it alone
+            one_by_one = [scores for prompt in self.prompts for scores in self.scores(model, [prompt])]
+            torch.testing.assert_close(self.scores(model), one_by_one)
 
 
 def check_decision(

@@ -16,7 +16,7 @@ from torch import nn
 
 from ...decision import Question
 from ...decision.modeling_utils import DecisionMixin
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import auto_docstring
 from ..auto import AutoModel
 from .configuration_jev import JevConfig
@@ -46,15 +46,15 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        marks: torch.LongTensor,
+        logits_to_keep: torch.BoolTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
         **kwargs,
     ) -> torch.Tensor:
-        # A batch of one prompt
-        marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]
-        hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state[0]
-        logits = self.proj(hidden_states[marks - 1].to(self.proj.weight.dtype))
+        # The hidden states before the marks of the batch: one per question, in order
+        hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.proj(hidden_states.to(self.proj.weight.dtype))
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
         # The options of a question are scored by the rows from the offset of its type on, in order

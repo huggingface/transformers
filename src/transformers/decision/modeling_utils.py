@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 
 import torch
+from torch.nn.utils.rnn import pad_sequence
 
 from ..configuration_utils import PreTrainedConfig
 from ..utils import cached_file
@@ -26,10 +27,41 @@ from .configuration_utils import DecisionConfig
 from .template_utils import Question
 
 
-def process_scores(decision_config, input_ids, marks, questions, scores) -> list[torch.Tensor]:
-    """The logits processors of the decision config on the option scores of each question of a prompt."""
-    tail = input_ids[0, int(marks[-1]) :]  # the tokens after the last mark, where the templates write the state
-    return [decision_config.logits_processors[q.type](tail, s.float()) for q, s in zip(questions, scores)]
+def batch_prompts(prompts: list[tuple[dict, list[Question]]]) -> dict[str, torch.Tensor]:
+    """
+    The prompts of a request as one right-padded batch, with `logits_to_keep` the mask of the positions read: the
+    token before each mark, so the read positions of a batch are its questions in order.
+    """
+    inputs = [prompt for prompt, _ in prompts]
+    reads = []
+    for prompt in inputs:
+        read = torch.zeros(prompt["input_ids"].shape[-1], dtype=torch.bool, device=prompt["input_ids"].device)
+        read[prompt["marks"] - 1] = True
+        reads.append(read)
+    batch = {
+        "attention_mask": pad_sequence([torch.ones_like(read, dtype=torch.long) for read in reads], batch_first=True),
+        "logits_to_keep": pad_sequence(reads, batch_first=True),
+    }
+    for key in inputs[0].keys() - {"marks", "attention_mask"}:
+        values = [prompt[key] for prompt in inputs]
+        if values[0].shape[-1] == inputs[0]["input_ids"].shape[-1]:  # per token: `input_ids`, `mm_token_type_ids`...
+            batch[key] = pad_sequence([value[0] for value in values], batch_first=True)
+        else:  # ponytail: per image, already flat over images (`pixel_values`, `image_grid_thw`) like Qwen-VL
+            batch[key] = torch.cat(values)
+    return batch
+
+
+def process_scores(decision_config, batch, questions, scores) -> list[list[torch.Tensor]]:
+    """
+    The logits processors of the decision config on the option scores of each question of each prompt of a batch from
+    [`batch_prompts`], `scores` being those of all its questions in order.
+    """
+    scores, processed = iter(scores), []
+    lengths = batch["attention_mask"].sum(-1).tolist()
+    for input_ids, read, length, group in zip(batch["input_ids"], batch["logits_to_keep"], lengths, questions):
+        tail = input_ids[int(read.nonzero()[-1]) + 1 : length]  # the tokens after the last mark: the state
+        processed.append([decision_config.logits_processors[q.type](tail, next(scores).float()) for q in group])
+    return processed
 
 
 def _hub_kwargs(kwargs: dict) -> dict:
@@ -100,29 +132,28 @@ class DecisionMixin:
     def decide(
         self,
         input_ids: torch.LongTensor,
-        marks: torch.LongTensor,
-        decision_questions: list[Question],
+        logits_to_keep: torch.BoolTensor,
+        decision_questions: list[list[Question]],
         decision_config: DecisionConfig | None = None,
         **kwargs,
-    ) -> list[torch.Tensor]:
+    ) -> list[list[torch.Tensor]]:
         """
-        Scores the options of each question of a prompt from `decision_config.prepare_inputs`: one forward pass,
-        then the logits processors of the decision config. Returns the scores of each question, which
+        Scores the options of each question of a batch of prompts from [`batch_prompts`]: one forward pass, then the
+        logits processors of the decision config. Returns the scores of each question of each prompt, which
         `Question.answer` turns into answers.
         """
         decision_config = decision_config or self.decision_config
-        inputs = {"input_ids": input_ids, **kwargs}
-        num_options = torch.tensor([[len(question.options) for question in decision_questions]])
-        question_types = [Question.questions_types.index(question.type) for question in decision_questions]
+        batch = {"input_ids": input_ids, "logits_to_keep": logits_to_keep, **kwargs}
+        batch = {key: value.to(self.device) if hasattr(value, "to") else value for key, value in batch.items()}
+        questions = [question for group in decision_questions for question in group]
+        num_options = [len(question.options) for question in questions]
+        question_types = [Question.questions_types.index(question.type) for question in questions]
         scores = self(
-            marks=marks[None].to(self.device),
-            num_options=num_options.to(self.device),
-            question_type_ids=torch.tensor([question_types], device=self.device),
-            **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
+            num_options=torch.tensor(num_options, device=self.device),
+            question_type_ids=torch.tensor(question_types, device=self.device),
+            **batch,
         )
-        return process_scores(
-            decision_config, inputs["input_ids"], marks, decision_questions, scores.split(num_options[0].tolist())
-        )
+        return process_scores(decision_config, batch, decision_questions, scores.split(num_options))
 
 
 __all__ = ["DecisionMixin"]
