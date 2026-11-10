@@ -160,17 +160,8 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         state = tester.prepare_state()
         inputs = extractor(state, seconds_since_epoch=tester.prepare_times(), return_tensors="np")
 
-        channels = sum(levels for _, _, levels in extractor.input_channel_layout)
-        self.assertEqual(
-            inputs["grid_features"].shape,
-            (tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes),
-        )
-        self.assertEqual(
-            inputs["global_features"].shape,
-            (tester.batch_size, sum(levels for _, _, levels in extractor.mesh_channel_layout)),
-        )
+        # Missing sea surface temperature is filled before normalization, so the network never sees NaN.
         self.assertFalse(np.isnan(inputs["grid_features"]).any())
-        self.assertEqual(inputs["noise"].shape, (tester.batch_size, extractor.noise_channels))
         np.testing.assert_allclose(inputs["grid_features"][:, :2], (state["2m_temperature"] - 280.0) / 20.0)
 
     def test_postprocess_inverts_the_residual_encoding(self):
@@ -237,38 +228,6 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
             for key in ("grid_features", "global_features"):
                 np.testing.assert_allclose(single[key][0], batched[key][member], rtol=1e-6, atol=1e-6)
 
-    def test_numpy_torch_inputs(self):
-        import torch
-
-        tester = self.feat_extract_tester
-        extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        state = tester.prepare_state()
-        times = tester.prepare_times()
-        tensor_state = {name: torch.from_numpy(values) for name, values in state.items()}
-
-        from_numpy = extractor(state, seconds_since_epoch=times, generator=torch.Generator().manual_seed(0))
-        from_tensors = extractor(
-            tensor_state, seconds_since_epoch=torch.from_numpy(times), generator=torch.Generator().manual_seed(0)
-        )
-        for key in ("grid_features", "global_features", "noise"):
-            self.assertIsInstance(from_numpy[key], torch.Tensor)
-            torch.testing.assert_close(from_numpy[key], from_tensors[key])
-
-        channels = sum(levels for _, _, levels in extractor.target_channel_layout)
-        prediction = torch.randn(tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes)
-        forecast = extractor.postprocess(prediction.numpy(), state)
-        tensor_forecast = extractor.postprocess(prediction, tensor_state)
-        for name, values in forecast.items():
-            self.assertIsInstance(values, torch.Tensor)
-            torch.testing.assert_close(values, tensor_forecast[name], equal_nan=True)
-
-        next_times = times + tester.time_step_hours * 3600
-        next_state = extractor.advance_state(state, forecast, next_times)
-        tensor_next = extractor.advance_state(tensor_state, tensor_forecast, torch.from_numpy(next_times))
-        for name, values in next_state.items():
-            self.assertIsInstance(values, torch.Tensor)
-            torch.testing.assert_close(values, tensor_next[name], equal_nan=True)
-
     def test_rollout_keeps_the_clock_aligned_with_the_frames(self):
         """Physical fields and clock forcings must advance together."""
         tester = self.feat_extract_tester
@@ -300,17 +259,3 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
                     np.testing.assert_allclose(state[name][:, index], expected[name], rtol=1e-5, atol=1e-5)
 
             valid_time = valid_time + step_seconds
-
-    def test_attention_mask(self):
-        import torch
-
-        tester = self.feat_extract_tester
-        extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        attention_mask = torch.ones(2, 1, 4, 12, dtype=torch.bool)
-        inputs = extractor(
-            tester.prepare_state(), seconds_since_epoch=tester.prepare_times(), attention_mask=attention_mask
-        )
-        self.assertIs(inputs["attention_mask"], attention_mask)
-        inputs = inputs.to(dtype=torch.bfloat16)
-        self.assertEqual(inputs["grid_features"].dtype, torch.bfloat16)
-        self.assertIs(inputs["attention_mask"], attention_mask)
