@@ -31,7 +31,7 @@ from typing import Any
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import TensorType, is_torch_available, logging
-from ...utils.hub import cached_file, resolve_revision
+from ...utils.hub import cached_file
 from ...utils.import_utils import requires
 from .configuration_weathernext2 import WeatherNext2ChannelLayoutMixin
 
@@ -169,24 +169,13 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        # Resolve the revision once so the config and the mask come from the same commit.
-        kwargs["revision"] = resolve_revision(
-            pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            cache_dir=kwargs.get("cache_dir"),
-            local_files_only=kwargs.get("local_files_only", False),
-        )
         output = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
         feature_extractor = output[0] if kwargs.get("return_unused_kwargs") else output
+        hub_kwargs = ("revision", "token", "cache_dir", "subfolder", "local_files_only", "force_download")
         mask_file = cached_file(
             pretrained_model_name_or_path,
             "attention_mask.safetensors",
-            **{
-                key: kwargs[key]
-                for key in ("revision", "token", "cache_dir", "subfolder", "local_files_only", "force_download")
-                if key in kwargs
-            },
+            **{key: kwargs[key] for key in hub_kwargs if key in kwargs},
         )
         feature_extractor.attention_mask = load_file(mask_file)["attention_mask"]
         return output
@@ -217,6 +206,7 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
         expected = self.num_levels(variable)
         if value.shape != (expected,):
             raise ValueError(f"Statistic for {variable!r} has shape {tuple(value.shape)}, expected ({expected},).")
+
         return value.reshape(-1, 1, 1)
 
     def normalize(self, values: "torch.Tensor", variable: str) -> "torch.Tensor":
@@ -235,6 +225,7 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
         stddev = self._statistic(self.stddev_by_level, variable)
         if stddev is not None:
             values = values / stddev.to(values.device)
+
         return values
 
     def unnormalize(self, values: "torch.Tensor", variable: str) -> "torch.Tensor":
@@ -246,6 +237,7 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
         mean = self._statistic(self.mean_by_level, variable)
         if mean is not None:
             values = values + mean.to(values.device)
+
         return values
 
     def compute_forcings(self, seconds_since_epoch: "torch.Tensor") -> dict[str, "torch.Tensor"]:
@@ -300,6 +292,7 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
                 return values[:, None]
         if values.ndim == 2 and values.shape[-1] == self.grid_longitudes:
             return values[:, None, None].expand(values.shape[0], 1, self.grid_latitudes, self.grid_longitudes)
+
         return values
 
     def sample_noise(
@@ -419,6 +412,7 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
         if targets is not None:
             labels = self.preprocess_targets(targets, state).to(device)
             data["labels"] = labels[:, None].expand(-1, num_members, -1, -1, -1)
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def preprocess_targets(self, targets: Mapping[str, Any], state: Mapping[str, Any]) -> "torch.Tensor":
