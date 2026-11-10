@@ -202,10 +202,10 @@ def apply_fully_sharded_data_parallelism(
         for module_name, module in model.named_modules():
             if ep_plan.get(module_name) == "ep_dispatch_experts":
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
-                # an EP group holds ep_size / tp_size distinct batches
+                # an EP group holds ep_size / tp_size distinct batches, or cp slices of them under context parallelism
                 # the efsdp reduce the sums on efsdp_size copies of that expert.
-                # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
-                # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * tp_size / ep_size)
+                # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size * cp_size batches
+                # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * cp_size * tp_size / ep_size)
                 # With HSDP, the all-reduce across replicas adds dp_replicate_size times more: dp_size batches.
                 module.set_gradient_divide_factor(float(distributed_config.dp_size))
                 # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
