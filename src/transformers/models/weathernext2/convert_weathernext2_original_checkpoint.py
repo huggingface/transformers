@@ -491,6 +491,15 @@ def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
+SUPPORTED_NODE_FEATURES = {"add_sin_latitude": True, "add_sin_longitude": True, "add_cos_longitude": True}
+SUPPORTED_EDGE_FEATURES = {
+    "add_scalar_distances": True,
+    "add_vector_distances": True,
+    "relative_latitude_vectors": True,
+    "relative_longitude_vectors": True,
+}
+
+
 def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitudes: int) -> WeatherNext2Config:
     task = fiddle["task"]
     architecture = fiddle["predictor_kwargs"]["noisy_function_kwargs"]
@@ -508,6 +517,14 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
     loss_kwargs = fiddle["predictor_kwargs"].get("fgn_loss_function_kwargs", {})
     if loss_kwargs.get("loss_for_nan_targets", 0.0) != 0.0:
         raise ValueError("Only checkpoints that fill missing targets with zero loss are supported.")
+
+    # `get_spatial_features` and `get_edge_features` compute only the released feature sets.
+    if architecture["spatial_features_kwargs"] != SUPPORTED_NODE_FEATURES:
+        raise ValueError(f"Unsupported node features: {architecture['spatial_features_kwargs']}")
+    for graph in ("points_to_mesh_model_ctor", "mesh_to_grid_model_ctor"):
+        edge_features = architecture[graph]["spatial_edge_features_kwargs"]
+        if edge_features != SUPPORTED_EDGE_FEATURES:
+            raise ValueError(f"Unsupported edge features in {graph}: {edge_features}")
 
     return WeatherNext2Config(
         hidden_size=transformer["d_model"],
