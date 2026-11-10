@@ -26,7 +26,6 @@ from transformers import (
     Lfm3OmniModel,
     is_torch_available,
 )
-from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -36,6 +35,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...test_image_processing_common import load_test_image
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin
 from ..lfm3_audio.test_modeling_lfm3_audio import (
@@ -304,14 +304,6 @@ class Lfm3OmniCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         feature_attention_mask[1, 24:] = 0
         return config, {"input_features": input_features, "feature_attention_mask": feature_attention_mask}
 
-    @unittest.skip("The vision tower splits frames by host-side sizes, which `torch.export` can't trace")
-    def test_torch_export_dynamic(self):
-        pass
-
-    @unittest.skip("The vision tower splits frames by host-side sizes, which `torch.export` can't trace")
-    def test_torch_export_static(self):
-        pass
-
     @unittest.skip("the conv layers record no attention weights")
     def test_attention_outputs(self):
         pass
@@ -345,6 +337,7 @@ class Lfm3OmniCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         return self._image_features_get_expected_num_hidden_states()
 
 
+@unittest.skip(reason="Update after release, the Hub checkpoint still points at remote code")
 @require_torch_accelerator
 @slow
 class Lfm3OmniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
@@ -353,7 +346,7 @@ class Lfm3OmniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-        image = load_image(
+        image = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
         )
         conversation = [
@@ -406,7 +399,7 @@ class Lfm3OmniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Lfm3OmniForConditionalGeneration.from_pretrained(
             self.model_id, device_map=torch_device, dtype=torch.bfloat16
         )
-        output = model.generate(**self.inputs, max_new_tokens=24, do_sample=False)
+        output = model.generate(**self.inputs.to(model.dtype), max_new_tokens=24, do_sample=False)
         text = self.processor.batch_decode(
             output.sequences[:, self.inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )[0]

@@ -18,8 +18,8 @@ rendered properly in your Markdown viewer.
 
 # LFM3-Omni
 
-LFM3-Omni combines the [LFM3](lfm3) language model, the [LFM3-Audio](lfm3_audio) speech encoder and
-codec depth decoder, and the [LFM3-VL](lfm3_vl) image encoder. It accepts interleaved text, images,
+LFM3-Omni combines the [LFM3](./lfm3.md) language model, the [LFM3-Audio](./lfm3_audio.md) speech encoder and
+codec depth decoder, and the [LFM3-VL](./lfm3_vl.md) image encoder. It accepts interleaved text, images,
 and audio, and generates text, speech, or interleaved text and speech.
 
 ## Usage
@@ -36,7 +36,7 @@ conversation = [{"role": "user", "content": [
 ]}]
 inputs = processor.apply_chat_template(
     conversation, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
-).to(model.device)
+).to(model.device, model.dtype)
 outputs = model.generate(
     **inputs,
     max_new_tokens=128,
@@ -47,7 +47,7 @@ text = processor.decode(outputs.sequences[0, inputs.input_ids.shape[1]:], skip_s
 
 Audio inputs are 16 kHz waveforms; output speech uses the 24 kHz Liquid Codec. Speech generation (the mode is read
 from the prompt's last token: `<|audio_start|>` or `<|mixed_start|>` through the chat template), streaming, batching
-and MaskGIT sampling follow [LFM3-Audio](lfm3_audio).
+and MaskGIT sampling follow [LFM3-Audio](./lfm3_audio.md).
 Inputs are not validated: every `<|image|>`, `<|video|>`, `<|audio|>` and `<|audio_out|>` placeholder needs
 its pixels and grid, features or codes, as the processor returns them.
 

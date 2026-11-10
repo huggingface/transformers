@@ -72,7 +72,6 @@ class Lfm3OmniAudioProcessorKwargs(TypedDict, total=False):
 class Lfm3OmniProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: Lfm3OmniAudioProcessorKwargs
     videos_kwargs: Lfm3OmniVideosKwargs
-    _defaults = {"videos_kwargs": {"return_metadata": True, "use_audio_in_video": False}}
 
 
 @auto_docstring
@@ -86,6 +85,7 @@ class Lfm3OmniProcessor(ProcessorMixin):
     audio_tokenizer_class = "LiquidCodecModel"
 
     valid_processor_kwargs = Lfm3OmniProcessorKwargs
+    videos_kwargs = {"return_metadata": True, "use_audio_in_video": False}
 
     def __init__(
         self,
