@@ -1001,18 +1001,17 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | list[torch.FloatTensor],
+        pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`):
-            A flat 4D patch tensor, a padded 5D patch tensor, or a list of 3D/4D patch tensors.
+        pixel_values (`torch.FloatTensor`):
+            A flat 4D patch tensor or a padded 5D patch tensor.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Original image sizes in `(height, width)` order.
         """
-        pixel_values = self._flatten_pixel_values(pixel_values)
         image_num_patches = [
             image_size_to_num_patches(
                 image_size=image_size,
@@ -1078,7 +1077,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | list[torch.FloatTensor] | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1090,13 +1089,12 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01ModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`, *optional*):
-            A flat tensor of shape `(total_crops, channels, height, width)`, a padded 5D crop tensor, or a list of
-            3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            A flat tensor of shape `(total_crops, channels, height, width)` or a padded 5D crop tensor.
+            Each image's thumbnail precedes its high-resolution crops.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
         """
-        pixel_values = self._flatten_pixel_values(pixel_values)
         if pixel_values is not None and pixel_values.numel() == 0:
             pixel_values = None
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1144,20 +1142,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
             router_logits=outputs.router_logits,
         )
 
-    @staticmethod
-    def _flatten_pixel_values(pixel_values):
-        if not isinstance(pixel_values, (list, tuple)):
-            return pixel_values
-        if not pixel_values:
-            raise ValueError("`pixel_values` cannot be an empty list.")
-        if not all(isinstance(value, torch.Tensor) for value in pixel_values):
-            raise TypeError("List-form `pixel_values` must contain PyTorch tensors.")
-        if all(value.ndim == 3 for value in pixel_values):
-            return torch.stack(list(pixel_values), dim=0)
-        if all(value.ndim == 4 for value in pixel_values):
-            return torch.cat(list(pixel_values), dim=0)
-        raise ValueError("List-form `pixel_values` must contain only 3D patches or only 4D patch batches.")
-
 
 @auto_docstring(
     custom_intro="MiniMax-VL-01 with a causal language modeling head for image-conditioned text generation."
@@ -1187,14 +1171,14 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | list[torch.FloatTensor],
+        pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`):
-            A flat 4D patch tensor, a padded 5D patch tensor, or a list of 3D/4D patch tensors.
+        pixel_values (`torch.FloatTensor`):
+            A flat 4D patch tensor or a padded 5D patch tensor.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Original image sizes in `(height, width)` order.
         """
@@ -1211,7 +1195,7 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | list[torch.FloatTensor] | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1225,9 +1209,9 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`, *optional*):
-            A flat tensor of shape `(total_crops, channels, height, width)`, a padded 5D crop tensor, or a list of
-            3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            A flat tensor of shape `(total_crops, channels, height, width)` or a padded 5D crop tensor.
+            Each image's thumbnail precedes its high-resolution crops.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Original image sizes in `(height, width)` order.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

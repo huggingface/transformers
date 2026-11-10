@@ -358,21 +358,16 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
             "image_sizes": torch.tensor([[8, 8]], device=torch_device),
         }
 
-    def test_flat_batched_and_list_pixel_values_match(self):
+    def test_flat_and_batched_pixel_values_match(self):
         config, inputs = self._single_image_inputs()
         model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
 
         pixel_values_5d = inputs["pixel_values"]
         pixel_values_4d = pixel_values_5d.flatten(0, 1)
-        list_of_patch_batches = [pixel_values_5d[0]]
-        list_of_patches = list(pixel_values_5d[0].unbind(0))
-
         with torch.no_grad():
             reference = model(**inputs).logits
-            for pixel_values in (pixel_values_4d, list_of_patch_batches, list_of_patches):
-                candidate_inputs = {**inputs, "pixel_values": pixel_values}
-                candidate = model(**candidate_inputs).logits
-                torch.testing.assert_close(candidate, reference, rtol=1e-5, atol=1e-5)
+            candidate = model(**{**inputs, "pixel_values": pixel_values_4d}).logits
+            torch.testing.assert_close(candidate, reference, rtol=1e-5, atol=1e-5)
 
     def test_attention_mask_is_applied_to_loss(self):
         config = self.model_tester.get_config()
