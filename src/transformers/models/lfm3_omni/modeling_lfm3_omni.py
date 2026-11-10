@@ -163,6 +163,8 @@ class Lfm3OmniPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     input_modalities = ("image", "video", "audio", "text")
+    # the released checkpoints store the tied depth logit heads next to their embeddings
+    _keys_to_ignore_on_load_unexpected = [r"depth_embeddings\.\d+\.to_logits\."]
 
     @torch.no_grad()
     def _init_weights(self, module):

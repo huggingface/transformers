@@ -154,20 +154,40 @@ _MODEL_TO_CONVERSION_PATTERN = {
 # the released speech encoders carry LFM2's attention names, and every codebook of the depth decoder its own
 # embedding and norm
 _LFM3_SPEECH_CONVERSIONS = [
+    # the released checkpoints keep the training layout; every rule matches those names directly, so that saving
+    # reverses them one by one (the attention renames are kept out of the encoder prefix rule for that reason)
+    WeightRenaming(source_patterns=r"^lfm\.model\.", target_patterns="model.language_model."),
+    WeightRenaming(source_patterns=r"^encoder\.downsample\.", target_patterns="model.audio_encoder.downsample."),
     WeightRenaming(
-        source_patterns=r"(audio_encoder\.lfm\.layers\.\d+\.self_attn)\.out_proj\.", target_patterns=r"\1.o_proj."
+        source_patterns=(
+            r"^encoder\.lfm\.lfm\.(?!layers\.\d+\.self_attn\.out_proj\.)(?!layers\.\d+\.self_attn\.q_layernorm\.)"
+            r"(?!layers\.\d+\.self_attn\.k_layernorm\.)"
+        ),
+        target_patterns="model.audio_encoder.lfm.",
     ),
     WeightRenaming(
-        source_patterns=r"(audio_encoder\.lfm\.layers\.\d+\.self_attn\.[qk])_layernorm\.", target_patterns=r"\1_norm."
+        source_patterns=r"^encoder\.lfm\.lfm\.(layers\.\d+\.self_attn)\.out_proj\.",
+        target_patterns=r"model.audio_encoder.lfm.\1.o_proj.",
     ),
+    WeightRenaming(
+        source_patterns=r"^encoder\.lfm\.lfm\.(layers\.\d+\.self_attn\.[qk])_layernorm\.",
+        target_patterns=r"model.audio_encoder.lfm.\1_norm.",
+    ),
+    WeightRenaming(source_patterns=r"^mlp\.model\.0\.", target_patterns="model.audio_projector.layer_norm."),
+    WeightRenaming(source_patterns=r"^mlp\.model\.1\.", target_patterns="model.audio_projector.linear_1."),
+    WeightRenaming(source_patterns=r"^mlp\.model\.3\.", target_patterns="model.audio_projector.linear_2."),
+    WeightRenaming(source_patterns=r"^codebook_embedding\.", target_patterns="model.codebook_embedding."),
+    WeightRenaming(source_patterns=r"^depth_linear\.", target_patterns="model.depth_decoder.depth_linear."),
+    WeightRenaming(source_patterns=r"^mask_embedding", target_patterns="model.depth_decoder.mask_embedding"),
+    WeightRenaming(source_patterns=r"^depthformer\.model\.", target_patterns="model.depth_decoder.model."),
     WeightConverter(
-        source_patterns="depth_decoder.depth_embeddings.*.embedding.weight",
-        target_patterns="depth_decoder.codebook_embedding",
+        source_patterns="depth_embeddings.*.embedding.weight",
+        target_patterns="model.depth_decoder.codebook_embedding",
         operations=[MergeModulelist(dim=0)],
     ),
     WeightConverter(
-        source_patterns="depth_decoder.depth_embeddings.*.embedding_norm.weight",
-        target_patterns="depth_decoder.codebook_norm.weight",
+        source_patterns="depth_embeddings.*.embedding_norm.weight",
+        target_patterns="model.depth_decoder.codebook_norm.weight",
         operations=[MergeModulelist(dim=0)],
     ),
 ]

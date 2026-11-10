@@ -352,6 +352,8 @@ class Lfm3AudioPreTrainedModel(Lfm3PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     _no_split_modules = ["Lfm3AudioDepthDecoder"]
+    # the released checkpoints store the tied depth logit heads next to their embeddings
+    _keys_to_ignore_on_load_unexpected = [r"depth_embeddings\.\d+\.to_logits\."]
     _can_record_outputs = AttributeError()
 
     @torch.no_grad()
