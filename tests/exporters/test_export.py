@@ -234,11 +234,17 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "onnx.exactness": {
         "Wav2Vec2ForPreTraining": (
-            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
-            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
-            "with itself either."
+            "In eval mode the codevector quantizer picks one of 320 codes per frame with a hard `argmax`. "
+            "With random weights, two code logits can land within a few float32 ulps of each other, and "
+            "ORT's rounding (~1e-5 on the logits) then picks the other code. One flipped code changes that "
+            "frame's `projected_quantized_states` (~0.5% of the elements, within the 5% allowance) and "
+            "makes the scalar `codevector_perplexity` jump by up to ~1%, far over the tolerance."
         ),
-        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechForPreTraining": "Same `argmax` near-tie in the codevector quantizer as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechSatForPreTraining": "Same `argmax` near-tie in the codevector quantizer as `Wav2Vec2ForPreTraining`.",
+        "Wav2Vec2ConformerForPreTraining": (
+            "Same `argmax` near-tie in the codevector quantizer as `Wav2Vec2ForPreTraining`."
+        ),
         "PatchTSTForPretraining": (
             "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
             "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
