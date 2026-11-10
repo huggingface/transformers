@@ -391,6 +391,12 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
         return inputs_dict
 
+    def _logits_scored_by_loss(self, model, logits):
+        # The logits also cover the image patches placed before the text, `(batch, num_patches + text_length, vocab)`,
+        # but the loss is only computed on the text positions.
+        num_image_tokens = model.git.encoder.layer[0].attention.self.image_patch_tokens
+        return logits[:, num_image_tokens:]
+
     def setUp(self):
         self.model_tester = GitModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GitConfig, hidden_size=32)
