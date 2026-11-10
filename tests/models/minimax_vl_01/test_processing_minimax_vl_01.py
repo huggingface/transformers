@@ -17,7 +17,7 @@ from itertools import groupby
 
 import numpy as np
 
-from transformers import MiniMaxVL01Config, MiniMaxVL01Processor, PreTrainedTokenizerFast
+from transformers import MiniMaxVL01Config, MiniMaxVL01Processor
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import (
     require_tokenizers,
@@ -26,15 +26,9 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
-from transformers.utils import is_tokenizers_available, is_torch_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_tokenizers_available():
-    from tokenizers import Tokenizer, decoders
-    from tokenizers.models import BPE
-    from tokenizers.pre_tokenizers import ByteLevel
 
 
 if is_torch_available():
@@ -57,28 +51,14 @@ CHAT_TEMPLATE = (
 @require_tokenizers
 class MiniMaxVL01ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniMaxVL01Processor
+    model_id = "MiniMaxAI/MiniMax-VL-01"
 
     @classmethod
-    def _setup_tokenizer(cls):
-        vocab = {
-            "<unk>": 0,
-            "<pad>": 1,
-            "<bos>": 2,
-            "<eos>": 3,
-            "<image>": 4,
-        }
-        vocab.update({token: index for index, token in enumerate(sorted(ByteLevel.alphabet()), start=len(vocab))})
-        tokenizer = Tokenizer(BPE(vocab=vocab, merges=[], unk_token="<unk>"))
-        tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=False)
-        tokenizer.decoder = decoders.ByteLevel()
-        return PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            unk_token="<unk>",
-            pad_token="<pad>",
-            bos_token="<bos>",
-            eos_token="<eos>",
-            extra_special_tokens={"image_token": "<image>"},
-        )
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        processor = super()._setup_from_pretrained(model_id, **kwargs)
+        if processor.tokenizer.pad_token is None:
+            processor.tokenizer.pad_token = processor.tokenizer.eos_token
+        return processor
 
     @classmethod
     def _setup_image_processor(cls):
@@ -215,7 +195,7 @@ class MiniMaxVL01ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @slow
     def test_public_processor_loads_without_remote_code(self):
         processor = MiniMaxVL01Processor.from_pretrained(
-            "MiniMaxAI/MiniMax-VL-01", config=MiniMaxVL01Config(), trust_remote_code=False
+            self.model_id, config=MiniMaxVL01Config(), trust_remote_code=False
         )
 
         self.assertIsInstance(processor, MiniMaxVL01Processor)
