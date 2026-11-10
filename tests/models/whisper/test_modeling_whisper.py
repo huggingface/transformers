@@ -1660,11 +1660,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPT = [
             {
                 "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-                "timestamp": (0.0, 6.5600000000000005),
+                "timestamp": (0.0, 6.56),
             },
             {
                 "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
-                "timestamp": (6.5600000000000005, 11.24),
+                "timestamp": (6.56, 11.24),
             },
             {
                 "text": " He tells us that at this festive season of the year, with Christmas and roast beef looming",
@@ -1686,12 +1686,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             {"text": " are as national as a jingo poem.", "timestamp": (40.32, 44.72)},
             {
                 "text": " Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used",
-                "timestamp": (44.72, 50.400000000000006),
+                "timestamp": (44.72, 50.4),
             },
-            {"text": " to flash his teeth.", "timestamp": (50.400000000000006, 52.96)},
+            {"text": " to flash his teeth.", "timestamp": (50.4, 52.96)},
             {
                 "text": " And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like",
-                "timestamp": (52.96, 58.68000000000001),
+                "timestamp": (52.96, 58.68),
             },
             {"text": " a shampoo and a Turkish bath next man.", "timestamp": (58.68, 61.96)},
         ]
@@ -1699,7 +1699,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript_segments = [
             {
                 "text": processor.decode(seg["tokens"], skip_special_tokens=True),
-                "timestamp": (seg["start"].item(), seg["end"].item()),
+                "timestamp": (round(seg["start"].item(), 2), round(seg["end"].item(), 2)),
             }
             for seg in generated_ids["segments"][0]
         ]
