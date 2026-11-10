@@ -211,8 +211,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     # DeepSeek-V4-Flash's per-block `.scale`, Mistral Large 4's `.qscale_weight`, ModelOpt's names (and FP8 embeddings')
     renamed_names = {
-        "scale": "weight_scale_inv",
-        "qscale_weight": "weight_scale_inv",
-        "weight_scale": "weight_scale_inv",
-        "input_scale": "activation_scale",
+        "weight_scale_inv": ["scale", "qscale_weight", "weight_scale"],
+        "activation_scale": ["input_scale"],
     }

@@ -78,11 +78,7 @@ class Mxfp4Quantize(ConversionOps):
                 )
 
                 proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
-
-                if proj in module._parameters:
-                    # Remove the nn.Parameter registration so we can attach the Triton tensor
-                    del module._parameters[proj]
-
+                swizzled(module, proj, missing_keys, full_layer_name)
                 setattr(module, proj, triton_weight_tensor)
                 setattr(
                     module,
@@ -90,7 +86,6 @@ class Mxfp4Quantize(ConversionOps):
                     PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
                 )
 
-                missing_keys.discard(f"{full_layer_name}")
                 module._is_hf_initialized = True
 
                 return {}
@@ -178,7 +173,7 @@ class Mxfp4Deserialize(ConversionOps):
             param_data[f"{proj}_blocks"].device,
             triton_kernels_hub,
         )
-        missing_keys.discard(f"{full_layer_name}")
+        swizzled(module, proj, missing_keys, full_layer_name)
         module._is_hf_initialized = True
         # We return an empty mapping since the module was updated in-place. This prevents
         # the loader from trying to materialize the original meta-parameter names again.
@@ -330,8 +325,13 @@ class Mxfp4GptOssExperts(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
 
-        self.gate_up_proj = nn.Parameter(
+        # As GPT-OSS saves them: swizzled into `gate_up_proj` and its `gate_up_proj_precision_config` once loaded
+        self.gate_up_proj_blocks = nn.Parameter(
             torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, 16, dtype=torch.uint8),
+            requires_grad=False,
+        )
+        self.gate_up_proj_scales = nn.Parameter(
+            torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -339,8 +339,12 @@ class Mxfp4GptOssExperts(nn.Module):
             torch.zeros(self.num_experts, 2 * self.intermediate_size, dtype=torch.float32), requires_grad=False
         )
 
-        self.down_proj = nn.Parameter(
+        self.down_proj_blocks = nn.Parameter(
             torch.zeros((self.num_experts, self.hidden_size, self.intermediate_size // 32, 16), dtype=torch.uint8),
+            requires_grad=False,
+        )
+        self.down_proj_scales = nn.Parameter(
+            torch.zeros((self.num_experts, self.hidden_size, self.intermediate_size // 32), dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -509,6 +513,14 @@ def dequantize_convertops(blocks, scales, dtype):
     return torch.nn.Parameter(dequantized)
 
 
+def swizzled(module, proj, missing_keys, full_layer_name):
+    "The serialized params of `proj` (`gate_up_proj_blocks`, `gate_up_proj_scales`) now live in its Triton tensor"
+    prefix = full_layer_name.rpartition(".")[0]
+    for name in (f"{proj}_blocks", f"{proj}_scales"):
+        module._parameters.pop(name, None)
+        missing_keys.discard(f"{prefix}.{name}")
+
+
 def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton_kernels_hub):
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
@@ -545,10 +557,6 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
         triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
 
     # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It's like a subtensor
-    # Since the Experts module registers gate_up_proj and down_proj as nn.Parameters, we need to remove them so we can attach the Triton tensor
-    if proj in module._parameters:
-        # Remove the nn.Parameter registration so we can attach the Triton tensor
-        del module._parameters[proj]
     setattr(module, proj, triton_weight_tensor)
     setattr(
         module,

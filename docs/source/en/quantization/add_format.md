@@ -53,7 +53,7 @@ The quantizer then says which modules become `Mxfp4Experts` and what the checkpo
 ```py
 class Mxfp4HfQuantizer(HfQuantizer):
     serialized_names = {"weight": ["weight", "weight_scale_inv"]}  # what a param is stored as
-    renamed_names = {"scale": "weight_scale_inv"}                 # DeepSeek-V4 saves `.scale`
+    renamed_names = {"weight_scale_inv": ["scale"]}               # DeepSeek-V4 saves `.scale`
 
     def quantized_module(self, name, module):
         if name.endswith(".experts"):

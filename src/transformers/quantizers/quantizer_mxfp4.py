@@ -242,18 +242,38 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return Mxfp4Quantize(self)
 
     serialized_names = {
-        "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
-        "down_proj": ["down_proj_blocks", "down_proj_scales"],
-        # `Mxfp4Experts`: the model's converters merge the experts' weights, and their scales
+        # `Mxfp4Experts` (DeepSeek-V4): the model's converters merge the experts' weights, index-aligned
         "weight": ["weight", "weight_scale_inv"],
+        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
+        "down_proj": ["down_proj", "down_proj_scale_inv"],
+        # `Mxfp4GptOssExperts`, as GPT-OSS saves them
+        "gate_up_proj_blocks": ["gate_up_proj_blocks", "gate_up_proj_scales"],
+        "down_proj_blocks": ["down_proj_blocks", "down_proj_scales"],
     }
 
     def get_weight_conversions(self):
-        # A `weight` only loads through the model's converters (`update_weight_conversions`)
-        return [c for c in super().get_weight_conversions() if c._original_target_patterns != ["weight"]]
+        from ..core_model_loading import WeightRenaming
+
+        if not self.pre_quantized:  # GPT-OSS's experts, quantized on the fly into their serialized names
+            return [WeightRenaming(r"experts\.(gate_up_proj|down_proj)$", r"experts.\1_blocks")]
+        # GPT-OSS's: the others load through the model's converters
+        conversions = [
+            c for c in super().get_weight_conversions() if c._original_target_patterns[0].endswith("_blocks")
+        ]
+        if not self.quantization_config.dequantize:
+            return conversions
+        # Dequantized into the original experts' `gate_up_proj`
+        return [
+            c.copy(
+                c._original_source_patterns,
+                [c._original_target_patterns[0].removesuffix("_blocks")],
+                operations=c.operations,
+            )
+            for c in conversions
+        ]
 
     # DeepSeek-V4 saves the expert scales under `.scale`
-    renamed_names = {"scale": "weight_scale_inv"}
+    renamed_names = {"weight_scale_inv": ["scale"]}
 
     def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize

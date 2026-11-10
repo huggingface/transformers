@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 import warnings
 from collections.abc import Callable
 from itertools import chain
@@ -403,7 +402,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
         self.checkpoint_names = checkpoint_names  # patterns are checkpoint module names, renamed in `match_modules`
-        self.module_quantizers, self.prefix, self.registered = {}, "", set()
+        self.module_quantizers, self.prefix = {}, ""
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
 
@@ -442,34 +441,36 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def match_modules(self, model):
         """
-        The quantizer of every module, matched once against the plan with the dtype plan's globs: exact names first,
-        then globs, then `"*"` for the modules no other pattern matches.
+        The quantizer of every module: the plan pattern its name (or one of its params') matches, exact names before
+        globs, `"*"` for the rest. A checkpoint's plan names checkpoint modules: renamed like their keys first.
         """
         from ..conversion_mapping import get_model_conversion_mapping
-        from ..core_model_loading import build_glob_alternation
+        from ..core_model_loading import WeightConverter, build_glob_alternation, rename_source_key
 
-        if self.checkpoint_names:  # renamed like their keys: per-expert ones collapse on the fused module
-            renamed, transforms = {}, get_model_conversion_mapping(model)
+        if self.checkpoint_names:  # e.g. per-expert names collapse on the fused module
+            transforms = get_model_conversion_mapping(model)
+            converters = [t for t in transforms if isinstance(t, WeightConverter)]
+            renamings = [t for t in transforms if not isinstance(t, WeightConverter)]
+            renamed = {}
             for pattern, quantizer in self.quantizers.items():
-                name = f"{pattern}.weight"
-                for transform in transforms:
-                    name, _ = transform.rename_source_key(name)
-                renamed.setdefault(name.removesuffix(".weight"), quantizer)
+                renamed.setdefault(
+                    rename_source_key(f"{pattern}.weight", renamings, converters)[0][: -len(".weight")], quantizer
+                )
             self.set_quantizers(renamed)
             self.checkpoint_names = False
             model.config.quantization_config = self.quantization_config
         tiers = [[p for p in self.quantizers if "*" not in p], [p for p in self.quantizers if "*" in p and p != "*"]]
         tiers = [build_glob_alternation(tier)[:2] for tier in tiers if tier]
-        self.prefix = f"{model.base_model_prefix}."
-        self.module_quantizers = {}
+        self.prefix, self.module_quantizers = f"{model.base_model_prefix}.", {}
         for name, module in model.named_modules():
-            # A pattern may name the module or one of its params (e.g. `*.experts.*` for `experts.gate_up_proj`)
-            names = [name, *(f"{name}.{param}" for param in chain(module._parameters, module._buffers))]
+            keys = [name, *(f"{name}.{param}" for param in chain(module._parameters, module._buffers))]
             matches = (
-                (alternation.search(key), group_to_pattern) for alternation, group_to_pattern in tiers for key in names
+                patterns[m.lastgroup]
+                for alternation, patterns in tiers
+                for key in keys
+                if (m := alternation.search(key))
             )
-            pattern = next((patterns[match.lastgroup] for match, patterns in matches if match), "*")
-            self.module_quantizers[name] = self.quantizers.get(pattern)
+            self.module_quantizers[name] = self.quantizers.get(next(matches, "*"))
 
     def get_quantizer(self, name):
         "The quantizer of the module owning `name` (a param, or a module), as matched by `match_modules`"
@@ -519,18 +520,19 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)  # before the model's ops, else after
         sources, targets = transform._original_source_patterns, transform._original_target_patterns
-        stored = sources[0].rpartition(".")[2]  # e.g. `weight_scale` of `experts.*.gate_proj.weight_scale`
-        if not any(stored in names for names in quantizer.serialized_names.values()):  # e.g. a merged expert bias
+        stored = sources[0].rpartition(".")[2]  # the param: read first, e.g. `weight` of `experts.*.gate_proj.weight`
+        names = quantizer.serialized_names.get(stored)
+        if names is None:  # not one of the format's params, e.g. a merged expert bias
             return transform
 
-        layer = name.rpartition(".")[0].removeprefix(self.prefix)
-        if stored in quantizer.serialized_names and layer not in self.registered:  # the checkpoint's names for ours
-            self.registered.add(layer)
-            scope = rf"^((?:{re.escape(self.prefix)})?{re.escape(layer)}(?:\..+)?)"
-            renamings += [WeightRenaming(rf"{scope}\.{s}$", rf"\1.{o}") for s, o in quantizer.renamed_names.items()]
+        # The checkpoint's names for ours, on this layer only: e.g. ModelOpt's `weight_scale` is also NVFP4's own
+        for ours, aliases in quantizer.renamed_names.items():
+            renaming = WeightRenaming(rf"(?<![^.])(?:{'|'.join(aliases)})$", ours)  # a whole name: not `hc_scale`
+            renaming.scope_prefix = name.rpartition(".")[0].removeprefix(self.prefix)
+            renaming.base_model_prefix = model.base_model_prefix
+            renamings.append(renaming)
 
-        sources = [source for source in sources if source.endswith(f".{stored}")]
-        if not sources:  # a format's general converter: it already reads all its names
+        if sources == names:  # a format's general converter: it reads all its names
             if dequantize:
                 transform.operations = [operation(quantizer), *transform.operations]
             else:
@@ -538,16 +540,18 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             return transform
 
         # A model converter, e.g. merging the experts: it also reads the param's other names (its scales)
-        names = [source.removesuffix(stored) + n for source in sources for n in quantizer.serialized_names[stored]]
-        if (sources[0], quantizer) not in self.registered:  # once: their keys renamed to its target
-            self.registered.add((sources[0], quantizer))
-            converters.insert(0, transform.copy(names, targets, operations=transform.operations))
-            pattern_to_converter.update(dict.fromkeys(converters[0].source_patterns, converters[0]))
+        # Route the scales' keys (`experts.*.gate_proj.weight_scale_inv`) to this target, like the weights': collected
+        # together. Once, and before the format's general converters, which would take them (`weight_scale_inv` -> `weight`)
+        scales = [source.removesuffix(stored) + n for source in sources for n in names[1:]]
+        if scales and scales[0] not in pattern_to_converter:
+            router = transform.copy(scales, targets, operations=transform.operations)
+            converters.insert(0, router)
+            pattern_to_converter.update(dict.fromkeys(router.source_patterns, router))
 
         # Dequantized, the scales fold into the weight first. Else the ops run per name, e.g. `gate_up_proj_scale_inv`
         per_name = PerName(transform.operations, quantizer.serialized_names, stored)
         ops = [operation(quantizer), *transform.operations] if dequantize else [per_name, operation(quantizer)]
-        return transform.copy(names, targets, operations=ops)
+        return transform.copy([*sources, *scales], targets, operations=ops)
 
     def param_element_size(self, model, param_name, param):
         if not self.module_quantizers:
