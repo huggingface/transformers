@@ -202,7 +202,7 @@ class BenchmarkConfig:
         return {
             "name": self.name,
             "prompt_length_policy": "repeat_tokens_to_exact_length",
-            "eos_token_id": -1,
+            "eos_token_id": -1 if self.continuous_batching else None,
             "allow_block_sharing": False if self.continuous_batching else None,
             "auto_switch_to_flash": False if self.continuous_batching else None,
             "warmup_iterations": self.warmup_iterations,

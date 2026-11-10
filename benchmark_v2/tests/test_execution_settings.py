@@ -51,7 +51,8 @@ def test_setup_exact_inputs_and_explicit_settings(continuous_batching, sequence_
 
     assert runner.inputs["input_ids"].tolist() == [[10, 11, 12, 10, 11, 12, 10, 11][:sequence_length]] * 2
     assert runner.execution_settings["input_token_lengths"] == [sequence_length] * 2
-    assert model.generation_config.eos_token_id == -1
+    assert model.generation_config.eos_token_id == (-1 if continuous_batching else None)
+    assert config.to_dict()["eos_token_id"] == model.generation_config.eos_token_id
     assert model.generation_config.cache_implementation == (None if continuous_batching else "static")
     if continuous_batching:
         assert runner.continuous_batching_config.allow_block_sharing is False

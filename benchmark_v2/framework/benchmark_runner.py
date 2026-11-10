@@ -205,7 +205,7 @@ class BenchmarkRunner:
         # Prepare generation config
         generation_config_kwargs = {
             "do_sample": False,
-            "eos_token_id": -1,
+            "eos_token_id": -1 if config.continuous_batching else None,
             "max_new_tokens": config.num_tokens_to_generate,
         }
 

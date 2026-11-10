@@ -5,7 +5,7 @@ A comprehensive benchmarking framework for transformer models that supports mult
 
 ## Workload and execution settings
 
-The main runner uses exactly `--sequence-length` input tokens per request. It truncates the fixed passage for shorter inputs and repeats its tokenized contents for longer inputs. Prompts remain identical across the batch. EOS stopping is explicitly disabled (`eos_token_id=-1`) for fixed-length output measurements.
+The main runner uses exactly `--sequence-length` input tokens per request. It truncates the fixed passage for shorter inputs and repeats its tokenized contents for longer inputs. Prompts remain identical across the batch. EOS stopping is explicitly disabled for fixed-length output measurements: regular generation uses `eos_token_id=None`, while continuous batching uses its `eos_token_id=-1` convention.
 
 Continuous batching disables prefix sharing through `ContinuousBatchingConfig` and disables automatic switching to Flash Attention. Eager attention uses its continuous-batching variant, `paged|eager`. Each call creates and warms up a manager; that lifecycle work remains inside API-call latency. Compiled regular generation uses a static cache.
 
