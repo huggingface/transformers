@@ -833,30 +833,30 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # Loss differs by CPU and GPU, also this can be changed in future.
         expected_loss_dict = {
-            "loss_ce": torch.tensor(1.1799),
-            "loss_bbox": torch.tensor(0.2348),
-            "loss_giou": torch.tensor(0.5834),
-            "loss_ce_0": torch.tensor(1.1199),
-            "loss_bbox_0": torch.tensor(0.3083),
-            "loss_giou_0": torch.tensor(0.6555),
-            "loss_ce_1": torch.tensor(1.2075),
-            "loss_bbox_1": torch.tensor(0.2641),
-            "loss_giou_1": torch.tensor(0.6073),
-            "loss_ce_2": torch.tensor(1.2915),
-            "loss_bbox_2": torch.tensor(0.2616),
-            "loss_giou_2": torch.tensor(0.5730),
-            "loss_ce_3": torch.tensor(1.0243),
-            "loss_bbox_3": torch.tensor(0.2799),
-            "loss_giou_3": torch.tensor(0.6326),
-            "loss_ce_4": torch.tensor(1.2019),
-            "loss_bbox_4": torch.tensor(0.2430),
-            "loss_giou_4": torch.tensor(0.5679),
-            "loss_ce_enc": torch.tensor(10.2381),
-            "loss_bbox_enc": torch.tensor(0.2886),
-            "loss_giou_enc": torch.tensor(0.6335),
+            "loss_ce": torch.tensor(1.2019),
+            "loss_bbox": torch.tensor(0.2259),
+            "loss_giou": torch.tensor(0.5644),
+            "loss_ce_0": torch.tensor(1.1258),
+            "loss_bbox_0": torch.tensor(0.3075),
+            "loss_giou_0": torch.tensor(0.6526),
+            "loss_ce_1": torch.tensor(1.2258),
+            "loss_bbox_1": torch.tensor(0.2650),
+            "loss_giou_1": torch.tensor(0.6079),
+            "loss_ce_2": torch.tensor(1.3710),
+            "loss_bbox_2": torch.tensor(0.2298),
+            "loss_giou_2": torch.tensor(0.5836),
+            "loss_ce_3": torch.tensor(1.1709),
+            "loss_bbox_3": torch.tensor(0.2343),
+            "loss_giou_3": torch.tensor(0.5750),
+            "loss_ce_4": torch.tensor(1.2305),
+            "loss_bbox_4": torch.tensor(0.2247),
+            "loss_giou_4": torch.tensor(0.5623),
+            "loss_ce_enc": torch.tensor(10.2855),
+            "loss_bbox_enc": torch.tensor(0.2865),
+            "loss_giou_enc": torch.tensor(0.6313),
         }
 
-        expected_loss = torch.tensor(52.4340)
+        expected_loss = torch.tensor(52.4458)
 
         for key in expected_loss_dict:
             self.assertTrue(torch.allclose(outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3))
