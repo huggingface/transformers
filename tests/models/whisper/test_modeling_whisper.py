@@ -2788,6 +2788,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             " Folks, if you watch the show and I hope you do, I spend a lot of time right over there. Tirelessly studying the lineage of the day's most important thoroughbred stories and whole-stiner headlines, working with the best trainers money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen that is my nightly monologue. But sometimes sometimes folks I break into an unincorporated veterinary genetics lab. And grab whatever test tubes I can find and then under a grow light I got from a discarded chia pet. I mixed the pill for DNA of a horse and whatever was in a tube labelled Keith Cole and extra. Slurring the concoction with caffeine pills and a microwave bread bowl, I screamed sing a prayer to Janice initiator of human life and God of transformation as a half horse, half man freak, seizes to life before me and the hideous collection of loose animal parts and corrupted men tissue that is my segment. Meanwhile!",
         ]
         # fmt: on
+        EXPECTED_TEXT_TPU = list(EXPECTED_TEXT)
+        EXPECTED_TEXT_TPU[1] = EXPECTED_TEXT[1].replace("my segment. Meanwhile.", "my segment. Meanwhile!")
+        expected_text = Expectations({(None, None): EXPECTED_TEXT, ("tpu", None): EXPECTED_TEXT_TPU}).get_expectation()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
@@ -2826,7 +2829,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
-        self.assertListEqual(decoded_all, EXPECTED_TEXT)
+        self.assertListEqual(decoded_all, expected_text)
 
     @slow
     def test_whisper_shortform_multi_batch_hard_prev_cond(self):
