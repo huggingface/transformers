@@ -245,7 +245,7 @@ class RecurrentGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "google/recurrentgemma-2b"
 
     def test_2b_generate(self):
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', "Hi today the 19th of June 2019, I was in the office of the Ministry of Health and Social Protection of the Republic of Uzbekistan. I was there to discuss the issue of the implementation of the project “Strengthening the capacity of the Ministry of Health and Social Protection of the Republic of Uzbekistan to"]  # fmt: skip
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
         ).to(torch_device)
@@ -304,7 +304,8 @@ class RecurrentGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", None): ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am stuck', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
-                (None, None): ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
+                ("rocm", (9, 4)): ['Hello I am doing a project on the 1960s and I am looking for a picture of a ', 'Hi today I am going to show you how to make a simple and easy to make a <strong>DIY</strong>'],
+                (None, None): ['Hello I am doing a project on the effects of the environment on the human body. I am looking for a few good', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
             }
         )
         # fmt: on
