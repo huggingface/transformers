@@ -23,12 +23,14 @@ from transformers import (
     CLIPVisionConfig,
     MiniMaxVL01Config,
     MiniMaxVL01ForConditionalGeneration,
+    MiniMaxVL01ImageProcessor,
     MiniMaxVL01Model,
     MiniMaxVL01TextConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchvision, require_vision, slow, torch_device
 
+from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -387,6 +389,8 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
+@require_torchvision
+@require_vision
 class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # TODO: replace with a tiny MiniMax-VL-01 checkpoint on the Hub, as MiniMax uses `hf-internal-testing/MiniMax-tiny`.
     @staticmethod
@@ -436,12 +440,20 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @staticmethod
     def _image_inputs():
-        pixel_values = torch.arange(4 * 3 * 8 * 8, dtype=torch.float32, device=torch_device).reshape(4, 3, 8, 8)
+        images = [
+            load_coco_image("000000039769.jpg"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+        ]
+        image_processor = MiniMaxVL01ImageProcessor(
+            size={"height": 8, "width": 8}, image_grid_pinpoints=[[8, 8]], patch_size=4
+        )
+        image_inputs = image_processor(images, return_tensors="pt").to(torch_device)
         return {
             "input_ids": torch.tensor([[3] * 10 + [5, 6, 7], [3] * 10 + [8, 9, 10]], device=torch_device),
             "attention_mask": torch.ones(2, 13, dtype=torch.long, device=torch_device),
-            "pixel_values": pixel_values / pixel_values.numel(),
-            "image_sizes": torch.tensor([[8, 8], [8, 8]], device=torch_device),
+            **image_inputs,
         }
 
     def test_small_model_logits_batched(self):
@@ -449,8 +461,8 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         logits = model(**self._image_inputs(), logits_to_keep=3).logits
         expected_slice = torch.tensor(
             [
-                [[0.043018, -0.140558, 0.122684], [-0.112334, -0.081162, -0.004151], [0.013292, 0.107908, -0.186869]],
-                [[-0.027265, -0.132032, 0.167542], [-0.069453, 0.046494, -0.200256], [0.124182, -0.002037, -0.107000]],
+                [[0.011019, -0.157553, 0.124968], [-0.124731, -0.088083, -0.016194], [0.005786, 0.093807, -0.179877]],
+                [[-0.012799, -0.148575, 0.171030], [-0.079123, 0.022661, -0.211346], [0.132855, -0.025805, -0.122426]],
             ],
             device=torch_device,
         )
@@ -462,5 +474,5 @@ class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=5, do_sample=False)
         self.assertEqual(
             generated_ids[:, inputs["input_ids"].shape[1] :].tolist(),
-            [[60, 87, 65, 68, 53], [21, 82, 7, 60, 87]],
+            [[60, 87, 65, 68, 53], [21, 82, 7, 52, 45]],
         )
