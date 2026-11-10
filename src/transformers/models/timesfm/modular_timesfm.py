@@ -315,11 +315,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Normalize each patch
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
-        outputs = torch.where(
-            torch.abs(inputs - self.config.pad_val) < self.config.tolerance,
-            torch.full((), self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
-            outputs,
-        )
+        # padded positions keep their value (`pad_val`), which does not fit in fp16: no scalar to cast
+        outputs = torch.where(torch.abs(inputs - self.config.pad_val) < self.config.tolerance, inputs, outputs)
         return outputs, (mu, sigma)
 
     @merge_with_config_defaults
@@ -333,7 +330,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFmOutput:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series that serves as input to the model.
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
@@ -619,7 +616,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFmOutputForPrediction:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series that serves as input to the model.
         freq (`torch.LongTensor` of shape `(batch_size,)`):
             Frequency indices for the time series data.

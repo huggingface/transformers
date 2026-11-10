@@ -21,10 +21,14 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import torch
 
+from ...utils.import_utils import is_torch_available
 from ..decompose import decode_graph_name, decompose_for_generation
 from ..utils import BATCH_INPUTS, get_leaf_tensors
+
+
+if is_torch_available():
+    import torch
 
 
 if TYPE_CHECKING:

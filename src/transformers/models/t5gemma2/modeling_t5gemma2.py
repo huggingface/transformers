@@ -461,7 +461,7 @@ class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor,]:
+    ) -> tuple[torch.Tensor,]:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -517,7 +517,7 @@ class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         encoder_hidden_states: torch.Tensor | None = None,
         **kwargs,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
 
@@ -767,7 +767,7 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         # Unused for processor compatibility kept in signature.
         token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -865,8 +865,8 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
     def get_image_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor | None,
-        image_features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor | None,
+        image_features: torch.Tensor,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -898,8 +898,8 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         # Unused for processor compatibility kept in signature.
         token_type_ids: torch.Tensor | None = None,
@@ -967,7 +967,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
@@ -1090,8 +1090,8 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         self,
         # encoder inputs
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         # decoder inputs
         decoder_input_ids: torch.LongTensor | None = None,
@@ -1202,8 +1202,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         self,
         # encoder inputs
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         # decoder inputs
         decoder_input_ids: torch.LongTensor | None = None,
@@ -1212,13 +1212,13 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         # others (mainly inference or cache related)
         encoder_outputs: BaseModelOutput | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
+    ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
@@ -1372,15 +1372,15 @@ class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.Tensor | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
@@ -1467,15 +1467,15 @@ class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.Tensor | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:

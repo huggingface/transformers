@@ -230,11 +230,14 @@ def _prepare_grid_thw_vision_inputs(config: Any, inputs: dict[str, Any]) -> None
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
     module = _resolve_modeling_module(config)
-    merge_temporal = _vision_tower_attr(config, "merge_temporal_attention") is True
+    # An encoder with per-frame helpers (kimi_k25) attends over the whole clip; a tower's `merge_temporal` overrides it.
+    merge_temporal = _vision_tower_attr(config, "merge_temporal")
+    if merge_temporal is None:
+        merge_temporal = hasattr(module, "get_vision_frame_index")
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
         grid_thw, config, merge_temporal=merge_temporal, kwargs=inputs
     )
-    include_temporal = _vision_tower_attr(config, "include_temporal_position_ids") is True
+    include_temporal = _vision_tower_attr(config, "include_temporal") is True
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
     window_size = _vision_tower_attr(config, "window_size")

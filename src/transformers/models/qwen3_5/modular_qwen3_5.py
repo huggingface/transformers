@@ -27,7 +27,11 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -58,7 +62,6 @@ from ..qwen3_next.modeling_qwen3_next import (
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLForConditionalGeneration,
-    Qwen3VLModelOutputWithPast,
     Qwen3VLTextRotaryEmbedding,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
@@ -294,9 +297,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
-            query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
-            key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
         if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
@@ -375,7 +375,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -437,7 +437,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
     config: Qwen3_5VisionConfig
     _no_split_modules = ["Qwen3_5VisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3_5VisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         del self.deepstack_visual_indexes
         del self.deepstack_merger_list
@@ -491,10 +491,6 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         )
 
 
-class Qwen3_5ModelOutputWithPast(Qwen3VLModelOutputWithPast):
-    pass
-
-
 class Qwen3_5TextModel(Qwen3NextModel):
     config: Qwen3_5TextConfig
 
@@ -508,7 +504,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -566,7 +562,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return Qwen3_5ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -576,7 +572,7 @@ class Qwen3_5Model(Qwen2VLModel):
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5Config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -620,7 +616,7 @@ class Qwen3_5Model(Qwen2VLModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -632,7 +628,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.model = Qwen3_5TextModel(config)
 
@@ -663,9 +659,9 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,

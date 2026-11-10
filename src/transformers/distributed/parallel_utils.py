@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import contextlib
+import re
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
@@ -33,6 +34,34 @@ class ParallelInterface(GeneralInterface):
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+
+
+def replace_layer_number_by_wildcard(name: str) -> str:
+    """
+    Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
+    a dot (`.`) and the end of the string.
+    This matches how modules are named/numbered when using a nn.ModuleList or nn.Sequential, but will NOT match
+    numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
+    """
+    return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
+def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=True) -> str | None:
+    """
+    Get the parallel style for a parameter or module from a TP or EP plan.
+
+    The plan is a dictionary that maps parameter or module names to parallel styles.
+    The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+
+    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
+    not parent classes for `post_init` calls
+    """
+    generic_param_name = replace_layer_number_by_wildcard(parameter_name)
+    if generic_param_name in plan:
+        return plan[generic_param_name]
+    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in plan:
+        return plan[module_name]
+    return None
 
 
 @contextlib.contextmanager

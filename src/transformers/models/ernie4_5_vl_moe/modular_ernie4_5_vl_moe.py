@@ -545,7 +545,7 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
         position_ids: torch.LongTensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
@@ -648,7 +648,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Ernie4_5_VLMoeVisionConfig) -> None:
         super().__init__(config)
 
         del self.merger
@@ -929,7 +929,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -945,7 +945,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -963,10 +963,10 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -1046,7 +1046,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
@@ -1089,12 +1089,12 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         mm_token_type_ids: torch.IntTensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1237,6 +1237,8 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    config: Ernie4_5_VLMoeConfig
+
     def post_init(self):
         logger.warning_once(
             "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",

@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from ..utils import logging
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 from .parallel_utils import ALL_PARALLEL_STYLES, _use_local_dtensor_params
-from .tensor_parallel import _get_parameter_plan
 
 
 if TYPE_CHECKING:
@@ -385,20 +384,22 @@ if is_torch_distributed_available():
 
 
 def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
-    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
-    for name, module in model.named_modules():
-        for p_name, _ in list(module.named_parameters(recurse=False)):
-            full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
-            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, ep_mesh, parameter_name=full)
-                style.shard_param(module, p_name, ep_mesh)
+    """
+    Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch.
+    """
+    modules = dict(model.named_modules())
+    parameters = dict(model.named_parameters())
 
-        # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
-        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
-        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-            style = ALL_PARALLEL_STYLES[style_name]
+    for name, style_name in plan.items():
+        style = ALL_PARALLEL_STYLES[style_name]
+        if name in parameters:
+            module_name, _, param_name = name.rpartition(".")
+            module = modules[module_name]
+            style.validate_param(module, param_name, ep_mesh, parameter_name=name)
+            style.shard_param(module, param_name, ep_mesh)
+        else:
+            module = modules[name]
+            # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
             if style_name == "ep_dispatch_experts":
                 style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
             else:
