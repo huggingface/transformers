@@ -17,7 +17,6 @@ and remove unnecessary dependencies.
 """
 
 import base64
-import importlib
 import io
 import os
 import warnings
@@ -28,7 +27,6 @@ from urllib.parse import urlparse
 
 import numpy as np
 from huggingface_hub.utils import httpx
-from packaging import version
 
 from .utils import (
     is_librosa_available,
@@ -36,7 +34,8 @@ from .utils import (
     is_soundfile_available,
     is_torch_tensor,
     is_torchaudio_available,
-    is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     requires_backends,
 )
 from .utils.generic import retry
@@ -57,8 +56,6 @@ if is_librosa_available():
 if is_torchaudio_available():
     import torchaudio
 
-if is_torchcodec_available():
-    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
@@ -71,7 +68,10 @@ def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     return response.content
 
 
-_NEEDS_TORCHCODEC = "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from this source."
+_NEEDS_TORCHCODEC = (
+    "Loading audio from this source needs torchcodec>=0.3.0 with FFmpeg, which is not installed or can't be loaded. "
+    "See https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+)
 
 
 TORCHCODEC_ONLY_FILETYPES = frozenset(
@@ -223,13 +223,15 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
     if not isinstance(audio, str):
         raise TypeError(
             "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
-            "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
+            f"a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI) but got {type(audio)}."
         )
 
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
         resolved_backend = (
-            "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
+            "torchcodec"
+            if is_torchcodec_greater_or_equal("0.3.0") and is_torchcodec_usable(decode="audio")
+            else "librosa"
         )
     elif backend in ("torchcodec", "librosa", "torchaudio"):
         resolved_backend = backend

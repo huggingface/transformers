@@ -138,6 +138,7 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_detr_encoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6
@@ -159,6 +160,7 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_detr_decoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6

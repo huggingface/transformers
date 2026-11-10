@@ -149,7 +149,7 @@ class PPOCRV6SmallRecConvLayer(PPOCRV5ServerRecConvLayer):
 class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
     def __init__(
         self,
-        config,
+        config: PPOCRV6SmallRecConfig,
     ):
         super().__init__(config)
         in_channels = config.backbone_config.block_configs[-1][-1][2]
@@ -175,7 +175,7 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
             ]
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         # PP-OCRv6_small_rec uses the output of the first conv block as the residual.
         residual = self.conv_block[0](hidden_states)
 

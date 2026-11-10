@@ -63,6 +63,11 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
             A preemphasis filter coefficient. 0.0 means no preemphasis filter.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+            Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+            precision (`"bfloat16"` for Nemotron 3.5 Transcribe): the filter bank and the window are then rounded to
+            that dtype when the features are computed, so the log-mel features match the original front-end; the
+            spectrogram itself is always computed in float32.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -76,6 +81,7 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         win_length=400,
         preemphasis=0.97,
         padding_value=0.0,
+        mel_filters_dtype="float32",
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -100,9 +106,11 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
             sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
         )
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
+        self.mel_filters_dtype = mel_filters_dtype
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        dtype = getattr(torch, self.mel_filters_dtype)
+        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -118,7 +126,7 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        mel_filters = self.mel_filters.to(device).to(dtype).float()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 

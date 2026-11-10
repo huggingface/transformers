@@ -28,14 +28,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
-
-
-class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
 
 
 @requires(backends=("torch",))
@@ -56,8 +53,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
     """
-
-    valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
 
     def __init__(
         self,
@@ -107,7 +102,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -117,9 +112,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":
@@ -215,8 +208,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
-        **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
-    ) -> BatchFeature:
+        tokenize: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template.
 
@@ -231,6 +225,11 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 Hotwords/domain terms (e.g. proper nouns) to bias transcription toward the correct spelling. A
                 string or flat list of strings is shared across the batch; a nested list supplies separate
                 keywords per audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -255,7 +254,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -388,5 +387,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         """
         return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MossTranscribeDiarizeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MossTranscribeDiarizeProcessor"]

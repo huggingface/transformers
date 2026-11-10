@@ -510,15 +510,14 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
     # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
-    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
+    # (matching the encoder's util call). An explicit `merge_temporal` attribute overrides this default.
     module = sys.modules[type(model).__module__]
     temporal_encoder = hasattr(module, "get_vision_frame_index")
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
-        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+        grid_thw, model.config, merge_temporal=getattr(model, "merge_temporal", temporal_encoder), kwargs=inputs
     )
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+    # Encoders opt into 3-axis (t, h, w) positions with an explicit attribute; default to 2-axis (h, w).
+    include_temporal = getattr(model, "include_temporal", False)
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
     window_size = _find_submodule_attr(model, "window_size")
@@ -766,6 +765,10 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
 
     concat_along("input_ids", 1)
     concat_along("inputs_embeds", 1)
+    # Continuous Audio Language models (PocketTTS, GradiumPhononTTS) feed one `audio_latents` frame
+    # `[batch, 1, latent_dim]` per decode step, one per placeholder token, so they grow along the same
+    # axis as `input_ids`.
+    concat_along("audio_latents", 1)
     concat_along("cache_position", 0)
     # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
     # last in both, so a negative dim concatenates it correctly either way.

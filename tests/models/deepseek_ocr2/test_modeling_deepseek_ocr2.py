@@ -34,10 +34,6 @@ if is_torch_available():
         DeepseekOcr2ForConditionalGeneration,
         DeepseekOcr2Model,
     )
-    from transformers.models.deepseek_ocr2.configuration_deepseek_ocr2 import (
-        DeepseekOcr2TextConfig,
-        DeepseekOcr2VisionConfig,
-    )
 
 if is_vision_available():
     from transformers.image_utils import load_image
@@ -47,8 +43,6 @@ class DeepseekOcr2VisionText2TextModelTester(VLMModelTester):
     base_model_class = DeepseekOcr2Model
     config_class = DeepseekOcr2Config
     conditional_generation_class = DeepseekOcr2ForConditionalGeneration
-    text_config_class = DeepseekOcr2TextConfig
-    vision_config_class = DeepseekOcr2VisionConfig
 
     def __init__(self, parent, **kwargs):
         # VisionModel always selects query_768_resolution (144 tokens) for small images + 1 separator
@@ -71,45 +65,20 @@ class DeepseekOcr2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
         kwargs.setdefault("moe_intermediate_size", 64)
         kwargs.setdefault("num_experts_per_tok", 2)
+
+        kwargs.setdefault("vision_sam_hidden_size", 32)
+        kwargs.setdefault("vision_sam_output_channels", 16)
+        kwargs.setdefault("vision_sam_patch_size", 2)
+        kwargs.setdefault("vision_sam_hidden_act", "gelu")
+        kwargs.setdefault("vision_sam_mlp_ratio", 4.0)
+        kwargs.setdefault("vision_sam_window_size", 4)
+        kwargs.setdefault("vision_sam_global_attn_indexes", [1])
+        kwargs.setdefault("vision_sam_downsample_channels", [32, 64])
+
+        kwargs.setdefault("vision_encoder_hidden_size", 64)
+        kwargs.setdefault("vision_encoder_intermediate_size", 128)
+        kwargs.setdefault("vision_encoder_rms_norm_eps", 1.0)
         super().__init__(parent, **kwargs)
-
-        self.sam_config = {
-            "hidden_size": 32,
-            "output_channels": 16,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_channels": 3,
-            "image_size": 16,
-            "patch_size": 2,
-            "hidden_act": "gelu",
-            "mlp_ratio": 4.0,
-            "window_size": 4,
-            "global_attn_indexes": [1],
-            "downsample_channels": [32, 64],
-        }
-        self.encoder_config = {
-            "hidden_size": 64,
-            "intermediate_size": 128,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 4,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-            "rms_norm_eps": 1.0,
-        }
-
-    def get_vision_config(self):
-        return DeepseekOcr2VisionConfig(
-            sam_config=self.sam_config,
-            encoder_config=self.encoder_config,
-        )
-
-    def get_config(self):
-        return self.config_class(
-            vision_config=self.get_vision_config(),
-            text_config=self.get_text_config(),
-            image_token_id=self.image_token_id,
-        )
 
 
 @require_torch

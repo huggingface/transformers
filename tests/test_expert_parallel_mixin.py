@@ -23,7 +23,8 @@ from transformers import set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.testing_utils import is_expert_parallel_test, is_torch_available
 
-from .test_tensor_parallel_mixin import _get_expert_weight_names, _init_distributed, _reference_grad_shard
+from .distributed_testing_utils import run_distributed
+from .test_tensor_parallel_mixin import _get_expert_weight_names, _reference_grad_shard
 
 
 if is_torch_available():
@@ -54,7 +55,7 @@ EP_DISTRIBUTED_TEST_MODEL_TYPES = {
 
 
 # =============================================================================
-# Distributed helpers (top-level for pickling by mp.spawn)
+# Distributed helpers (top-level for pickling to the ranks)
 # =============================================================================
 
 
@@ -206,7 +207,7 @@ class ExpertParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_ep_forward_impl)(
                 tmp_dir, model_class, atol, rtol, experts_implementation
             )
 
@@ -225,6 +226,6 @@ class ExpertParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_ep_backward_impl)(
                 tmp_dir, model_class, atol, rtol, experts_implementation
             )
