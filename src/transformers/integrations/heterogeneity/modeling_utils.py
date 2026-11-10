@@ -59,25 +59,20 @@ _initializing_models: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = cont
 _layer_patching_lock = threading.Lock()
 
 
-def _select_attention_mask_by_layer_idx(
+def _select_attention_masks_by_layer_idx(
     module: nn.Module,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     *,
     layer_idx: int,
-    mask_position: int | None,
-) -> tuple[tuple[Any, ...], dict[str, Any]] | None:
-    if mask_position is not None and mask_position < len(args):
-        # The mask is passed by position
-        attention_mask = args[mask_position]
-        if isinstance(attention_mask, AttentionMasksByLayerIdx):
-            return (*args[:mask_position], attention_mask[layer_idx], *args[mask_position + 1 :]), kwargs
-    else:
-        # The mask is passed by keyword
-        attention_mask = kwargs.get("attention_mask")
-        if isinstance(attention_mask, AttentionMasksByLayerIdx):
-            kwargs["attention_mask"] = attention_mask[layer_idx]
-            return args, kwargs
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    # A layer can get several masks, so every argument is checked
+    args = tuple(arg[layer_idx] if isinstance(arg, AttentionMasksByLayerIdx) else arg for arg in args)
+    kwargs = {
+        name: value[layer_idx] if isinstance(value, AttentionMasksByLayerIdx) else value
+        for name, value in kwargs.items()
+    }
+    return args, kwargs
 
 
 def _validate_layer_cache_entry(
@@ -114,11 +109,7 @@ def _register_layer_attention_mask_selection_hook(
     layer_idx: int,
 ) -> None:
     layer.register_forward_pre_hook(
-        partial(
-            _select_attention_mask_by_layer_idx,
-            layer_idx=layer_idx,
-            mask_position=_get_argument_position(layer.forward, "attention_mask"),
-        ),
+        partial(_select_attention_masks_by_layer_idx, layer_idx=layer_idx),
         with_kwargs=True,
     )
 

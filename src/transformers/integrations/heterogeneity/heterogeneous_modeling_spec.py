@@ -84,8 +84,9 @@ class HeterogeneousModelingSpec:
             The layer class to patch, usually the model's decoder layer. The model must pass its own config object, not
             a copy, as the first argument of `layer_cls.__init__` after `self`, where the patched `__init__` replaces
             it with the layer's config. Only layers that receive this object are patched, and building the model raises
-            an error if any layer isn't. `layer_cls.forward` must also take the attention mask as an argument named
-            `attention_mask`, so that each layer gets its own mask.
+            an error if any layer isn't. `layer_cls.forward` must also take each attention mask as a separate
+            argument, because a hook that runs before the `forward` of each layer finds the masks of all layers in
+            its arguments, and replaces them with the masks built for that layer.
         layer_idx_resolver (`LayerIdxResolver`):
             Finds the index of each layer while the layer's `__init__` runs. Most models use `LayerIdxFromArgument`.
         skip_descriptors (`dict[str, dict[str | tuple[str, type], Callable[[], nn.Module]]]`, *optional*):

@@ -145,8 +145,8 @@ if is_torch_available():
             super().__init__()
             self.scale = torch.nn.Parameter(torch.tensor(2.0))
 
-        def forward(self, hidden_states, position_ids=None, attention_mask=None):
-            return hidden_states * self.scale, attention_mask
+        def forward(self, hidden_states, position_ids=None, attention_mask=None, encoder_attention_mask=None):
+            return hidden_states * self.scale, attention_mask, encoder_attention_mask
 
     class _MaskSelectingToyModel(_ToyPreTrainedModel):
         _heterogeneous_modeling_spec = HeterogeneousModelingSpec(
@@ -458,6 +458,17 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(model.layers[2](torch.zeros(1), attention_mask=masks)[1], "layer-two-mask")
         self.assertEqual(model.layers[2](torch.zeros(1), None, masks)[1], "layer-two-mask")
 
+    def test_layer_forward_selects_every_attention_mask_by_layer_idx(self):
+        model = _MaskSelectingToyModel(_toy_config(intermediate_size=64))
+        attention_masks = AttentionMasksByLayerIdx({2: "attention-mask"})
+        cross_attention_masks = AttentionMasksByLayerIdx({2: "cross-attention-mask"})
+
+        outputs = model.layers[2](
+            torch.zeros(1), attention_mask=attention_masks, encoder_attention_mask=cross_attention_masks
+        )
+
+        self.assertEqual(outputs[1:], ("attention-mask", "cross-attention-mask"))
+
     def test_data_parallel_replica_uses_its_own_parameters(self):
         model = _MaskSelectingToyModel(_toy_config(intermediate_size=64))
         # Exercise DataParallel's shallow replication without requiring GPUs.
@@ -465,7 +476,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         copied_layer.scale = torch.nn.Parameter(torch.tensor(7.0))
         masks = AttentionMasksByLayerIdx({0: "layer-zero-mask", 2: "layer-two-mask"})
 
-        output, selected_mask = copied_layer(torch.tensor(3.0), attention_mask=masks)
+        output, selected_mask, _ = copied_layer(torch.tensor(3.0), attention_mask=masks)
 
         torch.testing.assert_close(output, torch.tensor(21.0))
         self.assertEqual(selected_mask, "layer-two-mask")
