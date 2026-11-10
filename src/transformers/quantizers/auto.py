@@ -402,7 +402,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
         self.checkpoint_names = checkpoint_names  # patterns are checkpoint module names, renamed in `match_modules`
-        self.prefix, self.patterns = "", None
+        self.patterns = None
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
 
@@ -460,15 +460,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             self.set_quantizers(renamed)
             self.checkpoint_names = False
             model.config.quantization_config = self.quantization_config
-        self.prefix = f"{model.base_model_prefix}."
-        # Exact names first (the checkpoint's too, for `rename_layer` on its keys), then globs, `"*"` last
-        exact = {
-            pattern: quantizer for pattern, quantizer in self.quantizers.items() if "*" not in pattern
-        } | checkpoint
-        globs = sorted((pattern for pattern in self.quantizers if "*" in pattern), key=lambda glob: glob == "*")
-        patterns = exact | {glob: self.quantizers[glob] for glob in globs}
-        # `P` (or `P.*`) names the module `P` under any prefix, and everything under it
-        self.patterns = {f"*{pattern.removesuffix('.*')}.*": quantizer for pattern, quantizer in patterns.items()}
+        # Exact names first (the checkpoint's too, for `rename_layer` on its keys), then globs, `"*"` last. `P` (or
+        # `P.*`) names the module `P` under any prefix, and everything under it
+        patterns = self.quantizers | checkpoint
+        order = sorted(patterns, key=lambda pattern: ("*" in pattern) + (pattern == "*"))
+        self.patterns = {f"*{pattern.removesuffix('.*')}.*": patterns[pattern] for pattern in order}
 
     def get_quantizer(self, name):
         "The quantizer of the first plan pattern naming the module or key `name` (a module's name ends with a dot)"
