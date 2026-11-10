@@ -17,31 +17,24 @@ Processor class for DeepSeek-OCR-2.
 
 import math
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...image_utils import make_flat_list_of_images
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-            "min_patches": 2,
-            "max_patches": 6,
-        },
-    }
-
-
 @auto_docstring
 class DeepseekOcr2Processor(ProcessorMixin):
+    images_kwargs = {
+        "crop_to_patches": True,
+        "min_patches": 2,
+        "max_patches": 6,
+    }
+
     def __init__(
         self,
         image_processor=None,
@@ -63,90 +56,34 @@ class DeepseekOcr2Processor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _expand_image_tokens(
-        self,
-        text: list[TextInput],
-        num_crops_list: list[int],
-    ) -> list[str]:
-        """
-        Expand each `<image>` placeholder in the text to the correct number of image tokens.
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        images, text, videos, audio = super().prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
+        )
+        if images is not None:
+            images = make_flat_list_of_images(images)
+        return images, text, videos, audio
 
-        Args:
-            text (`list[str]`):
-                List of text strings, each potentially containing `<image>` placeholders.
-            num_crops_list (`list[int]`):
-                Number of crops for each image, consumed in order as `<image>` placeholders
-                are encountered across all text samples.
+    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        if text is None:
+            raise ValueError("You have to specify text.")
 
-        Returns:
-            `list[str]`: Text with expanded image token placeholders.
-        """
-        size = self.image_processor.size["height"]
-        tile_size = self.image_processor.tile_size
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
+        size = kwargs.get("size") or self.image_processor.size
+        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
 
-        num_queries_global = math.ceil(size / self.patch_size / self.downsample_ratio)
+        num_queries_global = math.ceil(size["height"] / self.patch_size / self.downsample_ratio)
         global_tokens = num_queries_global * num_queries_global
 
         num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
         local_tokens = num_queries_local * num_queries_local
 
-        crop_index = 0
-        for i in range(len(text)):
-            while self.image_token in text[i]:
-                num_tokens = global_tokens + local_tokens * num_crops_list[crop_index] + 1
-                text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_tokens, 1)
-                crop_index += 1
-            text[i] = text[i].replace("<|placeholder|>", self.image_token)
-        return text
+        num_crops = image_inputs["num_local_patches"][image_idx]
+        num_tokens = global_tokens + local_tokens * num_crops + 1
+        return self.image_token * num_tokens
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[DeepseekOcr2ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Global view pixel values. Returned when `images` is not `None`.
-            - **pixel_values_local** -- Local patch pixel values. Returned when `images` is not `None`.
-        """
-        if images is None:
-            raise ValueError("`images` are expected as arguments to a `DeepseekOcr2Processor` instance.")
-        if text is None:
-            raise ValueError("`text` is required for `DeepseekOcr2Processor`. Example: `'<image>\\nFree OCR.'`")
-
-        output_kwargs = self._merge_kwargs(
-            DeepseekOcr2ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if isinstance(text, str):
-            text = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        text = list(text).copy()  # below lines change text in-place
-
-        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        num_crops_list = image_inputs["num_local_patches"]
-        text = self._expand_image_tokens(text, num_crops_list)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        return BatchFeature(
-            data={**text_inputs, **image_inputs},
-            tensor_type=return_tensors,
-        )
-
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekOcr2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["DeepseekOcr2Processor"]

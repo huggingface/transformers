@@ -128,8 +128,8 @@ class JanusConfig(PreTrainedConfig):
     model_type = "janus"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
-        "vision_config": SubConfigSpec(config_class=JanusVisionConfig),
-        "vq_config": SubConfigSpec(config_class=JanusVQVAEConfig),
+        "vision_config": JanusVisionConfig,
+        "vq_config": JanusVQVAEConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

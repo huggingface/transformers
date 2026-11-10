@@ -20,7 +20,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -162,9 +162,9 @@ class SamHQConfig(PreTrainedConfig):
 
     model_type = "sam_hq"
     sub_configs_defaults = {
-        "prompt_encoder_config": SubConfigSpec(config_class=SamHQPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=SamHQMaskDecoderConfig),
-        "vision_config": SubConfigSpec(config_class=SamHQVisionConfig),
+        "prompt_encoder_config": SamHQPromptEncoderConfig,
+        "mask_decoder_config": SamHQMaskDecoderConfig,
+        "vision_config": SamHQVisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

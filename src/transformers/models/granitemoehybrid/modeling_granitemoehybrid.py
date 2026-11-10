@@ -40,7 +40,7 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
@@ -554,7 +554,9 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.norm = GraniteMoeHybridRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = GraniteMoeHybridRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.empty(self.num_heads))
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
             self.init_granitemoehybrid_weights()
@@ -579,7 +581,12 @@ class GraniteMoeHybridMambaLayer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -616,13 +623,9 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -658,7 +661,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         )
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             A = A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size)
@@ -697,7 +700,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 return_final_states=output_final_state,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
-                initial_states=recurrent_state if use_precomputed_states else None,
+                initial_states=recurrent_state,
                 dt_limit=self.time_step_limit,
                 **kwargs,
             )
@@ -718,20 +721,23 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
 
 class GraniteMoeHybridRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
-
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
         return self.weight * hidden_states.to(input_dtype)
 
 
@@ -811,7 +817,7 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
 class GraniteMoeHybridTopKRouter(nn.Module):
     """Top-k gating that returns the routing decisions without grouping tokens by expert.
 
-    Returns ``(top_k_index, top_k_weights, router_logits)``; the grouping/scattering used to live
+    Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
     here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
     experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
     paths can compile cleanly.
@@ -827,7 +833,7 @@ class GraniteMoeHybridTopKRouter(nn.Module):
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
         top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
-        return top_k_index, top_k_weights, router_logits
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -882,7 +888,7 @@ class GraniteMoeHybridMoE(nn.Module):
     def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
         bsz, length, emb_size = layer_input.size()
         hidden_states = layer_input.reshape(-1, emb_size)
-        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
         return layer_output.view(bsz, length, self.input_size)
 
@@ -965,7 +971,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1013,7 +1019,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(GraniteMoeHybridTopKRouter, index=2),
+        "router_logits": OutputRecorder(GraniteMoeHybridTopKRouter, index=0),
         "hidden_states": GraniteMoeHybridDecoderLayer,
         "attentions": GraniteMoeHybridAttention,
     }
@@ -1063,7 +1069,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -1155,6 +1161,9 @@ def load_balancing_loss_func(
     # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
     # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
     compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
     tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     total_rows = 0.0
@@ -1167,9 +1176,9 @@ def load_balancing_loss_func(
         routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
         _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
         if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
             )
             # Sum of routing probabilities per expert
             router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
@@ -1217,7 +1226,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1256,8 +1265,8 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
 
         # Only compute necessary logits
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         logits = logits / self.config.logits_scaling
 
         loss = None

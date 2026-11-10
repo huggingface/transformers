@@ -14,7 +14,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -174,8 +174,8 @@ class MllamaConfig(PreTrainedConfig):
     model_type = "mllama"
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MllamaTextConfig),
-        "vision_config": SubConfigSpec(config_class=MllamaVisionConfig),
+        "text_config": MllamaTextConfig,
+        "vision_config": MllamaVisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

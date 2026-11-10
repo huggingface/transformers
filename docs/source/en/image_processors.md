@@ -23,6 +23,8 @@ Image processors convert images into pixel values, tensors that represent image 
 
 Use [`~ImageProcessingMixin.from_pretrained`] to load an image processors configuration (image size, whether to normalize and rescale, etc.) from a vision model on the Hugging Face [Hub](https://hf.co) or local directory. The configuration for each pretrained model is saved in a [preprocessor_config.json](https://huggingface.co/google/vit-base-patch16-224/blob/main/preprocessor_config.json) file.
 
+When an image processor is part of a multimodal processor, its configuration is nested in `processor_config.json` instead. See [Save and load a processor](./processors#save-and-load-a-processor) for details.
+
 ```py
 from transformers import AutoImageProcessor
 
@@ -59,6 +61,8 @@ There are two ways you can load an image processor: with [`AutoImageProcessor`] 
 The [AutoClass](./model_doc/auto) API provides a convenient method to load an image processor without directly specifying the model the image processor is associated with.
 
 Use [`~AutoImageProcessor.from_pretrained`] with the `backend` argument to select the backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Note that `backend="pil"` is only supported for older models; newer models only expose the torchvision backend.
+
+For the closest match to a model's training preprocessing, use the backend specified in its docs or training code. If the training pipeline uses PIL and the model supports both backends, pass `backend="pil"`. Switching backends can change resized pixel values, and Pillow or torchvision updates can also change them. For reproducible preprocessing, keep the backend and image-library versions fixed.
 
 > [!NOTE]
 > A small set of older models (Chameleon, Flava, Idefics3, SmolVLM) use Lanczos interpolation. Their default backend depends on your torchvision version. With torchvision > 0.27, Lanczos is supported natively and these models default to torchvision. Older torchvision version falls back to BICUBIC, so the default is PIL to preserve the original outputs. Pass `backend="torchvision"` explicitly to override the default.

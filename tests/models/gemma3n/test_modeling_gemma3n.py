@@ -488,7 +488,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
             self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers - text_config.num_kv_shared_layers)
+            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
             self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
 
     @pytest.mark.generate
@@ -550,10 +550,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(
-                    len(static_cache_generation.past_key_values)
-                    == num_hidden_layers - text_config.num_kv_shared_layers
-                )
+                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
                 self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
@@ -1072,7 +1069,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
             ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1150,7 +1147,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
-            ("rocm", (9, 4)): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("rocm", (9, 4)): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("tpu", None): [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip

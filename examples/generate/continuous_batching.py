@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig
 from transformers.generation import GenerationConfig
-from transformers.generation.continuous_batching.requests import logger
+from transformers.generation.continuous_batching.utils import logger
 
 
 # TODO: this file is now mostly used for benchmarking, remodel it in consequence.

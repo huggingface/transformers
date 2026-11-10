@@ -36,12 +36,12 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-        scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
+        scores (`torch.Tensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
 
     Return:
-        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
+        `torch.Tensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
 
 """
 
@@ -54,7 +54,7 @@ class LogitsProcessor:
     supports_continuous_batching: bool | None = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
@@ -67,19 +67,19 @@ class LogitsProcessorList(list):
     inputs.
     """
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, **kwargs) -> torch.Tensor:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
             kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs that are specific to a logits processor.
 
         Return:
-            `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`:
+            `torch.Tensor` of shape `(batch_size, config.vocab_size)`:
                 The processed prediction scores.
 
         """
@@ -152,7 +152,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
@@ -224,7 +224,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
@@ -298,7 +298,7 @@ class TemperatureLogitsWarper(LogitsProcessor):
         self.temperature = temperature
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         scores_processed = scores / self.temperature
         return scores_processed
 
@@ -318,8 +318,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
-        prompt_ignore_length (`int`, *optional*):
-            The original input ids sequence length, which if provided, will not be used in the penalty calculation.
+        prompt_ignore_length (`int`, or `torch.LongTensor`, *optional*):
+            Number of leading tokens to ignore, optionally specified per batch element.
 
     Examples:
 
@@ -355,14 +355,15 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     supports_continuous_batching = False
 
-    def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
+    def __init__(self, penalty: float, prompt_ignore_length: int | torch.Tensor | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
-        if prompt_ignore_length is not None and (
-            not isinstance(prompt_ignore_length, int) or prompt_ignore_length < 0
-        ):
-            raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
+        if prompt_ignore_length is not None:
+            if isinstance(prompt_ignore_length, int) and prompt_ignore_length < 0:
+                raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
+            if isinstance(prompt_ignore_length, torch.Tensor) and prompt_ignore_length.dim() != 1:
+                raise ValueError("`prompt_ignore_length` must be 1D")
 
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
@@ -370,9 +371,19 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.cu_seq_lens_q = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if self.prompt_ignore_length:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
+        vocab_size = scores.shape[-1]
+        # In this case simply cut the prompt
+        if isinstance(self.prompt_ignore_length, int):
             input_ids = input_ids[:, self.prompt_ignore_length :]
+        # In this case, set all ids we do not want to take into account at `vocab_size`, we will then filter them out after `scatter`
+        elif isinstance(self.prompt_ignore_length, torch.Tensor):
+            if input_ids.shape[0] != self.prompt_ignore_length.shape[0]:
+                raise ValueError("Incompatible `prompt_ignore_length` batch size")
+            # Set the device in-place so that future calls will be a no-op
+            self.prompt_ignore_length = self.prompt_ignore_length.to(input_ids.device)
+            positions = torch.arange(input_ids.shape[1], device=input_ids.device)
+            input_ids = input_ids.masked_fill(positions[None, :] < self.prompt_ignore_length[:, None], vocab_size)
 
         if scores.dim() == 3:
             if self.logits_indices is not None and self.cu_seq_lens_q is not None:
@@ -380,7 +391,9 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 last_scores = scores[0, last_positions, :]
 
                 # Prepare token mask
-                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                token_mask = torch.zeros(
+                    (*last_scores.shape[:-1], vocab_size + 1), dtype=torch.bool, device=last_scores.device
+                )
                 cu_seq_lens = self.cu_seq_lens_q
                 lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
                 seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
@@ -388,11 +401,12 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
                 # Apply penalty
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
-                scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
+                scores[0, last_positions, :] = torch.where(token_mask[..., :vocab_size], penalty_scores, last_scores)
             else:
-                batch_size, seq_len, vocab_size = scores.shape
                 last_scores = scores[:, -1, :]
-                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                token_mask = torch.zeros(
+                    (*last_scores.shape[:-1], vocab_size + 1), dtype=torch.bool, device=last_scores.device
+                )
                 if input_ids.dim() == 1:
                     unique_tokens = torch.unique(input_ids)
                     token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
@@ -400,7 +414,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                     token_mask.scatter_(1, input_ids, True)
                 # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
-                scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
+                scores[:, -1, :] = torch.where(token_mask[..., :vocab_size], penalty_scores, last_scores)
             return scores
 
         if input_ids.dim() == 1:
@@ -409,7 +423,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         # In some very rare cases, the embedding vocab may be larger than the lm_head output - in those cases, clamp the
         # ids > output vocab_size to a fix index that we drop afterwards (the tokens with id > output_vocab cannot be
         # generated by the model, so there's no need to apply a penalty to them)
-        vocab_size = scores.shape[-1]
         input_ids = input_ids.clamp(max=vocab_size)
         # Pad by 1 to absorb all the indices larger than output vocab that were clamped to the vocab
         scores = torch.nn.functional.pad(scores, (0, 1))
@@ -471,7 +484,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.encoder_input_ids = encoder_input_ids
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         encoder_input_ids = (
             self.encoder_input_ids.repeat_interleave(scores.shape[0] // self.encoder_input_ids.shape[0], dim=0)
             if scores.shape[0] > self.encoder_input_ids.shape[0]
@@ -540,7 +553,7 @@ class TopPLogitsWarper(LogitsProcessor):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         sorted_logits, sorted_indices = torch.sort(scores, descending=False)
         cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
 
@@ -603,7 +616,7 @@ class TopKLogitsWarper(LogitsProcessor):
         self.min_tokens_to_keep = min_tokens_to_keep  # used for CB processor initialization
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         top_k = min(self.top_k, scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
@@ -662,18 +675,18 @@ class TopHLogitsWarper(LogitsProcessor):
         self.top_h = top_h
         self.filter_value = filter_value
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         """
         Filters logits using Top-H sampling.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Input token IDs.
-            scores (`torch.FloatTensor` of shape `(batch_size, vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, vocab_size)`):
                 Raw logits from the model.
 
         Return:
-            `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
+            `torch.Tensor` of shape `(batch_size, vocab_size)`:
                 Processed logits where invalid tokens are masked with `-inf`.
         """
         batch_size, vocab_size = scores.shape
@@ -774,7 +787,7 @@ class MinPLogitsWarper(LogitsProcessor):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # Convert logits to probabilities
         probs = torch.softmax(scores, dim=-1)
         # Get the probability of the top token for each sequence in the batch
@@ -858,7 +871,7 @@ class TypicalLogitsWarper(LogitsProcessor):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # calculate entropy
         normalized = torch.nn.functional.log_softmax(scores, dim=-1)
         p = torch.exp(normalized)
@@ -937,7 +950,7 @@ class EpsilonLogitsWarper(LogitsProcessor):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # Determine which indices to remove
         probabilities = scores.softmax(dim=-1)
         indices_to_remove = probabilities < self.epsilon
@@ -1020,7 +1033,7 @@ class EtaLogitsWarper(LogitsProcessor):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         probabilities = scores.softmax(dim=-1)
         entropy = torch.distributions.Categorical(logits=scores).entropy()
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
@@ -1134,7 +1147,7 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         self.ngram_size = ngram_size
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         cur_len = input_ids.shape[-1]
         # No complete ngram yet, so nothing to ban
         if cur_len < self.ngram_size:
@@ -1207,7 +1220,7 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
         self.generated_ngrams = _get_ngrams(encoder_ngram_size, encoder_input_ids, self.batch_size)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # B x num_beams
         num_hypos = scores.shape[0]
         num_beams = num_hypos // self.batch_size
@@ -1300,10 +1313,11 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # Bias variables that will be populated on the first call (for retrocompatibility purposes, the vocabulary size
         # is inferred in the first usage, which inhibits initializing here)
         self.length_1_bias = None
+        self.multi_token_biases = None
         self.prepared_bias_variables = False
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # 1 - Prepares the bias tensors. This is only needed the first time the logit processor is called.
         if not self.prepared_bias_variables:
             self._prepare_bias_variables(scores)
@@ -1314,29 +1328,20 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # 3 - include the bias from length = 1
         bias += self.length_1_bias
 
-        # 4 - include the bias from length > 1, after determining which biased sequences may be completed.
-        for sequence_ids, sequence_bias in self.sequence_bias.items():
-            if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
-                continue
-            prefix_length = len(sequence_ids) - 1
+        # 4 - include the bias from length > 1, after determining which biased sequences may be completed. Sequences
+        # with the same prefix length are matched against the end of `input_ids` all at once.
+        for prefixes, last_tokens, sequence_biases in self.multi_token_biases:
+            prefix_length = prefixes.shape[1]
             if prefix_length > input_ids.shape[1]:  # the prefix is longer than the context, ignore
                 continue
-            last_token = sequence_ids[-1]
-            matching_rows = torch.eq(
-                input_ids[:, -prefix_length:],
-                torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
-            ).prod(dim=1)
-            bias[:, last_token] += torch.where(
-                matching_rows.bool(),
-                torch.tensor(sequence_bias, device=input_ids.device),
-                torch.tensor(0.0, device=input_ids.device),
-            )
+            matching_rows = (input_ids[:, None, -prefix_length:] == prefixes).all(dim=-1)
+            bias.index_add_(1, last_tokens, torch.where(matching_rows, sequence_biases, 0.0).to(bias.dtype))
 
         # 5 - apply the bias to the scores
         scores_processed = scores + bias
         return scores_processed
 
-    def _prepare_bias_variables(self, scores: torch.FloatTensor):
+    def _prepare_bias_variables(self, scores: torch.Tensor):
         vocabulary_size = scores.shape[-1]
 
         # Check biased tokens out of bounds
@@ -1364,6 +1369,20 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
         if single_token_ids:  # Only if we have any single-token sequences
             self.length_1_bias[single_token_ids] = torch.tensor(single_token_biases, device=scores.device)
+
+        # Longer sequences are grouped by prefix length, so that each group can be matched with a single comparison
+        sequences_by_prefix_length = {}
+        for sequence_ids, bias in self.sequence_bias.items():
+            if len(sequence_ids) > 1:
+                sequences_by_prefix_length.setdefault(len(sequence_ids) - 1, []).append((sequence_ids, bias))
+        self.multi_token_biases = [
+            (
+                torch.tensor([sequence_ids[:-1] for sequence_ids, _ in group], device=scores.device),
+                torch.tensor([sequence_ids[-1] for sequence_ids, _ in group], device=scores.device),
+                torch.tensor([bias for _, bias in group], dtype=torch.float, device=scores.device),
+            )
+            for group in sequences_by_prefix_length.values()
+        ]
         self.prepared_bias_variables = True
 
     def _validate_arguments(self):
@@ -1551,7 +1570,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
         self._num_beams = num_beams
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         mask = torch.full_like(scores, -math.inf)
         batch_size = input_ids.shape[0] // self._num_beams
 
@@ -1610,7 +1629,7 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
         self.bos_token_id = bos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         cur_len = input_ids.shape[-1]
         scores_processed = scores
         if cur_len == 1:
@@ -1666,7 +1685,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
             raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         cur_len = input_ids.shape[-1]
         scores_processed = scores
         if cur_len == self.max_length - 1:
@@ -1685,7 +1704,7 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # set all nan values to 0.0
         scores_processed = torch.where(scores != scores, 0.0, scores)
 
@@ -1783,7 +1802,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         cur_len = input_ids.shape[-1]
         self.eos_token_id = self.eos_token_id.to(scores.device)
         penalties = torch.zeros_like(scores)
@@ -1830,7 +1849,7 @@ class LogitNormalization(LogitsProcessor):
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         scores_processed = scores.log_softmax(dim=-1)
         return scores_processed
 
@@ -1878,7 +1897,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens.to(scores.device))
         scores_processed = scores
@@ -1921,7 +1940,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
         self.suppress_tokens = torch.tensor(list(suppress_tokens), device=device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -2019,7 +2038,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores_processed = scores.clone()
         scores_processed[:, self.no_timestamps_token_id] = -float("inf")
@@ -2118,7 +2137,7 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         is_scores_logprobs = self.is_scores_logprobs
 
         if input_ids.shape[1] == self.begin_index:
@@ -2191,7 +2210,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # simple check to make sure we have compatible batch sizes between our
         # logits scores (cond + uncond) and input ids (cond only)
         if scores.shape[0] != 2 * input_ids.shape[0]:
@@ -2235,7 +2254,7 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
         self.semantic_vocab_size = semantic_vocab_size
         self.codebook_size = codebook_size
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         curr_len = input_ids.shape[-1]
 
         # even -> first codebook, odd -> second codebook
@@ -2401,7 +2420,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
         self.min_eos_p = min_eos_p
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         scores_processed = scores
         if self.min_eos_p:
             probs = torch.nn.functional.softmax(scores.float(), dim=-1)
@@ -2523,7 +2542,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         greenlist_ids = vocab_permutation[: self.greenlist_size]
         return greenlist_ids
 
-    def _score_rejection_sampling(self, input_seq: torch.LongTensor, scores: torch.FloatTensor) -> torch.LongTensor:
+    def _score_rejection_sampling(self, input_seq: torch.LongTensor, scores: torch.Tensor) -> torch.LongTensor:
         """
         Generate greenlist based on current candidate next token. Reject and move on if necessary.
         Runs for a fixed number of steps only for efficiency, since the methods is not batched.
@@ -2539,7 +2558,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         return torch.tensor(final_greenlist, device=input_seq.device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         if input_ids.shape[-1] < self.context_width:
             logger.warning(
                 f"`input_ids` should have at least `{self.context_width}` tokens but has {input_ids.shape[-1]}. "
@@ -2703,13 +2722,13 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             device=self.device,
         )
 
-    def update_scores(self, scores: torch.FloatTensor, g_values: torch.FloatTensor) -> torch.FloatTensor:
+    def update_scores(self, scores: torch.Tensor, g_values: torch.Tensor) -> torch.Tensor:
         """Updates scores using the g values.
 
         We assume that the scores are in the log space.
         Args:
-            scores (`torch.FloatTensor`): Scores (batch_size, vocab_size).
-            g_values (`torch.FloatTensor`): G values (batch_size, vocab_size, depth).
+            scores (`torch.Tensor`): Scores (batch_size, vocab_size).
+            g_values (`torch.Tensor`): G values (batch_size, vocab_size, depth).
 
         Returns:
             Updated scores (batch_size, vocab_size).
@@ -2728,7 +2747,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         return log_probs
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         self._check_input_ids_shape(input_ids)
         batch_size, vocab_size = scores.shape
 
@@ -3071,7 +3090,7 @@ class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # simple check to make sure we have compatible batch sizes between our
         # logits scores (cond + uncond) and input ids (cond only)
         if scores.shape[0] != 2 * input_ids.shape[0]:
@@ -3130,7 +3149,7 @@ class DiaEOSChannelFilterLogitsProcessor(LogitsProcessor):
         self.eos_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # Reshape for easier channel indexing [B, C, V]
         scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
 
@@ -3216,7 +3235,7 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         self.device = device
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         # Reshape for easier channel indexing [B, C, V]
         scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
 

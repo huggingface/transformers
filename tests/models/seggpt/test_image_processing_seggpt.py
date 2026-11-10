@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 from datasets import load_dataset
+from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
@@ -307,3 +308,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSeg
             self._assert_tensors_equivalence(
                 encodings[reference_backend].prompt_masks, encodings[backend_name].prompt_masks
             )
+
+    @parameterized.expand([1, 3, 4])
+    @unittest.skip("Model hardcoded `do_convert_rgb=False` inside `processor.__call__`")
+    def test_convert_to_rgb_mixed_input_batch(self, num_channels: int):
+        pass

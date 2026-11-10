@@ -137,7 +137,7 @@ class MusicgenMelodyConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "text_encoder": SubConfigSpec(config_class=AutoConfig, model_type="t5"),
         "audio_encoder": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
-        "decoder": SubConfigSpec(config_class=MusicgenMelodyDecoderConfig),
+        "decoder": MusicgenMelodyDecoderConfig,
     }
 
     text_encoder: dict | PreTrainedConfig | None = None

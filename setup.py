@@ -48,7 +48,7 @@ from setuptools import Command, find_packages, setup
 
 
 # Supported Python version range (min, max)
-SUPPORTED_PYTHON_VERSIONS = (10, 14)  # 3.10 to 3.14
+SUPPORTED_PYTHON_VERSIONS = (11, 14)  # 3.11 to 3.14
 
 PYTHON_MINOR_VERSION = sys.version_info.minor
 
@@ -84,12 +84,12 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder",
+    "hf-doc-builder>=0.6.0",
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
-    "jinja2>=3.1.0",
+    "jinja2>=3.1.6",
     "kenlm",
-    "kernels>=0.17.2,<0.18",
+    "kernels>=0.18.2,<0.19",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
@@ -115,7 +115,7 @@ _deps = [
     "pytest-env",
     "pytest-xdist",
     "pytest-order",
-    "python>=3.10.0",
+    "python>=3.11.0",
     "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
@@ -136,7 +136,6 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
-    "tomli",
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.23.1,<0.24.0",
@@ -145,6 +144,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
+    "transformers-mic[runtime]",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -175,7 +175,7 @@ if PYTHON_MINOR_VERSION < 13:
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
-    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli", "transformers-mlinter"
+    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "transformers-mlinter"
 )
 extras["docs"] = deps_list("hf-doc-builder")
 extras["kernels"] = deps_list("kernels")
@@ -213,6 +213,7 @@ extras["testing"] = (
         "pytest-timeout",
         "pytest-env",
         "timeout-decorator",
+        "transformers-mic[runtime]",
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests
@@ -314,7 +315,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.19.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.23.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

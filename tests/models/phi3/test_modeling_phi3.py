@@ -51,7 +51,7 @@ if is_torch_available():
         def forward(
             self,
             input_ids: torch.LongTensor = None,
-        ) -> torch.FloatTensor:
+        ) -> torch.Tensor:
             return self.model.forward(
                 input_ids=input_ids,
                 use_cache=True,
@@ -131,6 +131,49 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
                 prefix = generated.sequences[:, : input_ids.shape[1] + step]
                 expected = model(prefix, use_cache=False).logits[:, -1]
                 torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
+
+    def _get_longrope_config(self):
+        config = self.model_tester.get_config()
+        config.original_max_position_embeddings = 8
+        config.max_position_embeddings = 32
+        rotary_dim = config.hidden_size // config.num_attention_heads // 2
+        config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "short_factor": [1.0] * rotary_dim,
+            "long_factor": [2.0] * rotary_dim,
+            "original_max_position_embeddings": 8,
+            "factor": 4.0,
+        }
+        return config
+
+    @parameterized.expand([(8,), (16,)])
+    def test_longrope_compiled_matches_eager(self, seq_len):
+        config = self._get_longrope_config()
+        model = Phi3ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.arange(1, seq_len + 1, device=torch_device).unsqueeze(0)
+
+        with torch.no_grad():
+            expected = model(input_ids, use_cache=False).logits
+            compiled = torch.compile(model, fullgraph=True)(input_ids, use_cache=False).logits
+        torch.testing.assert_close(compiled, expected, rtol=1e-4, atol=1e-4)
+
+    def test_longrope_updates_inv_freq_in_place(self):
+        # CUDA graphs replay from the buffer's address, so switching frequency sets must not replace it
+        config = self._get_longrope_config()
+        rotary_emb = Phi3ForCausalLM(config).to(torch_device).model.rotary_emb
+        inv_freq = rotary_emb.inv_freq
+        short_inv_freq = rotary_emb.original_inv_freq.clone()
+        x = torch.zeros(1, device=torch_device)
+
+        with torch.no_grad():
+            rotary_emb(x, torch.arange(16, device=torch_device)[None])
+            self.assertIs(rotary_emb.inv_freq, inv_freq)
+            torch.testing.assert_close(inv_freq, rotary_emb.long_inv_freq)
+
+            rotary_emb(x, torch.arange(8, device=torch_device)[None])
+            self.assertIs(rotary_emb.inv_freq, inv_freq)
+            torch.testing.assert_close(inv_freq, short_inv_freq)
 
 
 @slow

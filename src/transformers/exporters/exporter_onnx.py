@@ -1062,6 +1062,12 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     return result
 
 
+def _aten_mm_dtype(self: TReal, mat2: TReal, out_dtype: int) -> TReal:
+    """ONNX implementation of `aten.mm.dtype`, i.e. `torch.mm(self, mat2, out_dtype=...)`: a `MatMul` on the inputs
+    cast to `out_dtype`, as the CUDA kernel accumulates in it. The exporter hands `out_dtype` over as an ONNX dtype."""
+    return op.MatMul(op.Cast(self, to=out_dtype), op.Cast(mat2, to=out_dtype))
+
+
 def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
     """ONNX implementation of `aten.repeat_interleave.self_int`.
 
@@ -1172,6 +1178,9 @@ if is_onnxscript_available():
             operator.floordiv: _operator_floordiv,
         }
     )
+    # `torch.mm(..., out_dtype=...)` exists from torch 2.8
+    if hasattr(torch.ops.aten.mm, "dtype"):
+        _ONNX_TRANSLATION_TABLE[torch.ops.aten.mm.dtype] = _aten_mm_dtype
 
     # Registers the `quantized_decomposed` ops, so the per-channel dequant resolves as a table key.
     import torch.ao.quantization.fx._decomposed  # noqa: F401

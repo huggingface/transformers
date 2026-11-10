@@ -189,7 +189,7 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
     """
 )
 class EdgeTamVisionModel(Sam2VisionModel):
-    config_class = EdgeTamVisionConfig
+    config: EdgeTamVisionConfig
     main_input_name = "pixel_values"
     # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
     # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
@@ -202,7 +202,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
     @capture_outputs
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
@@ -243,7 +243,7 @@ class EdgeTamModel(Sam2Model):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVisionEncoderOutput:
         # original_sizes is returned by the processor for post-processing only and must not

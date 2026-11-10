@@ -114,9 +114,12 @@ class DeepseekV4Config(PreTrainedConfig):
     # Main attention and the shared MLP stay replicated. Shared-KV MQA and the CSA / HCA compressor
     # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
     # head count; the shared MLP is too small to be worth sharding.
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_ep_plan = {
-        # V4 ships EP only (no `base_model_tp_plan`). Routed experts run as a grouped-GEMM kernel
-        # sharded along the expert axis, with all-to-all token dispatch (same as gpt-oss).
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
@@ -240,6 +243,16 @@ class DeepseekV4Config(PreTrainedConfig):
         legacy_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
         n = self.num_hidden_layers
+
+        # V4.1 ships `expert_dtype` in the quantization config, so V4's moves there too
+        quantization_config = getattr(self, "quantization_config", None)
+        expert_dtype = getattr(self, "expert_dtype", None)
+        if (
+            isinstance(quantization_config, dict)
+            and expert_dtype is not None
+            and "expert_dtype" not in quantization_config
+        ):
+            self.quantization_config = {**quantization_config, "expert_dtype": expert_dtype}
 
         # `compress_rates`: dict, default per attention type. Legacy scalar overrides fold in.
         if self.compress_rates is None:

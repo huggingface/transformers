@@ -35,10 +35,8 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
-triton_kernels_hub = None
 
 
 class Mxfp4HfQuantizer(HfQuantizer):
@@ -48,21 +46,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: "Mxfp4Config"
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-        self.triton_kernels_hub = None
-
-    def _lazy_import_kernels(self):
-        """Lazy import and initialize kernels only when needed"""
-        if self.triton_kernels_hub is None:
-            try:
-                from ..integrations.hub_kernels import get_kernel
-
-                self.triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
-            except ImportError:
-                raise ImportError("kernels package is required for MXFP4 quantization")
-        return self.triton_kernels_hub
 
     def validate_environment(self, *args, **kwargs):
         if not is_torch_available():
@@ -149,9 +132,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         elif not kernels_installed:
             raise ValueError("MXFP4 quantization requires the `kernels` package: `pip install kernels>=0.12.0`")
 
-        if not self.pre_quantized:
-            self._lazy_import_kernels()
-
         device_map = kwargs.get("device_map")
         if device_map is not None and isinstance(device_map, dict):
             if not self.pre_quantized and "disk" in device_map.values():
@@ -211,66 +191,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
 
-    def update_tp_plan(self, config):
-        if "GptOssConfig" in config.__class__.__name__:
-            if getattr(config, "base_model_tp_plan", None) is not None:
-                config.base_model_tp_plan.update(
-                    {
-                        "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
-                        "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
-                        "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
-                        "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
-                    }
-                )
-        return config
-
-    def update_ep_plan(self, config):
-        if "GptOssConfig" in config.__class__.__name__:
-            if getattr(config, "base_model_ep_plan", None) is not None:
-                config.base_model_ep_plan.update(
-                    {
-                        "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
-                        "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
-                        "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
-                        "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
-                    }
-                )
-        return config
-
     def get_state_dict_and_metadata(self, model):
-        from ..integrations import Mxfp4GptOssExperts
+        from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize
 
         state_dict = model.state_dict()
-        num_local_experts = getattr(model.config, "num_local_experts", 32)
-        hidden_size = getattr(model.config, "hidden_size", 2880)
-
+        reverse_op = Mxfp4ReverseDeserialize(self)
         for name, module in model.named_modules():
-            if not (
-                isinstance(module, Mxfp4GptOssExperts)
-                and hasattr(module, "gate_up_proj")
-                and hasattr(module, "down_proj")
-            ):
-                continue
-
-            for proj in ("gate_up_proj", "down_proj"):
-                triton_tensor = getattr(module, proj)
-                precision_config = getattr(module, f"{proj}_precision_config")
-
-                blocks = triton_tensor.storage.layout.unswizzle_data(triton_tensor.storage.data).transpose(-1, -2)
-                if proj == "gate_up_proj":
-                    blocks = blocks.reshape(num_local_experts, -1, 90, 16)
-                else:
-                    blocks = blocks.reshape(num_local_experts, hidden_size, 90, -1)
-
-                scales = precision_config.weight_scale.storage.layout.unswizzle_data(
-                    precision_config.weight_scale.storage.data
-                ).transpose(-1, -2)
-
-                state_dict[f"{name}.{proj}_blocks"] = blocks
-                state_dict[f"{name}.{proj}_scales"] = scales
-
-        metadata = {}
-        return state_dict, metadata
+            if isinstance(module, Mxfp4GptOssExperts):
+                for proj in ("gate_up_proj", "down_proj"):
+                    state_dict.update(reverse_op.convert({}, model=model, full_layer_name=f"{name}.{proj}_blocks"))
+        return state_dict, {}
 
     def is_serializable(self):
         return True
@@ -287,32 +217,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         return Mxfp4Quantize(self)
 
-    def get_weight_conversions(self):
+    serialized_names = {
+        "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
+        "down_proj": ["down_proj_blocks", "down_proj_scales"],
+    }
+
+    def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                WeightConverter(
-                    source_patterns=["down_proj_blocks", "down_proj_scales"],
-                    target_patterns=r"down_proj$",
-                    operations=[Mxfp4Dequantize(self)],
-                ),
-                WeightConverter(
-                    source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                    target_patterns=["gate_up_proj$"],
-                    operations=[Mxfp4Dequantize(self)],
-                ),
-            ]
-
-        return [
-            WeightConverter(
-                source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                target_patterns=r"gate_up_proj$",
-                operations=[Mxfp4Deserialize(self)],
-            ),
-            WeightConverter(
-                source_patterns=["down_proj_blocks", "down_proj_scales"],
-                target_patterns=r"down_proj$",
-                operations=[Mxfp4Deserialize(self)],
-            ),
-        ]
+        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}

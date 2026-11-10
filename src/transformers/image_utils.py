@@ -16,6 +16,7 @@ import base64
 import os
 from collections.abc import Iterable
 from dataclasses import astuple, dataclass, fields
+from functools import partial
 from io import BytesIO
 from typing import Any, Union
 
@@ -28,6 +29,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     is_torchvision_available,
     is_torchvision_greater_or_equal,
     is_vision_available,
@@ -520,7 +522,8 @@ def load_image_as_tensor(
     timeout: float | None = None,
 ) -> "torch.Tensor":
     """
-    Loads `image` directly to a `torch.Tensor` using torchvision.
+    Loads `image` directly to a `torch.Tensor` using torchcodec or torchvision. The EXIF orientation tag is applied,
+    so the tensor holds the upright image, the same as `load_image` returns.
 
     Args:
         image (`str` or `PIL.Image.Image`):
@@ -533,11 +536,15 @@ def load_image_as_tensor(
     """
     import torch
 
-    if is_torchcodec_greater_or_equal("0.16.0"):
+    if is_torchcodec_greater_or_equal("0.16.0") and is_torchcodec_usable(decode="image"):
         # Try with torchcodec first and warn only if torchvision is used
         from torchcodec.decoders import ImageReadMode, decode_image
     else:
         from torchvision.io import ImageReadMode, decode_image
+
+        # torchcodec applies the EXIF orientation by default; torchvision has to be told to, so that both backends
+        # return the same upright image as `load_image`
+        decode_image = partial(decode_image, apply_exif_orientation=True)
 
         if is_torchvision_greater_or_equal("0.29.0"):
             logger.warning_once(

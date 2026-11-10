@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -233,8 +233,8 @@ class Llama4Config(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Llama4TextConfig),
-        "vision_config": SubConfigSpec(config_class=Llama4VisionConfig),
+        "text_config": Llama4TextConfig,
+        "vision_config": Llama4VisionConfig,
     }
 
     base_model_tp_plan = {

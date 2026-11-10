@@ -107,7 +107,7 @@ class Florence2Config(PreTrainedConfig):
 
     model_type = "florence2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Florence2VisionConfig),
+        "vision_config": Florence2VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bart"),
     }
 

@@ -170,6 +170,33 @@ class TestDefaultDataCollator(DataCollatorTestMixin, unittest.TestCase):
         batch = default_data_collator(features, return_tensors="np")
         self.assertEqual(batch["labels"].dtype, np.float32)
 
+    def test_numpy_integer_scalar_labels(self):
+        """NumPy integer scalars should retain integer label dtypes."""
+        for return_tensors in ("pt", "np"):
+            for scalar_type in (np.int32, np.int64):
+                for label_key in ("label", "label_ids"):
+                    with self.subTest(
+                        return_tensors=return_tensors,
+                        scalar_type=scalar_type,
+                        label_key=label_key,
+                    ):
+                        features = []
+                        for value in (0, 1):
+                            label = scalar_type(value)
+                            if label_key == "label_ids":
+                                label = [label, label]
+                            features.append(
+                                {
+                                    "input_ids": [1, 2, 3],
+                                    label_key: label,
+                                }
+                            )
+
+                        batch = default_data_collator(features, return_tensors=return_tensors)
+
+                        expected_dtype = torch.long if return_tensors == "pt" else np.int64
+                        self.assertEqual(batch["labels"].dtype, expected_dtype)
+
     def test_immutability(self):
         """Test that collation does not mutate input data."""
 

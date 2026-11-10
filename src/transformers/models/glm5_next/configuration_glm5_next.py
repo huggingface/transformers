@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -241,7 +241,7 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     model_type = "glm5_next_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 24
     hidden_size: int = 1024
@@ -289,8 +289,8 @@ class Glm5NextConfig(PreTrainedConfig):
 
     model_type = "glm5_next"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm5NextVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm5NextTextConfig),
+        "vision_config": Glm5NextVisionConfig,
+        "text_config": Glm5NextTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

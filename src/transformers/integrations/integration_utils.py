@@ -2531,7 +2531,7 @@ class KubeflowCallback(TrainerCallback):
         import json
         import time
         import urllib.request
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
 
         try:
             url = os.environ.get(self._ENV_SERVER_URL)
@@ -2547,7 +2547,7 @@ class KubeflowCallback(TrainerCallback):
             if not token:
                 return False
 
-            trainer_status = {"lastUpdatedTime": datetime.now(timezone.utc).isoformat()}
+            trainer_status = {"lastUpdatedTime": datetime.now(UTC).isoformat()}
 
             if progress_percent is not None:
                 trainer_status["progressPercentage"] = max(0, min(100, progress_percent))

@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -50,7 +50,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 24
     hidden_size: int = 1024
@@ -158,8 +158,8 @@ class GlmOcrConfig(PreTrainedConfig):
 
     model_type = "glm_ocr"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=GlmOcrVisionConfig),
-        "text_config": SubConfigSpec(config_class=GlmOcrTextConfig),
+        "vision_config": GlmOcrVisionConfig,
+        "text_config": GlmOcrTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

@@ -191,8 +191,8 @@ class EdgeTamConfig(PreTrainedConfig):
             config_class=AutoConfig,
             model_type="edgetam_vision_model",
         ),
-        "prompt_encoder_config": SubConfigSpec(config_class=EdgeTamPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=EdgeTamMaskDecoderConfig),
+        "prompt_encoder_config": EdgeTamPromptEncoderConfig,
+        "mask_decoder_config": EdgeTamMaskDecoderConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
