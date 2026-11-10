@@ -634,8 +634,6 @@ class MiniMaxVL01PreTrainedModel(LlavaNextPreTrainedModel):
     custom_intro="The MiniMax-VL-01 model, consisting of a CLIP vision encoder and a MiniMax language backbone."
 )
 class MiniMaxVL01Model(LlavaNextModel):
-    config_class = MiniMaxVL01Config
-
     def __init__(self, config: MiniMaxVL01Config):
         MiniMaxVL01PreTrainedModel.__init__(self, config)
         self.vision_tower = AutoModel.from_config(config.vision_config)

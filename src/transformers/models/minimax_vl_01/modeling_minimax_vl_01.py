@@ -925,7 +925,6 @@ def unpad_image(tensor, original_size):
 )
 class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
     base_model_prefix = "model"
-    config_class = MiniMaxVL01Config
 
     def __init__(self, config: MiniMaxVL01Config):
         super().__init__(config)
