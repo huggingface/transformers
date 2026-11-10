@@ -122,7 +122,7 @@ _deps = [
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
-    "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@587c0378f83fd3739d2b152b0c2fbcb3d121c327",
+    "transformers-mlinter==0.1.6",
     "ty==0.0.20",
     "sacremoses",
     "safetensors>=0.8.0",

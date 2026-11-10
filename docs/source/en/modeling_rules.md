@@ -766,7 +766,7 @@ if labels is not None:
 
 ### TRF055
 
-In modeling_*.py, flags on PreTrainedModel classes: any `config_class`; `config = SomeConfig` as a class attribute; a `<Model>PreTrainedModel` with no `config: SomeConfig` annotation; and an `__init__` whose `config` argument is unannotated or names a different config than the class declares or inherits. A class the model builds from a sub-config (`AcmeTextModel(config.text_config)`, or `._from_config(...)`) must declare that sub-config, as listed in the composite config's `sub_configs`; otherwise it inherits the composite config unnoticed, for example a modular `class AcmeTextModel(LlamaModel): pass`. A `modular_*.py` file is checked through the `modeling_*.py` files generated from it, since the class hierarchy is only complete there; each problem is reported on the class in the modular file, and classes the converter copied from another model are left to that model's files. `PreTrainedModel.__init_subclass__` derives `config_class` from a `config` **annotation**, via `inspect.get_annotations(cls)`. An assignment creates a stray class attribute that call does not report, so the subclass silently keeps the parent's `config_class`; a hand-written `config_class` is redundant and can drift from the annotation. A bare annotation has no runtime value, creates no attribute, and is picked up correctly. The `__init__` annotation must agree with the class's `config`, otherwise the model is built from one config type but advertises another.
+Flags `config_class`, a `config = SomeConfig` assignment, a `<Model>PreTrainedModel` without a `config` annotation, and an `__init__` whose `config` argument is unannotated or names another config. A class built from a sub-config (`AcmeTextModel(config.text_config)`) must declare that sub-config. A `modular_*.py` file is checked through the files it generates. `PreTrainedModel` derives `config_class` from the `config` annotation. An assignment or a hand-written `config_class` keeps or drifts from the parent's, and a mismatched `__init__` builds the model from one config while it advertises another.
 
 ```diff
 class Gemma4VisionModel(Gemma4PreTrainedModel):
@@ -792,7 +792,7 @@ In modeling_*.py and modular_*.py, flags `.item()` and `.tolist()` calls inside 
 
 ### TRF057
 
-Checks `@auto_docstring` on public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors, video processors and `ProcessorMixin` subclasses, and on their public methods `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A `modular_*.py` is checked against the files generated from it. Without it a class ships with no intro and no parameter documentation, and a method with no argument documentation, no `Returns` section and no usage example -- all of which then have to be hand-written per model instead of coming from `auto_docstring.py`.
+Checks `@auto_docstring` on public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors, video processors and `ProcessorMixin` subclasses, and on their public methods `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A `modular_*.py` is checked against the files generated from it. Without it, the class and its methods ship without parameter, return and example documentation, which then has to be written by hand for each model.
 
 ```diff
 +@auto_docstring
@@ -833,7 +833,7 @@ class AcmeExperts(nn.Module):
 
 ### TRF060
 
-Flags `from transformers... import X` and `import transformers...` in every file under `src/transformers/models/` and suggests the relative spelling for the file's location (`from ...modeling_utils import X`, `from .configuration_acme import X`). `convert_*.py` scripts are skipped (they run as standalone scripts, where a relative import cannot resolve). Relative imports are the convention across `src/transformers`. An absolute `from transformers import X` inside the package goes through the lazy top-level `transformers/__init__.py`, which can raise a circular import while the package is still initializing, and in a checkout with several installs it can resolve to a different copy of transformers than the one the file lives in.
+Flags `from transformers... import X` and `import transformers...` under `src/transformers/models/` and suggests the relative form (`from ...modeling_utils import X`). `convert_*.py` scripts are skipped. An absolute import inside the package goes through the lazy top-level `transformers/__init__.py`, which can cause circular imports, and can resolve to another installed copy of transformers.
 
 ```diff
 -from transformers.modeling_utils import PreTrainedModel
@@ -846,7 +846,7 @@ Flags `from transformers... import X` and `import transformers...` in every file
 
 ### TRF061
 
-In modular_*.py, flags a class whose base is another class defined earlier in the same file. Bases imported from another model are what modular inheritance is for and are not flagged. `<Model>PreTrainedModel` and its subclasses are exempt, since every model class is meant to build on them, and so is a backward-compatibility alias whose body only calls `super().__init__()`, optionally after a deprecation warning. The modular converter writes out a base imported from another model in full, but leaves a base defined in the same modular file as it is. The generated modeling file then keeps the inheritance, for example `class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork)` with a seven-line body, so a reader has to reassemble the class from its parent. Modeling files are meant to read one class at a time, with reuse expressed only in the modular file through imports from other models.
+In modular_*.py, flags a class whose base is defined earlier in the same file. Bases imported from another model, `<Model>PreTrainedModel` subclasses and backward-compatibility aliases are not flagged. The converter inlines bases imported from other models but keeps a same-file base, so the generated modeling file keeps the inheritance and its classes can no longer be read one at a time.
 
 ```diff
 from ..llama.modeling_llama import LlamaDecoderLayer
@@ -865,7 +865,7 @@ from ..llama.modeling_llama import LlamaDecoderLayer
 
 ### TRF062
 
-Flags calls inside `_init_weights` to an in-place `torch.nn.init` initializer such as `nn.init.normal_(...)`, however it was imported (`torch.nn.init`, `from torch.nn import init`, `from torch.nn.init import normal_`). Helpers that only compute a value, such as `calculate_gain` or `_calculate_fan_in_and_fan_out`, are not flagged. The transformers `init` functions skip a tensor whose `_is_hf_initialized` flag is set, so weights already loaded from a checkpoint are never overwritten. `torch.nn.init` has no such check. `from_pretrained` only covers for it by patching the `torch.nn.init` module while `initialize_weights` runs, which misses a function imported by name: `from torch.nn.init import normal_` keeps the unpatched function, and the loaded weight is silently replaced by a random one. The transformers functions hold the guarantee themselves instead of relying on that patch.
+Flags in-place `torch.nn.init` initializers (`nn.init.normal_(...)`, however imported) called inside `_init_weights`. Helpers that only compute a value, such as `calculate_gain`, are not flagged. The transformers `init` functions skip tensors already loaded from a checkpoint. `torch.nn.init` relies on a patch applied during `from_pretrained`, which a function imported by name escapes, so a loaded weight can be silently re-initialized.
 
 ```diff
 from torch import nn
@@ -882,7 +882,7 @@ from torch import nn
 
 ### TRF063
 
-For every relative import that runs when a model file is imported, follows the imported model files and collects the backends their unguarded top-level imports need (`import torch` needs torch, `from PIL import Image` needs vision, and so on). It flags the import when one of those backends is not covered by the file's base requirements, the weakest `@requires(backends=...)` among its `__all__` objects, or an enclosing `if is_<backend>_available():` guard. A `modular_*.py` file is checked through the files it generates. Transformers' lazy module imports a file as soon as the backends one of its exported objects declares are installed. If that file pulls in a sibling which needs more, `from transformers import *` crashes in that environment: a processor marked `@requires(backends=("vision",))` that imports a torchvision image processor breaks every install that has Pillow but not torch. CI rarely runs that combination, so the crash reaches users.
+Follows every relative import a model file runs at import time and flags it when the imported files need a backend the importing file does not declare: through its base requirements, the weakest `@requires` among its `__all__` objects, or an `is_<backend>_available()` guard. A `modular_*.py` file is checked through the files it generates. The lazy module imports a file once its declared backends are installed. If that file imports a sibling that needs more, `from transformers import *` crashes in that environment: a vision-only processor importing a torchvision image processor breaks installs with Pillow but no torch.
 
 ```diff
 if is_vision_available():
@@ -895,7 +895,7 @@ if is_vision_available():
 
 ### TRF064
 
-In processing_*.py and modular_*.py, flags a `ProcessingKwargs` subclass that assigns or re-annotates `_defaults`, `text_kwargs`, `images_kwargs`, `videos_kwargs` or `audio_kwargs` in its class body. `ProcessingKwargs._defaults` is deprecated. Processor defaults are class attributes of the `ProcessorMixin` subclass, where they are inherited and overridden like any other attribute. The modality fields cannot be statically typed as available arguments are only known at runtime due to dynamic processor loading. We omit typing them and stick to the default types.
+In processing_*.py and modular_*.py, flags a `ProcessingKwargs` subclass that assigns or re-annotates `_defaults`, `text_kwargs`, `images_kwargs`, `videos_kwargs` or `audio_kwargs`. `ProcessingKwargs._defaults` is deprecated: defaults are class attributes of the processor, inherited and overridden like any other. The modality fields keep their default types, because the available arguments are only known once sub-processors are loaded at runtime.
 
 ```diff
 class AcmeProcessorKwargs(ProcessingKwargs, total=False):
@@ -915,7 +915,7 @@ class AcmeProcessorKwargs(ProcessingKwargs, total=False):
 
 ### TRF065
 
-In processing_*.py, flags any class extending `ImagesKwargs`, `TextKwargs`, `AudioKwargs` or `VideosKwargs`, directly or through another model's subclass. A modular file also holds image, video and audio processors, which may extend the shared kwargs, so there a subclass must be named `<Model>ImageProcessorKwargs` (for `ImagesKwargs`), `<Model>VideoProcessorKwargs`/`<Model>VideoProcessorInitKwargs` (for `VideosKwargs`) or `<Model>AudioProcessorKwargs` (for `AudioKwargs`); `TextKwargs` subclasses are always flagged. Modality kwargs must be defined in the sub-processor files (`image_processing_*.py`, `video_processing_*.py`, etc.). In processing_*.py the modality kwargs remain untyped as they cannot be statically known due to dynamic sub-processor loading at runtime.
+In processing_*.py, flags any class extending `ImagesKwargs`, `TextKwargs`, `AudioKwargs` or `VideosKwargs`, directly or through another model's subclass. In modular_*.py, which also holds sub-processors, a subclass is allowed when named `<Model>ImageProcessorKwargs`, `<Model>VideoProcessorKwargs`, `<Model>VideoProcessorInitKwargs` or `<Model>AudioProcessorKwargs`. Modality kwargs belong in the sub-processor files (`image_processing_*.py`, `video_processing_*.py`, ...). In processing_*.py they stay untyped, since sub-processors are loaded dynamically.
 
 ```diff
 -class AcmeImagesKwargs(ImagesKwargs, total=False):
@@ -948,7 +948,7 @@ Flags backends in `@requires` that repeat the file's implicit requirements or, f
 
 ### TRF067
 
-In modeling_*.py and modular_*.py, flags a call made with every hidden state switched on -- `output_hidden_states=True` passed to it, or `kwargs["output_hidden_states"] = True` (or `.update`/`.setdefault`) on a path that reaches a call unpacking `**kwargs` -- when the same function then only reads that call's `.hidden_states[...]` by index: a single layer, a config value such as `vision_feature_layer`, or a comprehension over feature layers. Code that needs the whole tuple is exempt: iterating or slicing it, indexing it with every position (`range(len(...))`, `enumerate`), passing it to `torch.stack` or a weighted sum, or handing it on in an output or return value. So are backbones decorated with `@filter_output_hidden_states`. `output_hidden_states=True` keeps one `(batch, seq, hidden)` tensor per layer alive until the call returns, even when only one or two of them are projected, so peak activation memory grows with depth times image tokens. For Aria in vLLM it raised peak activation memory from 5.79 GiB to 14.91 GiB, cost about half the KV cache and cut image throughput by roughly 30%. `output_hidden_states` also takes an index or list of indices, which captures only those hidden states. The returned tuple keeps its full length, with `None` for the rest, so the same indices pick the same features. Decorate a method that forwards `**kwargs` with `@select_hidden_states`, naming its feature-layer argument or passing a function of the model; it lets an explicit `output_hidden_states` from the caller win. For a single call, pass the index directly.
+In modeling_*.py and modular_*.py, flags a call that switches on every hidden state (`output_hidden_states=True`, or setting it in `**kwargs`) when the function then only reads `.hidden_states[...]` by index. Code that uses the whole tuple (iterating, slicing, stacking or returning it) and `@filter_output_hidden_states` backbones are exempt. Every layer's hidden state stays alive until the call returns, so peak memory grows with depth. `output_hidden_states` also accepts an index or a list of indices and captures only those: decorate a method that forwards `**kwargs` with `@select_hidden_states`, or pass the index directly.
 
 ```diff
 +from ...utils.output_capturing import select_hidden_states
@@ -966,7 +966,7 @@ In modeling_*.py and modular_*.py, flags a call made with every hidden state swi
 
 ### TRF068
 
-Checks every `_no_split_modules` assignment against the classes the modeling file defines or imports. `modeling_*.py` files are checked directly. `modular_*.py` files are checked through the `modeling_*.py` files they generate, and each problem is reported on the modular class so `# trf-ignore: TRFXXX` works there. Note that for modular files this rule inspects the generated files on disk, so the results reflect the last converted file. After editing `modular_*.py`, regenerate before running the linter, otherwise a fix will not show up and a new breakage will not be caught. accelerate matches `_no_split_modules` against the class names of the model's submodules. A name that is not a class never matches, so the layer is silently split across devices. In modular files this happens when `_no_split_modules` is inherited from another model: the converter renames the prefix but not the class (`Qwen4ExpDecoderLayer` vs. the real `Qwen4ExpTextDecoderLayer`).
+Checks each `_no_split_modules` entry against the classes the modeling file defines or imports. A `modular_*.py` file is checked through the files it generates on disk, so regenerate before linting. accelerate matches these names against submodule class names. A name that is not a class never matches, so the layer can be split across devices. It usually comes from a modular file inheriting `_no_split_modules`: the converter renames the prefix, not the class.
 
 ```diff
 class Qwen4ExpModel(Qwen3_5MoeModel):
