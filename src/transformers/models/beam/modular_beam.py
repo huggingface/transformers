@@ -26,6 +26,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GenericForTokenClassification
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -491,9 +492,14 @@ class BeamForCausalLM(DeepseekV3ForCausalLM):
         )
 
 
+class BeamForTokenClassification(GenericForTokenClassification, BeamPreTrainedModel):
+    pass
+
+
 __all__ = [
     "BeamConfig",
     "BeamForCausalLM",
+    "BeamForTokenClassification",
     "BeamModel",
     "BeamPreTrainedModel",
 ]

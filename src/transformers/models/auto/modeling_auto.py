@@ -1709,6 +1709,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("arcee", "ArceeForTokenClassification"),
         ("axk1", "AXK1ForTokenClassification"),
         ("axk2", "AXK2ForTokenClassification"),
+        ("beam", "BeamForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
         ("biogpt", "BioGptForTokenClassification"),

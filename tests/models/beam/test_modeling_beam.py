@@ -26,7 +26,13 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 if is_torch_available():
     import torch
 
-    from transformers import BeamConfig, BeamForCausalLM, BeamModel
+    from transformers import (
+        AutoModelForTokenClassification,
+        BeamConfig,
+        BeamForCausalLM,
+        BeamForTokenClassification,
+        BeamModel,
+    )
 
 
 class BeamModelTester(CausalLMModelTester):
@@ -45,6 +51,25 @@ class BeamModelTester(CausalLMModelTester):
 class BeamModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BeamModelTester
     model_split_percents = [0.5, 0.9]
+
+    def test_token_classification_auto_model_bfloat16_round_trip(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        model = AutoModelForTokenClassification.from_config(config, dtype=torch.bfloat16).to(torch_device).eval()
+        self.assertIsInstance(model, BeamForTokenClassification)
+
+        with torch.no_grad():
+            expected_logits = model(**inputs).logits
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model.save_pretrained(tmpdir)
+            reloaded = AutoModelForTokenClassification.from_pretrained(tmpdir, dtype="auto").to(torch_device).eval()
+
+        with torch.no_grad():
+            logits = reloaded(**inputs).logits
+
+        self.assertEqual(logits.dtype, torch.bfloat16)
+        torch.testing.assert_close(logits, expected_logits, atol=0, rtol=0)
 
 
 @slow
