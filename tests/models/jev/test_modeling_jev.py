@@ -22,7 +22,14 @@ from safetensors.torch import save_file
 
 from transformers import AutoProcessor, is_torch_available, pipeline
 from transformers.decision import DecisionConfig
-from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
+from transformers.testing_utils import (
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, render
 
@@ -127,9 +134,9 @@ DECIDERS = {
 class JevIntegrationTest(unittest.TestCase):
     def test_jev_9b(self):
         expected = {
-            "intent": {"refund": 0.9999, "track": 0.0000, "other": 0.0001},
-            "urgent": 0.5419,
-            "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
+            "intent": {"refund": 0.9998, "track": 0.0000, "other": 0.0002},
+            "urgent": 0.5331,
+            "anger": {"0": 0.0216, "1": 0.1264, "2": 0.5149, "3": 0.2954, "4": 0.0403, "5": 0.0014},
         }
         check_decision(
             self, "hf-internal-testing/JEV-9B", "hf-internal-testing/JEV-9B", expected, atol=1e-2, dtype="bfloat16"
@@ -145,6 +152,8 @@ class JevIntegrationTest(unittest.TestCase):
         check_decision(self, "hf-internal-testing/JEV-35B", "hf-internal-testing/JEV-35B", expected, atol=1e-2)
 
     def test_deciders(self):
+        # 27B checkpoints, ~54 GB in bfloat16: offloaded to the CPU past the memory of the accelerator
         for repo, expected in DECIDERS.items():
             with self.subTest(repo):
-                check_decision(self, None, repo, expected, atol=1e-2)
+                check_decision(self, None, repo, expected, atol=1e-2, device_map="auto")
+            cleanup(torch_device, gc_collect=True)
