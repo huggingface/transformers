@@ -14,7 +14,6 @@
 
 from collections import defaultdict
 from collections.abc import Collection, Iterable
-from math import ceil
 from typing import Optional, Union
 
 import numpy as np
@@ -511,19 +510,22 @@ def center_crop(
     new_shape = image.shape[:-2] + (new_height, new_width)
     new_image = np.zeros_like(image, shape=new_shape)
 
-    # If the image is too small, pad it with zeros
-    top_pad = ceil((new_height - orig_height) / 2)
+    # If the image is too small, pad it with zeros. When the padding is odd, the extra pixel goes on the
+    # bottom/right (floor on top/left), matching torchvision's center crop convention.
+    top_pad = (new_height - orig_height) // 2
     bottom_pad = top_pad + orig_height
-    left_pad = ceil((new_width - orig_width) / 2)
+    left_pad = (new_width - orig_width) // 2
     right_pad = left_pad + orig_width
     new_image[..., top_pad:bottom_pad, left_pad:right_pad] = image
 
-    top += top_pad
-    bottom += top_pad
-    left += left_pad
-    right += left_pad
+    # Crop relative to the padded image, like torchvision: floor division keeps the extra pixel of an odd
+    # difference on the bottom/right.
+    top = (new_height - crop_height) // 2
+    bottom = top + crop_height
+    left = (new_width - crop_width) // 2
+    right = left + crop_width
 
-    new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
+    new_image = new_image[..., top:bottom, left:right]
     new_image = to_channel_dimension_format(new_image, output_data_format, ChannelDimension.FIRST)
 
     return new_image

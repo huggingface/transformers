@@ -19,7 +19,7 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils.import_utils import is_torch_available, is_vision_available
+from transformers.utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
 if is_torch_available():
@@ -342,6 +342,25 @@ class ImageTransformsTester(unittest.TestCase):
         image = np.random.randint(0, 256, (224, 224, 4))
         expected_image = image[52:172, 82:142, :]
         self.assertTrue(np.allclose(center_crop(image, (120, 60), input_data_format="channels_last"), expected_image))
+
+    @require_torch
+    def test_center_crop_odd_padding_matches_torchvision(self):
+        if not is_torchvision_available():
+            self.skipTest("torchvision is not available")
+        from torchvision.transforms.v2 import functional as tvF
+
+        # Undersized image, odd padding difference in both dimensions: the extra pixel must land on the
+        # bottom/right, matching torchvision's center crop convention (parity between the backends).
+        image = np.random.randint(0, 256, (3, 223, 224))
+        expected = tvF.center_crop(torch.from_numpy(image), [224, 225]).numpy()
+
+        cropped = center_crop(image, (224, 225))
+        self.assertEqual(cropped.shape, expected.shape)
+        self.assertTrue(np.array_equal(cropped, expected))
+
+        # Same check with channels_last input/output
+        cropped_cl = center_crop(image, (224, 225), data_format="channels_last")
+        self.assertTrue(np.array_equal(cropped_cl, expected.transpose(1, 2, 0)))
 
     def test_center_to_corners_format(self):
         bbox_center = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
