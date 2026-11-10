@@ -384,16 +384,22 @@ class HfQuantizer(ABC):
         """
         return {}
 
+    def get_load_operation(self):
+        "The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"
+        if not self.pre_quantized:
+            return None
+        dequantize = getattr(self.quantization_config, "dequantize", False)
+        return self.get_load_operations().get("dequantize" if dequantize else "deserialize")
+
     def get_weight_conversions(self):
         "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
         from ..core_model_loading import WeightConverter, _IdentityOp
 
-        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
-        if not self.pre_quantized or mode not in self.get_load_operations():
+        if self.get_load_operation() is None:
             return []
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
 
-    # Names a checkpoint stores, renamed to ours after the model's renamings, e.g. ModelOpt's `weight_scale`
+    # Names a checkpoint stores, renamed to ours on the layers of the format, e.g. ModelOpt's `weight_scale`
     renamed_names: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):

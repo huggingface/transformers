@@ -116,7 +116,12 @@ class NVFP4HfQuantizer(HfQuantizer):
         return NVFP4Quantize(self.quantization_device)
 
     # As ModelOpt saves them
-    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
+    # Index-aligned: a scale merged like its weight loads into the experts' name at its index
+    serialized_names = {
+        "weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"],
+        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale", "gate_up_proj_scale_2", "gate_up_proj_input_scale"],
+        "down_proj": ["down_proj", "down_proj_scale", "down_proj_scale_2", "down_proj_input_scale"],
+    }
 
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize

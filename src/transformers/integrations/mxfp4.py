@@ -483,7 +483,7 @@ class Mxfp4GptOssMLP(nn.Module):
 
 
 class Mxfp4Experts(FP8Experts):
-    "MXFP4 experts (e.g. DeepSeek-V4's): e2m1 pairs packed in `int8`, a ue8m0 scale per 32, run W4A8 on the FP8 kernels"
+    """MXFP4 experts (e.g. DeepSeek-V4's): e2m1 pairs packed in `int8`, a ue8m0    scale per 32, run W4A8 on the FP8 kernels. mostly for BC"""
 
     def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
         super().__init__(

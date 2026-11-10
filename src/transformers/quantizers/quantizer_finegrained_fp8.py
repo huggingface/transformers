@@ -193,8 +193,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does
     serialized_names = {
         "weight": ["weight", "weight_scale_inv", "activation_scale"],
-        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
-        "down_proj": ["down_proj", "down_proj_scale_inv"],
+        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_activation_scale"],
+        "down_proj": ["down_proj", "down_proj_scale_inv", "down_proj_activation_scale"],
     }
 
     def get_load_operations(self):

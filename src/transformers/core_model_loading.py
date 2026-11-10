@@ -113,6 +113,31 @@ class _IdentityOp(ConversionOps):
         return _IdentityOp()
 
 
+class PerName(ConversionOps):
+    """
+    Runs `operations` once per name a param is stored as, e.g. the experts' `weight` and `weight_scale_inv`, each into
+    the target's name at the same index in `names` (`gate_up_proj`, `gate_up_proj_scale_inv`).
+    """
+
+    def __init__(self, operations: list[ConversionOps], names: dict[str, list[str]], stored: str):
+        self.operations, self.names, self.stored = operations, names, stored
+
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        sources = [source for source in source_patterns if source.endswith(f".{self.stored}")]
+        output = {}
+        for i, name in enumerate(self.names[self.stored]):
+            named = {s: s.removesuffix(self.stored) + name for s in sources}
+            group = {s: input_dict[n] for s, n in named.items() if n in input_dict}
+            if not group:  # not in this checkpoint, e.g. no `activation_scale`
+                continue
+            for op in self.operations:
+                group = op.convert(group, source_patterns=sources, target_patterns=target_patterns, **kwargs)
+            for target, tensor in group.items():
+                param = target.rpartition(".")[2]
+                output[target.removesuffix(param) + self.names[param][i]] = tensor
+        return output
+
+
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
     to know how many tensors to chunk into. Useful when concatenating an arbitrary number of tensors."""
@@ -1705,6 +1730,8 @@ def convert_and_load_state_dict_in_model(
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+    if hf_quantizer is not None:
+        state_dict = hf_quantizer.order_keys(state_dict)
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
@@ -1728,7 +1755,9 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = original_key
             # each target key gets its own converter instance, with the ops of its quantizer
             if hf_quantizer is not None and renamed_key not in param_name_to_load:
-                new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
+                new_converter = hf_quantizer.update_weight_transform(
+                    new_converter, model, renamed_key, renamings, converters, pattern_to_converter
+                )
             mapping = param_name_to_load.setdefault(renamed_key, new_converter)
 
             # 3. Handle dtype casting
