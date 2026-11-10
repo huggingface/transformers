@@ -349,6 +349,140 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
 
+@require_torch
+class Mask2FormerInitWeightsTest(unittest.TestCase):
+    """
+    Regression tests for https://github.com/huggingface/transformers/issues/35877
+
+    Meta's original Mask2Former code uses:
+    - PyTorch default nn.Embedding init (normal, std=1.0) for query embeddings
+    - xavier_uniform_ on weights (dim > 1) and PyTorch default on biases for MLPs
+    - No explicit init for level_embed (PyTorch default, not zeroed)
+
+    The HuggingFace implementation previously had three bugs:
+    1. nn.Embedding layers got normal_(std=0.02) from super()._init_weights()
+    2. MLP biases were zeroed by super()._init_weights()
+    3. level_embed was initialized with normal_(std=0), effectively zeroing it
+    """
+
+    def get_config(self):
+        return Mask2FormerConfig(
+            backbone_config={
+                "model_type": "swin",
+                "embed_dim": 96,
+                "depths": [2, 2, 6, 2],
+                "num_heads": [3, 6, 12, 24],
+                "out_indices": [1, 2, 3],
+                "image_size": 224,
+            },
+            decoder_layers=2,
+            num_queries=10,
+            hidden_dim=64,
+            num_feature_levels=3,
+            encoder_feedforward_dim=128,
+        )
+
+    def test_embedding_std_matches_pytorch_default(self):
+        """
+        Bug 1: nn.Embedding layers should use PyTorch default std (~1.0),
+        not the 0.02 that PreTrainedModel._init_weights applies.
+        Meta's original Mask2Former creates query embeddings without explicit
+        initialization.
+        """
+        config = self.get_config()
+        model = Mask2FormerModel(config)
+
+        # Check the transformer module's embeddings
+        transformer = model.transformer_module
+        for name in ["queries_embedder", "queries_features", "level_embed"]:
+            embed = getattr(transformer, name)
+            weight_std = embed.weight.std().item()
+            # PyTorch default is normal(0, 1). With 0.02, std would be ~0.02.
+            # We check that std is much larger than 0.02, indicating correct init.
+            self.assertGreater(
+                weight_std,
+                0.5,
+                f"{name} embedding std is {weight_std:.4f}, expected ~1.0 "
+                f"(PyTorch default), not ~0.02 (wrong PreTrainedModel default)",
+            )
+
+    def test_mlp_biases_not_zeroed(self):
+        """
+        Bug 2: MLP prediction head biases should keep PyTorch's default init
+        (Kaiming uniform), not be zeroed. Meta's original _reset_parameters
+        only applies xavier_uniform_ to tensors where p.dim() > 1, leaving
+        biases untouched.
+        """
+        config = self.get_config()
+        model = Mask2FormerForUniversalSegmentation(config)
+
+        # Check the mask_embed MLP: its biases should NOT be all zeros
+        mask_embed = model.model.transformer_module.decoder.mask_predictor.mask_embedder
+        has_nonzero_bias = False
+        for submodule in mask_embed.modules():
+            if isinstance(submodule, torch.nn.Linear) and submodule.bias is not None:
+                if submodule.bias.abs().sum().item() > 0:
+                    has_nonzero_bias = True
+                    break
+        self.assertTrue(
+            has_nonzero_bias,
+            "All MLP biases in mask_embed are zero. Meta's original keeps "
+            "PyTorch default (Kaiming uniform) biases, not zeros.",
+        )
+
+    def test_level_embed_not_zeroed(self):
+        """
+        Bug 3: level_embed (nn.Parameter in PixelDecoder) should not be zeroed.
+        Meta's original does not explicitly initialize level_embed, so it keeps
+        whatever PyTorch assigns. Previously this was normal_(std=0) which zeroed it.
+        """
+        config = self.get_config()
+        model = Mask2FormerModel(config)
+
+        level_embed = model.pixel_level_module.decoder.level_embed
+        # level_embed should not be all zeros and should have reasonable std
+        self.assertGreater(
+            level_embed.abs().sum().item(),
+            1.0,
+            "level_embed is near-zero. It should be initialized with normal_(std=1.0), "
+            "not zeroed with normal_(std=0).",
+        )
+        self.assertGreater(
+            level_embed.std().item(),
+            0.5,
+            "level_embed std is too small. Expected ~1.0, matching PyTorch default.",
+        )
+
+    def test_deformable_attention_sampling_offsets_init(self):
+        """
+        Verify that the deformable attention's sampling_offsets bias has the
+        correct grid initialization pattern, not just zeros or random values.
+        """
+        config = self.get_config()
+        model = Mask2FormerModel(config)
+
+        # Find the deformable attention modules in the pixel decoder encoder
+        encoder = model.pixel_level_module.decoder.encoder
+        for layer in encoder.layers:
+            deform_attn = layer.self_attn
+            # sampling_offsets weight should be all zeros
+            self.assertTrue(
+                torch.allclose(deform_attn.sampling_offsets.weight, torch.zeros_like(deform_attn.sampling_offsets.weight)),
+                "Deformable attention sampling_offsets.weight should be initialized to zeros",
+            )
+            # sampling_offsets bias should NOT be all zeros (it has the grid pattern)
+            self.assertGreater(
+                deform_attn.sampling_offsets.bias.abs().sum().item(),
+                0.0,
+                "Deformable attention sampling_offsets.bias should have grid init pattern, not zeros",
+            )
+            # attention_weights should be all zeros
+            self.assertTrue(
+                torch.allclose(deform_attn.attention_weights.weight, torch.zeros_like(deform_attn.attention_weights.weight)),
+                "Deformable attention attention_weights.weight should be initialized to zeros",
+            )
+
+
 TOLERANCE = 2e-4
 
 

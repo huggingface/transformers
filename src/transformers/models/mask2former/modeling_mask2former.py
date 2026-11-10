@@ -2144,7 +2144,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
-        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
 
@@ -2183,7 +2182,34 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             init.zeros_(module.cross_attn.in_proj_bias)
 
         elif isinstance(module, Mask2FormerPixelDecoder):
-            init.normal_(module.level_embed, std=0)
+            # Meta's original does not explicitly initialize level_embed, so it keeps
+            # PyTorch's default. Previously this was normal_(std=0) which incorrectly
+            # zeroed the parameter. Use normal_(std=1.0) to match PyTorch's default
+            # nn.Embedding-style init (level_embed is an nn.Parameter, not nn.Embedding).
+            init.normal_(module.level_embed, std=1.0)
+
+        elif isinstance(module, Mask2FormerPredictionBlock):
+            # Meta's original MLP uses _reset_parameters: xavier_uniform_ on weights
+            # where p.dim() > 1, and leaves biases at PyTorch's default init.
+            # The base PreTrainedModel._init_weights would zero all biases, which is wrong.
+            # We apply xavier_uniform_ on weights and the default fan_in-based uniform
+            # on biases to match PyTorch's nn.Linear default.
+            for submodule in module.modules():
+                if isinstance(submodule, nn.Linear):
+                    init.xavier_uniform_(submodule.weight)
+                    if submodule.bias is not None:
+                        fan_in = submodule.weight.shape[1]
+                        bound = 1.0 / (fan_in ** 0.5)
+                        init.uniform_(submodule.bias, -bound, bound)
+
+        elif isinstance(module, nn.Embedding):
+            # Meta's original creates embeddings (query_feat, query_embed, level_embed)
+            # without explicit initialization, so they use PyTorch's default normal(std=1.0).
+            # The base PreTrainedModel._init_weights would apply normal_(std=0.02), which
+            # is far too small and not what the original Mask2Former code does.
+            init.normal_(module.weight, mean=0.0, std=1.0)
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
@@ -2198,6 +2224,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             empty_weight = torch.ones(module.num_labels + 1)
             empty_weight[-1] = module.eos_coef
             init.copy_(module.empty_weight, empty_weight)
+
+        else:
+            # For all other modules (nn.Linear, nn.Conv2d, etc.), fall back to
+            # the base PreTrainedModel default initialization.
+            super()._init_weights(module)
 
         if hasattr(module, "reference_points"):
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
