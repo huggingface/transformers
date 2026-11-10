@@ -102,14 +102,13 @@ The [Quickstart](./quicktour) covers loading models, running inference on other 
 
 Copy the prompt below into your coding agent. It has the agent check your installed version, read the docs for that version, and follow the best and latest practices from Transformers v5.
 
-```text
-I'm building with Hugging Face Transformers. Before you write any Transformers code:
-
-1. Check the installed version with `python -c "import transformers; print(transformers.__version__)"`. If Transformers isn't installed, install it with `pip install "transformers[torch]"`.
-2. Read the docs index for that version at https://huggingface.co/docs/transformers/v<version>/llms.txt, for example v5.22.2. For a .dev version, use https://huggingface.co/docs/transformers/main/llms.txt. Add .md to any docs page URL to read it as Markdown. Look up each class and argument there instead of relying on memory.
-3. If the version is 5.0 or later, read https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md Don't use APIs from older versions.
-4. Read the model card of each model you use on the Hugging Face Hub. Many models need specific arguments, like a chat template option or a minimum Transformers version.
-```
+> [!AgentPrompt]
+> I'm building with Hugging Face Transformers. Before you write any Transformers code:
+> 
+> 1. Check the installed version with `python -c "import transformers; print(transformers.__version__)"`. If Transformers isn't installed, install it with `pip install "transformers[torch]"`.
+> 2. Read the docs index for that version at https://huggingface.co/docs/transformers/v<version>/llms.txt, for example v5.22.2. For a .dev version, use https://huggingface.co/docs/transformers/main/llms.txt. Add .md to any docs page URL to read it as Markdown. Look up each class and argument there instead of relying on memory.
+> 3. If the version is 5.0 or later, read https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md Don't use APIs from older versions.
+> 4. Read the model card of each model you use on the Hugging Face Hub. Many models need specific arguments, like a chat template option or a minimum Transformers version.
 
 ## Run inference
 
