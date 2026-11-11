@@ -520,7 +520,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
         model_keys = model.state_dict()
 
-        renamed = rename_keys(keys, renamings, converters, None, "model", model_keys)
+        renamed = rename_keys({key: key for key in keys}, renamings, converters, "model", model_keys)
         each_key = {key: rename_source_key(key, renamings, converters, "model", model_keys) for key in keys}
         self.assertEqual(renamed, each_key)
 

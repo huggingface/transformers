@@ -206,7 +206,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return Fp8Quantize(self)
 
-    # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does
     serialized_names = {
         "weight": ["weight", "weight_scale_inv", "activation_scale"],
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_activation_scale"],
@@ -218,17 +217,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize}
 
-    def get_weight_conversions(self):
-        # Quantized, the experts load through the model's converters: only the linears need ours
-        conversions = super().get_weight_conversions()
-        if self.quantization_config.dequantize:
-            return conversions
-        return [c for c in conversions if c._original_target_patterns == ["weight"]]
-
-    # DeepSeek-V4-Flash's per-block `.scale`, Mistral Large 4's `.qscale_weight`, ModelOpt's names (and FP8 embeddings').
-    # An expert's static `input_scale` is named after its weight: the experts' converter takes it along
+    # DeepSeek-V4-Flash's per-block `.scale`, Mistral Large 4's `.qscale_weight`, ModelOpt's names (and FP8 embeddings')
     renamed_names = {
-        "experts.*.input_scale": "weight_activation_scale",
         "scale": "weight_scale_inv",
         "qscale_weight": "weight_scale_inv",
         "weight_scale": "weight_scale_inv",

@@ -25,6 +25,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
+from fnmatch import fnmatchcase
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
@@ -903,13 +904,9 @@ class WeightTransform:
         for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
-            # `gate` matches `*.gate`, not `*.gate_*`
-            # `gate` in a WeightConverter matches `*.gate`, not `*.gate_*` nor `*.gate.weight`
-            # `gate_up_proj.weight` matches `gate_up_proj.weight` but also `gate_up_proj.weight_scale_inv`
-            # `gate_` matches `gate_*`
-            if isinstance(self, WeightConverter) and re.fullmatch(r"\w+", pattern):
-                pattern = rf"(?<![^.]){pattern}$"
-            elif re.search(r"[a-zA-Z0-9]$", pattern) and not pattern.endswith(".weight"):
+            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
+            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
+            if re.search(r"[a-zA-Z0-9]$", pattern):
                 pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
@@ -1597,37 +1594,49 @@ class _Templates(set):
         return True if key in self else None
 
 
-def _rename(key, layered, renamings, converters, prefix, model_keys):
-    "A checkpoint key renamed: its quantizer's names (`layered`), then the model's transforms and prefix"
-    return rename_source_key(layered, renamings, converters, prefix, model_keys)
-
-
-def rename_keys(keys, renamings, converters, hf_quantizer, prefix, model_keys):
+def rename_keys(names, renamings, converters, prefix, model_keys):
     """
-    `{key: (renamed key, matched converter pattern)}`, renamed once per template: keys equal up to their indices
-    rename alike. A template whose slots do not rename like its first key's indices is renamed key by key.
+    `{key: (renamed name, matched converter pattern)}` of `names` (`{key: name}`), renamed once per template: names
+    equal up to their indices rename alike. A template whose slots do not rename like its first name's indices is
+    renamed name by name.
     """
     templates = _Templates(INDEX.sub("*", key) for key in model_keys)
     groups = defaultdict(list)
-    for key in keys:
-        # The quantizer's names stay per key: its plan patterns may name one layer index
-        layered = key if hf_quantizer is None else hf_quantizer.rename_layer(key)
-        groups[INDEX.sub("*", key), INDEX.sub("*", layered)].append((key, layered))
+    for key, name in names.items():
+        groups[INDEX.sub("*", name)].append((key, name))
 
     renamed = {}
     for members in groups.values():
-        key, layered = members[0]
-        slotted = [INDEX.sub(lambda _, s=iter(range(SLOT, SLOT + 1000)): str(next(s)), k) for k in (key, layered)]
-        template, pattern = _rename(*slotted, renamings, converters, prefix, templates)
+        name = members[0][1]
+        slotted = INDEX.sub(lambda _, s=iter(range(SLOT, SLOT + 1000)): str(next(s)), name)
+        template, pattern = rename_source_key(slotted, renamings, converters, prefix, templates)
 
         def fill(indices):
             return re.sub(rf"{SLOT // 1000}(\d{{3}})", lambda m: indices[int(m[1])], template)
 
-        if (fill(INDEX.findall(key)), pattern) != _rename(key, layered, renamings, converters, prefix, model_keys):
-            renamed |= {k: _rename(k, kl, renamings, converters, prefix, model_keys) for k, kl in members}
+        if (fill(INDEX.findall(name)), pattern) != rename_source_key(name, renamings, converters, prefix, model_keys):
+            renamed |= {k: rename_source_key(n, renamings, converters, prefix, model_keys) for k, n in members}
         else:
-            renamed |= {k: (fill(INDEX.findall(k)), pattern) for k, _ in members}
+            renamed |= {k: (fill(INDEX.findall(n)), pattern) for k, n in members}
     return renamed
+
+
+def _param(quantizer, key):
+    """
+    `(param key, role)`: the param a checkpoint key serializes in its quantizer's format, and the key's position in
+    the param's `serialized_names` (after the format's `renamed_names`). `(key, None)` for a key of no format's.
+    """
+    if quantizer is None or quantizer.get_load_operation() is None:
+        return key, None
+    stored = next((stored for stored in quantizer.renamed_names if fnmatchcase(key, f"*.{stored}")), None)
+    if stored is not None:
+        key = f"{key.rpartition('.')[0]}.{quantizer.renamed_names[stored]}"
+    # The longest names first: `weight.absmax` is not a `weight`
+    names = [(name, param, role) for param, ns in quantizer.serialized_names.items() for role, name in enumerate(ns)]
+    for name, param, role in sorted(names, key=lambda item: -len(item[0])):
+        if key.endswith(f".{name}"):
+            return f"{key.removesuffix(name)}{param}", role
+    return key, None
 
 
 def _meta(tensor):
@@ -1649,35 +1658,123 @@ def _outputs(transform, target, state_dict, model):
         return {target}
 
 
+def _quantize(target, transform, quantizer, param, companions, model):
+    """
+    `{target: transform}`, with the ops of the quantizer of the checkpoint's `param` loading into `target`. Quantized
+    on the fly, after the model's ops. Serialized, its `companions` (e.g. its scales) are read with it: dequantized,
+    by the same transform before the model's ops; deserialized, each by its own copy of the transform, after them.
+    """
+    if quantizer is None:
+        return {target: transform}
+    if not quantizer.pre_quantized:
+        if quantizer.param_needs_quantization(model, target):
+            transform.quantization_operation = quantizer.get_quantize_ops()
+        return {target: transform}
+    operation, names = quantizer.get_load_operation(), quantizer.serialized_names.get(param)
+    if operation is None or names is None:  # e.g. a bias: not one of the format's tensors
+        return {target: transform}
+
+    load = operation(quantizer)
+    if isinstance(transform, WeightRenaming):  # its names read together, as the format saves them
+        grouped = WeightConverter(names, target.rpartition(".")[2], [load])
+        for key in chain(*transform.layer_targets.values()):
+            grouped.add_tensor(target, key, names[0], key)
+        for key, _, role in companions:
+            grouped.add_tensor(target, key, names[role], key)
+        return {target: grouped}
+
+    if getattr(quantizer.quantization_config, "dequantize", False):  # the companions read along, by the same ops
+        sources = dict(zip(transform.source_patterns, transform._original_source_patterns))
+        roles = {
+            (s, r): s.removesuffix(param) + names[r]
+            for s in sources.values()
+            if s.endswith(param)
+            for r in range(1, len(names))
+        }
+        new = transform.copy(
+            [*sources.values(), *roles.values()],
+            transform._original_target_patterns,
+            operations=[load, *transform.operations],
+        )
+        processed = dict(zip([*sources.values(), *roles.values()], new.source_patterns))
+        for pattern, keys in transform.collected_tensors.items():
+            for key in keys:
+                new.add_tensor(target, key, processed[sources[pattern]], key)
+        for key, pattern, role in companions:
+            if (sources.get(pattern), role) in roles:  # else saved merged already, unlike its param: not read
+                new.add_tensor(target, key, processed[roles[sources[pattern], role]], key)
+        return {target: new}
+
+    # Deserialized, each companion into its own param, e.g. the merged experts' `gate_up_proj_scale_inv`: through a
+    # copy of the param's transform, or as is if the checkpoint saved it merged already
+    module, _, name = target.rpartition(".")
+    transforms = {target: transform}
+    for key, pattern, role in companions:
+        stored = quantizer.serialized_names.get(name, names)[role]
+        companion = f"{module}.{stored}"
+        if companion not in transforms:
+            transforms[companion] = (
+                deepcopy(transform) if pattern else WeightConverter(stored, stored, [_IdentityOp()])
+            )
+            transforms[companion].collected_tensors = defaultdict(list)
+            transforms[companion].layer_targets = defaultdict(set)
+        transforms[companion].add_tensor(companion, key, pattern or stored, key)
+    for transform in transforms.values():
+        transform.operations = [*transform.operations, load]
+    return transforms
+
+
 def build_load_plan(state_dict, model, weight_mapping, hf_quantizer=None):
     """
-    `(plan, unexpected_keys)`, from the checkpoint's key names and shapes: every transform runs on meta tensors, so
-    its exact outputs are known before reading a tensor. `plan` maps a param of each transform loading into the model
-    to it, with its quantizer's ops, whose `collected_tensors` hold the checkpoint keys it reads, in order.
+    `(plan, unexpected_keys)`, from the checkpoint's key names and shapes. Each checkpoint key is a param, or a
+    companion of one in its quantizer's format (e.g. its scales). The params' transforms run on meta tensors, so
+    their exact outputs are known before reading a tensor; then their quantizer's ops are added, with the companions
+    they read. `plan` maps each param to load to its transform, whose `collected_tensors` hold the checkpoint keys it
+    reads, in order.
     """
     model_keys = model.state_dict()
     renamings = [t for t in weight_mapping if isinstance(t, WeightRenaming)]
     converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
     pattern_to_converter = {p: converter for converter in converters for p in converter.source_patterns}
     keys = sorted(state_dict, key=dot_natural_key)
-    renamed = rename_keys(keys, renamings, converters, hf_quantizer, model.base_model_prefix, model_keys)
+    prefix = model.base_model_prefix
+    renamed = rename_keys({key: key for key in keys}, renamings, converters, prefix, model_keys)
+    # A key's quantizer, by the model's name of its module (the plan's patterns name the model's modules)
+    owners = {key: None if hf_quantizer is None else hf_quantizer.get_quantizer(renamed[key][0]) for key in keys}
+    params = {key: _param(owners[key], key) for key in keys}
+    if any(param != key for key, (param, _) in params.items()):
+        renamed = rename_keys(
+            {key: param for key, (param, _) in params.items()}, renamings, converters, prefix, model_keys
+        )
 
-    transforms = {}
+    # 1. The params, through the model's transforms
+    transforms, companions = {}, defaultdict(list)
     for key in keys:
-        target, pattern = renamed[key]
+        (target, pattern), role = renamed[key], params[key][1]
+        if role:  # e.g. a scale: read with its param
+            companions[target].append((key, pattern, role))
+            continue
         if target not in transforms:
-            transform = deepcopy(pattern_to_converter[pattern]) if pattern else WeightRenaming(key, target)
-            if hf_quantizer is not None:
-                transform = hf_quantizer.update_weight_transform(transform, model, target)
-            transforms[target] = transform
+            transforms[target] = deepcopy(pattern_to_converter[pattern]) if pattern else WeightRenaming(key, target)
         transforms[target].add_tensor(target, key, pattern or key, key)
 
+    # 2. Their exact outputs, run on meta, then their quantizer's ops
     plan, unexpected = {}, set()
     for target, transform in transforms.items():
         outputs = _outputs(transform, target, state_dict, model)
         unexpected |= outputs - model_keys.keys()
-        if loaded := sorted(outputs & model_keys.keys()):
-            plan[target if target in model_keys else loaded[0]] = transform
+        if not (loaded := sorted(outputs & model_keys.keys())):
+            continue
+        key = next(chain(*transform.layer_targets.values()))
+        param = params[key][0].rpartition(".")[2]
+        quantized = _quantize(target, transform, owners[key], param, companions.pop(target, []), model)
+        plan[target if target in model_keys else loaded[0]] = quantized.pop(target)
+        for companion, transform in quantized.items():
+            if companion in model_keys:
+                plan[companion] = transform
+            else:
+                unexpected.add(companion)
+    unexpected |= {key for keys in companions.values() for key, _, _ in keys}  # of a param not loaded
     return plan, unexpected
 
 

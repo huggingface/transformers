@@ -970,8 +970,8 @@ class Fp8Dequantize(ConversionOps):
     """Dequantize FP8 weights using their per-block ``weight_scale_inv``.
 
     Designed to run as the *first* op in any :class:`WeightConverter` chain when
-    loading with ``dequantize=True`` — the quantization plan's :meth:`update_weight_transform`
-    prepends it to the converter of each weight, which reads its scales along, so that
+    loading with ``dequantize=True`` — the load plan prepends it to the converter of each
+    weight, which reads its scales along, so that
     per-expert (weight, scale) pairs are folded into full-precision tensors before
     the chain's merge / concat ops collapse the per-expert structure.
 

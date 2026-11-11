@@ -373,8 +373,8 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
         )
 
-    # Maps a non quantized parameter name to its corresponding quantized names
-    # e.g. `{"weight": ["weight", "weight_scale_inv"]}` means a weight becomes weight + scale inv.
+    # A param's serialized names: the param, then its companions, e.g. `{"weight": ["weight", "weight_scale_inv"]}`.
+    # The load plan reads a checkpoint's companions with their param, into the companions of the param it loads into
     serialized_names: dict[str, list[str]] = {}
 
     def get_load_operations(self) -> dict:
@@ -393,15 +393,11 @@ class HfQuantizer(ABC):
         return self.get_load_operations().get("dequantize" if dequantize else "deserialize")
 
     def get_weight_conversions(self):
-        "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
-        from ..core_model_loading import WeightConverter, _IdentityOp
+        "A format's own renamings of the checkpoint's params, after the model's"
+        return []
 
-        if self.get_load_operation() is None:
-            return []
-        return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
-
-    # Globs of a checkpoint's keys (the first one naming a key wins) to our name, on the format's layers, see
-    # `rename_layer`. E.g. `{"scale": "weight_scale_inv"}` renames `*.scale`
+    # Globs of a checkpoint's keys (the first one naming a key wins) to our name, on the format's layers, e.g.
+    # `{"scale": "weight_scale_inv"}` renames `*.scale`
     renamed_names: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):

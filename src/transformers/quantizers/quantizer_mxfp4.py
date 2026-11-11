@@ -256,21 +256,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         if not self.pre_quantized:  # GPT-OSS's experts, quantized on the fly into their serialized names
             return [WeightRenaming(r"experts\.(gate_up_proj|down_proj)$", r"experts.\1_blocks")]
-        # GPT-OSS's: the others load through the model's converters
-        conversions = [
-            c for c in super().get_weight_conversions() if c._original_target_patterns[0].endswith("_blocks")
-        ]
-        if not self.quantization_config.dequantize:
-            return conversions
-        # Dequantized into the original experts' `gate_up_proj`
-        return [
-            c.copy(
-                c._original_source_patterns,
-                [c._original_target_patterns[0].removesuffix("_blocks")],
-                operations=c.operations,
-            )
-            for c in conversions
-        ]
+        if self.quantization_config.dequantize:  # GPT-OSS's, dequantized into the original experts' params
+            return [WeightRenaming(r"experts\.(gate_up_proj|down_proj)_blocks$", r"experts.\1")]
+        return []
 
     # DeepSeek-V4 saves the expert scales under `.scale`
     renamed_names = {"scale": "weight_scale_inv"}
