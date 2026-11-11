@@ -89,9 +89,8 @@ class OpenVINOModelRunner(ModelRunner):
         config: dict | None = None,
         torch_threads: int | None = None,
     ) -> OpenVINOModelRunner:
-        """`config`, OpenVINO compile properties, goes over the CPU defaults, which keep the export's precision:
-        inference and KV cache in its dtype (OpenVINO otherwise keeps a stateful cache in uint8, and may run fp32 in
-        bf16 on CPUs that have it), tuned for latency.
+        """`config`, OpenVINO compile properties, goes over the CPU defaults (tuned for latency) and over the precision
+        the export recorded on the model.
 
         `torch_threads` splits the CPU between torch and OpenVINO, for torch work around the model (pre- and
         post-processing, `generate`'s loop): torch keeps that many threads and OpenVINO runs pinned on the remaining
@@ -101,12 +100,7 @@ class OpenVINOModelRunner(ModelRunner):
         device = _openvino_device_name(device)
         defaults = {}
         if device == "CPU":
-            precision = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}.get(metadata.dtype, "f32")
-            defaults = {
-                "PERFORMANCE_HINT": "LATENCY",
-                "INFERENCE_PRECISION_HINT": precision,
-                "KV_CACHE_PRECISION": precision,
-            }
+            defaults = {"PERFORMANCE_HINT": "LATENCY"}
             if torch_threads is not None:
                 torch.set_num_threads(torch_threads)
                 defaults["INFERENCE_NUM_THREADS"] = max(1, _physical_cores() - torch_threads)

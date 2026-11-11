@@ -400,7 +400,11 @@ class ExportedModelTest(unittest.TestCase):
             expected = model(**inputs).logits
         exported = OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig())
         self.assertIs(model.model.norm.input_min._base, base)
-        # OpenVINO runs a bf16 model in fp32 and returns fp32.
+        # The graph takes and returns float32, the trace's, and runs in the model's own precision.
+        self.assertEqual(exported.components["model"].metadata.dtype, "float32")
+        for option in ("INFERENCE_PRECISION_HINT", "KV_CACHE_PRECISION"):
+            self.assertEqual(exported.program.get_rt_info(["runtime_options", option]).astype(str), "bf16")
+        # OpenVINO hands a bf16 model's outputs back in fp32.
         torch.testing.assert_close(exported.to("cpu")(**inputs).logits, expected.float(), atol=2e-2, rtol=2e-2)
 
     @require_executorch
