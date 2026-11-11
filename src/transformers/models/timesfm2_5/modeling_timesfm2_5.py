@@ -65,8 +65,9 @@ class TimesFm2_5OutputForPrediction(BaseModelOutput):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
         Deterministic forecasts after denormalization.
-    full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, quantiles)`):
-        Quantile forecasts including the median after denormalization.
+    full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, num_quantiles)`):
+        Quantile forecasts including the median after denormalization, plus a leading point-forecast
+        channel at index 0, so `num_quantiles = len(config.quantiles) + 1`.
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
         Training loss combining MSE and quantile losses when targets are supplied.
     """
@@ -828,10 +829,11 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
             normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
             normalized_mean_preds = normalized_preds[:, :, decode_index]
             mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
-            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
-            if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)
+            # Channel 0 is the point-forecast head, not a quantile level: the quantile channels are `1..N-1`,
+            # in the same order as `config.quantiles`. Selecting the channels by `i != decode_index` instead
+            # shifts the lower half by one level and feeds the point head to `q=0.1`.
+            quantile_tensor = normalized_preds[..., 1:]
+            if quantile_tensor.shape[-1]:
                 quantile_loss = self._quantile_loss(quantile_tensor, normalized_targets)
                 loss = mse_loss + quantile_loss
             else:
