@@ -650,6 +650,32 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return all(quantizer.is_trainable for quantizer in self.all_quantizers)
 
 
+def plan_quantizers(plan: dict, loading, pre_quantized: bool) -> dict:
+    """
+    The quantizer of each pattern of `plan`, one per distinct config. Loading a saved plan, the `quantization_config`
+    passed to `from_pretrained` brings loading attributes: for every pattern (one config or dict, e.g.
+    `{"dequantize": True}`), or per pattern (a plan of them). The saved plan may mix formats (e.g. fp8 + mxfp4).
+    """
+    if not is_quantization_plan(loading):
+        loading = dict.fromkeys(plan, loading)
+    quantizers, shared = {}, {}
+    for pattern, config in plan.items():
+        if config is None:
+            quantizers[pattern] = None
+            continue
+        if isinstance(config, dict):
+            config = AutoQuantizationConfig.from_dict(config)
+        attributes = loading.get(pattern) if pre_quantized else None
+        if isinstance(attributes, QuantizationConfigMixin):
+            attributes = attributes.get_loading_attributes()
+        for key, value in (attributes or {}).items():
+            setattr(config, key, value)
+        if (key := repr(config)) not in shared:
+            shared[key] = AutoHfQuantizer.from_config(config, pre_quantized=pre_quantized)
+        quantizers[pattern] = shared[key]
+    return quantizers
+
+
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
     if gguf_file is not None:
         if quantization_config is None:
@@ -683,29 +709,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     saved_plan = quantization_params_from_config if plan_from_config else None
     user_plan = quantization_config if is_quantization_plan(quantization_config) else None
     if (plan := saved_plan or user_plan) is not None:
-        # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
-        # `{"dequantize": True}`), or per pattern (a plan of them)
-        # A single config only brings its loading attributes: the saved plan may mix methods (e.g. fp8 + mxfp4)
-        if isinstance(quantization_config, QuantizationConfigMixin):
-            quantization_config = quantization_config.get_loading_attributes()
-        loading_attributes = user_plan if user_plan is not None else dict.fromkeys(plan, quantization_config)
-        quantizers, shared = {}, {}  # patterns with equal configs share one quantizer
-        for pattern, pattern_config in plan.items():
-            if pattern_config is None:
-                quantizers[pattern] = None
-                continue
-            if plan_from_config:
-                attributes = loading_attributes.get(pattern)
-                pattern_config = AutoHfQuantizer.merge_quantization_configs(
-                    pattern_config, None if isinstance(attributes, dict) else attributes
-                )
-                for key, value in (attributes if isinstance(attributes, dict) else {}).items():
-                    setattr(pattern_config, key, value)
-            elif isinstance(pattern_config, dict):
-                pattern_config = AutoQuantizationConfig.from_dict(pattern_config)
-            if (key := repr(pattern_config)) not in shared:
-                shared[key] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
-            quantizers[pattern] = shared[key]
+        quantizers = plan_quantizers(plan, quantization_config, pre_quantized=plan_from_config)
         hf_quantizer = QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
         if not checkpoint_names:  # else `map_module_to_quantizer` sets it, in the model's names
             config.quantization_config = hf_quantizer.quantization_config
