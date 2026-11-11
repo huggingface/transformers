@@ -20,7 +20,6 @@ from types import SimpleNamespace
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.testing_utils import torch_device
 
 
 if is_torch_available():
@@ -124,7 +123,8 @@ def check_decision(
         "decision",
         model=model or test["model"],
         decision_config=decision_repo,
-        device=torch_device,
+        # 27-35B checkpoints: sharded over the 24 GB CI GPUs
+        device_map="auto",
         trust_remote_code=False,
         **pipeline_kwargs,
     )
