@@ -1409,7 +1409,7 @@ _STEPS = (
     (_unfuse_leftover_attentions, None),
     (_unfuse_attention_activation_biases, None),
     (_unfuse_group_norms, None),
-    (_untranspose_batch_matmuls, ("cuda",)),
+    (_untranspose_batch_matmuls, ("cuda", "dml")),
     (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",)),
     # 5. More fusions.
     (_WEIGHTLESS_RMS_NORMS.apply_to_model, None),
@@ -1422,6 +1422,7 @@ _STEPS = (
     (partial(_fuse_group_query_attention, prefill=False, head_norms=True), ("cuda",)),
     # WebGPU's rotates at the positions after the past, ignoring `position_ids`: rotary stays its own op.
     (partial(_fuse_group_query_attention, rotary=False), ("webgpu",)),
+    # DirectML's ignores rotary and `attention_bias` and needs unpacked q/k/v: it keeps `MultiHeadAttention`.
     (_fuse_mixture_of_experts, ("cuda",)),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused (microsoft/onnxruntime#33873): the ones
     # left, unfused.
@@ -1437,8 +1438,8 @@ _STEPS = (
 
 
 def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str) -> None:
-    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, `ort_fusions` (`"cpu"`, `"cuda"`
-    or `"webgpu"`)."""
+    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, `ort_fusions` (`"cpu"`, `"cuda"`,
+    `"webgpu"` or `"dml"`)."""
     if ort_fusions == "cuda" and not is_onnxruntime_available("1.28.0"):
         logger.warning(
             "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "

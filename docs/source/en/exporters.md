@@ -834,17 +834,19 @@ Set `ort_fusions` to the execution provider the graph will run on. Each provider
 config = OnnxConfig(ort_fusions="cpu")
 config = OnnxConfig(ort_fusions="cuda")
 config = OnnxConfig(ort_fusions="webgpu")
+config = OnnxConfig(ort_fusions="dml")
 ```
 
-| | `"cpu"` | `"cuda"` | `"webgpu"` |
-|---|---|---|---|
-| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` |
-| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` |
-| Mixture of experts | unfused | `MoE` | unfused |
-| CUDA graphs | — | static exports can replay | — |
+| | `"cpu"` | `"cuda"` | `"webgpu"` | `"dml"` |
+|---|---|---|---|---|
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
+| Mixture of experts | unfused | `MoE` | unfused | unfused |
+| CUDA graphs | — | static exports can replay | — | — |
 
 A `"cuda"` graph with `MoE` doesn't run on CPU, since ONNX Runtime's `MoE` only exists for CUDA. A `"webgpu"` graph runs
-in the browser with onnxruntime-web, or natively with onnxruntime-webgpu.
+in the browser with onnxruntime-web, or natively with onnxruntime-webgpu. A `"dml"` graph runs on Windows with
+onnxruntime-directml.
 
 The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
 is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for

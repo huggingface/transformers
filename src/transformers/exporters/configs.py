@@ -152,8 +152,8 @@ class OnnxConfig(DynamoConfig):
             Expose weight initializers as explicit graph inputs. Required by
             some older ONNX runtimes (opset < 9).
         ort_fusions (`str`, *optional*):
-            Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"` or
-            `"webgpu"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
+            Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
+            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -164,11 +164,11 @@ class OnnxConfig(DynamoConfig):
     optimize: bool = True
     export_params: bool = True
     keep_initializers_as_inputs: bool = False
-    ort_fusions: Literal["cpu", "cuda", "webgpu"] | None = None
+    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
 
     def __post_init__(self):
-        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu"):
-            raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda' or 'webgpu', got {self.ort_fusions!r}")
+        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml"):
+            raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_fusions!r}")
         if self.ort_fusions is not None and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 

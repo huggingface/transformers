@@ -82,12 +82,15 @@ ORT_FUSIONS = {
     # WebGPU's `GroupQueryAttention` rotates at the positions after the past, not at `position_ids`: rotary stays its
     # own op, for the queries and the keys. It has no `FusedMatMul`, which would run on the CPU.
     "webgpu": {"GroupQueryAttention": 1, "MoE": 0, "RotaryEmbedding": 2, "FusedMatMul": 0, **ORT_UNFUSED},
+    # DirectML's `GroupQueryAttention` reads neither rotary, the mask, nor packed q/k/v: `MultiHeadAttention` stays.
+    "dml": {"MultiHeadAttention": 1, "GroupQueryAttention": 0, "MoE": 0, "RotaryEmbedding": 2, **ORT_UNFUSED},
 }
 # Only CUDA has `MoE`: elsewhere the router keeps its softmax (microsoft/onnxruntime#33866).
 ORT_MOE_FUSIONS = {
     "cpu": {**ORT_FUSIONS["cpu"], "Softmax": 1},
     "cuda": {**ORT_FUSIONS["cuda"], "MoE": 1},
     "webgpu": {**ORT_FUSIONS["webgpu"], "Softmax": 1},
+    "dml": {**ORT_FUSIONS["dml"], "Softmax": 1},
 }
 
 
