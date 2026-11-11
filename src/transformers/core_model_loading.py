@@ -257,6 +257,9 @@ class TeleChatInterleaveKeyValue(ConversionOps):
     TeleChat fuses its key and value projections per head, i.e. `[k_0, v_0, k_1, v_1, ...]` along dim 0 with heads of
     `head_dim`. This regroups them as `[k_0, k_1, ..., v_0, v_1, ...]` so that `Chunk` can split keys from values, or
     does the opposite when `inverse` is set.
+
+    TP-safe: with tensor parallelism it receives a contiguous shard of whole `[k_h, v_h]` pairs, which it regroups into
+    that rank's colwise shards of `k_proj` and `v_proj`.
     """
 
     def __init__(self, inverse: bool = False):

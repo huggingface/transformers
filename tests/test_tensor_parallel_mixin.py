@@ -54,6 +54,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "qwen3",
     "qwen2",
     "granite_swa",
+    "telechat",
     # MoE
     "qwen4_exp_text",
     "qwen3_moe",
