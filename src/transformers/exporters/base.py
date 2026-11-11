@@ -232,14 +232,6 @@ class HfExporter(ABC):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
         check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
 
-    def _as_config(self, config: ExportConfigMixin | dict[str, Any]) -> ExportConfigMixin:
-        """`config` as this exporter's `config_class`, built from a dict when handed one."""
-        if isinstance(config, dict):
-            return self.config_class(**config)
-        if not isinstance(config, self.config_class):
-            raise TypeError(f"Expected config to be a {self.config_class.__name__} or dict, got {type(config)}")
-        return config
-
     @abstractmethod
     def export_program(
         self,
@@ -288,7 +280,10 @@ class HfExporter(ABC):
         return [filename]
 
     def _export_component(self, model, sample_inputs, config: ExportConfigMixin | dict[str, Any]) -> ExportedComponent:
-        config = self._as_config(config)
+        if isinstance(config, dict):
+            config = self.config_class(**config)
+        elif not isinstance(config, self.config_class):
+            raise TypeError(f"Expected config to be a {self.config_class.__name__} or dict, got {type(config)}")
         program, metadata = self.export_program(model, sample_inputs, config=config)
         metadata.export_config = export_config_metadata(config)
         return ExportedComponent(program, metadata)
