@@ -20,10 +20,7 @@ from parameterized import parameterized
 
 from transformers import (
     Apertus1p5Config,
-    Apertus1p5TextConfig,
-    Apertus1p5VisionTokenizerConfig,
     AutoProcessor,
-    WavTokenizerEncoderConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -70,20 +67,22 @@ class Apertus1p5Vision2TextModelTester(VLMModelTester):
         base_model_class = Apertus1p5Model
         conditional_generation_class = Apertus1p5ForConditionalGeneration
     config_class = Apertus1p5Config
-    text_config_class = Apertus1p5TextConfig
-    vision_config_class = Apertus1p5VisionTokenizerConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("audio_token_id", 4)
         # image codes use ids 40-59 and audio codes 60-71
         kwargs.setdefault("image_token_offset", 40)
         kwargs.setdefault("audio_token_offset", 60)
-        kwargs.setdefault("codebook_size", 20)
+        kwargs.setdefault("vision_codebook_size", 20)
         kwargs.setdefault("base_channels", 32)
         kwargs.setdefault("channel_multiplier", [1, 2, 1])  # downsamples by 4, the default `patch_size`
         kwargs.setdefault("num_res_blocks", 2)
         kwargs.setdefault("embed_dim", 16)
         kwargs.setdefault("latent_channels", 16)
+        kwargs.setdefault("audio_codebook_size", 12)
+        kwargs.setdefault("num_filters", 8)
+        kwargs.setdefault("upsampling_ratios", [2, 2])
+        kwargs.setdefault("codebook_dim", 32)  # equal to `hidden_size`: the quantizer has no projections
         super().__init__(parent, **kwargs)
 
     @property
@@ -93,14 +92,6 @@ class Apertus1p5Vision2TextModelTester(VLMModelTester):
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         return {"image_sizes": torch.full((batch_size, 2), self.image_size, dtype=torch.long, device=torch_device)}
-
-    def _build_modality_sub_configs(self):
-        return {
-            "vision_config": self.get_vision_config(),
-            "audio_config": WavTokenizerEncoderConfig(
-                num_filters=8, upsampling_ratios=[2, 2], hidden_size=32, codebook_dim=32, codebook_size=12
-            ),
-        }
 
 
 @require_torch
@@ -152,8 +143,6 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
         base_model_class = Apertus1p5Model
         conditional_generation_class = Apertus1p5ForConditionalGeneration
     config_class = Apertus1p5Config
-    text_config_class = Apertus1p5TextConfig
-    audio_config_class = WavTokenizerEncoderConfig
     audio_mask_key = "feature_attention_mask"
 
     def __init__(self, parent, **kwargs):
@@ -162,11 +151,17 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("audio_token_id", 4)
         kwargs.setdefault("image_token_offset", 40)
         kwargs.setdefault("audio_token_offset", 60)
+        kwargs.setdefault("audio_codebook_size", 12)
         kwargs.setdefault("num_filters", 8)
         kwargs.setdefault("upsampling_ratios", [2, 2])
-        kwargs.setdefault("codebook_size", 12)
         kwargs.setdefault("codebook_dim", 32)  # equal to `hidden_size`: the quantizer has no projections
         kwargs.setdefault("feat_seq_length", 20)
+        kwargs.setdefault("vision_codebook_size", 20)
+        kwargs.setdefault("base_channels", 32)
+        kwargs.setdefault("channel_multiplier", [1, 2, 1])
+        kwargs.setdefault("num_res_blocks", 2)
+        kwargs.setdefault("embed_dim", 16)
+        kwargs.setdefault("latent_channels", 16)
         super().__init__(parent, **kwargs)
 
     @property
@@ -188,19 +183,6 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
         lengths = (audio_mask.sum(-1) + hop_length - 1) // hop_length
         positions = torch.arange(int(lengths.max()), device=audio_mask.device)[None, :]
         return (positions < lengths[:, None]).long()
-
-    def _build_modality_sub_configs(self):
-        return {
-            "audio_config": self.get_audio_config(),
-            "vision_config": Apertus1p5VisionTokenizerConfig(
-                codebook_size=20,
-                base_channels=32,
-                channel_multiplier=[1, 2, 1],
-                num_res_blocks=2,
-                embed_dim=16,
-                latent_channels=16,
-            ),
-        }
 
 
 @require_torch
