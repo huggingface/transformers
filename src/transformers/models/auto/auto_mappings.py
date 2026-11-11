@@ -472,6 +472,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("musicgen_melody", "MusicgenMelodyConfig"),
         ("musicgen_melody_decoder", "MusicgenMelodyDecoderConfig"),
         ("mvp", "MvpConfig"),
+        ("nanbeige", "NanbeigeConfig"),
         ("nanochat", "NanoChatConfig"),
         ("nemo_speechlm", "Nemotron3_5TranscribeConfig"),
         ("nemotron", "NemotronConfig"),

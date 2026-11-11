@@ -849,6 +849,8 @@
         title: MVP
       - local: model_doc/myt5
         title: myt5
+      - local: model_doc/nanbeige
+        title: Nanbeige
       - local: model_doc/nanochat
         title: NanoChat
       - local: model_doc/nemotron
