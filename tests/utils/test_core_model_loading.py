@@ -1401,13 +1401,17 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         class OnTheFlyQuantizer:
             pre_quantized = False
 
-            def rename_layer(self, key):
-                return key
+            def get_quantizer(self, *names):
+                return self
 
-            def update_weight_transform(self, transform, model, name):
-                if name.endswith("down_proj.weight"):
-                    transform.quantization_operation = QuantizeOp()
-                return transform
+            def get_load_operation(self):
+                return None
+
+            def param_needs_quantization(self, model, name):
+                return name.endswith("down_proj.weight")
+
+            def get_quantize_ops(self):
+                return QuantizeOp()
 
         received = []
         model = DummyRoot(PreTrainedConfig(), with_mlp=True)
