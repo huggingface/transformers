@@ -29,6 +29,11 @@ from ...utils import auto_docstring
 @strict
 class Kolibri1_1Config(PreTrainedConfig):
     r"""
+    mlp_only_layers (`list[int]`, *optional*):
+        Indices of the layers with a dense MLP instead of a mixture of experts. Defaults to none.
+    mlp_only_intermediate_size (`int`, *optional*):
+        Intermediate size of the dense MLPs of `mlp_only_layers`.
+
     ```python
     >>> from transformers import Kolibri1_1Model, Kolibri1_1Config
 
@@ -96,7 +101,12 @@ class Kolibri1_1Config(PreTrainedConfig):
     shared_expert_intermediate_size: int = 512
     layer_types: list[str] | None = None
 
+    mlp_only_layers: list[int] | None = None
+    mlp_only_intermediate_size: int | None = None
+
     def __post_init__(self, **kwargs):
+        if self.mlp_only_layers is None:
+            self.mlp_only_layers = []
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
@@ -107,6 +117,10 @@ class Kolibri1_1Config(PreTrainedConfig):
         super().validate_architecture()
         if "sliding_attention" in self.layer_types and (self.sliding_window is None or self.sliding_window <= 0):
             raise ValueError(f"Sliding-attention layers need a positive `sliding_window`, got {self.sliding_window}.")
+        if not set(self.mlp_only_layers) <= set(range(self.num_hidden_layers)):
+            raise ValueError(f"`mlp_only_layers` must be layer indices, got {self.mlp_only_layers}.")
+        if self.mlp_only_layers and (self.mlp_only_intermediate_size or 0) <= 0:
+            raise ValueError("`mlp_only_layers` need a positive `mlp_only_intermediate_size`.")
 
 
 __all__ = ["Kolibri1_1Config"]

@@ -43,27 +43,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_kolibri1_1 import Kolibri1_1Config
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Kolibri1_1RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Kolibri1_1RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -223,6 +202,27 @@ class Kolibri1_1MLP(nn.Module):
         return down_proj
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Kolibri1_1RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Kolibri1_1RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 @use_experts_implementation
 class Kolibri1_1Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
@@ -317,10 +317,14 @@ class Kolibri1_1SparseMoeBlock(nn.Module):
 
 class Kolibri1_1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
+        # Not the parent's `__init__`, which would build the experts of the dense MLP layers only to discard them
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Kolibri1_1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Kolibri1_1SparseMoeBlock(config)
+        if layer_idx in config.mlp_only_layers:
+            self.mlp = Kolibri1_1MLP(config, intermediate_size=config.mlp_only_intermediate_size)
+        else:
+            self.mlp = Kolibri1_1SparseMoeBlock(config)
         self.input_layernorm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_self_attn_layernorm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

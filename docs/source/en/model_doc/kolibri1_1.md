@@ -20,6 +20,7 @@ rendered properly in your Markdown viewer.
 Kolibri 1.1 is Aleph Alpha's successor to [Kolibri 1](./kolibri1).
 Comparison to Kolibri 1:
 - It keeps the mixture-of-experts layers and the sliding-window attention layers of Kolibri 1.
+- The first two layers have a dense MLP instead of a mixture of experts.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
