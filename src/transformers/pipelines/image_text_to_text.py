@@ -350,7 +350,10 @@ class ImageTextToTextPipeline(Pipeline):
             # Handle Mistral tokenizer which does not accept processing kwargs
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
-                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                    k: v
+                    for k, v in chat_template_kwargs.items()
+                    if k != "processor_kwargs"
+                    and (k not in processing_kwargs or k in ("padding", "truncation", "max_length"))
                 }
 
             model_inputs = self.processor.apply_chat_template(

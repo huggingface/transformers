@@ -204,7 +204,9 @@ class VoxtralProcessor(ProcessorMixin):
 
         tokenizer_kwargs = output_kwargs["text_kwargs"]
         tokenizer_kwargs["return_tensors"] = None  # let's not return tensors here
-        encoded_instruct_inputs = self.tokenizer.apply_chat_template(conversations, **tokenizer_kwargs)
+        encoded_instruct_inputs = self.tokenizer.apply_chat_template(
+            conversations, continue_final_message=continue_final_message, **tokenizer_kwargs
+        )
 
         if text_kwargs.get("tokenize", False):
             if text_kwargs.get("return_dict", False):
