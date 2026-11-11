@@ -178,3 +178,17 @@ class OpenVINOFusionTest(MemoryCleanupMixin, unittest.TestCase):
         )
         self.assertEqual(modes["bidirectional"], 0)
         self.assertGreaterEqual(modes["numpy"], 2 * model.config.num_hidden_layers)
+
+    def test_rank_adding_expand_keeps_bidirectional_broadcast(self):
+        # An expand that adds leading dimensions: its target and input shapes don't line up elementwise.
+        class LeadingExpand(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.scale = torch.nn.Parameter(torch.ones(1))
+
+            def forward(self, hidden_states):
+                return {"expanded": hidden_states.expand(2, *hidden_states.shape) * self.scale}
+
+        model, inputs = LeadingExpand().eval(), {"hidden_states": torch.randn(4, 5)}
+        exported = OpenVINOExporter().export(model, dict(inputs), OpenVINOConfig(dynamic=True))
+        torch.testing.assert_close(exported.to("cpu")(**inputs)["expanded"], model(**inputs)["expanded"])

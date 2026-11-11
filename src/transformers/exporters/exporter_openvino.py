@@ -239,19 +239,22 @@ def _convert_to_openvino(graph_module) -> openvino.Model:
     decoder._input_signature = [node.name for node in graph_module.graph.nodes if node.op == "placeholder"]
     ov_model = openvino.convert_model(decoder, extension=_OV_CONVERSION_EXTENSIONS)
     _fix_non_tensor_inputs(ov_model, graph_module)
-    _numpy_broadcasts(ov_model)
+    _use_numpy_broadcasts(ov_model)
     return ov_model
 
 
-def _numpy_broadcasts(ov_model: openvino.Model) -> None:
+def _use_numpy_broadcasts(ov_model: openvino.Model) -> None:
     """Turn the frontend's bidirectional `Broadcast`s (`aten.expand`, as in `repeat_kv`) into numpy ones to the shape
     they produce, the elementwise maximum of the target and input shapes: the same result. The CPU plugin runs a
-    bidirectional broadcast to a computed shape in float32 reference code, outside the graph's 16-bit precision
-    (dynamic-shape EmbeddingGemma2 in bf16 on 53 Xeon cores: 73 -> 52 ms)."""
+    bidirectional broadcast to a computed shape in float32 reference code, outside the graph's 16-bit precision. An
+    expand that adds dimensions keeps its bidirectional broadcast: its shapes don't line up elementwise."""
     for node in ov_model.get_ordered_ops():
         if node.get_type_name() != "Broadcast" or node.get_attributes().get("mode") != "bidirectional":
             continue
         source, target = node.input_value(0), node.input_value(1)
+        rank, target_shape = source.get_partial_shape().rank, target.get_partial_shape()
+        if rank.is_dynamic or target_shape.is_dynamic or target_shape[0].get_length() != rank.get_length():
+            continue
         shape = ov_ops.maximum(ov_ops.convert(target, "i64"), ov_ops.shape_of(source, output_type="i64"))
         broadcast = ov_ops.broadcast(source, shape, broadcast_spec="NUMPY")
         broadcast.set_friendly_name(node.get_friendly_name())
