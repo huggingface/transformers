@@ -46,7 +46,7 @@ def batch_prompts(prompts: list[tuple[dict, list[Question]]]) -> dict[str, torch
         values = [prompt[key] for prompt in inputs]
         if values[0].shape[-1] == inputs[0]["input_ids"].shape[-1]:  # per token: `input_ids`, `mm_token_type_ids`...
             batch[key] = pad_sequence([value[0] for value in values], batch_first=True)
-        else:  # ponytail: per image, already flat over images (`pixel_values`, `image_grid_thw`) like Qwen-VL
+        else:
             batch[key] = torch.cat(values)
     return batch
 
