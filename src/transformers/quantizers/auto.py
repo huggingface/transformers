@@ -311,7 +311,7 @@ class AutoHfQuantizer(HfQuantizer):
         return True
 
     @classmethod
-    def from_plan(cls, plan: dict, loading, pre_quantized: bool, checkpoint_names: bool = False):
+    def from_plan(cls, plan: dict, loading, pre_quantized: bool):
         """
         The quantizer of each pattern of `plan`, one per distinct config. Loading a saved plan, the `quantization_config`
         passed to `from_pretrained` brings loading attributes: for every pattern (one config or dict, e.g.
@@ -350,13 +350,10 @@ class AutoHfQuantizer(HfQuantizer):
             if (key := repr(config)) not in shared:
                 shared[key] = cls.from_config(config, pre_quantized=pre_quantized)
             quantizers[pattern] = shared[key]
-        return cls(quantizers, checkpoint_names)
+        return cls(quantizers)
 
-    def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
-        self.checkpoint_names = (
-            checkpoint_names  # patterns are checkpoint module names, renamed in `map_module_to_quantizer`
-        )
-        self.patterns = None
+    def __init__(self, quantizers: dict[str, HfQuantizer | None]):
+        self.owners = None  # `{module: quantizer}`, once read from the checkpoint by `preprocess_model`
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
         # Mixed, each format swaps the modules the plan gives it (`quantized_module`): one swapping all of a model's
@@ -378,6 +375,15 @@ class AutoHfQuantizer(HfQuantizer):
         }
         if list(self.quantization_config) == ["*"]:  # a single quantizer keeps its config as is
             self.quantization_config = self.quantization_config["*"]
+        # Exact names first, then globs, `"*"` last. `P` (or `P.*`) names the module `P` under any prefix, and
+        # everything under it. E.g. `{"layers.0.mlp.experts": nvfp4, "*": fp8}` gives one regex, a group per pattern:
+        #   self.patterns = [("*layers.0.mlp.experts.*", nvfp4), ("**.*", fp8)]
+        #   self.matcher  = (?P<p0>.*layers\.0\.mlp\.experts\..*)|(?P<p1>.*\..*)
+        order = sorted(quantizers, key=lambda pattern: ("*" in pattern) + (pattern == "*"))
+        self.patterns = [(f"*{pattern.removesuffix('.*')}.*", quantizers[pattern]) for pattern in order]
+        self.matcher = re.compile(
+            "|".join(f"(?P<p{i}>{translate(glob)})" for i, (glob, _) in enumerate(self.patterns))
+        )
 
     @property
     def quantizer(self):
@@ -398,54 +404,24 @@ class AutoHfQuantizer(HfQuantizer):
             raise AttributeError(name)
         return getattr(self.quantizer, name)
 
-    def map_module_to_quantizer(self, model):
-        r"""
-        The plan's patterns, in order, for `get_quantizer`. A checkpoint's plan names checkpoint modules: renamed
-        to the model's like their params' keys (per-expert names onto the fused module), its own names kept too.
-
-        E.g. the plan `{"layers.0.mlp.experts": nvfp4, "*": fp8}` gives:
-
-            self.patterns = [("*layers.0.mlp.experts.*", nvfp4), ("**.*", fp8)]  # exact names first, `"*"` last
-            self.matcher  = (?P<p0>.*layers\.0\.mlp\.experts\..*)|(?P<p1>.*\..*)  # one group per pattern
-            get_quantizer("model.layers.0.mlp.experts.gate_up_proj")  # matches `p0` -> nvfp4
-            get_quantizer("model.layers.0.self_attn.q_proj")          # matches `p1` -> fp8
-
+    def get_quantizer(self, *names):
         """
-        from ..conversion_mapping import get_model_conversion_mapping
-        from ..core_model_loading import WeightConverter, rename_source_key
-
-        checkpoint = {}
-        if self.checkpoint_names:
-            transforms = get_model_conversion_mapping(model)
-            converters = [t for t in transforms if isinstance(t, WeightConverter)]
-            renamings = [t for t in transforms if t not in converters]
-            checkpoint = {pattern: quantizer for pattern, quantizer in self.quantizers.items() if "*" not in pattern}
-            renamed = {
-                rename_source_key(f"{pattern}.weight", renamings, converters)[0].rpartition(".")[0]: quantizer
-                for pattern, quantizer in self.quantizers.items()
-            }
-            self.set_quantizers(renamed)
-            self.checkpoint_names = False
-
-        # Exact names first (the checkpoint's too, for its keys in the load plan), then globs, `"*"` last. `P` (or
-        # `P.*`) names the module `P` under any prefix, and everything under it
-        patterns = self.quantizers | checkpoint
-        order = sorted(patterns, key=lambda pattern: ("*" in pattern) + (pattern == "*"))
-        self.patterns = [(f"*{pattern.removesuffix('.*')}.*", patterns[pattern]) for pattern in order]
-        # One regex, the first matching pattern wins
-        self.matcher = re.compile(
-            "|".join(f"(?P<p{i}>{translate(glob)})" for i, (glob, _) in enumerate(self.patterns))
-        )
-
-    def get_quantizer(self, name):
-        "The quantizer of the first plan pattern naming the module or key `name` (a module's name ends with a dot)"
-        match = self.matcher.match(f"{name}.")
-        return self.patterns[int(match.lastgroup[1:])][1] if match else None
+        The quantizer of a module or key, by any of its `names` (e.g. a checkpoint key, and the model's name of it).
+        Once the checkpoint is read, its module's. Else the plan's first pattern naming one of them, e.g.
+        `get_quantizer("model.layers.0.mlp.experts.gate_up_proj")` -> nvfp4 with the plan above.
+        """
+        if self.owners is not None:
+            for name in names:
+                while name not in self.owners and "." in name:
+                    name = name.rpartition(".")[0]
+                if name in self.owners:
+                    return self.owners[name]
+            return None
+        matches = [int(match.lastgroup[1:]) for name in names if (match := self.matcher.match(f"{name}."))]
+        return self.patterns[min(matches)][1] if matches else None
 
     def update_weight_conversions(self, weight_conversions, model):
         "The model's conversions, then the formats' own renamings. The load plan reads a param's scales along with it"
-        if self.patterns is None:
-            self.map_module_to_quantizer(model)
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
         return [
@@ -454,8 +430,6 @@ class AutoHfQuantizer(HfQuantizer):
         ]
 
     def param_element_size(self, model, param_name, param):
-        if self.patterns is None:
-            self.map_module_to_quantizer(model)
         quantizer = self.get_quantizer(param_name)
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
 
@@ -500,11 +474,22 @@ class AutoHfQuantizer(HfQuantizer):
             max_memory = quantizer.adjust_max_memory(max_memory)
         return max_memory
 
-    def preprocess_model(self, model, **kwargs):
-        self.map_module_to_quantizer(model)
+    def preprocess_model(self, model, checkpoint_files=None, **kwargs):
+        """
+        A serialized checkpoint's modules are quantized by the format they were saved in: the quantizer of the
+        modules whose keys are its serialized names, under the checkpoint's names or the model's.
+        """
+        from safetensors import safe_open
+
+        from ..conversion_mapping import get_model_conversion_mapping
+        from ..core_model_loading import quantized_modules
+
+        if self.pre_quantized and checkpoint_files and all(f.endswith(".safetensors") for f in checkpoint_files):
+            keys = [key for file in checkpoint_files for key in safe_open(file, "pt").keys()]
+            self.owners = quantized_modules(keys, model, get_model_conversion_mapping(model, hf_quantizer=self), self)
         for quantizer in self.all_quantizers:
             quantizer.modules_named = [pattern for pattern in self.quantizers if "*" not in pattern]
-        super().preprocess_model(model, **kwargs)
+        super().preprocess_model(model, checkpoint_files=checkpoint_files, **kwargs)
 
     def postprocess_model(self, model, **kwargs):
         """
@@ -519,7 +504,8 @@ class AutoHfQuantizer(HfQuantizer):
             if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
         }
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
-        self.patterns = [(glob, None if q in dequantized else q) for glob, q in self.patterns]
+        if self.owners is not None:
+            self.owners = {module: None if q in dequantized else q for module, q in self.owners.items()}
         if not self.all_quantizers:
             self.remove_quantization_config(model)
             return model
@@ -655,7 +641,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     hf_quantizer = None
     if plan is not None:
-        hf_quantizer = AutoHfQuantizer.from_plan(plan, quantization_config, pre_quantized, checkpoint_names)
+        hf_quantizer = AutoHfQuantizer.from_plan(plan, quantization_config, pre_quantized)
         if not checkpoint_names:  # else the checkpoint's own config is kept, e.g. ModelOpt's `quantized_layers`
             config.quantization_config = hf_quantizer.quantization_config
 

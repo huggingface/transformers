@@ -29,6 +29,8 @@ from transformers import (
     Mxfp4Config,
     NVFP4Config,
 )
+from transformers.conversion_mapping import get_model_conversion_mapping
+from transformers.core_model_loading import quantized_modules
 from transformers.quantizers.auto import (
     AutoHfQuantizer,
     get_hf_quantizer,
@@ -73,6 +75,7 @@ MISTRAL = {  # mistralai/Mistral-Large-4-1T-A52B-NVFP4 (params.json)
     "quantized_layers": {"layers.0.attention.wq": {"quant_algo": "FP8_PB_WO"}, "layers.3.experts": NVFP4},
 }
 # deepseek-ai/DeepSeek-V4-Flash: MXFP4 experts from `expert_dtype: fp4` in the model config, V4.1's quantization config
+NVFP4_NAMES = ("weight", "weight_scale", "weight_scale_2", "input_scale")
 DEEPSEEK_V4 = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
 TINY_DEEPSEEK = {
     "num_hidden_layers": 2,
@@ -147,7 +150,6 @@ class QuantizationPlanTest(unittest.TestCase):
         model = LlamaForCausalLM(
             LlamaConfig(hidden_size=64, intermediate_size=128, num_hidden_layers=1, vocab_size=128)
         )
-        plan.map_module_to_quantizer(model)
         plan.postprocess_model(model)
         self.assertIsNone(model.config.quantization_config["*.self_attn.*"])  # stays, so no broader pattern claims it
         self.assertIsNotNone(model.config.quantization_config["*.mlp.*"])
@@ -190,29 +192,28 @@ class QuantizationPlanTest(unittest.TestCase):
 
     def test_modelopt_checkpoint_names(self):
         hf_quantizer, config = self.plan_from_config(DEEPSEEK)
-        with torch.device("meta"):
-            model = DeepseekV4ForCausalLM(config)
-        hf_quantizer.map_module_to_quantizer(model)
-        # Reusing the config (now in the model's names) gives the same plan
-        with patch.object(AutoHfQuantizer, "validate_environment"):
-            reloaded = get_hf_quantizer(config, None, None, True, {})[0]
-        reloaded.map_module_to_quantizer(model)
-        self.assertIn("layers.0.mlp.experts", reloaded.quantizers)
-        # The checkpoint's `layers.0.ffn.experts` is the model's `layers.0.mlp.experts`; exact names beat the `"*"`
-        nvfp4, fp8 = hf_quantizer.quantizers["layers.0.mlp.experts"], hf_quantizer.quantizers["*"]
+        nvfp4, fp8 = hf_quantizer.quantizers["layers.0.ffn.experts"], hf_quantizer.quantizers["*"]
         self.assertEqual(
             [nvfp4.quantization_config.quant_method, fp8.quantization_config.quant_method], ["nvfp4", "fp8"]
         )
-        for name, expected in [
-            ("model.layers.0.mlp.experts.gate_up_proj", nvfp4),
-            ("model.layers.1.mlp.experts.down_proj", nvfp4),
-            ("model.layers.0.mlp.shared_experts.gate_proj.weight", fp8),
-            ("lm_head.weight", fp8),
-        ]:
-            self.assertIs(hf_quantizer.get_quantizer(name), expected, name)
+        # The plan names the checkpoint's modules: exact names beat the `"*"`
+        self.assertIs(hf_quantizer.get_quantizer("layers.1.ffn.experts.2.w2.weight"), nvfp4)
+        self.assertIs(hf_quantizer.get_quantizer("layers.0.attn.wq_a.weight"), fp8)
+        # The model's modules get the format their checkpoint keys are saved in
+        with torch.device("meta"):
+            model = DeepseekV4ForCausalLM(config)
+        keys = [
+            *(f"layers.0.ffn.experts.{e}.w{n}.{s}" for e in range(4) for n in (1, 2, 3) for s in NVFP4_NAMES),
+            "layers.1.ffn.shared_experts.w1.weight",
+            "layers.1.ffn.gate.weight",
+            "layers.1.ffn.gate.scale",
+        ]
+        mapping = get_model_conversion_mapping(model, hf_quantizer=hf_quantizer)
+        owners = quantized_modules(keys, model, mapping, hf_quantizer)
+        expected = {"model.layers.0.mlp.experts": nvfp4, "model.layers.1.mlp.shared_experts.gate_proj": fp8}
+        self.assertEqual(owners, expected | {"model.layers.1.mlp.gate": fp8})
         # `None` leaves the modules unquantized, an exact name doesn't match a longer one
         plan = AutoHfQuantizer({"layers.1.mlp": nvfp4, "*.mlp.*": None})
-        plan.map_module_to_quantizer(model)
         self.assertIs(plan.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
         self.assertIsNone(plan.get_quantizer("model.layers.11.mlp.experts.down_proj"))
 

@@ -1658,6 +1658,31 @@ def _outputs(transform, target, state_dict, model):
         return {target}
 
 
+def _resolve(keys, model_keys, renamings, converters, hf_quantizer, prefix):
+    """
+    `(owners, params, renamed)` of the checkpoint's `keys`: each key's quantizer (by its name or the model's, the
+    plan may name either), the param it serializes in its quantizer's format (see `_param`), and the param renamed.
+    """
+    renamed = rename_keys({key: key for key in keys}, renamings, converters, prefix, model_keys)
+    get_quantizer = (lambda *names: None) if hf_quantizer is None else hf_quantizer.get_quantizer
+    owners = {key: get_quantizer(key, renamed[key][0]) for key in keys}
+    params = {key: _param(owners[key], key) for key in keys}
+    if any(param != key for key, (param, _) in params.items()):
+        renamed = rename_keys(
+            {key: param for key, (param, _) in params.items()}, renamings, converters, prefix, model_keys
+        )
+    return owners, params, renamed
+
+
+def quantized_modules(keys, model, weight_mapping, hf_quantizer):
+    "`{module: quantizer}` of the model's modules the checkpoint saved in a format: whose keys are its serialized names"
+    renamings = [t for t in weight_mapping if isinstance(t, WeightRenaming)]
+    converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
+    model_keys = model.state_dict()
+    owners, params, renamed = _resolve(keys, model_keys, renamings, converters, hf_quantizer, model.base_model_prefix)
+    return {renamed[key][0].rpartition(".")[0]: owners[key] for key, (_, role) in params.items() if role is not None}
+
+
 def _quantize(target, transform, quantizer, param, companions, model):
     """
     `{target: transform}`, with the ops of the quantizer of the checkpoint's `param` loading into `target`. Quantized
@@ -1737,15 +1762,7 @@ def build_load_plan(state_dict, model, weight_mapping, hf_quantizer=None):
     converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
     pattern_to_converter = {p: converter for converter in converters for p in converter.source_patterns}
     keys = sorted(state_dict, key=dot_natural_key)
-    prefix = model.base_model_prefix
-    renamed = rename_keys({key: key for key in keys}, renamings, converters, prefix, model_keys)
-    # A key's quantizer, by the model's name of its module (the plan's patterns name the model's modules)
-    owners = {key: None if hf_quantizer is None else hf_quantizer.get_quantizer(renamed[key][0]) for key in keys}
-    params = {key: _param(owners[key], key) for key in keys}
-    if any(param != key for key, (param, _) in params.items()):
-        renamed = rename_keys(
-            {key: param for key, (param, _) in params.items()}, renamings, converters, prefix, model_keys
-        )
+    owners, params, renamed = _resolve(keys, model_keys, renamings, converters, hf_quantizer, model.base_model_prefix)
 
     # 1. The params, through the model's transforms
     transforms, companions = {}, defaultdict(list)
