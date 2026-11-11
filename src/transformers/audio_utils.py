@@ -209,17 +209,15 @@ def _load_audio_soundfile(source: "str | bytes", sampling_rate: int) -> np.ndarr
     return np.ascontiguousarray(waveform, dtype=np.float32)
 
 
-def load_audio(
-    audio: str | bytes | np.ndarray, sampling_rate=16000, timeout=None, backend: str = "auto"
-) -> np.ndarray:
+def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backend: str = "auto") -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object.
 
     Args:
-        audio (`str`, `bytes` or `np.ndarray`):
+        audio (`str` or `np.ndarray`):
             The audio to be loaded to the numpy array format. If a `str`, it can be an `http(s)://`
             URL, a local file path, or a base64-encoded string (optionally wrapped as a
-            `data:<media-type>;base64,` URI). If `bytes`, the content of an audio file.
+            `data:<media-type>;base64,` URI).
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
@@ -238,11 +236,10 @@ def load_audio(
     """
     if isinstance(audio, np.ndarray):
         return audio
-    if not isinstance(audio, (str, bytes)):
+    if not isinstance(audio, str):
         raise TypeError(
-            "Incorrect format used for `audio`. Should be a numpy array, the `bytes` of an audio file, or a `str`: an "
-            "`http(s)://` URL, a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI) "
-            f"but got {type(audio)}."
+            "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
+            f"a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI) but got {type(audio)}."
         )
 
     # torchcodec handles audio/video; soundfile only plain audio. `backend` lets callers pin one.
@@ -267,7 +264,7 @@ def load_audio(
     use_torchcodec = resolved_backend == "torchcodec"
 
     # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
-    filetype = _format_from_source(audio) if isinstance(audio, str) else None
+    filetype = _format_from_source(audio)
     # 2. Without torchcodec, fail fast and clearly on a format soundfile cannot decode.
     if not use_torchcodec and filetype in TORCHCODEC_ONLY_FILETYPES:
         raise RuntimeError(
@@ -275,7 +272,7 @@ def load_audio(
         )
 
     # 3. Resolve to local path or bytes; sniff format for raw base64 payloads before passing to soundfile.
-    source = _resolve_audio_source(audio, timeout=timeout) if isinstance(audio, str) else audio
+    source = _resolve_audio_source(audio, timeout=timeout)
     if not use_torchcodec and filetype is None and isinstance(source, bytes):
         try:
             filetype = get_audio_filetype(source)

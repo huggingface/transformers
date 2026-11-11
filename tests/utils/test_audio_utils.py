@@ -2068,12 +2068,6 @@ class LoadAudioSoundfileTester(unittest.TestCase):
             audio = load_audio(path, sampling_rate=16000, backend="librosa")
         np.testing.assert_array_equal(audio, load_audio(path, sampling_rate=16000, backend="soundfile"))
 
-    def test_bytes_input(self):
-        data = self._encode(2, 44100, "FLAC")
-        audio = load_audio(data, sampling_rate=16000, backend="soundfile")
-        expected = load_audio(base64.b64encode(data).decode(), sampling_rate=16000, backend="soundfile")
-        np.testing.assert_array_equal(audio, expected)
-
     def test_auto_falls_back_to_soundfile_without_torchcodec(self):
         data = self._encode(2, 44100, "FLAC")
         source = base64.b64encode(data).decode()
