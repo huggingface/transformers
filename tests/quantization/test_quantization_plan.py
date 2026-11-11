@@ -136,7 +136,7 @@ class QuantizationPlanTest(unittest.TestCase):
         model = LlamaForCausalLM(
             LlamaConfig(hidden_size=64, intermediate_size=128, num_hidden_layers=1, vocab_size=128)
         )
-        plan.match_modules(model)
+        plan.map_module_to_quantizer(model)
         plan.postprocess_model(model)
         self.assertIsNone(model.config.quantization_config["*.self_attn.*"])  # stays, so no broader pattern claims it
         self.assertIsNotNone(model.config.quantization_config["*.mlp.*"])
@@ -181,11 +181,11 @@ class QuantizationPlanTest(unittest.TestCase):
         hf_quantizer, config = self.plan_from_config(DEEPSEEK)
         with torch.device("meta"):
             model = DeepseekV4ForCausalLM(config)
-        hf_quantizer.match_modules(model)
+        hf_quantizer.map_module_to_quantizer(model)
         # Reusing the config (now in the model's names) gives the same plan
         with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):
             reloaded = get_hf_quantizer(config, None, None, True, {})[0]
-        reloaded.match_modules(model)
+        reloaded.map_module_to_quantizer(model)
         self.assertIn("layers.0.mlp.experts", reloaded.quantizers)
         # The checkpoint's `layers.0.ffn.experts` is the model's `layers.0.mlp.experts`; exact names beat the `"*"`
         nvfp4, fp8 = hf_quantizer.quantizers["layers.0.mlp.experts"], hf_quantizer.quantizers["*"]
@@ -201,7 +201,7 @@ class QuantizationPlanTest(unittest.TestCase):
             self.assertIs(hf_quantizer.get_quantizer(name), expected, name)
         # `None` leaves the modules unquantized, an exact name doesn't match a longer one
         plan = QuantizationPlanHfQuantizer({"layers.1.mlp": nvfp4, "*.mlp.*": None})
-        plan.match_modules(model)
+        plan.map_module_to_quantizer(model)
         self.assertIs(plan.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
         self.assertIsNone(plan.get_quantizer("model.layers.11.mlp.experts.down_proj"))
 

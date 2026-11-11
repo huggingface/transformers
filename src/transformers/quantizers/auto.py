@@ -402,7 +402,9 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     """
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
-        self.checkpoint_names = checkpoint_names  # patterns are checkpoint module names, renamed in `match_modules`
+        self.checkpoint_names = (
+            checkpoint_names  # patterns are checkpoint module names, renamed in `map_module_to_quantizer`
+        )
         self.patterns = None
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
@@ -445,10 +447,22 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             raise AttributeError(name)
         return getattr(self.quantizer, name)
 
-    def match_modules(self, model):
-        """
+    def map_module_to_quantizer(self, model):
+        r"""
         The plan's patterns, in order, for `get_quantizer`. A checkpoint's plan names checkpoint modules: renamed
         to the model's like their params' keys (per-expert names onto the fused module), its own names kept too.
+
+        E.g. the plan `{"layers.0.mlp.experts": nvfp4, "*": fp8}` gives:
+
+            self.patterns = [("*layers.0.mlp.experts.*", nvfp4), ("**.*", fp8)]  # exact names first, `"*"` last
+            self.matcher  = (?P<p0>.*layers\.0\.mlp\.experts\..*)|(?P<p1>.*\..*)  # one group per pattern
+            get_quantizer("model.layers.0.mlp.experts.gate_up_proj")  # matches `p0` -> nvfp4
+            get_quantizer("model.layers.0.self_attn.q_proj")          # matches `p1` -> fp8
+
+        and, for FP8's `renamed_names = {"scale": "weight_scale_inv", "input_scale": "activation_scale"}`:
+
+            self.renamers[fp8] = ((?P<p0>.*\.scale)|(?P<p1>.*\.input_scale), ["weight_scale_inv", "activation_scale"])
+            rename_layer("layers.0.self_attn.q_proj.scale")  # `p0` -> "layers.0.self_attn.q_proj.weight_scale_inv"
         """
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightConverter, rename_source_key
@@ -476,14 +490,12 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             "|".join(f"(?P<p{i}>{translate(glob)})" for i, (glob, _) in enumerate(self.patterns))
         )
         # Each format's `renamed_names` as one regex too, with our names in order, for `rename_layer`
-        self.renamers = {
-            quantizer: (
-                re.compile("|".join(f"(?P<p{i}>{translate(f'*.{n}')})" for i, n in enumerate(names))),
-                list(names.values()),
-            )
-            for quantizer in self.all_quantizers
-            if quantizer.pre_quantized and (names := quantizer.renamed_names)
-        }
+        self.renamers = {}
+        for quantizer in self.all_quantizers:
+            names = quantizer.renamed_names
+            if quantizer.pre_quantized and names:
+                renamer = re.compile("|".join(f"(?P<p{i}>{translate(f'*.{n}')})" for i, n in enumerate(names)))
+                self.renamers[quantizer] = (renamer, list(names.values()))
 
     def get_quantizer(self, name):
         "The quantizer of the first plan pattern naming the module or key `name` (a module's name ends with a dot)"
@@ -498,13 +510,15 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter
 
         if self.patterns is None:
-            self.match_modules(model)
+            self.map_module_to_quantizer(model)
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
         # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
         # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
-        dequantized = [q for q in self.all_quantizers if getattr(q.quantization_config, "dequantize", False)]
-        names = [name for q in dequantized for name in (*q.serialized_names["weight"], *q.renamed_names.values())]
+        names = []
+        for quantizer in self.all_quantizers:
+            if getattr(quantizer.quantization_config, "dequantize", False):
+                names += [*quantizer.serialized_names["weight"], *quantizer.renamed_names.values()]
         for i, converter in enumerate(weight_conversions):
             sources = converter._original_source_patterns
             if names and isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
@@ -517,7 +531,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return [*weight_conversions, *general]
 
     def rename_layer(self, key):
-        "A checkpoint key in its layer's format names: the first glob of its `renamed_names` naming it, e.g. `*.scale`"
+        """
+        A checkpoint key in its layer's format names: the first of its format's `renamed_names` (theirs -> ours)
+        naming the key's last name. E.g. on an FP8 layer, `q_proj.scale` -> `q_proj.weight_scale_inv`, see
+        `map_module_to_quantizer` for the regex. A key of a format without `renamed_names` is kept.
+        """
         renamer, ours = self.renamers.get(self.get_quantizer(key), (None, None))
         match = renamer.match(key) if renamer else None
         return key if match is None else f"{key.rpartition('.')[0]}.{ours[int(match.lastgroup[1:])]}"
@@ -552,7 +570,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def param_element_size(self, model, param_name, param):
         if self.patterns is None:
-            self.match_modules(model)
+            self.map_module_to_quantizer(model)
         quantizer = self.get_quantizer(param_name)
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
 
@@ -598,7 +616,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return max_memory
 
     def preprocess_model(self, model, **kwargs):
-        self.match_modules(model)
+        self.map_module_to_quantizer(model)
         for quantizer in self.all_quantizers:
             quantizer.modules_named = [pattern for pattern in self.quantizers if "*" not in pattern]
         super().preprocess_model(model, **kwargs)
@@ -689,7 +707,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
                 shared[key] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
             quantizers[pattern] = shared[key]
         hf_quantizer = QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
-        if not checkpoint_names:  # else `match_modules` sets it, in the model's names
+        if not checkpoint_names:  # else `map_module_to_quantizer` sets it, in the model's names
             config.quantization_config = hf_quantizer.quantization_config
     elif pre_quantized or quantization_config is not None:
         if pre_quantized:
