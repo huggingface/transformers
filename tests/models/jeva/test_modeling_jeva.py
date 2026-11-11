@@ -18,10 +18,10 @@ from pathlib import Path
 
 import yaml
 
-from transformers import AutoConfig, AutoTokenizer, JevaConfig, is_torch_available, pipeline
+from transformers import AutoTokenizer, JevaConfig, is_torch_available, pipeline
 from transformers.testing_utils import require_peft, require_torch
 
-from ...test_decision_head_common import render, tiny_qwen2
+from ...test_decision_head_common import DecisionHeadTesterMixin, render, tiny_qwen2
 
 
 if is_torch_available():
@@ -92,25 +92,48 @@ class JevaLossTest(unittest.TestCase):
         for actual, reference in zip((self.scores.grad, self.coverage.grad), expected):
             torch.testing.assert_close(actual, reference)
 
+    def test_confident_prediction_gradients(self):
+        logits = torch.tensor([[9.0, -9.0, -9.0]], requires_grad=True)
+        coverage = torch.tensor([18.0], requires_grad=True)
+        mask = torch.ones_like(logits, dtype=torch.bool)
+        loss = JevaForDecisionLoss(
+            _log_softmax(logits), torch.tensor([[0.0, 1.0, 0.0, 0.0]]), coverage, mask, allow_null=torch.tensor([True])
+        )
+        mass = torch.exp(torch.tensor(-18.0, dtype=torch.float64))
+        option_gradient = mass / (1 + 2 * mass)
+        expected_gradient = torch.stack([-2 * option_gradient, option_gradient, option_gradient])[None]
+        loss.backward()
+        torch.testing.assert_close(loss.double(), torch.log1p(2 * mass) + torch.log1p(mass), rtol=1e-6, atol=0)
+        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
+        torch.testing.assert_close(coverage.grad.double(), (-mass / (1 + mass))[None], rtol=1e-6, atol=0)
+
 
 @require_torch
-class JevaForDecisionTest(unittest.TestCase):
+class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevaForDecision,) if is_torch_available() else ()
 
-    def setUp(self):
-        self.config = JevaConfig(
-            text_config=AutoConfig.for_model(
-                "qwen2",
-                vocab_size=128,
-                hidden_size=16,
-                intermediate_size=32,
-                num_hidden_layers=1,
-                num_attention_heads=2,
-                num_key_value_heads=1,
-            ),
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5")
+        cls.config = JevaConfig(
+            text_config=tiny_qwen2(cls.tokenizer).config,
             projection_dim=16,
             decision_num_heads=2,
         )
+        cls.decision_config = JevaForDecision(cls.config).decision_config
+        cls.request = {
+            "state": "My card has been charged twice.",
+            "questions": {
+                "intent": {
+                    "type": "choice",
+                    "instructions": "Which intent?",
+                    "criteria": {"refund": None, "delivery": None},
+                }
+            },
+        }
+        cls.prompts = render(cls.tokenizer, cls.request, cls.decision_config)
+
+    def setUp(self):
         self.inputs = {
             "input_ids": torch.tensor([[2, 3, 4, 0], [5, 6, 7, 8]]),
             "attention_mask": torch.tensor([[1, 1, 1, 0], [1, 1, 1, 1]]),
@@ -133,87 +156,28 @@ class JevaForDecisionTest(unittest.TestCase):
                 self.assertGreater(model.core.tau_cov.raw.grad.abs().sum(), 0)
                 self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum(), 0)
 
-    def test_save_load(self):
-        model = JevaForDecision(self.config).eval()
-        output = model(**self.inputs)
-        with tempfile.TemporaryDirectory() as tmp:
-            model.save_pretrained(tmp)
-            loaded = AutoModelForDecision.from_pretrained(tmp).eval()
-        result = loaded(**self.inputs)
-        torch.testing.assert_close(result.logits, output.logits)
-        torch.testing.assert_close(result.coverage_logits, output.coverage_logits)
-
-    def test_chunking_and_accumulation(self):
+    def test_option_chunking(self):
         model = JevaForDecision(self.config).eval()
         output = model(**self.inputs)
         chunked = model(**self.inputs, option_chunk_size=2)
         torch.testing.assert_close(chunked.loss, output.loss)
-        output.loss.backward()
-        reference = {name: p.grad.clone() for name, p in model.named_parameters()}
-        model.zero_grad()
-        offset = 0
-        for index, count in enumerate(self.inputs["num_options"].tolist()):
-            sample = {
-                key: value[offset : offset + count]
-                if key in {"option_input_ids", "option_attention_mask"}
-                else value[index : index + 1]
-                for key, value in self.inputs.items()
-            }
-            model(**sample, num_items_in_batch=2).loss.backward()
-            offset += count
-        for name, parameter in model.named_parameters():
-            torch.testing.assert_close(parameter.grad, reference[name], rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(chunked.logits, output.logits)
+        torch.testing.assert_close(chunked.coverage_logits, output.coverage_logits)
 
-    def test_decision_pipeline(self):
-        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5")
-        encoder = tiny_qwen2(tokenizer).model
-        config = JevaConfig(text_config=encoder.config, projection_dim=16, decision_num_heads=2)
-        model = JevaForDecision(config, model=encoder).eval()
-        request = {
-            "state": "My card has been charged twice.",
-            "questions": {
-                "intent": {
-                    "type": "choice",
-                    "instructions": "Which intent?",
-                    "criteria": {"refund": None, "delivery": None},
-                }
-            },
-        }
-        prompt = render(tokenizer, request, model.decision_config)[0]
-        questions = prompt.questions
-        scores = model.decide(**prompt.inputs, decision_questions=questions)
-        states = tokenizer(
-            ["Decision type: choice\nQuestion: Which intent?\nState:\n" + request["state"]],
-            padding=True,
-            return_tensors="pt",
-        )
-        options = tokenizer(
-            ["Option for choice: refund", "Option for choice: delivery"], padding=True, return_tensors="pt"
-        )
-        direct = model(
-            **states,
-            **{f"option_{key}": value for key, value in options.items()},
-            num_options=torch.tensor([2]),
-            option_mask=torch.ones(1, 2, dtype=torch.bool),
-        )
-        torch.testing.assert_close(scores[0], direct.logits[0])
-        expected = {q.name: q.answer(score.softmax(-1).tolist()) for q, score in zip(questions, scores)}
-        decide = pipeline("decision", model=model, tokenizer=tokenizer, device="cpu")
-        self.assertEqual(decide(request), expected)
-        with tempfile.TemporaryDirectory() as tmp:
-            model.save_pretrained(tmp)
-            tokenizer.save_pretrained(tmp)
-            decide = pipeline("decision", model=tmp, model_kwargs={"attn_implementation": "eager"}, device="cpu")
-            answer = decide(request)
-            self.assertEqual(answer["intent"]["choice"], expected["intent"]["choice"])
-            torch.testing.assert_close(answer["intent"]["probabilities"], expected["intent"]["probabilities"])
+    def test_chat_template_reproduces_the_model_code(self):
+        # The official collator encodes the state/question and each option independently.
+        texts = [
+            "Decision type: choice\nQuestion: Which intent?\nState:\n" + self.request["state"],
+            "Option for choice: refund",
+            "Option for choice: delivery",
+        ]
+        segments = self.tokenizer(texts)["input_ids"]
+        prompt = self.prompts[0]
+        self.assertEqual(prompt.input_ids, [token for segment in segments for token in segment])
+        self.assertEqual(prompt.marks, torch.tensor([len(segment) for segment in segments]).cumsum(0).tolist())
 
     def test_typed_decisions(self):
-        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5")
-        encoder = tiny_qwen2(tokenizer).model
-        model = JevaForDecision(
-            JevaConfig(text_config=encoder.config, projection_dim=16, decision_num_heads=2), model=encoder
-        ).eval()
+        model = JevaForDecision(self.config).eval()
         request = {
             "state": "A refund request",
             "questions": {
@@ -222,10 +186,10 @@ class JevaForDecisionTest(unittest.TestCase):
                 "quality": {"type": "score", "criteria": ["bad", "good"], "values": [1, 5]},
             },
         }
-        prompts = render(tokenizer, request, model.decision_config)
+        prompts = render(self.tokenizer, request, model.decision_config)
         scores = [model.decide(**prompt.inputs, decision_questions=prompt.questions)[0] for prompt in prompts]
         self.assertEqual([len(score) for score in scores], [33, 2, 2])
-        answers = pipeline("decision", model=model, tokenizer=tokenizer, device="cpu")(request)
+        answers = pipeline("decision", model=model, tokenizer=self.tokenizer, device="cpu")(request)
         intent = answers["intent"]
         self.assertAlmostEqual(sum(intent["probabilities"].values()) + intent["null_probability"], 1, places=6)
         best = max(intent["probabilities"], key=intent["probabilities"].get)
@@ -238,38 +202,17 @@ class JevaForDecisionTest(unittest.TestCase):
         )
         self.assertAlmostEqual(answers["truth"]["noul"], scores[1].softmax(-1)[1].item(), places=6)
 
-    def test_router_aux_loss(self):
-        self.config.text_config = AutoConfig.for_model(
-            "qwen3_moe",
-            vocab_size=128,
-            hidden_size=16,
-            intermediate_size=32,
-            moe_intermediate_size=8,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            num_experts=2,
-            num_experts_per_tok=1,
-        )
-        self.config.router_aux_loss_coef = 0.1
-        model = JevaForDecision(self.config)
-        output = model(**self.inputs, option_chunk_size=2)
-        self.assertGreater(output.aux_loss.item(), 0)
-        output.loss.backward()
-        self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
-
     @require_peft
     def test_checkpoint_conversion(self):
         from peft import LoraConfig, get_peft_model
 
         from transformers.models.jeva.convert_jeva_weights_to_hf import convert_checkpoint
 
-        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5")
         model = JevaForDecision(self.config).eval()
         with tempfile.TemporaryDirectory() as checkpoint, tempfile.TemporaryDirectory() as converted:
             path = Path(checkpoint)
             model.model.save_pretrained(path / "backbone")
-            tokenizer.save_pretrained(path / "tokenizer")
+            self.tokenizer.save_pretrained(path / "tokenizer")
             model.model = get_peft_model(model.model, LoraConfig(r=2, target_modules=["q_proj", "v_proj"]))
             for name, parameter in model.model.named_parameters():
                 if "lora_B" in name:
@@ -292,23 +235,3 @@ class JevaForDecisionTest(unittest.TestCase):
         torch.testing.assert_close(output.logits, expected.logits)
         torch.testing.assert_close(output.coverage_logits, expected.coverage_logits)
         torch.testing.assert_close(output.loss, expected.loss)
-
-    def test_confident_gradients(self):
-        logits = torch.tensor([[9.0, -9.0, -9.0], [2.0, 1.0, -torch.inf]], requires_grad=True)
-        reference = logits.detach().double().requires_grad_(True)
-        (-_log_softmax(logits)[:, 0].sum()).backward()
-        (-reference.log_softmax(-1)[:, 0].sum()).backward()
-        torch.testing.assert_close(logits.grad.double(), reference.grad, rtol=1e-6, atol=1e-14)
-        self.assertLess(logits.grad[0, 0].item(), 0)
-
-        torch.manual_seed(0)
-        self.config.coverage_bias_init = -4.0
-        model = JevaForDecision(self.config)
-        labels = self.inputs["labels"].clone()
-        labels[0] = torch.tensor([0.0, 1.0, 0.0, 0.0])
-        output = model(**{**self.inputs, "labels": labels})
-        self.assertGreater(output.coverage_logits[0].item(), 18)
-        output.loss.backward()
-        expected = output.coverage_logits[0].detach().neg().sigmoid() / model.core.tau_cov().detach() / 2
-        self.assertGreater(model.core.coverage_bias.grad.item(), 0)
-        torch.testing.assert_close(model.core.coverage_bias.grad, expected, atol=1e-30, rtol=1e-6)

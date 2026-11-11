@@ -16,7 +16,6 @@
 # Copyright 2026 Qi Li and Xinchao Wang.
 
 import math
-from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -24,22 +23,14 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.distributed.nn.functional import all_gather, all_reduce
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...decision import DecisionConfig, DecisionMixin, process_scores
-from ...integrations import is_deepspeed_zero3_enabled
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoConfig, AutoModel
-from ..mixtral.modeling_mixtral import load_balancing_loss_func
-
-
-if is_peft_available():
-    from peft import get_peft_config, get_peft_model
 
 
 JEVA_TEMPLATE = r"""
@@ -88,10 +79,6 @@ class JevaConfig(PreTrainedConfig):
         Initial coverage threshold.
     min_temperature (`float`, *optional*, defaults to `1e-4`):
         Lower bound of the learned temperatures.
-    adapter_config (`dict`, *optional*):
-        PEFT configuration for an adapter inside the shared encoder.
-    router_aux_loss_coef (`float`, *optional*, defaults to `0.0`):
-        Weight of the MoE load-balancing loss. Zero disables router-logit collection.
     """
 
     model_type = "jeva"
@@ -114,8 +101,6 @@ class JevaConfig(PreTrainedConfig):
     alpha_over_tau_init: float = 0.6
     coverage_bias_init: float = 0.0
     min_temperature: float = 1e-4
-    adapter_config: dict | None = None
-    router_aux_loss_coef: float = 0.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, PreTrainedConfig):
@@ -125,16 +110,6 @@ class JevaConfig(PreTrainedConfig):
             raise ValueError("decision_depth must be positive and decision_num_heads must divide projection_dim")
         if self.pooling not in {"last", "mean", "cls"}:
             raise ValueError("pooling must be last, mean, or cls")
-        self.base_model_tp_plan = {
-            f"model.{key}": value for key, value in (self.text_config.base_model_tp_plan or {}).items()
-        }
-        self.base_model_ep_plan = {
-            f"model.{key}": value for key, value in (self.text_config.base_model_ep_plan or {}).items()
-        }
-        if self.adapter_config is not None:
-            self.adapter_config = {
-                key: list(value) if isinstance(value, set) else value for key, value in self.adapter_config.items()
-            }
 
 
 def _log_softmax(logits: torch.Tensor) -> torch.Tensor:
@@ -252,19 +227,16 @@ class JevaDecisionStack(nn.Module):
 class JevaDecisionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `()`, *optional*, returned when `labels` is provided):
-        Candidate cross-entropy and, for nullable choices, binary coverage loss, plus the weighted MoE auxiliary loss.
+        Candidate cross-entropy and, for nullable choices, binary coverage loss.
     logits (`torch.FloatTensor` of shape `(batch_size, max_num_options)`):
         Conditional candidate log probabilities. Padded options have value `-inf`.
     coverage_logits (`torch.FloatTensor` of shape `(batch_size,)`):
         Logits of the probability that one of the supplied options applies.
-    aux_loss (`torch.FloatTensor`, *optional*):
-        Unweighted MoE load-balancing loss.
     """
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
     coverage_logits: torch.Tensor | None = None
-    aux_loss: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -314,20 +286,9 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         """
         super().__init__(config)
         self.model = model if model is not None else AutoModel.from_config(config.text_config)
-        if config.adapter_config is not None:
-            if not is_peft_available():
-                raise ImportError("Install `peft` to load an encoder adapter")
-            self.model = get_peft_model(self.model, get_peft_config(config.adapter_config))
         self.context_proj = nn.Linear(config.text_config.hidden_size, config.projection_dim, bias=False)
         self.option_proj = nn.Linear(config.text_config.hidden_size, config.projection_dim, bias=False)
         self.core = JevaDecisionStack(config)
-        if is_deepspeed_zero3_enabled():
-            self._keep_in_fp32_modules = []
-            self._keep_in_fp32_modules_strict = []
-            for module in (self.context_proj, self.option_proj, self.core):
-                module.to(dtype=self.model.dtype)
-        self.freeze_backbone = False
-        self.router_aux_loss_coef = config.router_aux_loss_coef
         self.post_init()
 
     def post_init(self):
@@ -336,58 +297,21 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             chat_template=JEVA_TEMPLATE, labels={"choice": None, "score": None}, noul_options=["false", "true"]
         )
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def train(self, mode=True):
-        super().train(mode)
-        if self.freeze_backbone:
-            self.model.eval()
-        return self
-
-    def _encode(self, inputs, cp_group=None, loss_mask=None, **kwargs):
-        encoder_inputs = {key: value for key, value in inputs.items() if key != "sequence_lengths"}
-        if self.router_aux_loss_coef:
-            encoder_inputs["output_router_logits"] = True
-        with torch.no_grad() if self.freeze_backbone else nullcontext():
-            kwargs.pop("use_cache", None)
-            outputs = self.model(**encoder_inputs, use_cache=False, **kwargs)
-        hidden = outputs.last_hidden_state
+    def _encode(self, inputs, **kwargs):
+        hidden_states = self.model(**inputs, use_cache=False, **kwargs).last_hidden_state
         mask = inputs["attention_mask"]
-        positions = inputs.get("position_ids", torch.arange(mask.shape[1], device=mask.device)[None, :])
-        lengths = inputs.get("sequence_lengths", mask.sum(-1))
+        lengths = mask.sum(-1)
+        positions = torch.arange(mask.shape[1], device=mask.device)[None]
         if self.config.pooling == "last":
             pool_mask = positions == lengths[:, None] - 1
         elif self.config.pooling == "cls":
             pool_mask = positions == 0
         else:
             pool_mask = mask.bool()
-        pooled = (hidden * pool_mask.unsqueeze(-1).to(hidden.dtype)).sum(1)
-        if cp_group is not None:
-            pooled = all_reduce(pooled, group=cp_group)
+        pooled = (hidden_states * pool_mask.unsqueeze(-1).to(hidden_states.dtype)).sum(1)
         if self.config.pooling == "mean":
             pooled = pooled / lengths[:, None].clamp(min=1)
-
-        aux_loss = hidden.new_zeros((), dtype=torch.float32)
-        aux_tokens = mask.sum()
-        if self.router_aux_loss_coef:
-            router_logits = outputs.router_logits
-            aux_mask = mask if loss_mask is None else mask * loss_mask[:, None]
-            if cp_group is not None:
-                router_logits = tuple(torch.cat(all_gather(logits, group=cp_group)) for logits in router_logits)
-                aux_mask = torch.cat(all_gather(aux_mask, group=cp_group))
-            aux_tokens = aux_mask.sum()
-            if aux_tokens > 0:
-                text_config = self.config.get_text_config()
-                aux_loss = load_balancing_loss_func(
-                    router_logits, text_config.num_experts, text_config.num_experts_per_tok, aux_mask
-                )
-            else:
-                aux_loss = sum(logits.sum() for logits in router_logits) * 0.0
-        return pooled, aux_loss, aux_tokens
+        return pooled
 
     @can_return_tuple
     @auto_docstring
@@ -401,13 +325,10 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         option_mask: torch.BoolTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         option_position_ids: torch.LongTensor | None = None,
-        sequence_lengths: torch.LongTensor | None = None,
-        option_sequence_lengths: torch.LongTensor | None = None,
         option_chunk_size: int | None = None,
-        cp_group=None,
         labels: torch.Tensor | None = None,
         allow_null: torch.BoolTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> JevaDecisionOutput:
         r"""
         option_input_ids (`torch.LongTensor` of shape `(total_options, option_sequence_length)`):
@@ -420,14 +341,8 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             Mask of valid options. Defaults to the mask implied by `num_options`.
         option_position_ids (`torch.LongTensor` of shape `(total_options, option_sequence_length)`, *optional*):
             Positions of the option tokens.
-        sequence_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Unsharded state sequence lengths for context-parallel pooling. Defaults to the attention-mask sums.
-        option_sequence_lengths (`torch.LongTensor` of shape `(total_options,)`, *optional*):
-            Unsharded option sequence lengths for context-parallel pooling. Defaults to the option attention-mask sums.
         option_chunk_size (`int`, *optional*):
             Number of options encoded in one forward pass. Defaults to all options.
-        cp_group (`torch.distributed.ProcessGroup`, *optional*):
-            Context-parallel group used to reduce pooled encoder states and router statistics.
         labels (`torch.FloatTensor` of shape `(batch_size, max_num_options + 1)`, *optional*):
             Target probability distributions, with null mass first and zero mass on padded options.
         allow_null (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
@@ -445,24 +360,12 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             state_inputs["position_ids"] = position_ids
         if option_position_ids is not None:
             option_inputs["position_ids"] = option_position_ids
-        if sequence_lengths is not None:
-            state_inputs["sequence_lengths"] = sequence_lengths
-        if option_sequence_lengths is not None:
-            option_inputs["sequence_lengths"] = option_sequence_lengths
-        state, aux_loss, aux_tokens = self._encode(state_inputs, cp_group, **kwargs)
-        weighted_aux_loss = aux_loss * aux_tokens
+        state = self._encode(state_inputs, **kwargs)
         chunk_size = option_chunk_size or option_inputs["input_ids"].shape[0]
         option_embeddings = []
-        real_options = num_options.sum()
         for start in range(0, option_inputs["input_ids"].shape[0], chunk_size):
             chunk = {key: value[start : start + chunk_size] for key, value in option_inputs.items()}
-            loss_mask = (
-                torch.arange(start, start + chunk["input_ids"].shape[0], device=num_options.device) < real_options
-            )
-            embeddings, chunk_aux_loss, chunk_aux_tokens = self._encode(chunk, cp_group, loss_mask, **kwargs)
-            option_embeddings.append(embeddings)
-            weighted_aux_loss = weighted_aux_loss + chunk_aux_loss * chunk_aux_tokens
-            aux_tokens = aux_tokens + chunk_aux_tokens
+            option_embeddings.append(self._encode(chunk, **kwargs))
         flat_options = torch.cat(option_embeddings)
         offsets = num_options.cumsum(0) - num_options
         indices = offsets[:, None] + torch.arange(option_mask.shape[1], device=num_options.device)[None, :]
@@ -474,7 +377,6 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
                 self.option_proj(options.to(self.option_proj.weight.dtype)),
                 option_mask,
             )
-        aux_loss = weighted_aux_loss / aux_tokens.clamp(min=1) if self.router_aux_loss_coef else None
         loss = None
         if labels is not None:
             loss = self.loss_function(
@@ -485,9 +387,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
                 allow_null=allow_null,
                 **kwargs,
             )
-            if aux_loss is not None:
-                loss = loss + self.router_aux_loss_coef * aux_loss
-        return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit, aux_loss=aux_loss)
+        return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit)
 
     @torch.no_grad()
     def decide(self, input_ids, marks, decision_questions, decision_config=None, **kwargs):

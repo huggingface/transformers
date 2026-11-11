@@ -66,10 +66,6 @@ class JevaConfig(PreTrainedConfig):
         Initial coverage threshold.
     min_temperature (`float`, *optional*, defaults to `1e-4`):
         Lower bound of the learned temperatures.
-    adapter_config (`dict`, *optional*):
-        PEFT configuration for an adapter inside the shared encoder.
-    router_aux_loss_coef (`float`, *optional*, defaults to `0.0`):
-        Weight of the MoE load-balancing loss. Zero disables router-logit collection.
     """
 
     model_type = "jeva"
@@ -92,8 +88,6 @@ class JevaConfig(PreTrainedConfig):
     alpha_over_tau_init: float = 0.6
     coverage_bias_init: float = 0.0
     min_temperature: float = 1e-4
-    adapter_config: dict | None = None
-    router_aux_loss_coef: float = 0.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, PreTrainedConfig):
@@ -103,16 +97,6 @@ class JevaConfig(PreTrainedConfig):
             raise ValueError("decision_depth must be positive and decision_num_heads must divide projection_dim")
         if self.pooling not in {"last", "mean", "cls"}:
             raise ValueError("pooling must be last, mean, or cls")
-        self.base_model_tp_plan = {
-            f"model.{key}": value for key, value in (self.text_config.base_model_tp_plan or {}).items()
-        }
-        self.base_model_ep_plan = {
-            f"model.{key}": value for key, value in (self.text_config.base_model_ep_plan or {}).items()
-        }
-        if self.adapter_config is not None:
-            self.adapter_config = {
-                key: list(value) if isinstance(value, set) else value for key, value in self.adapter_config.items()
-            }
 
 
 __all__ = ["JevaConfig"]
