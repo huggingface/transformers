@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from os import PathLike
 from typing import TYPE_CHECKING, Any
@@ -229,3 +229,20 @@ class OpenVINOConfig(DynamoConfig):
     output_path: str | PathLike | None = None
     compress_to_fp16: bool = True
     stateful: bool = True
+
+
+@dataclass
+class ExecutorchQnnConfig(ExecutorchConfig):
+    """
+    Configuration for exporting models to ExecuTorch's QNN HTP backend.
+
+    Inherits all fields from [`ExecutorchConfig`], with `backend` fixed to `"qnn"`.
+
+    Args:
+        soc_models (`list[str]`, *optional*, defaults to `["SM8750"]`):
+            Chipsets to compile for, as keys of the QNN backend's `get_soc_to_chipset_map()` (e.g. `"SM8650"`).
+            Listing several produces one program that runs on any of them.
+    """
+
+    backend: str = "qnn"
+    soc_models: list[str] = field(default_factory=lambda: ["SM8750"])

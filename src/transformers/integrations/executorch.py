@@ -533,6 +533,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
         # Register cache buffers to make them exportable
         for i, layer in enumerate(self.static_cache.layers):
+            layer.cumulative_length = torch.zeros(1, dtype=torch.long, device=layer.keys.device)
             self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
             self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
             self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
@@ -567,8 +568,11 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
-        for layer in self.static_cache.layers:
-            layer.cumulative_length.copy_(cache_position[0])
+        for i, layer in enumerate(self.static_cache.layers):
+            layer.keys = self.get_buffer(f"key_cache_{i}")
+            layer.values = self.get_buffer(f"value_cache_{i}")
+            layer.cumulative_length = self.get_buffer(f"cumulative_length_{i}")
+            layer.cumulative_length.copy_(cache_position[0:1])
 
         past_key_values = self.static_cache
 

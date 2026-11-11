@@ -92,6 +92,32 @@ if is_torch_available():
 _PATCHES: dict[str, list[tuple[str, str, callable]]] = {}
 _FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
+_MODEL_PATCHES: dict[str, list[callable]] = {}
+
+
+def register_model_patch(backend: str):
+    """Append the decorated `(model) -> ContextManager[model]` to `_MODEL_PATCHES[backend]`.
+
+    Unlike `register_patch`, which swaps class or module attributes, a model patch chooses the module
+    that gets traced: it yields either the model it was given or a replacement (e.g. an export wrapper
+    around it), valid for the duration of the export only. A patch that doesn't apply to a model
+    yields it unchanged.
+    """
+
+    def decorator(fn):
+        _MODEL_PATCHES.setdefault(backend, []).append(fn)
+        return fn
+
+    return decorator
+
+
+@contextlib.contextmanager
+def apply_model_patches(backend: str, model):
+    """Enter `_MODEL_PATCHES[backend]` in order, each on the previous one's model; yield the module to trace."""
+    with contextlib.ExitStack() as stack:
+        for patch in _MODEL_PATCHES.get(backend, []):
+            model = stack.enter_context(patch(model))
+        yield model
 
 
 @contextlib.contextmanager
