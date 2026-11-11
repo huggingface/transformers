@@ -652,7 +652,29 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
-        def return_fn(x: int) -> Address:
+        # We don't know what JSON a custom class expects, so these should raise rather than guessing "object"
+        for tool in (fn, nested_fn):
+            with self.assertRaisesRegex(TypeHintParsingException, "Address"):
+                get_json_schema(tool)
+
+    def test_custom_class_return_is_omitted(self):
+        @dataclasses.dataclass
+        class Address:
+            city: str
+
+        def fn(x: int) -> Address:
+            """
+            Test function
+
+            Args:
+                x: The input
+
+            Returns:
+                The address
+            """
+            return x
+
+        def nested_fn(x: int) -> list[Address]:
             """
             Test function
 
@@ -661,10 +683,19 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
-        # We don't know what JSON a custom class expects, so these should raise rather than guessing "object"
-        for tool in (fn, nested_fn, return_fn):
-            with self.assertRaisesRegex(TypeHintParsingException, "Address"):
-                get_json_schema(tool)
+        # The model never generates the return value, so a return hint we can't convert should be left out
+        # of the schema instead of making the whole tool unusable
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(fn)["function"], expected_schema)
+        self.assertEqual(get_json_schema(nested_fn)["function"], {**expected_schema, "name": "nested_fn"})
 
     def test_multiline_docstring_with_types(self):
         def fn(x: int, y: int):

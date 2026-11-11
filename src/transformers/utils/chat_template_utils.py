@@ -236,7 +236,15 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     for param_name, param_type in type_hints.items():
         if param_name == implicit_arg_name:
             continue
-        properties[param_name] = _parse_type_hint(param_type)
+        if param_name == "return":
+            # The model never generates the return value, so a return hint we can't convert shouldn't stop the
+            # tool from being used. We leave the return out of the schema rather than describing it wrongly.
+            try:
+                properties[param_name] = _parse_type_hint(param_type)
+            except TypeHintParsingException:
+                pass
+        else:
+            properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
     if required:
