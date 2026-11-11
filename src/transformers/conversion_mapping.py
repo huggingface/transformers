@@ -538,12 +538,16 @@ def _build_checkpoint_conversion_mapping():
             ),
             # Unfuse qkv and apply rope permutation
             WeightConverter(
-                source_patterns=[r"wqkv"],
-                target_patterns=[
-                    r"attn.q_proj",
-                    r"attn.k_proj",
-                    r"attn.v_proj",
+                source_patterns=["wqkv.weight"],
+                target_patterns=["attn.q_proj.weight", "attn.k_proj.weight", "attn.v_proj.weight"],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
                 ],
+            ),
+            WeightConverter(
+                source_patterns=["wqkv.bias"],
+                target_patterns=["attn.q_proj.bias", "attn.k_proj.bias", "attn.v_proj.bias"],
                 operations=[
                     Chunk(dim=0),
                     PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
