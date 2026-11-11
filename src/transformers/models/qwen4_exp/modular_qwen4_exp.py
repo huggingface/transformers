@@ -1027,7 +1027,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring
