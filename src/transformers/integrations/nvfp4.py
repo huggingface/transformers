@@ -348,6 +348,8 @@ class NVFP4Dequantize(ConversionOps):
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
         output = {}
+        # In the dtype of the dense param it loads into, a weight without scales too (e.g. a norm saved in float32)
+        dtype = model.get_parameter_or_buffer(full_layer_name).dtype
         for key, weights in input_dict.items():
             if not key.endswith("weight"):
                 continue  # the scales, read along with their weight
@@ -356,10 +358,8 @@ class NVFP4Dequantize(ConversionOps):
             if scales is not None and scales_2 is not None:
                 scales = scales if isinstance(scales, list) else [scales]
                 scales_2 = scales_2 if isinstance(scales_2, list) else [scales_2]
-                # In the dtype of the dense param it loads into
-                dtype = model.get_parameter_or_buffer(full_layer_name).dtype
-                weights = [self._dequantize(*tensors).to(dtype) for tensors in zip(weights, scales, scales_2)]
-            output[key] = weights
+                weights = [self._dequantize(*tensors) for tensors in zip(weights, scales, scales_2)]
+            output[key] = [weight.to(dtype) for weight in weights]
         return output
 
     @property

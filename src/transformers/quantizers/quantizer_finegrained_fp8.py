@@ -168,11 +168,20 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, plan)
-        # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) are scalars, not sharded
-        scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
-        plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
+        # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) and the experts' per-expert
+        # `activation_scale`s are not sharded
+        scales = {
+            replace_layer_number_by_wildcard(n)
+            for n, p in model.named_parameters()
+            if p.ndim == 0 or n.endswith("activation_scale")
+        }
+        plan.update({name: "replicate" for name in scales if _get_parameter_plan(name, plan) is not None})
+        # The style of the experts' kernel, on its experts only (not another format's of a quantization plan)
         overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
+        experts = {replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, FP8Experts)}
+        plan.update(
+            {key: overwrite.get(style, style) for key, style in plan.items() if key.rpartition(".")[0] in experts}
+        )
 
     def is_serializable(self):
         return True

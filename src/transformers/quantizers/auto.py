@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import warnings
 from collections.abc import Callable
-from fnmatch import fnmatchcase
+from fnmatch import translate
 from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -465,10 +466,19 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         patterns = self.quantizers | checkpoint
         order = sorted(patterns, key=lambda pattern: ("*" in pattern) + (pattern == "*"))
         self.patterns = {f"*{pattern.removesuffix('.*')}.*": patterns[pattern] for pattern in order}
+        # One regex, the first matching pattern wins
+        self.matcher = re.compile("|".join(f"(?P<p{i}>{translate(glob)})" for i, glob in enumerate(self.patterns)))
+        # Each format's `renamed_names` as one regex too, for `rename_layer`
+        self.renamers = {
+            quantizer: re.compile("|".join(f"(?P<p{i}>{translate(f'*.{n}')})" for i, n in enumerate(names)))
+            for quantizer in self.all_quantizers
+            if quantizer.pre_quantized and (names := quantizer.renamed_names)
+        }
 
     def get_quantizer(self, name):
         "The quantizer of the first plan pattern naming the module or key `name` (a module's name ends with a dot)"
-        return next((q for glob, q in self.patterns.items() if fnmatchcase(f"{name}.", glob)), None)
+        match = self.matcher.match(f"{name}.")
+        return list(self.patterns.values())[int(match.lastgroup[1:])] if match else None
 
     def update_weight_conversions(self, weight_conversions, model):
         """
@@ -498,9 +508,10 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def rename_layer(self, key):
         "A checkpoint key in its layer's format names: the first glob of its `renamed_names` naming it, e.g. `*.scale`"
-        names = getattr(self.get_quantizer(key), "renamed_names", {}) if self.pre_quantized else {}
-        stored = next((stored for stored in names if fnmatchcase(key, f"*.{stored}")), None)
-        return key if stored is None else f"{key.rpartition('.')[0]}.{names[stored]}"
+        quantizer = self.get_quantizer(key)
+        match = self.renamers[quantizer].match(key) if quantizer in self.renamers else None
+        ours = list(quantizer.renamed_names.values())[int(match.lastgroup[1:])] if match else None
+        return key if match is None else f"{key.rpartition('.')[0]}.{ours}"
 
     def update_weight_transform(self, transform, model, name):
         """

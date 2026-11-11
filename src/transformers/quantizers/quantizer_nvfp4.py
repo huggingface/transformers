@@ -80,13 +80,13 @@ class NVFP4HfQuantizer(HfQuantizer):
             raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
 
     def update_parallel_plan(self, model, plan):
-        distributed_config = getattr(model.config, "distributed_config", None)
-        tp_size = getattr(distributed_config, "tp_size", None)
-        if tp_size is not None and tp_size > 1:
-            raise ValueError(
-                "NVFP4 quantization does not support tensor parallelism yet because its scale metadata does not have "
-                "a sharding plan."
-            )
+        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
+        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear
+
+        # Its swizzled scales have no sharding plan yet: its modules stay whole on every rank
+        nvfp4 = (NVFP4Linear, NVFP4Experts)
+        modules = {replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, nvfp4)}
+        plan.update({key: "replicate" for key in plan if key in modules or key.rpartition(".")[0] in modules})
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
         from ..integrations.nvfp4 import NVFP4Linear

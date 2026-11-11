@@ -182,9 +182,13 @@ class HfQuantizer(ABC):
         from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
-        suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}
-        extra = {key + suffix: style for key, style in plan.items() for suffix in suffixes}
-        plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
+        names = {name for serialized in self.serialized_names.values() for name in serialized}
+        # A param named after a planned one shards like it: `gate_up_proj_scale_inv`, `gate_up_proj_blocks`
+        for key, style in list(plan.items()):
+            module, _, planned = key.rpartition(".")
+            for name in names:
+                if name.startswith(planned) and f"{module}.{name}" in params - plan.keys():
+                    plan[f"{module}.{name}"] = style
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
