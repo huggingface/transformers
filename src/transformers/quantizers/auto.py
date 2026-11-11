@@ -324,9 +324,11 @@ class AutoHfQuantizer(HfQuantizer):
             if config is None:
                 quantizers[pattern] = None
                 continue
-            if isinstance(config, dict):
-                config = AutoQuantizationConfig.from_dict(config)
             attributes = loading.get(pattern) if pre_quantized else None
+            if isinstance(config, dict) and isinstance(attributes, AutoRoundConfig):
+                config = AutoRoundConfig.from_dict(config)  # AutoRound loads GPTQ and AWQ checkpoints
+            elif isinstance(config, dict):
+                config = AutoQuantizationConfig.from_dict(config)
             if isinstance(attributes, QuantizationConfigMixin):
                 if type(attributes).__name__ != type(config).__name__:
                     raise ValueError(
@@ -334,7 +336,15 @@ class AutoHfQuantizer(HfQuantizer):
                         f"{type(attributes).__name__} config. Please make sure to pass the same quantization config class "
                         "to `from_pretrained` with different loading attributes."
                     )
-                attributes = attributes.get_loading_attributes()
+                if isinstance(config, LOADING_ATTRIBUTES_CONFIG_TYPES):
+                    attributes = attributes.get_loading_attributes()
+                else:
+                    attributes = None
+                logger.info(
+                    "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
+                    f"`quantization_config`, which is used. Its loading attributes {list(attributes or {})} are "
+                    "overwritten with the ones you passed, the rest is ignored."
+                )
             for key, value in (attributes or {}).items():
                 setattr(config, key, value)
             if (key := repr(config)) not in shared:
@@ -712,22 +722,19 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     saved_plan = quantization_params_from_config if plan_from_config else None
     user_plan = quantization_config if is_quantization_plan(quantization_config) else None
-    if (plan := saved_plan or user_plan) is not None:
-        hf_quantizer = AutoHfQuantizer.from_plan(plan, quantization_config, plan_from_config, checkpoint_names)
+    if user_plan is not None and saved_plan is None:
+        pre_quantized = False  # the passed plan quantizes the model, a saved single config is ignored
+    # A single config is the plan `{"*": config}`: the saved one, else the passed one
+    single_config = quantization_params_from_config if pre_quantized else quantization_config
+    plan = saved_plan or user_plan
+    if plan is None and single_config is not None:
+        plan = {"*": single_config}
+
+    hf_quantizer = None
+    if plan is not None:
+        hf_quantizer = AutoHfQuantizer.from_plan(plan, quantization_config, pre_quantized, checkpoint_names)
         if not checkpoint_names:  # else the checkpoint's own config is kept, e.g. ModelOpt's `quantized_layers`
             config.quantization_config = hf_quantizer.quantization_config
-    elif pre_quantized or quantization_config is not None:
-        if pre_quantized:
-            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                quantization_params_from_config, quantization_config
-            )
-        else:
-            config.quantization_config = quantization_config
-
-        quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
-        hf_quantizer = AutoHfQuantizer({"*": quantizer})
-    else:
-        hf_quantizer = None
 
     if hf_quantizer is not None:
         quant_method = getattr(hf_quantizer.quantization_config, "quant_method", "plan")

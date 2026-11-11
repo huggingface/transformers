@@ -80,8 +80,8 @@ the model before measuring generation throughput.
 
 ## Current limitations
 
-- Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
-  the sharding behavior of the NVFP4 scale metadata is defined.
+- One CUDA device per process: a multi-device `device_map` is rejected. With tensor parallelism, NVFP4 layers are not
+  sharded (their scales have no sharding plan yet): every rank holds them whole, the other layers shard as usual.
 - CPU and disk offload are not supported.
 - MoE experts are only quantized from pre-quantized checkpoints, not on the fly.
 - NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.

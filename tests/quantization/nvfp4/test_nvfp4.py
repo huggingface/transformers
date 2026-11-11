@@ -376,7 +376,7 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)
     def test_rejects_multi_device_map_until_tp_metadata_is_supported(self, _, __):
-        with self.assertRaisesRegex(ValueError, "Tensor parallelism"):
+        with self.assertRaisesRegex(ValueError, "multi-device `device_map`"):
             self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
