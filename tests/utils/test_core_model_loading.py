@@ -43,7 +43,9 @@ from transformers.core_model_loading import (
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
+    build_load_plan,
     convert_and_load_state_dict_in_model,
+    rename_keys,
     rename_source_key,
     revert_weight_conversion,
     spawn_materialize,
@@ -494,6 +496,47 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], expected_v)
 
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
+
+    def test_load_plan_renames_each_template_like_each_key(self):
+        model = DummyRoot(PreTrainedConfig())
+        keys = [f"model.layers.{i}.experts.{e}.w{w}.weight" for i in range(2) for e in range(2) for w in (1, 2, 3)]
+        keys += [f"model.layers.{i}.self_attn.qkv_proj.weight" for i in range(2)] + ["mlp.w2.weight"]
+        weight_mapping = [
+            WeightConverter(
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                "experts.gate_up_proj.weight",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter("experts.*.w2.weight", "experts.down_proj.weight", operations=[MergeModulelist(dim=0)]),
+            # Named on one layer index: the template's other layer renames unlike it, so key by key
+            WeightConverter(
+                "model.layers.0.self_attn.qkv_proj.weight",
+                [f"model.layers.0.self_attn.{p}_proj.weight" for p in "qkv"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
+        ]
+        renamings = [t for t in weight_mapping if isinstance(t, WeightRenaming)]
+        converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
+        model_keys = model.state_dict()
+
+        renamed = rename_keys(keys, renamings, converters, None, "model", model_keys)
+        each_key = {key: rename_source_key(key, renamings, converters, "model", model_keys) for key in keys}
+        self.assertEqual(renamed, each_key)
+
+        plan, unexpected = build_load_plan(keys, model, weight_mapping)
+        self.assertEqual(unexpected, {"model.layers.1.self_attn.qkv_proj.weight"})
+        self.assertEqual(
+            dict(plan["model.layers.1.experts.gate_up_proj.weight"].collected_tensors),
+            {
+                "experts.*.w1.weight": [f"model.layers.1.experts.{e}.w1.weight" for e in range(2)],
+                "experts.*.w3.weight": [f"model.layers.1.experts.{e}.w3.weight" for e in range(2)],
+            },
+        )
+        self.assertEqual(
+            plan["model.layers.0.self_attn.q_proj.weight"].layer_targets,
+            {"model.layers.0.self_attn.q_proj.weight": {"model.layers.0.self_attn.qkv_proj.weight"}},
+        )
 
     def test_moe_and_qkv_conversion_reversed(self):
         model = DummyRoot(PreTrainedConfig())

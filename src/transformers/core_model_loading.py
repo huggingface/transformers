@@ -1582,6 +1582,87 @@ def _add_unmatched_checkpoint_key(
         loading_info.unexpected_keys.add(key)
 
 
+INDEX = re.compile(r"(?<=\.)\d+(?=\.|$)")
+# A key's index slot `i` is renamed as the number `SLOT + i`, then filled back with the key's own index
+SLOT = 1_000_000_000
+
+
+class _Templates(set):
+    "Model keys with their indices as `*`: a renamed template key is in the model if any of its indices is"
+
+    def __contains__(self, key):
+        return super().__contains__(INDEX.sub("*", key))
+
+    def get(self, key):  # `rename_source_key` checks the base model prefix with `.get(key) is not None`
+        return True if key in self else None
+
+
+def _rename(key, layered, renamings, converters, prefix, model_keys):
+    "A checkpoint key renamed: its quantizer's names (`layered`), then the model's transforms and prefix"
+    renamed, pattern = rename_source_key(layered, renamings, converters, prefix, model_keys)
+    if renamed not in model_keys and key in model_keys:  # keep a key the model already has
+        renamed, pattern = rename_source_key(key, [], [], base_model_prefix=prefix, meta_state_dict=model_keys)
+    return renamed, pattern
+
+
+def rename_keys(keys, renamings, converters, hf_quantizer, prefix, model_keys):
+    """
+    `{key: (renamed key, matched converter pattern)}`, renamed once per template: keys equal up to their indices
+    rename alike. A template whose slots do not rename like its first key's indices is renamed key by key.
+    """
+    templates = _Templates(INDEX.sub("*", key) for key in model_keys)
+    groups = defaultdict(list)
+    for key in keys:
+        # The quantizer's names stay per key: its plan patterns may name one layer index
+        layered = key if hf_quantizer is None else hf_quantizer.rename_layer(key)
+        groups[INDEX.sub("*", key), INDEX.sub("*", layered)].append((key, layered))
+
+    renamed = {}
+    for members in groups.values():
+        key, layered = members[0]
+        slotted = [INDEX.sub(lambda _, s=iter(range(SLOT, SLOT + 1000)): str(next(s)), k) for k in (key, layered)]
+        template, pattern = _rename(*slotted, renamings, converters, prefix, templates)
+
+        def fill(indices):
+            return re.sub(rf"{SLOT // 1000}(\d{{3}})", lambda m: indices[int(m[1])], template)
+
+        if (fill(INDEX.findall(key)), pattern) != _rename(key, layered, renamings, converters, prefix, model_keys):
+            renamed |= {k: _rename(k, kl, renamings, converters, prefix, model_keys) for k, kl in members}
+        else:
+            renamed |= {k: (fill(INDEX.findall(k)), pattern) for k, _ in members}
+    return renamed
+
+
+def build_load_plan(keys, model, weight_mapping, hf_quantizer=None):
+    """
+    `(plan, unexpected_keys)`, from the checkpoint's key names only. `plan` maps each param to load to its transform,
+    with its quantizer's ops, whose `collected_tensors` hold the checkpoint keys it reads, in order.
+    """
+    model_keys = model.state_dict()
+    renamings = [t for t in weight_mapping if isinstance(t, WeightRenaming)]
+    converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
+    pattern_to_converter = {p: converter for converter in converters for p in converter.source_patterns}
+    keys = sorted(keys, key=dot_natural_key)
+    renamed = rename_keys(keys, renamings, converters, hf_quantizer, model.base_model_prefix, model_keys)
+
+    plan, unexpected = {}, set()
+    for key in keys:
+        target, pattern = renamed[key]
+        if target in model_keys:
+            if target not in plan:
+                transform = deepcopy(pattern_to_converter[pattern]) if pattern else WeightRenaming(key, target)
+                if hf_quantizer is not None:
+                    transform = hf_quantizer.update_weight_transform(transform, model, target)
+                plan[target] = transform
+            plan[target].add_tensor(target, key, pattern or key, key)
+        elif pattern is not None:  # each target of the converter
+            targets = pattern_to_converter[pattern].target_patterns
+            unexpected |= {target.replace(targets[0], t) for t in targets}
+        else:
+            unexpected.add(target)
+    return plan, unexpected
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -1674,7 +1755,6 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-    base_model_prefix = model.base_model_prefix
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
@@ -1709,99 +1789,58 @@ def convert_and_load_state_dict_in_model(
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
-    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
-    param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
-
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    # 1. Map every checkpoint key to the param it loads into, from the key names only
+    param_name_to_load, unexpected_keys = build_load_plan(state_dict, model, weight_mapping, hf_quantizer)
+    for key in unexpected_keys:
+        _add_unmatched_checkpoint_key(key, model, loading_info)
 
-    state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-    for original_key, tensor in state_dict:
-        # 1. Rename the key according to all renaming and weight conversion patterns.
-        key = original_key if hf_quantizer is None else hf_quantizer.rename_layer(original_key)
-        renamed_key, source_pattern = rename_source_key(
-            key, renamings, converters, base_model_prefix, meta_model_state_dict
-        )
-        # FIXME: this should just not happen
-        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
-            # Key should probably not have been renamed but we might need the `prefix` to be added.
-            renamed_key, source_pattern = rename_source_key(
-                original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
-            )
+    for renamed_key, mapping in param_name_to_load.items():
+        empty_param = meta_model_state_dict.get(renamed_key)
 
-        # 2. finally, collect the tensor into the proper converter
-        if renamed_key in meta_model_state_dict:
-            empty_param = meta_model_state_dict.get(renamed_key)
-            # If we enter here, we have a WeightConverter operation to perform
-            if source_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[source_pattern])
-            # Otherwise, only potential renaming
-            else:
-                new_converter = WeightRenaming(original_key, renamed_key)
-                source_pattern = original_key
-            # each target key gets its own converter instance, with the ops of its quantizer
-            if hf_quantizer is not None and renamed_key not in param_name_to_load:
-                new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
-            mapping = param_name_to_load.setdefault(renamed_key, new_converter)
+        # 2. Handle dtype casting
+        needs_quantization = mapping.quantization_operation is not None  # quantized on load, set by the plan
+        _dtype = dtype
+        if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
+            matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
+            if matched_dtype_pattern is not None:
+                _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
+        elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+            # Skip params quantized on load. Casting them first would zero int8 storage or round fp8 twice.
+            _dtype = empty_param.dtype
 
-            # 3. Handle dtype casting
-            needs_quantization = mapping.quantization_operation is not None  # set by `update_weight_transform`
-            _dtype = dtype
-            if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
-                matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
-                if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
-                # Skip params quantized on load. Casting them first would zero int8 storage or round fp8 twice.
-                _dtype = empty_param.dtype
-            if hf_quantizer and hf_quantizer.pre_quantized:
-                _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
+        # 3. Handle DTensor sharding or device_map placement
+        param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+        sharding_op = None
+        if is_dtensor(empty_param):
+            sharding_op = DtensorShardOperation(empty_param)
 
-            # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in
-            # the list lets the sharding op tell which slice of the param each one is
-            tensor_idx = (
-                len(mapping.collected_tensors.get(source_pattern, []))
-                if isinstance(mapping, WeightConverter)
-                else None
-            )
+        # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
+        # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
+        # accelerate will take care of putting back on correct device after loading
+        # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
+        # spike during conversion ops should be fine
+        if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
+            param_device = "cpu"
 
-            # 4. Handle DTensor sharding or device_map placement
-            param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-            sharding_op = None
-            if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
-
-            # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
-            # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
-            # accelerate will take care of putting back on correct device after loading
-            # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
-            # spike during conversion ops should be fine
-            if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
-                param_device = "cpu"
-
-            future_or_tensor = spawn_materialize(
-                thread_pool,
-                tensor,
-                param_device,
-                _dtype,
-                sharding_op=sharding_op,
-                tensor_idx=tensor_idx,
-            )
-
-            mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
-        elif source_pattern is not None:  # add all target keys as unexpected
-            mapping = pattern_to_converter[source_pattern]
-            for k in mapping.target_patterns:
-                _add_unmatched_checkpoint_key(
-                    renamed_key.replace(mapping.target_patterns[0], k),
-                    model,
-                    loading_info,
+        # 4. Read the checkpoint keys the plan collected. A converter collects its tensors into lists (e.g. one tensor
+        # per expert); the position in the list lets the sharding op tell which slice of the param each one is
+        for source_pattern, keys in mapping.collected_tensors.items():
+            mapping.collected_tensors[source_pattern] = [
+                spawn_materialize(
+                    thread_pool,
+                    state_dict[key],
+                    param_device,
+                    _dtype
+                    if hf_quantizer is None or not hf_quantizer.pre_quantized
+                    else hf_quantizer.get_new_dtype(mapping, state_dict[key], _dtype),
+                    sharding_op=sharding_op,
+                    tensor_idx=idx if isinstance(mapping, WeightConverter) else None,
                 )
-        else:
-            _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
+                for idx, key in enumerate(keys)
+            ]
 
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
