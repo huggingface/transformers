@@ -196,7 +196,7 @@ def _resolve_audio_source(audio: str, timeout: float | None = None) -> "str | by
 def _load_audio_soundfile(source: "str | bytes", sampling_rate: int) -> np.ndarray:
     """Decode with soundfile and resample with soxr: the same steps as `librosa.load`, so the output is identical
     (downmix by averaging, `soxr_hq` resampling, padding/trimming to `ceil(num_samples * sampling_rate / src_rate)`)."""
-    requires_backends(load_audio, ["soundfile", "soxr"])
+    requires_backends(load_audio, ["audio"])
     with sf.SoundFile(BytesIO(source) if isinstance(source, bytes) else source) as f:
         src_sampling_rate = f.samplerate
         waveform = f.read(dtype="float32", always_2d=True).T

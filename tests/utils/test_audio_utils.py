@@ -45,9 +45,8 @@ from transformers.audio_utils import (
 )
 from transformers.testing_utils import (
     is_librosa_available,
+    require_audio,
     require_librosa,
-    require_soundfile,
-    require_soxr,
     require_torchaudio,
     require_torchcodec,
     slow,
@@ -1911,8 +1910,7 @@ class LoadAudioTester(unittest.TestCase):
 
     # ---- source forms: local path, URL, base64, data: URI -------------------------------------
 
-    @require_soundfile
-    @require_soxr
+    @require_audio
     def test_load_audio_from_every_source_form(self):
         # a single sync gives us the file as a local path, a public URL, raw base64 and a data: URI
         with patch("transformers.audio_utils.is_torchcodec_usable", return_value=False):
@@ -1921,8 +1919,7 @@ class LoadAudioTester(unittest.TestCase):
                 self.assertIsInstance(audio, np.ndarray, form)
                 self.assertGreater(audio.size, 0, form)
 
-    @require_soundfile
-    @require_soxr
+    @require_audio
     def test_invalid_base64_raises_value_error(self):
         # a non-URL, non-path string is treated as base64 and must fail cleanly
         with patch("transformers.audio_utils.is_torchcodec_usable", return_value=False):
@@ -1932,8 +1929,7 @@ class LoadAudioTester(unittest.TestCase):
 
     # ---- soundfile fallback (torchcodec unavailable) ------------------------------------------
 
-    @require_soundfile
-    @require_soxr
+    @require_audio
     def test_soundfile_decodes_soundfile_formats(self):
         with patch("transformers.audio_utils.is_torchcodec_usable", return_value=False):
             for name, filetype in self._BUCKET_FILETYPES.items():
@@ -1944,8 +1940,7 @@ class LoadAudioTester(unittest.TestCase):
                 self.assertGreater(audio.size, 0, name)
 
     @require_librosa
-    @require_soundfile
-    @require_soxr
+    @require_audio
     def test_soundfile_matches_librosa_on_soundfile_formats(self):
         # the soundfile backend replaces `librosa.load`, so it must return exactly the same samples
         for name, filetype in self._BUCKET_FILETYPES.items():
@@ -1955,8 +1950,7 @@ class LoadAudioTester(unittest.TestCase):
             expected = librosa.load(self._path(name), sr=16000)[0]
             np.testing.assert_array_equal(audio, expected, err_msg=name)
 
-    @require_soundfile
-    @require_soxr
+    @require_audio
     def test_soundfile_rejects_torchcodec_only_formats_with_helpful_error(self):
         with patch("transformers.audio_utils.is_torchcodec_usable", return_value=False):
             for name, filetype in self._BUCKET_FILETYPES.items():
@@ -1980,8 +1974,7 @@ class LoadAudioTester(unittest.TestCase):
         self.assertIn("torchcodec", message)
         fetch.assert_not_called()
 
-    @require_soundfile
-    @require_soxr
+    @require_audio
     def test_deprecated_load_audio_librosa_warns_and_pins_soundfile(self):
         # BC: even with torchcodec available, the alias must still decode with soundfile (what librosa used)
         with patch("transformers.audio_utils.is_torchcodec_usable", return_value=True):
@@ -2026,8 +2019,7 @@ class LoadAudioTester(unittest.TestCase):
             load_audio(self._path("audio.wav"), sampling_rate=16000, backend="not_a_backend")
 
 
-@require_soundfile
-@require_soxr
+@require_audio
 class LoadAudioSoundfileTester(unittest.TestCase):
     """The `"soundfile"` backend replaces `librosa.load`: same samples, without librosa."""
 

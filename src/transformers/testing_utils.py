@@ -80,6 +80,7 @@ from .utils import (
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
+    is_audio_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
@@ -153,7 +154,6 @@ from .utils import (
     is_seqio_available,
     is_serve_available,
     is_soundfile_available,
-    is_soxr_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -885,6 +885,14 @@ def require_torchcodec(test_case):
 
     """
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
+
+
+def require_audio(test_case):
+    """
+    Decorator marking a test that requires the audio dependencies (soundfile and soxr, installed with
+    `transformers[audio]`). These tests are skipped when they aren't installed.
+    """
+    return unittest.skipUnless(is_audio_available(), "test requires audio")(test_case)
 
 
 def require_torchaudio(test_case):
@@ -1826,13 +1834,6 @@ def require_soundfile(test_case):
     Decorator marking a test that requires soundfile
     """
     return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
-
-
-def require_soxr(test_case):
-    """
-    Decorator marking a test that requires soxr
-    """
-    return unittest.skipUnless(is_soxr_available(), "test requires soxr")(test_case)
 
 
 def require_multipart(test_case):

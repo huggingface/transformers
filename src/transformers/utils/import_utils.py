@@ -1665,6 +1665,13 @@ def is_soxr_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_audio_available() -> bool:
+    """The audio core's dependencies, installed with `transformers[audio]`: soundfile to decode, soxr to resample."""
+    return is_soundfile_available() and is_soxr_available()
+
+
+@lru_cache
+@_make_compile_constant
 def is_speech_available() -> bool:
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return is_torchaudio_available()
@@ -2054,6 +2061,12 @@ def is_training_run_on_sagemaker() -> bool:
 
 
 # docstyle-ignore
+AUDIO_IMPORT_ERROR = """
+{0} requires soundfile and soxr, which were not found in your environment. You can install them with pip:
+`pip install transformers[audio]`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
 ```
@@ -2408,6 +2421,7 @@ MISTRAL_COMMON_IMPORT_ERROR = """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("audio", (is_audio_available, AUDIO_IMPORT_ERROR)),
         ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
