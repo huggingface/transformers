@@ -300,6 +300,7 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
 
     def test_sdpa_can_dispatch_on_flash(self):
         """Audio encoder can produce fp32 (attention) outputs => avoid by autocasting + a mask is required so dummy replace it"""
+
         def full_ones_mask(batch_size: int | None = None):
             batch_size = batch_size if batch_size is not None else self.model_tester.batch_size
             return torch.ones(
