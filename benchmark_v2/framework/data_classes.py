@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -47,7 +47,7 @@ def equalize_lengths_and_collate(stats: dict[str, dict[str, str]]) -> dict[str, 
 
 
 def pretty_print_dict(data: dict[str, str], tabs: int = 0) -> None:
-    max_key_length = max([len(key) for key in data.keys()])
+    max_key_length = max(len(key) for key in data.keys())
     for key, value in data.items():
         tabs_str = "  " * tabs
         padded_key = key.ljust(max_key_length + 1, ".")
@@ -70,7 +70,7 @@ class BenchmarkMetadata:
         self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "", success: bool = True
     ) -> None:
         self.model_id = model_id
-        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
         self.branch_name = branch_name
         self.commit_id = commit_id
         self.commit_message = commit_message

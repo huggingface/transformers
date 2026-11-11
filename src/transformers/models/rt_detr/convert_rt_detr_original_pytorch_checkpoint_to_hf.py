@@ -38,7 +38,7 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.num_labels = 80
     repo_id = "huggingface/label-files"
     filename = "coco-detection-mmdet-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -579,8 +579,8 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
     # finally, create HuggingFace model and load state dict
-    model = RTDetrForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    state_dict = {key: value.contiguous() for key, value in state_dict.items()}
+    model = RTDetrForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     # load image processor

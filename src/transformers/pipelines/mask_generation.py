@@ -199,25 +199,6 @@ class MaskGenerationPipeline(ChunkPipeline):
         crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
-        model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
-        model_inputs = model_inputs.to(self.dtype)
-
-        with self.device_placement():
-            inference_context = self.get_inference_context()
-            with inference_context():
-                model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
-
-                # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
-                if isinstance(embeddings, tuple):
-                    image_embeddings, intermediate_embeddings = embeddings
-                    model_inputs["intermediate_embeddings"] = intermediate_embeddings
-                else:
-                    image_embeddings = embeddings
-                # TODO: Identifying the model by the type of its returned embeddings is brittle.
-                #       Consider using a more robust method for distinguishing model types here.
-
-                model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]
         points_per_batch = points_per_batch if points_per_batch is not None else n_points
@@ -228,17 +209,46 @@ class MaskGenerationPipeline(ChunkPipeline):
                 "To return all points at once, set points_per_batch to None"
             )
 
-        for i in range(0, n_points, points_per_batch):
-            batched_points = grid_points[:, i : i + points_per_batch, :, :]
-            labels = input_labels[:, i : i + points_per_batch]
-            is_last = i + points_per_batch >= n_points
-            yield {
-                "input_points": batched_points,
-                "input_labels": labels,
-                "input_boxes": crop_boxes,
-                "is_last": is_last,
-                **model_inputs,
-            }
+        model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
+
+        model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
+        pixel_values = model_inputs.pop("pixel_values")
+
+        full_image_size = model_inputs["original_sizes"][0]
+        for c, im_px_val in enumerate(pixel_values):
+            crop_inputs = {key: value[c : c + 1] for key, value in model_inputs.items()}
+
+            with self.device_placement():
+                inference_context = self.get_inference_context()
+                with inference_context():
+                    im_px_val = im_px_val.unsqueeze(0)
+
+                    embeddings = self.model.get_image_embeddings(im_px_val)
+
+                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
+                    if isinstance(embeddings, tuple):
+                        crop_inputs["image_embeddings"] = embeddings[0]
+                        crop_inputs["intermediate_embeddings"] = embeddings[1]
+                    else:
+                        crop_inputs["image_embeddings"] = embeddings
+                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
+                    #       Consider using a more robust method for distinguishing model types here.
+
+            for i in range(0, n_points, points_per_batch):
+                batched_points = grid_points[:, i : i + points_per_batch, c : c + 1, :]
+                labels = input_labels[:, i : i + points_per_batch, c : c + 1]
+                input_boxes = crop_boxes[c : c + 1]
+                is_last = (c == len(pixel_values) - 1) and (i + points_per_batch >= n_points)
+
+                yield {
+                    "input_points": batched_points,
+                    "input_labels": labels,
+                    "input_boxes": input_boxes,
+                    "is_last": is_last,
+                    "full_image_size": full_image_size,
+                    **crop_inputs,
+                }
 
     def _forward(
         self,
@@ -255,6 +265,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         original_sizes = model_inputs.pop("original_sizes").tolist()
         reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes", None)
         reshaped_input_sizes = reshaped_input_sizes.tolist() if reshaped_input_sizes is not None else None
+        full_image_size = model_inputs.pop("full_image_size").tolist()
 
         model_outputs = self.model(**model_inputs)
 
@@ -285,7 +296,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         masks, iou_scores, boxes = self.image_processor.filter_masks(
             masks[0],
             iou_scores[0],
-            original_sizes[0],
+            full_image_size,
             input_boxes[0],
             pred_iou_thresh,
             stability_score_thresh,

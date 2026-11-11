@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most of
 the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
 Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
-[Pipeline tutorial](../pipeline_tutorial) for examples of use.
+[task list](https://huggingface.co/tasks) for examples of use.
 
 There are two categories of pipeline abstractions to be aware about:
 
@@ -68,7 +68,7 @@ from transformers.pipelines.pt_utils import KeyDataset
 from tqdm.auto import tqdm
 
 pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
-dataset = datasets.load_dataset("superb", name="asr", split="test")
+dataset = datasets.load_dataset("s3prl/superb", name="asr", split="test")
 
 # KeyDataset (only *pt*) will simply return the item in the dict returned by the dataset item
 # as we're not interested in the *target* part of the dataset. For sentence pair use KeyPairDataset
@@ -385,6 +385,45 @@ Pipelines available for computer vision tasks include the following.
 ## Natural Language Processing
 
 Pipelines available for natural language processing tasks include the following.
+
+### DecisionPipeline
+
+> [!WARNING]
+> Decision models, the `decision` pipeline and `DecisionConfig` are experimental: their API may change at any time, without deprecation.
+
+Each call asks its questions: a request `{"state": ..., "questions": ...}`, or a state with `questions`:
+
+```python
+from transformers import pipeline
+
+decide = pipeline("decision", model="autotrust/GEV-26B-Decide")
+decide(
+    {
+        "state": "I was charged twice for my order and want a refund.",
+        "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
+    }
+)
+```
+
+Images come as `assets`, like in the System One API: each placeholder in the state, the instructions or the criteria is
+replaced with its image. An asset is `{"type": "image", "format": "png", "data_base64": ...}`, a PIL image, a path or a
+URL, and the model needs a processor that handles images.
+
+```python
+decide(
+    {
+        "state": "The customer sent photo-1 and asks if it is damaged.",
+        "assets": {"photo-1": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"},
+        "questions": {"damaged": {"type": "noul", "instructions": "Is the product in the photo damaged?"}},
+    }
+)
+```
+
+[[autodoc]] DecisionPipeline
+    - __call__
+    - all
+
+[[autodoc]] DecisionConfig
 
 ### FillMaskPipeline
 

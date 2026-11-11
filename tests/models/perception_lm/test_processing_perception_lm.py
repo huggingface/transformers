@@ -46,11 +46,6 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = tokenizer_class.from_pretrained(TEST_MODEL_PATH)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token_id = processor.image_token_id
-        cls.video_token_id = processor.video_token_id
-
     @staticmethod
     def prepare_processor_dict():
         return {

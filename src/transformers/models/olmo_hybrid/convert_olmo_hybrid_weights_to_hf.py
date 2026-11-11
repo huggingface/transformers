@@ -95,12 +95,12 @@ def strtobool(val):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -558,7 +558,7 @@ def write_model(
 
     # Update config with tokenizer info
     hf_config_path = Path(model_path) / "config.json"
-    with open(hf_config_path, "r") as f:
+    with open(hf_config_path, "r", encoding="utf-8") as f:
         config_dict = json.load(f)
 
     config_dict["max_position_embeddings"] = max_position_embeddings
@@ -566,7 +566,7 @@ def write_model(
     config_dict["bos_token_id"] = tokenizer_config.get("bos_token_id")
     config_dict["eos_token_id"] = tokenizer_config.get("eos_token_id")
 
-    with open(hf_config_path, "w") as f:
+    with open(hf_config_path, "w", encoding="utf-8") as f:
         json.dump(config_dict, f, indent=2)
     print("Updated config.json with tokenizer settings")
 

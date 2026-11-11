@@ -36,8 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForImageClassification
 from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
@@ -52,13 +51,13 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 @dataclass
 class PeVideoOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Contrastive loss computed between video and text representations.
-    logits_video_text (`torch.FloatTensor` of shape `(batch_size, batch_size)`, *optional*):
+    logits_video_text (`torch.Tensor` of shape `(batch_size, batch_size)`, *optional*):
         Similarity logits between video and text embeddings.
-    text_video_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    text_video_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Text embeddings projected to the video-text space.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    video_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Video embeddings projected to the video-text space.
     text_outputs (`BaseModelOutputWithPooling`, *optional*):
         Model outputs for the text encoder, including last hidden state and pooled output.
@@ -66,10 +65,10 @@ class PeVideoOutput(ModelOutput):
         Model outputs for the video encoder, including last hidden state and pooled output.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_video_text: torch.FloatTensor | None = None
-    text_video_embeds: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_video_text: torch.Tensor | None = None
+    text_video_embeds: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     video_outputs: BaseModelOutputWithPooling = None
 
@@ -89,7 +88,7 @@ class PeVideoContrastiveHead(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.FloatTensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.proj(self.layer_norm(x))
 
 
@@ -448,8 +447,7 @@ class PeVideoPreTrainedModel(PreTrainedModel):
 
 
 class PeVideoEncoderRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: PeVideoEncoderConfig, device=None):
+    def __init__(self, config: PeVideoEncoderConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -460,16 +458,13 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: PeVideoEncoderConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: PeVideoEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -485,20 +480,15 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -647,7 +637,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
         video_outputs: BaseModelOutputWithPooling = self.video_encoder(
             pixel_values_videos=pixel_values_videos, padding_mask_videos=padding_mask_videos, **kwargs
         )
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         video_embeds = video_outputs.pooler_output

@@ -19,18 +19,22 @@ Tests for the serving layer.
 import asyncio
 import json
 import socket
+import tempfile
 import time
 import unittest
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
+from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
-from transformers.cli.serving.model_manager import ModelManager, TimedModel
+from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
+from transformers.cli.serving.systemone import SystemOneHandler
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
@@ -38,6 +42,7 @@ from transformers.cli.serving.utils import (
     GenerationState,
     Modality,
     ToolCall,
+    build_response_parser,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
@@ -46,14 +51,17 @@ from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
     slow,
+    torch_device,
 )
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
+from ..test_decision_head_common import tiny_qwen2
 from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -364,6 +372,24 @@ class TestGenerativeModelList(unittest.TestCase):
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
 
+    def test_skips_null_architectures(self):
+        """A cached config with `"architectures": null` must not break the listing."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from huggingface_hub import hf_hub_download
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
+            config = Path(hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)).resolve()
+            config.write_text(json.dumps({**json.loads(config.read_text()), "architectures": None}))
+
+            model_ids = {r["id"] for r in ModelManager.get_gen_models(cache_dir)}
+
+            self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
+            self.assertNotIn("google-bert/bert-base-cased", model_ids)
+
 
 @require_serve
 class TestBuildGenerationConfig(unittest.TestCase):
@@ -374,6 +400,20 @@ class TestBuildGenerationConfig(unittest.TestCase):
         from transformers import GenerationConfig
 
         result = self._make_handler()._build_generation_config({"max_tokens": 7}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 7)
+
+    def test_max_completion_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({"max_completion_tokens": 7}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 7)
+
+    def test_max_completion_tokens_overrides_max_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config(
+            {"max_completion_tokens": 7, "max_tokens": 50}, GenerationConfig()
+        )
         self.assertEqual(result.max_new_tokens, 7)
 
     def test_temperature_zero_disables_sampling(self):
@@ -510,6 +550,13 @@ class TestModelManager(unittest.TestCase):
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
 
+    def test_metal_flash_attn_default_only_with_continuous_batching(self):
+        resolve = ModelManager._resolve_attn_implementation
+        with patch("transformers.utils.import_utils.is_kernels_available", return_value=True):
+            self.assertEqual(resolve(None, "mps", continuous_batching=True), METAL_FLASH_ATTN)
+            self.assertIsNone(resolve(None, "mps", continuous_batching=False))
+            self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
+
 
 class TestTimedModel(unittest.TestCase):
     def test_delete_model(self):
@@ -579,12 +626,14 @@ class TestAppRoutes(unittest.TestCase):
         cls.completion_handler = MagicMock(spec=CompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
+        cls.systemone_handler = MagicMock(spec=SystemOneHandler)
         cls.app = build_server(
             cls.model_manager,
             cls.chat_handler,
             cls.completion_handler,
             cls.response_handler,
             cls.transcription_handler,
+            systemone_handler=cls.systemone_handler,
             generation_state=GenerationState(),
         )
         cls.transport = httpx.ASGITransport(app=cls.app)
@@ -613,6 +662,118 @@ class TestAppRoutes(unittest.TestCase):
     def test_request_id_passthrough(self):
         resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
+
+
+@slow
+@require_serve
+class TestSystemOneEndpoint(ServeIntegrationTestCase):
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def setUp(self):
+        super().setUp()
+        self.body = {
+            "model": self.MODEL,
+            "state": "Our integration has been failing for 3 days and we are losing sales!",
+            "questions": {
+                "team": {
+                    "type": "choice",
+                    "instructions": "Which team handles this?",
+                    "criteria": {"billing": None, "technical": "Bugs or integration problems"},
+                },
+                "urgency": {
+                    "type": "score",
+                    "instructions": "How urgent is this ticket?",
+                    "criteria": ["low", "medium", "high"],
+                },
+                "upset": {"type": "noul", "instructions": "Is the customer upset?"},
+            },
+        }
+
+    def test_response_format(self):
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["model"], self.MODEL)
+        answers = data["answers"]
+        self.assertEqual(set(answers), {"team", "urgency", "upset"})
+        self.assertEqual(answers["team"]["type"], "choice")
+        self.assertEqual(answers["urgency"]["type"], "score")
+        self.assertEqual(answers["upset"]["type"], "noul")
+        self.assertEqual(answers["urgency"]["legend"], {"0": "low", "1": "medium", "2": "high"})
+        self.assertAlmostEqual(sum(answers["team"]["probabilities"].values()), 1.0, places=5)
+        self.assertAlmostEqual(sum(answers["urgency"]["probabilities"].values()), 1.0, places=5)
+        self.assertGreater(data["usage"]["input_tokens"], 0)
+        self.assertEqual(data["usage"]["output_tokens"], 0)
+
+    def test_decision_with_text(self):
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+        self.assertEqual(response.status_code, 200)
+        answers = response.json()["answers"]
+        self.assertEqual(answers["team"]["choice"], "technical")
+        self.assertGreater(answers["urgency"]["score"], 1)
+        self.assertGreater(answers["upset"]["noul"], 0.5)
+
+    def test_invalid_question(self):
+        self.body["questions"]["team"]["criteria"] = {}
+        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("a choice question needs `criteria`", response.json()["detail"][0]["msg"])
+
+
+@require_serve
+class TestSystemOneDecisionConfig(unittest.TestCase):
+    @require_torch
+    def test_answers_are_the_pipelines(self):
+        from transformers import AutoTokenizer, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        decision_config = DecisionConfig(temperature={"noul": 1.5})
+        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
+        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        answers, input_tokens = handler._answer(pipe, request)
+        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
+        self.assertEqual(answers, expected)
+        self.assertGreater(input_tokens, 0)
+
+    @require_torch
+    def test_reads_the_decision_config_of_the_repo(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        template = "{{ state }}"
+        with tempfile.TemporaryDirectory() as repo:
+            DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
+            model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
+            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+        self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
+        self.assertEqual(pipe.decision_config.chat_template, template)
+
+    @require_torch
+    def test_loads_a_decision_checkpoint_as_the_pipeline_does(self):
+        # A checkpoint shipping a decision head next to its weights is served by the decision model, not as a causal LM
+        import torch
+        from safetensors.torch import save_file
+
+        from transformers import AutoTokenizer, JevForDecision, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        with tempfile.TemporaryDirectory() as repo:
+            tiny_qwen2(tokenizer).save_pretrained(repo)
+            tokenizer.save_pretrained(repo)
+            Path(repo, "decision_config.json").write_text(
+                json.dumps({"codes": ["A", "B"], "temperature": 2.0}), encoding="utf-8"
+            )
+            save_file({"weight": torch.randn(2, 16)}, f"{repo}/readout.safetensors", metadata={"format": "pt"})
+            manager = ModelManager(device="cpu")
+            model, _ = manager.load_model_and_processor(manager.process_model_name(repo))
+            decide = pipeline("decision", model=repo, device="cpu")
+        self.assertIsInstance(model, JevForDecision)
+        self.assertIsInstance(decide.model, JevForDecision)
+        self.assertEqual(model.decision_config.temperature, decide.decision_config.temperature)
 
 
 @slow
@@ -944,7 +1105,7 @@ class TestCompletion(ServeIntegrationTestCase):
         """Streaming completion with CB produces text."""
         serve, port = _start_serve(
             force_model=self.MODEL,
-            device="cuda:0",
+            device=f"{torch_device}:0",
             continuous_batching=True,
             attn_implementation="sdpa",
         )
@@ -966,7 +1127,7 @@ class TestCompletion(ServeIntegrationTestCase):
         """Non-streaming completion with CB returns a full response."""
         serve, port = _start_serve(
             force_model=self.MODEL,
-            device="cuda:0",
+            device=f"{torch_device}:0",
             continuous_batching=True,
             attn_implementation="sdpa",
         )
@@ -1805,6 +1966,41 @@ class TestToolCallUnit(unittest.TestCase):
         called_template = tokenizer.parse_response.call_args.args[1]
         self.assertIs(called_template, template)
 
+    def test_tool_schema_forwarded_to_serving_parsers(self):
+        tokenizer = MagicMock()
+        tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "fields": {},
+        }
+        tokenizer.decode.return_value = ""
+        tokenizer.parse_response.return_value = {"role": "assistant"}
+
+        processor = MagicMock()
+        model = MagicMock()
+        processor.tokenizer = tokenizer
+
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "set_alarm"},
+            }
+        ]
+
+        for schema in (None, tools):
+            with self.subTest(tools=schema):
+                parse_assistant_message(processor, model, [2], [1], tools=schema)
+                self.assertEqual(
+                    tokenizer.parse_response.call_args.kwargs["tools"],
+                    schema,
+                )
+
+                with patch("transformers.cli.serving.utils.ResponseParser") as parser:
+                    build_response_parser(processor, model, [1], tools=schema)
+                    self.assertEqual(
+                        parser.call_args.kwargs["tools"],
+                        schema,
+                    )
+
     def test_parse_assistant_message_multiple_tool_calls(self):
         tokenizer = MagicMock()
         tokenizer.response_template = None
@@ -1895,6 +2091,7 @@ class TestCBWorkerDeadServerIntegration(unittest.TestCase):
             completion_handler=MagicMock(),
             response_handler=MagicMock(),
             transcription_handler=MagicMock(),
+            systemone_handler=MagicMock(spec=SystemOneHandler),
             generation_state=generation_state,
         )
 
@@ -2627,7 +2824,7 @@ class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
     def serve_kwargs(cls) -> dict:
         return {
             "force_model": cls.MODEL,
-            "device": "cuda:0",
+            "device": f"{torch_device}:0",
             "continuous_batching": True,
             "attn_implementation": "sdpa",
             "default_seed": 42,
@@ -2749,7 +2946,7 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
     def serve_kwargs(cls) -> dict:
         return {
             "force_model": cls.MODEL,
-            "device": "cuda:0",
+            "device": f"{torch_device}:0",
             "continuous_batching": True,
             "attn_implementation": "sdpa",
             "default_seed": 42,

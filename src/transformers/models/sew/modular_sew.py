@@ -201,9 +201,10 @@ class SEWEncoder(nn.Module):
 
         for layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            skip_the_layer = False
+            if self.training and self.config.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
@@ -253,6 +254,8 @@ class SEWPreTrainedModel(PreTrainedModel):
                         init.kaiming_normal_(module.weight)
             else:
                 init.kaiming_normal_(module.weight)
+        elif isinstance(module, SEWModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -302,8 +305,8 @@ class SEWModel(SEWPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -353,7 +356,7 @@ class SEWModel(SEWPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""

@@ -189,7 +189,7 @@ model.generate(**formatted_chat)
 > [!WARNING]
 > You shouldn't use [`~PreTrainedTokenizerBase.apply_chat_template#add_generation_prompt`] and [`~PreTrainedTokenizerBase.apply_chat_template#continue_final_message`] together. The former adds tokens that start a new message, while the latter removes end of sequence tokens. Using them together returns an error.
 
-Pass a field name as a string to prefill that field instead of `content`. Reasoning models often expose a separate field, like `reasoning_content` on Qwen or `thinking` on Gemma. Prefilling `content` closes the reasoning block before generation starts, so the model can't continue inside it. Prefilling the reasoning field directly leaves the block open.
+Pass a field name as a string to prefill that field instead of `content`. Reasoning models read their reasoning from a separate `reasoning_content` field. Prefilling `content` closes the reasoning block before generation starts, so the model can't continue inside it. Prefilling `reasoning_content` directly leaves the block open.
 
 ```py
 chat = [

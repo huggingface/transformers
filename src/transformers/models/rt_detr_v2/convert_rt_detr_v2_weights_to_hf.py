@@ -39,7 +39,7 @@ def get_rt_detr_v2_config(model_name: str) -> RTDetrV2Config:
     config.num_labels = 80
     repo_id = "huggingface/label-files"
     filename = "coco-detection-mmdet-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -255,8 +255,7 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     del state_dict["decoder.anchors"]
     del state_dict["decoder.valid_mask"]
     # finally, create HuggingFace model and load state dict
-    model = RTDetrV2ForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    model = RTDetrV2ForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     # load image processor

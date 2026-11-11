@@ -44,7 +44,7 @@ def extract_warnings_from_single_artifact(artifact_path, targets):
                 # read the file
                 if filename != "warnings.txt":
                     continue
-                with open(file_path) as fp:
+                with open(file_path, encoding="utf-8") as fp:
                     parse_line(fp)
     else:
         try:

@@ -474,6 +474,18 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             self, config_class=Blip2Config, has_text_modality=False, common_properties=common_properties
         )
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         return _prepare_qformer_config_headdim(config, requested_dim)
@@ -850,6 +862,18 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         self.config_tester = ConfigTester(
             self, config_class=Blip2Config, has_text_modality=False, common_properties=common_properties
         )
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()

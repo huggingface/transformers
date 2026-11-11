@@ -238,6 +238,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     """
 
     _pipeline_calls_generate = True
+    # The number of answers, not the sampling parameter
+    _non_generation_params = ("top_k",)
     _load_processor = False
     _load_image_processor = None
     _load_feature_extractor = None
@@ -564,9 +566,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         is_last = model_inputs.pop("is_last", False)
 
         if self.model_type == ModelType.VisionEncoderDecoder:
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
+            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:

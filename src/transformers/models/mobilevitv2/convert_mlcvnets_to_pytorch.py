@@ -52,7 +52,7 @@ def load_orig_config_file(orig_cfg_file):
         return dict(items)
 
     config = argparse.Namespace()
-    with open(orig_cfg_file, "r") as yaml_file:
+    with open(orig_cfg_file, "r", encoding="utf-8") as yaml_file:
         try:
             cfg = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -114,7 +114,7 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
 
     # id2label
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}

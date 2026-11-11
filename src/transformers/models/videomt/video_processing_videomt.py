@@ -15,7 +15,7 @@
 
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
-from ...utils import is_torch_available, requires_backends
+from ...utils import auto_docstring, is_torch_available
 from ...video_processing_utils import BaseVideoProcessor
 
 
@@ -143,6 +143,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@auto_docstring
 class VideomtVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -202,8 +203,6 @@ class VideomtVideoProcessor(BaseVideoProcessor):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size.
         """
-        requires_backends(self, ["torch"])
-
         masks_queries_logits = outputs.masks_queries_logits  # [num_frames, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [num_frames, num_queries, num_classes+1]
 
@@ -253,8 +252,6 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 - `"segmentation"` -- A `torch.Tensor` of shape `(height, width)` with instance IDs (or -1 for background).
                 - `"segments_info"` -- A list of dicts with `"id"`, `"label_id"`, and `"score"` for each instance.
         """
-        requires_backends(self, ["torch"])
-
         class_queries_logits = outputs.class_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
 
@@ -333,8 +330,6 @@ class VideomtVideoProcessor(BaseVideoProcessor):
                 - `"segmentation"` -- A `torch.Tensor` of shape `(height, width)` with segment IDs (or -1 for background).
                 - `"segments_info"` -- A list of dicts with `"id"`, `"label_id"`, and `"score"` for each segment.
         """
-        requires_backends(self, ["torch"])
-
         masks_queries_logits = outputs.masks_queries_logits
         class_queries_logits = outputs.class_queries_logits
 

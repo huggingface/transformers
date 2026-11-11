@@ -37,7 +37,7 @@ def test_save_and_clear_chat():
         filename = os.path.join(tmp_path, "chat.json")
         save_chat(filename, [{"role": "user", "content": "hi"}], {"foo": "bar"})
         assert os.path.isfile(filename)
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             data = json.load(f)
             assert data["chat_history"] == [{"role": "user", "content": "hi"}]
             assert data["settings"] == {"foo": "bar"}
@@ -56,6 +56,24 @@ def test_parse_generate_flags():
 
 def test_parse_generate_flags_value_with_equal_sign():
     assert parse_generate_flags(["cache_implementation=a=b"]) == {"cache_implementation": "a=b"}
+
+
+def test_parse_generate_flags_preserves_types_and_quotes():
+    assert parse_generate_flags(['text=a"b', "do_sample=False", "eos_token_id=[1,2]", "watermark=None"]) == {
+        "text": 'a"b',
+        "do_sample": False,
+        "eos_token_id": [1, 2],
+        "watermark": None,
+    }
+
+
+def test_parse_generate_flags_preserves_lists_with_strings():
+    assert parse_generate_flags([r'stop_strings=["a\\b"]']) == {"stop_strings": [r"a\b"]}
+
+
+@pytest.mark.parametrize("value", [r"a\b", r"a\u0041", r"C:\temp", r"a\x"])
+def test_parse_generate_flags_preserves_backslashes(value):
+    assert parse_generate_flags([f"stop_strings={value}"]) == {"stop_strings": value}
 
 
 def test_parse_generate_flags_missing_equal_sign():

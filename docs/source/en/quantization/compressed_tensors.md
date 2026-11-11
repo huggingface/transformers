@@ -68,9 +68,11 @@ A compressed-tensors checkpoint stores its weights compressed (fp8, or packed in
 
 | Configuration | Weights after loading | Execution |
 |---------------|-----------------------|-----------|
-| default | left compressed | compressed-tensors owns the layers and decompresses the model on the first forward pass |
-| `dequantize=True` | dequantized to the model dtype (e.g. BF16) | regular dense matmuls, and the model can be fine-tuned or saved in that dtype |
+| default | kept in the compressed-tensors format: every serialized tensor (`weight_packed`, `weight_scale`, `weight_zero_point`, ...) loads as stored | compressed-tensors owns the layers and decompresses the model on the first forward pass |
+| `dequantize=True` | decompressed while loading into the model dtype (e.g. BF16) | a plain dense model with no `quantization_scheme` left, so w8a8 activations aren't quantized either; it can be fine-tuned or saved in that dtype |
 | `use_optimized_inference=True` | kept quantized | layers whose scheme has a kernel run through it, currently W8A8 fp8; inference only |
+
+With the default, [`~PreTrainedModel.save_pretrained`] writes the compressed tensors back unchanged, so a loaded model saves in the same compressed-tensors format.
 
 ## FP8 kernel acceleration
 
@@ -80,7 +82,8 @@ Pass `use_optimized_inference=True` to keep an FP8 compressed-tensors model in F
 |--------|--------|-------|
 | Intel XPU | `torch.nn.functional.scaled_mm` | All XPU devices with FP8 support |
 | NVIDIA CUDA (SM89+) | `torch.nn.functional.scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
-| CPU / CUDA SM80 (A100) | Fallback | `use_optimized_inference=True` is ignored, the model runs dequantized |
+| Apple silicon (MPS) | `torch.nn.functional.scaled_mm` | Requires torch >= 2.15 |
+| CPU / CUDA SM80 (A100) / MPS with torch < 2.15 | Fallback | `use_optimized_inference=True` is ignored, the model runs dequantized |
 
 The FP8 kernel path supports these quantization layouts.
 
@@ -109,7 +112,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ### Dequantizing at load time
 
-Without `use_optimized_inference=True`, the model takes the regular compressed-tensors route: the weights are left compressed and compressed-tensors decompresses them on the first forward pass. Pass `dequantize=True` to dequantize them during loading instead, which is what you want to fine-tune the model or save it in its original precision (e.g. BF16).
+Without `use_optimized_inference=True`, the model takes the regular compressed-tensors route: the weights are left compressed and compressed-tensors decompresses them on the first forward pass. Pass `dequantize=True` to decompress them during loading instead, which is what you want to fine-tune the model or save it in its original precision (e.g. BF16). The result is a plain dense model: no compressed-tensors scheme is attached, so activation quantization (e.g. w8a8) is dropped too.
 
 ```python
 from transformers import AutoModelForCausalLM, CompressedTensorsConfig
@@ -183,7 +186,7 @@ For a more detailed look at the model weights, use the [safetensors viewer](http
 
 When loading a compressed-tensors model with the [`~quantizers.HFQuantizer`] integration, the targeted modules are handed over to compressed-tensors: it attaches the resolved `quantization_scheme`, sets `quantization_status`, registers the parameters the checkpoint stores (`weight` in fp8, plus `weight_scale` and, for a static strategy, `input_scale`) and installs its own forward pass over them. They stay [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) instances, so that is what `print` shows — recent compressed-tensors versions no longer wrap them in a `CompressedLinear` subclass. Modules listed under `ignore`, such as `lm_head`, are left untouched.
 
-With `dequantize=False` (the default), the weights are still compressed once loading is over, and compressed-tensors decompresses the whole model on the first forward pass. `dequantize=True` does it during loading instead, so no forward pass is needed to get dense weights.
+With `dequantize=False` (the default), the weights are still compressed once loading is over, and compressed-tensors decompresses the whole model on the first forward pass. `dequantize=True` decompresses each weight while loading it instead, so no forward pass is needed to get dense weights, and the modules are plain dense layers with no `quantization_scheme`.
 
 ```python
 import torch

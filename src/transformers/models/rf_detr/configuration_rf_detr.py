@@ -20,7 +20,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -165,7 +165,19 @@ class RfDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "rf_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="rf_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     hidden_expansion: float = 0.5

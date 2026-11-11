@@ -18,7 +18,7 @@ import json
 from collections.abc import Mapping
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import PreTrainedTokenizer
@@ -179,10 +179,10 @@ class LukeTokenizer(TokenizersBackend):
             The maximum length of `entity_ids`.
         max_mention_length (`int`, *optional*, defaults to 30):
             The maximum number of tokens inside an entity span.
-        entity_token_1 (`str`, *optional*, defaults to `<ent>`):
+        entity_1_token (`str`, *optional*, defaults to `<ent>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_classification"` or `"entity_pair_classification"`.
-        entity_token_2 (`str`, *optional*, defaults to `<ent2>`):
+        entity_2_token (`str`, *optional*, defaults to `<ent2>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_pair_classification"`.
         errors (`str`, *optional*, defaults to `"replace"`):
@@ -249,8 +249,8 @@ class LukeTokenizer(TokenizersBackend):
         task=None,
         max_entity_length=32,
         max_mention_length=30,
-        entity_token_1="<ent>",
-        entity_token_2="<ent2>",
+        entity_1_token="<ent>",
+        entity_2_token="<ent2>",
         entity_unk_token="[UNK]",
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
@@ -258,6 +258,9 @@ class LukeTokenizer(TokenizersBackend):
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
+
+        entity_1_token = kwargs.pop("entity_token_1", entity_1_token)
+        entity_2_token = kwargs.pop("entity_token_2", entity_2_token)
 
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
@@ -324,15 +327,15 @@ class LukeTokenizer(TokenizersBackend):
         self.max_mention_length = max_mention_length
 
         # Add entity tokens to extra_special_tokens
-        entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False)
-            if isinstance(entity_token_1, str)
-            else entity_token_1
+        entity_1_token = (
+            AddedToken(entity_1_token, lstrip=False, rstrip=False)
+            if isinstance(entity_1_token, str)
+            else entity_1_token
         )
-        entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False)
-            if isinstance(entity_token_2, str)
-            else entity_token_2
+        entity_2_token = (
+            AddedToken(entity_2_token, lstrip=False, rstrip=False)
+            if isinstance(entity_2_token, str)
+            else entity_2_token
         )
         # Handle extra/legacy special tokens (v4 hub files compat)
         extra_tokens: list[AddedToken | str] = []
@@ -342,7 +345,7 @@ class LukeTokenizer(TokenizersBackend):
 
         # Ensure LUKE entity tokens are present exactly once.
         seen = {str(token) for token in extra_tokens}
-        for token in (entity_token_1, entity_token_2):
+        for token in (entity_1_token, entity_2_token):
             token_str = str(token)
             if token_str not in seen:
                 extra_tokens.append(token)
@@ -358,8 +361,7 @@ class LukeTokenizer(TokenizersBackend):
         self.special_tokens_pattern = special_tokens_pattern
         self.token_type_ids_include_special_tokens = token_type_ids_include_special_tokens
 
-        # Set clean_up_tokenization_spaces=True by default to match old Python tokenizer behavior
-        kwargs.setdefault("clean_up_tokenization_spaces", True)
+        kwargs.setdefault("clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output", True)
 
         super().__init__(
             errors=errors,
@@ -374,14 +376,19 @@ class LukeTokenizer(TokenizersBackend):
             task=task,
             max_entity_length=max_entity_length,
             max_mention_length=max_mention_length,
-            entity_token_1=str(entity_token_1),
-            entity_token_2=str(entity_token_2),
+            entity_1_token=str(entity_1_token),
+            entity_2_token=str(entity_2_token),
             entity_unk_token=entity_unk_token,
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
             entity_mask2_token=entity_mask2_token,
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if it was passed as data
             **kwargs,
+        )
+
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            (str(self.sep_token), self.sep_token_id),
+            (str(self.cls_token), self.cls_token_id),
         )
 
     def build_inputs_with_special_tokens(
@@ -400,27 +407,6 @@ class LukeTokenizer(TokenizersBackend):
         self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         return PreTrainedTokenizer.create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1)
-
-    def _decode(
-        self,
-        token_ids: int | list[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool | None = None,
-        **kwargs,
-    ) -> str:
-        text = super()._decode(
-            token_ids, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=False, **kwargs
-        )
-
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
-
-        return text
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
@@ -974,12 +960,8 @@ class LukeTokenizer(TokenizersBackend):
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
-            )
+            first_ids = first_ids[:entity_token_end] + [self.entity_1_token_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [self.entity_1_token_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1000,8 +982,8 @@ class LukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.extra_special_tokens_ids[0]),
-                (tail_token_span, self.extra_special_tokens_ids[1]),
+                (head_token_span, self.entity_1_token_id),
+                (tail_token_span, self.entity_2_token_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)

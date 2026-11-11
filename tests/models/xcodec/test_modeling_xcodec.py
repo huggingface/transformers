@@ -158,7 +158,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip(reason="The XcodecModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
@@ -263,7 +263,7 @@ See here: https://github.com/huggingface/transformers/pull/39793#issue-327740738
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/xcodec/integration_tests.json"
 
-with open(RESULTS_PATH, "r") as f:
+with open(RESULTS_PATH, "r", encoding="utf-8") as f:
     raw_data = json.load(f)
 
 # convert dicts into tuples ordered to match test args

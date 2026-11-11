@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -108,7 +108,10 @@ class T5GemmaConfig(PreTrainedConfig):
 
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
+    sub_configs_defaults = {
+        "encoder": T5GemmaModuleConfig,
+        "decoder": T5GemmaModuleConfig,
+    }
 
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
     decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
@@ -120,16 +123,7 @@ class T5GemmaConfig(PreTrainedConfig):
     vocab_size: int = 256000
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder, dict):
-            self.encoder = T5GemmaModuleConfig(**self.encoder)
-        elif self.encoder is None:
-            self.encoder = T5GemmaModuleConfig()
-
-        if isinstance(self.decoder, dict):
-            self.decoder = T5GemmaModuleConfig(**self.decoder)
-        elif self.decoder is None:
-            self.decoder = T5GemmaModuleConfig()
-
+        super().__post_init__(**kwargs)
         self.encoder.is_decoder = False
         self.encoder.dropout_rate = self.dropout_rate
         self.encoder.attention_dropout = self.attention_dropout
@@ -144,9 +138,7 @@ class T5GemmaConfig(PreTrainedConfig):
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
-
-        super().__post_init__(**kwargs)
+                setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
@@ -277,7 +269,7 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor,]:
+    ) -> tuple[torch.Tensor,]:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -336,7 +328,7 @@ class T5GemmaDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.pre_self_attn_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -475,7 +467,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         "hidden_states": T5GemmaEncoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -500,7 +492,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -559,7 +551,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         "hidden_states": T5GemmaDecoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -585,7 +577,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
@@ -686,7 +678,7 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
@@ -762,7 +754,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -810,28 +802,24 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
+    ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -854,9 +842,8 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = decoder_outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         decoder_config = self.get_decoder().config
         if decoder_config.final_logit_softcapping is not None:
             logits = logits / decoder_config.final_logit_softcapping
@@ -1001,8 +988,8 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         decoder_attention_mask: torch.Tensor | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
@@ -1010,10 +997,6 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
             config.decoder.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if self.config.is_encoder_decoder and (input_ids is None and inputs_embeds is not None):
             raise NotImplementedError(
@@ -1143,8 +1126,8 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
         decoder_attention_mask: torch.Tensor | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:

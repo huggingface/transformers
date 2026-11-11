@@ -359,7 +359,7 @@ class EncoderDecoderMixin:
         model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         model.to(torch_device)
         model.train()
-        model.gradient_checkpointing_enable()
+        model.activation_checkpointing_enable()
         model.config.decoder_start_token_id = 0
         model.config.pad_token_id = 0
 
@@ -1136,8 +1136,9 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_handwritten(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
-        image = dataset[1]["image"].convert("RGB")
+        image = Image.open(
+            hf_hub_download("hf-internal-testing/fixtures_ocr", "iam_picture.jpeg", repo_type="dataset")
+        ).convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
@@ -1161,8 +1162,9 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_printed(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
-        image = dataset[0]["image"].convert("RGB")
+        image = Image.open(
+            hf_hub_download("hf-internal-testing/fixtures_ocr", "SROIE-receipt.jpeg", repo_type="dataset")
+        ).convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)

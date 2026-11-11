@@ -27,7 +27,7 @@ import torch.nn as nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ..auto import AutoModel
@@ -42,23 +42,23 @@ from .configuration_deepseek_vl import DeepseekVLConfig
 @dataclass
 class DeepseekVLBaseModelOutputWithPast(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
 
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -69,28 +69,28 @@ class DeepseekVLBaseModelOutputWithPast(ModelOutput):
 @dataclass
 class DeepseekVLCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
 
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: tuple[torch.Tensor] | None = None
 
 
 class DeepseekVLAligner(nn.Module):
@@ -127,7 +127,7 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DeepseekVLModel(DeepseekVLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
         self.config = config
 
@@ -143,7 +143,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
@@ -151,7 +151,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         return vision_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -179,25 +179,32 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> DeepseekVLBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, return_dict=True).pooler_output
-            image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -210,7 +217,6 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -219,7 +225,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             past_key_values=lm_output.past_key_values,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -227,6 +233,7 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("text",)
     _can_compile_fullgraph = True
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
@@ -242,22 +249,17 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DeepseekVLCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -266,12 +268,12 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

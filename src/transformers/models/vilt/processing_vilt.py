@@ -17,29 +17,15 @@ Processor class for ViLT.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class ViltProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class ViltProcessor(ProcessorMixin):
-    valid_processor_kwargs = ViltProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ViltProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["ViltProcessor"]

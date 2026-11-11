@@ -31,6 +31,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -51,15 +52,6 @@ TOKEN_BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
 TOKEN_POINT_OPEN_STRING = "<0x02>"  # <point>
 TOKEN_POINT_CLOSE_STRING = "<0x03>"  # </point>
 BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
-
-
-class FuyuProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-        },
-    }
 
 
 # Simplified assuming self.crop_top = self.padding_top = 0
@@ -202,8 +194,6 @@ def construct_full_unpacked_stream(
 @requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
-    valid_processor_kwargs = FuyuProcessorKwargs
-
     @classmethod
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
@@ -240,9 +230,14 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs: Unpack[FuyuProcessorKwargs],
+        return_legacy_image_output: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> "BatchFeature":
         r"""
+        return_legacy_image_output (`bool`, *optional*, defaults to `True`):
+            Whether to return image inputs in legacy format or not. Note that legacy format is
+            deprecated and will be removed in v5.23.
+
         Returns:
             [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
 
@@ -254,7 +249,6 @@ class FuyuProcessor(ProcessorMixin):
         requires_backends(self, ["torch"])
 
         merged_kwargs = self._merge_kwargs(
-            FuyuProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -278,14 +272,19 @@ class FuyuProcessor(ProcessorMixin):
         processed_images = {}
         images_replacements = []
         if images is not None and hasattr(self, "image_processor"):
-            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(
+                images, return_legacy_image_output=return_legacy_image_output, **merged_kwargs["images_kwargs"]
+            )
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            # text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             # if there is an image associated with text, process location tags
@@ -392,7 +391,7 @@ class FuyuProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
-    def _process_images(self, images: ImageInput, **kwargs):
+    def _process_images(self, images: ImageInput, return_legacy_image_output: bool = True, **kwargs):
         processed_images = self.image_processor(images, **kwargs)
 
         batch_image_patches = []
@@ -424,7 +423,14 @@ class FuyuProcessor(ProcessorMixin):
             )
             image_replacements.append(replacement_text)
 
-        processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
+        if return_legacy_image_output:
+            processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
+            logger.warning_once(
+                "returning `image_patches` is deprecated, and we'll be returning `pixel_values` from v5.23. "
+                "Please pass `return_legacy_image_output=False` to get `pixel_values` in inputs."
+            )
+        else:
+            processed_images["pixel_values"] = torch.cat(batch_image_patches, dim=0)
         return processed_images, image_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -627,5 +633,7 @@ class FuyuProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         return list(tokenizer_input_names + ["image_patches"])
 
+
+__getattr__ = deprecate_attr(__name__, rename={"FuyuProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["FuyuProcessor"]

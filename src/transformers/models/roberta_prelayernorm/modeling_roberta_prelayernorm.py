@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -73,7 +73,7 @@ class RobertaPreLayerNormEmbeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if position_ids is None:
@@ -209,7 +209,7 @@ class RobertaPreLayerNormSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -276,8 +276,8 @@ class RobertaPreLayerNormCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -350,10 +350,10 @@ class RobertaPreLayerNormAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
-        past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: tuple[tuple[torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         hidden_states_pre_layer_norm = self.LayerNorm(hidden_states)
@@ -423,9 +423,9 @@ class RobertaPreLayerNormLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -477,9 +477,9 @@ class RobertaPreLayerNormEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -518,7 +518,7 @@ class RobertaPreLayerNormPooler(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
-    config_class = RobertaPreLayerNormConfig
+    config: RobertaPreLayerNormConfig
     base_model_prefix = "roberta_prelayernorm"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -563,7 +563,7 @@ class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
     """
 )
 class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaPreLayerNormConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -599,7 +599,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
@@ -713,7 +713,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -738,14 +738,14 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
-        past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: tuple[tuple[torch.Tensor]] | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -799,9 +799,8 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -829,7 +828,7 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     }
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -856,12 +855,12 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
@@ -875,10 +874,6 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
             >= 2. All the value in this tensor should be always < type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         outputs = self.roberta_prelayernorm(
             input_ids,
@@ -939,7 +934,7 @@ class RobertaPreLayerNormLMHead(nn.Module):
     """
 )
 class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -956,10 +951,10 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
@@ -973,10 +968,6 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
             >= 2. All the value in this tensor should be always < type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         outputs = self.roberta_prelayernorm(
             input_ids,
@@ -1026,7 +1017,7 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         self.roberta_prelayernorm = RobertaPreLayerNormModel(config)
@@ -1042,10 +1033,10 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
@@ -1065,16 +1056,12 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
             >= 2. All the value in this tensor should be always < type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1123,7 +1110,7 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
 
 @auto_docstring
 class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1143,10 +1130,10 @@ class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedMod
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
@@ -1160,8 +1147,6 @@ class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedMod
             >= 2. All the value in this tensor should be always < type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs = self.roberta_prelayernorm(
             input_ids,
@@ -1218,7 +1203,7 @@ class RobertaPreLayerNormClassificationHead(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1234,10 +1219,10 @@ class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

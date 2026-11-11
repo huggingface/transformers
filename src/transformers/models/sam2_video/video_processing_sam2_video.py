@@ -19,10 +19,11 @@ import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 
 
+@auto_docstring
 class Sam2VideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

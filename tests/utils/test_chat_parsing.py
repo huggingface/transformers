@@ -26,6 +26,7 @@ from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
+from transformers.utils.chat_parsing.response_templates import load_response_template
 
 
 cohere_template = {
@@ -37,7 +38,7 @@ cohere_template = {
             "close": "<|END_RESPONSE|>",
             "content": "text",
         },
-        "thinking": {
+        "reasoning_content": {
             "open": "<|START_THINKING|>",
             "close": "<|END_THINKING|>",
             "content": "text",
@@ -57,7 +58,7 @@ ernie_template = {
     "defaults": {"role": "assistant"},
     "start_anchor": "Assistant:",
     "fields": {
-        "thinking": {
+        "reasoning_content": {
             "open_pattern": r"(?:^|<think>\s*)",
             "close": "</think>",
             "content": "text",
@@ -82,7 +83,7 @@ gpt_oss_template = {
     "defaults": {"role": "assistant"},
     "start_anchor": "<|start|>assistant",
     "fields": {
-        "thinking": {
+        "reasoning_content": {
             "open": "<|channel|>analysis<|message|>",
             "close": "<|end|>",
             "content": "text",
@@ -107,7 +108,7 @@ smollm_template = {
     "defaults": {"role": "assistant"},
     "start_anchor": "<|im_start|>assistant\n",
     "fields": {
-        "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+        "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
         "tool_calls": {
             "open": "<tool_call>",
             "close": "</tool_call>",
@@ -127,7 +128,7 @@ qwen3_template = {
     "defaults": {"role": "assistant"},
     "start_anchor": "<|im_start|>assistant\n",
     "fields": {
-        "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+        "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
         "tool_calls": {
             "open_pattern": r"<tool_call>\s*<function=(?P<name>\w+)>",
             "close": "</tool_call>",
@@ -150,7 +151,7 @@ gemma4_template = {
     # model continues from there, so we accept either anchor and truncate past the latest one.
     "start_anchor": ["<|turn>model\n", "<tool_response|>"],
     "fields": {
-        "thinking": {
+        "reasoning_content": {
             "open": "<|channel>thought\n",
             "close": "<channel|>",
             "content": "text",
@@ -180,7 +181,7 @@ inkling_template = {
     "defaults": {"role": "assistant"},
     "start_anchor": "<|message_model|>",
     "fields": {
-        "thinking": {
+        "reasoning_content": {
             "open_pattern": r"(?:<\|message_model\|>)?[^<]*<\|content_thinking\|>",
             "close": "<|end_message|>",
             "repeats": True,
@@ -205,6 +206,39 @@ inkling_template = {
 }
 
 
+# Beam reopens `<|start|>assistant` before every channel; tool calls name the tool in that header (` to=NAME`).
+beam_template = {
+    "defaults": {"role": "assistant"},
+    "start_anchor_pattern": r"<\|start\|>assistant",
+    "fields": {
+        "thinking": {
+            "open": "<|channel|>analysis<|message|>",
+            "close": ["<|end|><|start|>assistant", "<|constrain|><|start|>assistant", "<|start|>assistant"],
+            "content": "text",
+        },
+        "content": {
+            "open": "<|channel|>final<|message|>",
+            "close": ["<|return|>", "<|end|>", "<|call|>"],
+            "content": "text",
+        },
+        "tool_calls": {
+            "open_pattern": r" to=(?P<name>[^\s<]+)<\|channel\|>analysis <\|constrain\|>xml<\|message\|>",
+            "close": ["<|end|><|start|>assistant", "<|call|>"],
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": (
+                    r'<rfl:parameter name="(?P<key>[^"]+)">\n(?P<value>.*?)\n'
+                    r'(?:</rfl:parameter>|(?=<rfl:parameter name="))'
+                ),
+                "value_parser": {"name": "text", "args": {"strip": False}},
+            },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+    },
+}
+
+
 class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_response_template_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -224,7 +258,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         )
         expected = {
             "role": "assistant",
-            "thinking": "I should call a tool.",
+            "reasoning_content": "I should call a tool.",
             "tool_calls": [
                 {
                     "type": "function",
@@ -328,7 +362,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, cohere_template, prefix=""),
             {
                 "role": "assistant",
-                "thinking": "I should call a tool.",
+                "reasoning_content": "I should call a tool.",
                 "tool_calls": [
                     {
                         "type": "function",
@@ -353,7 +387,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, ernie_template, prefix=""),
             {
                 "role": "assistant",
-                "thinking": (
+                "reasoning_content": (
                     "The user is asking about the weather in Paris today. Let me check the available tools. "
                     "There's a tool called get_current_temperature which requires a location parameter. Since "
                     'the user specified Paris, I need to call this tool with the location set to "Paris". I '
@@ -391,7 +425,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                     "Hello! I'm doing well, thank you for asking. How about you? Is there something specific "
                     "you'd like help with today? I'm here to assist you with any questions or problems you have!"
                 ),
-                "thinking": (
+                "reasoning_content": (
                     'The user just greeted me with "Hi! How are you?" I need to respond in a friendly and '
                     "helpful manner. Let me start by acknowledging their greeting. I should ask them how "
                     "they're doing to engage in conversation.\n\n"
@@ -419,7 +453,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, gpt_oss_template, prefix=""),
             {
                 "role": "assistant",
-                "thinking": (
+                "reasoning_content": (
                     'We need to respond in riddles. The user asks: "What is the weather like in SF?" We need '
                     "to get the location of the user? The user explicitly asks about SF (San Francisco). So "
                     "we need to get the current weather in San Francisco, CA. We need to call "
@@ -448,7 +482,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             {
                 "role": "assistant",
                 "content": "2",
-                "thinking": "User asks a simple math question: 2+2 = 4. Provide answer.",
+                "reasoning_content": "User asks a simple math question: 2+2 = 4. Provide answer.",
             },
         )
 
@@ -467,7 +501,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, smollm_template, prefix=""),
             {
                 "role": "assistant",
-                "thinking": (
+                "reasoning_content": (
                     'Okay, the user said, "Hello! How are you?" I need to respond appropriately. Since this '
                     "is the first message, I should greet them back and ask how I can assist. I should keep "
                     "it friendly and open-ended. Let me make sure the response is welcoming and encourages "
@@ -517,7 +551,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             {
                 "role": "assistant",
                 "content": "Some content about gravity goes here but I'm cutting it off to make this shorter!",
-                "thinking": (
+                "reasoning_content": (
                     'Okay, the user asked, "Hey! Can you tell me about gravity?" Let me start by breaking '
                     "down what they might be looking for. They probably want a basic understanding of "
                     "gravity, maybe for a school project or just personal curiosity. I should explain what "
@@ -562,7 +596,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, gemma4_template, prefix=""),
             {
                 "role": "assistant",
-                "thinking": (
+                "reasoning_content": (
                     "The user is asking for the current temperature in Paris. I should check the available "
                     "tools to see if there's a function that can provide this information."
                 ),
@@ -589,7 +623,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, gemma4_template, prefix=""),
             {
                 "role": "assistant",
-                "thinking": "Let me call the tool.",
+                "reasoning_content": "Let me call the tool.",
                 "tool_calls": [
                     {
                         "type": "function",
@@ -623,7 +657,7 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             parse_response(model_out, inkling_template, prefix=prefix),
             {
                 "role": "assistant",
-                "thinking": "Consider the weather. Tokyo, probably.",
+                "reasoning_content": "Consider the weather. Tokyo, probably.",
                 "content": "Checking the weather now.",
                 "tool_calls": [
                     {
@@ -632,6 +666,67 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                     }
                 ],
             },
+        )
+
+    def test_beam_thinking_and_tool_calls(self):
+        model_out = (
+            "<|channel|>analysis<|message|>I will check both cities.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter>\n'
+            '<rfl:parameter name="days">\n3\n</rfl:parameter><|end|>'
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            # A parameter missing its closing tag ends where the next one starts.
+            '<rfl:parameter name="city">\nNew York\n'
+            '<rfl:parameter name="days">\n3\n</rfl:parameter><|call|>'
+        )
+        prefix = "<|start|>user<|message|>Weather in Paris and New York?<|end|><|start|>assistant"
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}, "days": {"type": "integer"}},
+                    },
+                },
+            }
+        ]
+        self.assertEqual(
+            parse_response(model_out, beam_template, prefix=prefix, tools=tools),
+            {
+                "role": "assistant",
+                "thinking": "I will check both cities.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "Paris", "days": 3}},
+                    },
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "New York", "days": 3}},
+                    },
+                ],
+            },
+        )
+
+    def test_beam_final_answer_after_tool_result(self):
+        model_out = (
+            "<|channel|>analysis<|message|>The tool says it is sunny.<|end|>"
+            "<|start|>assistant<|channel|>final<|message|>It is sunny in Paris.<|return|>"
+        )
+        # Earlier assistant turns in the prefix must not leak into the parsed message.
+        prefix = (
+            "<|start|>user<|message|>Weather in Paris?<|end|>"
+            "<|start|>assistant<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter><|call|>'
+            "<|start|>get_weather to=assistant<|channel|>analysis<|message|>sunny<|end|>"
+            "<|start|>assistant"
+        )
+        self.assertEqual(
+            parse_response(model_out, beam_template, prefix=prefix),
+            {"role": "assistant", "thinking": "The tool says it is sunny.", "content": "It is sunny in Paris."},
         )
 
     def test_transform_dotted_paths(self):
@@ -707,18 +802,40 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<|assistant|>",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "repeats": True, "join": " "},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "repeats": True, "join": " "},
                 "content": {"repeats": True, "join": " "},
             },
         }
         self.assertEqual(
             parse_response("<think>first</think>middle<think>second</think>done", template_spec, prefix=""),
-            {"role": "assistant", "thinking": "first second", "content": "middle done"},
+            {"role": "assistant", "reasoning_content": "first second", "content": "middle done"},
         )
         self.assertEqual(
             parse_response("<think>only</think>", template_spec, prefix=""),
-            {"role": "assistant", "thinking": "only"},
+            {"role": "assistant", "reasoning_content": "only"},
         )
+
+    def test_mutable_defaults_not_shared_between_parses(self):
+        """A list default like `tool_calls: []` must be copied for each parse, not appended to in place."""
+        template_spec = {
+            "defaults": {"role": "assistant", "tool_calls": []},
+            "start_anchor": "<|assistant|>",
+            "fields": {
+                "tool_calls": {"open": "<tool_call>", "close": "</tool_call>", "content": "json", "repeats": True}
+            },
+        }
+        original = copy.deepcopy(template_spec)
+        loaded = load_response_template(template_spec)
+        text = '<tool_call>{"name": "f", "arguments": {}}</tool_call>'
+        expected = {"role": "assistant", "tool_calls": [{"name": "f", "arguments": {}}]}
+        for _ in range(2):
+            self.assertEqual(parse_response(text, template_spec, prefix=""), expected)
+            self.assertEqual(parse_response(text, loaded, prefix=""), expected)
+        # An untouched default is returned as-is, so mutating the result must not reach the template either
+        parse_response("", template_spec, prefix="")["tool_calls"].append("leak")
+        parse_response("", loaded, prefix="")["tool_calls"].append("leak")
+        self.assertEqual(template_spec, original)
+        self.assertEqual(parse_response("", loaded, prefix=""), {"role": "assistant", "tool_calls": []})
 
     def test_join_validation(self):
         no_repeats = {"start_anchor": "a", "fields": {"x": {"open": "<x>", "close": "</x>", "join": ""}}}
@@ -1012,6 +1129,15 @@ _STREAMING_FIXTURES = [
             "<|content_model_end_sampling|>"
         ),
     ),
+    (
+        "beam",
+        beam_template,
+        (
+            "<|channel|>analysis<|message|>Let me check.<|end|>"
+            "<|start|>assistant to=get_weather<|channel|>analysis <|constrain|>xml<|message|>"
+            '<rfl:parameter name="city">\nParis\n</rfl:parameter><|call|>'
+        ),
+    ),
 ]
 
 
@@ -1132,11 +1258,11 @@ class ResponseEventStreamTest(unittest.TestCase):
             elif ev["type"] == "region_close":
                 per_field_close_value[ev["field"]] = ev["value"]
 
-        # `thinking` is text → chunks are clean and concatenate to its value.
-        self.assertIn("thinking", per_field_chunks)
-        self.assertEqual(per_field_dirty["thinking"], {False})
-        self.assertEqual("".join(per_field_chunks["thinking"]), "I should call a tool.")
-        self.assertEqual(per_field_close_value["thinking"], "I should call a tool.")
+        # `reasoning_content` is text → chunks are clean and concatenate to its value.
+        self.assertIn("reasoning_content", per_field_chunks)
+        self.assertEqual(per_field_dirty["reasoning_content"], {False})
+        self.assertEqual("".join(per_field_chunks["reasoning_content"]), "I should call a tool.")
+        self.assertEqual(per_field_close_value["reasoning_content"], "I should call a tool.")
         # `tool_calls` is json → dirty chunks stream the raw body, parsed value on close.
         self.assertIn("tool_calls", per_field_chunks)
         self.assertEqual(per_field_dirty["tool_calls"], {True})
@@ -1155,7 +1281,7 @@ class ResponseEventStreamTest(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<|assistant|>",
             "fields": {
-                "thinking": {"open": "<t>", "close": "</t>", "content": "text"},
+                "reasoning_content": {"open": "<t>", "close": "</t>", "content": "text"},
                 "score": {"open": "<n>", "close": "</n>", "content": "int"},
                 "json_call": {"open": "<j>", "close": "</j>", "content": "json"},
                 "xml_call": {
@@ -1188,7 +1314,7 @@ class ResponseEventStreamTest(unittest.TestCase):
                 per_field_dirty.setdefault(ev["field"], set()).add(ev["dirty"])
 
         # Clean (streamable) regions.
-        for field in ("thinking", "score"):
+        for field in ("reasoning_content", "score"):
             self.assertEqual(per_field_dirty[field], {False}, f"{field} should be clean")
         # Dirty (structured) regions.
         for field in ("json_call", "xml_call", "kv_call"):
@@ -1196,7 +1322,7 @@ class ResponseEventStreamTest(unittest.TestCase):
 
         # Dirty chunks reconstruct the raw region body (un-parsed). Clean
         # chunks reconstruct the verbatim body too — stripping happens at close.
-        self.assertEqual("".join(per_field_chunks["thinking"]), "hello world")
+        self.assertEqual("".join(per_field_chunks["reasoning_content"]), "hello world")
         self.assertEqual("".join(per_field_chunks["score"]), "42")
         self.assertEqual("".join(per_field_chunks["json_call"]), '{"a": 1, "b": 2}')
         self.assertEqual("".join(per_field_chunks["xml_call"]), "<name=foo><age=10>")
@@ -1252,21 +1378,21 @@ class PrefixAndTruncationTest(unittest.TestCase):
         )
         generated = "Let me think...</think>"
         stream = ResponseParser(qwen3_template, prefix=prompt)
-        # The region_open for `thinking` surfaces via initial_events; the
+        # The region_open for `reasoning_content` surfaces via initial_events; the
         # caller replays it before feeding model output.
         self.assertEqual(
             [(e["type"], e["field"]) for e in stream.initial_events],
-            [("region_open", "thinking"), ("region_chunk", "thinking")],
+            [("region_open", "reasoning_content"), ("region_chunk", "reasoning_content")],
         )
         events = stream.feed(generated)
         result, _ = stream.finalize()
-        # thinking ends up with the prefill + generated body; text parser strips,
+        # reasoning_content ends up with the prefill + generated body; text parser strips,
         # so the leading "\n" from the prefix is trimmed in the final value.
-        self.assertEqual(result, {"role": "assistant", "thinking": "Let me think..."})
+        self.assertEqual(result, {"role": "assistant", "reasoning_content": "Let me think..."})
         # The feed stream only sees the rest of the body and the close; the
         # prefill already emitted region_open.
         self.assertEqual([e["type"] for e in events], ["region_chunk", "region_close"])
-        self.assertEqual(events[1]["field"], "thinking")
+        self.assertEqual(events[1]["field"], "reasoning_content")
 
     def test_prefix_truncated_to_last_anchor(self):
         """Multiple `<|im_start|>assistant\\n` anchors in the prefix (multi-turn
@@ -1279,14 +1405,14 @@ class PrefixAndTruncationTest(unittest.TestCase):
             "<|im_start|>assistant\n<think>\n"
         )
         stream = ResponseParser(qwen3_template, prefix=prompt)
-        # We landed inside `thinking` (from the LAST assistant turn's `<think>\n`),
+        # We landed inside `reasoning_content` (from the LAST assistant turn's `<think>\n`),
         # not in some earlier-turn artifact.
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]
-        self.assertEqual([e["field"] for e in opens], ["thinking"])
+        self.assertEqual([e["field"] for e in opens], ["reasoning_content"])
         # No earlier-turn content leaked into output.
         stream.feed("done</think>")
         stream.finalize()
-        self.assertEqual(stream._output, {"role": "assistant", "thinking": "done"})
+        self.assertEqual(stream._output, {"role": "assistant", "reasoning_content": "done"})
 
     def test_template_without_anchor_rejected_at_load(self):
         """A template missing both `start_anchor` and `start_anchor_pattern` is
@@ -1305,10 +1431,10 @@ class PrefixAndTruncationTest(unittest.TestCase):
         prompt = "<think>\n"  # no <|im_start|>assistant\n
         stream = ResponseParser(qwen3_template, prefix=prompt)
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]
-        self.assertEqual([e["field"] for e in opens], ["thinking"])
+        self.assertEqual([e["field"] for e in opens], ["reasoning_content"])
         stream.feed("hi</think>")
         stream.finalize()
-        self.assertEqual(stream._output, {"role": "assistant", "thinking": "hi"})
+        self.assertEqual(stream._output, {"role": "assistant", "reasoning_content": "hi"})
 
     def test_round_trip_equivalence_prefix_streaming_vs_oneshot(self):
         """The load-bearing property: `prefix=p` + chunked `feed(g)` produces the
@@ -1321,7 +1447,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
             if "thinking" not in gen_text and "<think>" not in gen_text:
                 continue
             # Only fixtures whose generation text is compatible with starting
-            # inside `thinking`. Restrict to qwen3 / smollm shape for clarity.
+            # inside `reasoning_content`. Restrict to qwen3 / smollm shape for clarity.
             if name not in ("qwen3", "smollm"):
                 continue
             tmpl_with_anchor = {**tmpl_dict, "start_anchor": "<|im_start|>assistant\n"}
@@ -1360,7 +1486,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         )
         self.assertEqual(
             parse_response(gpt_oss_gen, gpt_oss_template, prefix=""),
-            {"role": "assistant", "thinking": "thinking", "content": "answer"},
+            {"role": "assistant", "reasoning_content": "thinking", "content": "answer"},
         )
 
     def test_prefix_with_open_close_inside_truncated_region(self):
@@ -1411,7 +1537,7 @@ class PrefixAndTruncationTest(unittest.TestCase):
         types = [e["type"] for e in events]
         self.assertIn("region_open", types)  # think opens during feed, not prefill
         stream.finalize()
-        self.assertEqual(stream._output, {"role": "assistant", "thinking": "real body"})
+        self.assertEqual(stream._output, {"role": "assistant", "reasoning_content": "real body"})
 
     def test_prefix_token_ids_decoded(self):
         """The tokenizer-level helper accepts token IDs as prefix (decoded
@@ -1451,10 +1577,10 @@ class PrefixAndTruncationTest(unittest.TestCase):
         prefix = "<|im_start|>assistant\n<think>\n"
         stream = tokenizer.get_response_parser(prefix=prefix)
         opens = [e for e in stream.initial_events if e["type"] == "region_open"]
-        self.assertEqual([e["field"] for e in opens], ["thinking"])
+        self.assertEqual([e["field"] for e in opens], ["reasoning_content"])
         stream.feed("body</think>")
         result, _ = stream.finalize()
-        self.assertEqual(result, {"role": "assistant", "thinking": "body"})
+        self.assertEqual(result, {"role": "assistant", "reasoning_content": "body"})
 
 
 # xml-inline without a value_parser: parameter bodies stay raw strings until tools= coerces them.
@@ -1562,6 +1688,14 @@ class ToolArgCoercionTest(unittest.TestCase):
     def test_coerce_falls_back_to_raw_on_failure(self):
         self.assertEqual(_coerce("not-a-number", ("integer",)), "not-a-number")
 
+    def test_coerce_integer_accepts_whole_number_floats(self):
+        self.assertEqual(_coerce("3.0", ("integer",)), 3)
+        self.assertIsInstance(_coerce("3.0", ("integer",)), int)
+        self.assertEqual(_coerce("3.5", ("integer",)), "3.5")
+        self.assertEqual(_coerce("3.5", ("integer", "number")), 3.5)
+        self.assertEqual(_coerce("inf", ("integer",)), "inf")
+        self.assertEqual(_coerce("NaN", ("integer",)), "NaN")
+
     def test_coerce_handles_any_of_and_null(self):
         self.assertEqual(_coerce("5", ("integer", "null")), 5)
         self.assertIsNone(_coerce("null", ("integer", "null")))
@@ -1596,6 +1730,7 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
         self.assertEqual(_schema_types({"type": ["integer", "string"]}), ("integer", "string"))
         self.assertEqual(_schema_types({"anyOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
+        self.assertEqual(_schema_types({"oneOf": [{"type": "number"}, {"type": "null"}]}), ("number", "null"))
         self.assertEqual(_schema_types({"type": "integer", "nullable": True}), ("integer", "null"))
         # Undescribed parameters resolve to no candidate types, making coercion a no-op.
         self.assertEqual(_schema_types({"description": "no type"}), ())
@@ -1606,6 +1741,11 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
         self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true", "label": "wake up"})
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
+
+    def test_parse_response_tools_coerces_one_of_string_args(self):
+        tools = _set_alarm_tools(hour={"oneOf": [{"type": "integer"}, {"type": "null"}]})
+        parsed = parse_response(_SET_ALARM_CALL, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools)
+        self.assertEqual(_first_tool_args(parsed)["hour"], 7)
 
     def test_streaming_tools_coerces_on_region_close(self):
         # Coercion must land on the region_close event during feed(), not only after finalize().
@@ -1702,6 +1842,15 @@ class ToolArgCoercionTest(unittest.TestCase):
         call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": ["7", "x", 9]}}}
         parser._coerce_tool_calls(call)
         self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
+
+    def test_already_decoded_array_is_not_cast_element_wise(self):
+        tools = _set_alarm_tools(groups={"type": "array", "items": {"type": "string"}})
+        call = {
+            "type": "function",
+            "function": {"name": "set_alarm", "arguments": {"groups": ["[1,2]", "[]"]}},
+        }
+        _parser_with_tools(tools)._coerce_tool_calls(call)
+        self.assertEqual(call["function"]["arguments"], {"groups": ["[1,2]", "[]"]})
 
     def test_coerce_tool_calls_ignores_unusable_function_name(self):
         # A transform can hand us a name parsed from model output, so a non-string name

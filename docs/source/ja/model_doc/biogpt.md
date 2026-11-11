@@ -27,7 +27,7 @@ BioGPT モデルは、[BioGPT: generative pre-trained transformer for biomedical
 ## Usage tips
 
 - BioGPT は絶対位置埋め込みを備えたモデルであるため、通常は入力を左側ではなく右側にパディングすることをお勧めします。
-- BioGPT は因果言語モデリング (CLM) 目的でトレーニングされているため、シーケンス内の次のトークンを予測するのに強力です。 run_generation.py サンプル スクリプトで確認できるように、この機能を利用すると、BioGPT は構文的に一貫したテキストを生成できます。
+- BioGPT は因果言語モデリング (CLM) 目的でトレーニングされているため、シーケンス内の次のトークンを予測するのに強力です。この機能を利用すると、BioGPT は構文的に一貫したテキストを生成できます。
 - モデルは、以前に計算されたキーと値のアテンション ペアである`past_key_values`(PyTorch の場合) を入力として受け取ることができます。この (past_key_values または past) 値を使用すると、モデルがテキスト生成のコンテキストで事前に計算された値を再計算できなくなります。 PyTorch の使用法の詳細については、BioGptForCausalLM.forward() メソッドの past_key_values 引数を参照してください。
 
 このモデルは、[kamalkraj](https://huggingface.co/kamalkraj) によって提供されました。元のコードは [ここ](https://github.com/microsoft/BioGPT) にあります。

@@ -68,9 +68,27 @@ audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_value
 
 [[autodoc]] MimiConfig
 
+## MimiEncoderConfig
+
+[[autodoc]] MimiEncoderConfig
+
+## MimiDecoderConfig
+
+[[autodoc]] MimiDecoderConfig
+
 ## MimiModel
 
 [[autodoc]] MimiModel
     - decode
     - encode
+    - forward
+
+## MimiEncoderModel
+
+[[autodoc]] MimiEncoderModel
+    - forward
+
+## MimiDecoderModel
+
+[[autodoc]] MimiDecoderModel
     - forward

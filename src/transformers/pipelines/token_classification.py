@@ -4,7 +4,6 @@ from typing import Any, overload
 
 import numpy as np
 
-from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
@@ -137,6 +136,8 @@ class TokenClassificationPipeline(ChunkPipeline):
         super().__init__(**kwargs)
 
         self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
+
+        from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser

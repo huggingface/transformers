@@ -21,13 +21,22 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import is_typeddict
+from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import ProcessorMixin
-from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
+from transformers.processing_utils import (
+    MODALITY_TO_AUTOPROCESSOR_MAPPING,
+    AudioKwargs,
+    ImagesKwargs,
+    OmniModalProcessingKwargs,
+    OmniModalProcessorMixin,
+    ProcessingKwargs,
+    TextKwargs,
+    VideosKwargs,
+)
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_librosa,
@@ -36,6 +45,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import get_video_size
 
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -75,11 +85,13 @@ MODALITY_TEST_SPECS = {
         "component_key": "tokenizer",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
     "images": {
         "component_key": "image_processor",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+        "valid_kwargs_key": "valid_kwargs",
     },
     "videos": {
         "component_key": "video_processor",
@@ -90,6 +102,7 @@ MODALITY_TEST_SPECS = {
             "do_rescale": True,
             "rescale_factor": -1.0,
         },
+        "valid_kwargs_key": "valid_kwargs",
     },
     "audio": {
         # Either a raw feature_extractor or an audio_processor attribute
@@ -97,6 +110,7 @@ MODALITY_TEST_SPECS = {
         "component_key": None,
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
 }
 
@@ -156,6 +170,9 @@ class ProcessorTesterMixin:
 
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
+
+    # Role used in chat template tests. Override in subclasses whose template expects another role.
+    chat_template_user_role = "user"
 
     @classmethod
     def setUpClass(cls):
@@ -789,38 +806,40 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
 
-        if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
-            self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
+        if not (
+            "text" in input_args
+            and "images" in input_args
+            and hasattr(processor, "image_processor")
+            and hasattr(processor, "tokenizer")
+        ):
+            self.skipTest(f"{self.processor_class} doesn't support images with text.")
 
         # Prepare inputs and filter by input signature. Make sure to use a high batch size, we'll set some
         # samples to text-only later
-        text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
         image_inputs = self.prepare_images_inputs(batch_size=3)
-        video_inputs = self.prepare_videos_inputs(batch_size=3)
-        inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
-        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"images": image_inputs_nested}
+        modalities = ["image"]
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
         # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
-        if "videos" in inputs_dict:
+        if "videos" in input_args and hasattr(processor, "video_processor"):
+            video_inputs = self.prepare_videos_inputs(batch_size=3)
+            inputs_dict_nested["videos"] = [[video] for video in video_inputs]
+            modalities.append("video")
             processing_kwargs["do_sample_frames"] = False
 
         # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
-        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
-        video_inputs_nested = [[video] for video in video_inputs]
-        inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_nested = {k: v for k, v in inputs_dict_nested.items() if k in input_args}
+        text = self.prepare_text_inputs(batch_size=3, modalities=modalities)
+        inputs_dict_nested["text"] = text
         inputs = processor(**inputs_dict_nested, **processing_kwargs)
         self.assertTrue(self.text_input_name in inputs)
 
         # Now call with one of the samples with no associated vision input. Let's set the first input to be a plain text
         # with no placeholder tokens and no images/videos. The final format would be `images = [[], [image2], [image3]]`
         plain_text = "lower newer"
-        image_inputs_nested[0] = []
-        video_inputs_nested[0] = []
-        text[0] = plain_text
-        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_no_vision = {k: v for k, v in inputs_dict_no_vision.items() if k in input_args}
+        inputs_dict_no_vision = {key: [[]] + value[1:] for key, value in inputs_dict_nested.items() if key != "text"}
+        inputs_dict_no_vision["text"] = [plain_text] + text[1:]
         inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
 
         # Check that text samples are same and are expanded with placeholder tokens correctly. First sample
@@ -866,6 +885,54 @@ class ProcessorTesterMixin:
                 processor_kwargs={"padding": True},
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
+
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        """
+        Tests that vision models raise an error when number of data doesn't match number
+        of special token in input text.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if not ("text" in input_args and hasattr(processor, "tokenizer")):
+            self.skipTest(f"{self.processor_class} doesn't accpet text inputs.")
+
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+        if (
+            "images" in input_args
+            and getattr(processor, "image_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
+        ):
+            image_inputs = self.prepare_images_inputs(batch_size=4)
+            image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["image"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(images=image_inputs_nested, text=text, **processing_kwargs)
+
+        if (
+            "videos" in input_args
+            and getattr(processor, "video_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
+        ):
+            video_inputs = self.prepare_videos_inputs(batch_size=4)
+            videos = [[video] for video in video_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["video"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(videos=videos, text=text, do_sample_frames=False, **processing_kwargs)
+
+        if (
+            "audio" in input_args
+            and getattr(processor, "audio_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_audio_token")
+        ):
+            audio_inputs = self.prepare_audio_inputs(batch_size=4)
+            text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(audio=audio_inputs, text=text, **processing_kwargs)
 
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
@@ -1117,7 +1184,10 @@ class ProcessorTesterMixin:
 
         inputs = processor(**inputs_dict, **extra_kwargs, text_kwargs={}, return_tensors="pt")
         for k, v in inputs.items():
-            self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
+            if k in processor.skip_tensor_conversion:
+                self.assertNotIsInstance(v, torch.Tensor, msg=f"{k} should not be a torch.Tensor")
+            else:
+                self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
 
     def test_args_overlap_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -1140,7 +1210,7 @@ class ProcessorTesterMixin:
         processor.chat_template = "test template"
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor.save_pretrained(tmpdirname)
-            with open(Path(tmpdirname, "chat_template.json"), "w") as fp:
+            with open(Path(tmpdirname, "chat_template.json"), "w", encoding="utf-8") as fp:
                 json.dump({"chat_template": processor.chat_template}, fp)
             os.remove(Path(tmpdirname, "chat_template.jinja"))
 
@@ -1281,7 +1351,10 @@ class ProcessorTesterMixin:
         # Qwen-style pixels don't scale with bs same way as other models
         # calculate expected video token count based on video_grid_thw
         if (grid_thw := out_dict.get(f"{modality}_grid_thw")) is not None:
-            mm_len = sum([thw[0] * thw[1] * thw[2] for thw in grid_thw])
+            mm_len = sum(thw[0] * thw[1] * thw[2] for thw in grid_thw)
+        elif (num_frames_per_video := out_dict.get("num_frames_per_video")) is not None:
+            # Models that concatenate the frames of every video along a single axis
+            mm_len = sum(num_frames_per_video)
         else:
             mm_len = batch_size
 
@@ -1289,7 +1362,10 @@ class ProcessorTesterMixin:
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
-            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
+            if k in processor.skip_tensor_conversion:
+                self.assertNotIsInstance(out_dict[k], (torch.Tensor, np.ndarray))
+            else:
+                self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
         # Test continue from final message
         assistant_message = {
@@ -1323,6 +1399,56 @@ class ProcessorTesterMixin:
                 "audio_processor",
                 MODALITY_INPUT_DATA["audio"],
             )
+
+    @require_librosa
+    def test_chat_template_audio_sampling_rate(self):
+        """Audio decoded by `apply_chat_template` reaches the processor with the `sampling_rate` it was decoded at,
+        so audio processors don't warn about a missing one. Users may pass it flat or nested under `audio_kwargs`,
+        and a nested one must be forwarded as-is instead of being duplicated by a flat one."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        audio_processor = getattr(processor, "feature_extractor", getattr(processor, "audio_processor", None))
+        if audio_processor is None:
+            self.skipTest(f"{self.processor_class} has no audio processor")
+
+        sampling_rate = audio_processor.sampling_rate
+        messages = [
+            {
+                "role": self.chat_template_user_role,
+                "content": [
+                    {"type": "audio", "url": MODALITY_INPUT_DATA["audio"][0]},
+                    {"type": "text", "text": "What is happening in this audio?"},
+                ],
+            },
+        ]
+
+        for processor_kwargs in [
+            None,
+            {"sampling_rate": sampling_rate},
+            {"audio_kwargs": {"sampling_rate": sampling_rate}},
+            {"sampling_rate": None},
+            {"audio_kwargs": {"sampling_rate": None}},
+        ]:
+            with patch.object(
+                type(processor), "__call__", autospec=True, side_effect=type(processor).__call__
+            ) as mocked_call:
+                out_dict = processor.apply_chat_template(
+                    messages,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                    processor_kwargs=processor_kwargs,
+                )
+
+            call_kwargs = mocked_call.call_args.kwargs
+            passed_sampling_rate = call_kwargs.get(
+                "sampling_rate", call_kwargs.get("audio_kwargs", {}).get("sampling_rate")
+            )
+            self.assertEqual(passed_sampling_rate, sampling_rate)
+            self.assertIn(self.audio_input_name, out_dict)
 
     @require_torchcodec
     @parameterized.expand([(1, "pt")])
@@ -1423,34 +1549,32 @@ class ProcessorTesterMixin:
                 processor_kwargs={"do_sample_frames": True},
             )
 
-    @require_librosa
     @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest(f"{self.processor_class} does not support video inputs")
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"{self.processor_class.__name__} does not support video inputs")
 
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
-            or "audio_processor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
         ):
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+            self.skipTest(f"{self.processor_class.__name__} does not support audio inputs")
 
-        video_file_path = hf_hub_download(
-            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
+        video_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
-        messages = [
+        video_expected_shape = processor.video_processor(videos=video_file_path)[self.videos_input_name].shape
+
+        Video_audio_message = [
             {
                 "role": "user",
                 "content": [
                     {"type": "video", "path": video_file_path},
+                    {"type": "audio"},
                     {"type": "text", "text": "Which of these animals is making the sound?"},
                 ],
             },
@@ -1466,25 +1590,52 @@ class ProcessorTesterMixin:
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
         out_dict = processor.apply_chat_template(
-            messages,
+            Video_audio_message,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            load_audio_backend="torchcodec",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.videos_input_name in out_dict)
 
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
+
+        audio_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
+        )
+        audio_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file_path},
+                    {"type": "text", "text": "What do you hear in this track?"},
+                ],
+            },
+        ]
+        out_dict = processor.apply_chat_template(
+            [Video_audio_message, audio_message],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            load_audio_backend="torchcodec",
+            load_audio_from_video=True,
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[0], 2)
+        self.assertEqual(out_dict["attention_mask"].shape[0], 2)
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""
@@ -1531,72 +1682,76 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
+        # The second conversation is shorter, so it gets padded when the two are batched together
         messages = [
             [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is the capital of France?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of France is Paris."},
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What about Italy?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of Italy is Rome."},
-                    ],
-                },
-            ]
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of France is Paris."}]},
+                {"role": "user", "content": [{"type": "text", "text": "What about Italy?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Italy is Rome."}]},
+            ],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of Spain?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Spain is Madrid."}]},
+            ],
         ]
-
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
-            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{% for content in message['content'] %}"
+            "{{ image_token if content['type'] == 'image' else content['text'] }}"
+            "{% endfor %}"
+            "{{'<|special_end|>' + '\n'}}"
             "{% elif (message['role'] == 'assistant')%}"
             "{{'<|special_start|>' + message['role'] + '\n'}}"
             "{% generation %}"
-            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>'}}"
             "{% endgeneration %}"
+            "{{'\n'}}"
             "{% endif %}"
             "{% endfor %}"
         )
 
-        inputs = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=False,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            return_assistant_tokens_mask=True,
-            chat_template=dummy_template,
+        # The tokenizer's own implementation on the text-only conversations is the reference for the assistant ids. Note
+        # that the generation span ends on a non-whitespace char above: `char_to_token` has no token for stripped whitespace
+        reference = processor.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_dict=True, return_assistant_tokens_mask=True, chat_template=dummy_template
         )
-        self.assertTrue("assistant_masks" in inputs)
-        self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
+        expected_ids = [
+            [token_id for token_id, is_assistant in zip(input_ids, assistant_mask) if is_assistant]
+            for input_ids, assistant_mask in zip(reference["input_ids"], reference["assistant_masks"])
+        ]
 
-        mask = inputs["assistant_masks"].bool()
-        assistant_ids = inputs["input_ids"][mask]
+        # Regression test for #44521: expanding each placeholder into N image tokens must not shift the assistant spans.
+        # Use several images in one turn and images in several turns, since every expansion shifts the spans after it
+        image_token = getattr(self, "image_token", None)
+        if image_token and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
+            for turn, num_images in ((0, 2), (2, 1)):
+                for _ in range(num_images):
+                    messages[0][turn]["content"].insert(0, {"type": "image", "image": self.prepare_images_inputs()})
 
-        assistant_text = (
-            "The capital of France is Paris.<|special_end|>\nThe capital of Italy is Rome.<|special_end|>\n"
-        )
+        # A single conversation first, then a batch mixing it with the text-only one. Padding tokens have `(0, 0)`
+        # offsets, so the spans must be mapped correctly whichever side the padding is on
+        for batch, padding_side in ((messages[:1], None), (messages, "right"), (messages, "left")):
+            inputs = processor.apply_chat_template(
+                batch,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                return_assistant_tokens_mask=True,
+                chat_template=dummy_template,
+                image_token=image_token,
+                padding=True,
+                padding_side=padding_side,
+            )
+            self.assertIn("assistant_masks", inputs)
+            self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
 
-        # Some tokenizers add extra spaces which aren't then removed when decoding, so we need to check token ids
-        # if we can't get identical text outputs
-        text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
-        ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
-        self.assertTrue(text_is_same or ids_is_same)
+            masks = inputs["assistant_masks"].bool()
+            for input_ids, mask, expected in zip(inputs["input_ids"], masks, expected_ids):
+                self.assertEqual(input_ids[mask].tolist(), expected)
 
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
@@ -1614,13 +1769,28 @@ class ProcessorTesterMixin:
             },
             {
                 "role": "assistant",
-                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
             },
         ]
 
         # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
         result = processor.apply_chat_template(messages, tokenize=True)
         self.assertIsInstance(result, list)
+
+        # Also test with explicit content=None (OpenAI returns this for tool-call-only messages)
+        messages_with_none = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+            },
+        ]
+        result_none = processor.apply_chat_template(messages_with_none, tokenize=True)
+        self.assertIsInstance(result_none, list)
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
@@ -1665,14 +1835,122 @@ class ProcessorTesterMixin:
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
         self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
 
+    def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if getattr(processor, "video_processor", None) is None:
+            self.skipTest("Processor has no video processor")
+
+        if "video_sizes" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count video tokens yet")
+
+        video_inputs = self.prepare_videos_inputs(batch_size=2)
+        # An odd frame count, so that the temporal padding of the counters is covered
+        video_inputs = [video_inputs[0][:7], video_inputs[1][:7, :, :, :200]]
+        video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
+
+        try:
+            num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes)
+        except AttributeError:
+            self.skipTest("Video processor doesn't support `get_num_of_video_patches` yet")
+        if num_video_tokens_from_helper["num_video_tokens"] is None:
+            self.skipTest("Processor doesn't count video tokens yet")
+
+        video_token = getattr(self, "video_token", "")
+        text = [f"This is a video {video_token}"] * len(video_inputs)
+        inputs = processor(
+            text=text,
+            videos=video_inputs,
+            padding=True,
+            do_sample_frames=False,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
+
+        # Test with two videos per single text
+        text = [f"These are two videos {video_token}{video_token}"] * len(video_inputs)
+        inputs = processor(
+            text=text,
+            videos=video_inputs * 2,
+            padding=True,
+            do_sample_frames=False,
+            return_mm_token_type_ids=True,
+            return_tensors="pt",
+        )
+
+        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
+        self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
+
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if processor._audio_processor is None:
+            self.skipTest("Processor has no audio processor")
+
+        if "audio_lengths" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count audio tokens yet")
+
+        sampling_rate = processor._audio_processor.sampling_rate
+        # Lengths that aren't a multiple of the hop length, so that the frame rounding of the counters is covered
+        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate) + 50]
+        audio_inputs = [np.zeros(length, dtype=np.float32) for length in audio_lengths]
+
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+
+        audio_token = getattr(self, "audio_token", "")
+        text = [f"This is an audio {audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
+
+        # Test with two audios per single text
+        text = [f"These are two audios {audio_token}{audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs * 2, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths * 2)
+        self.assertEqual(sum(num_audio_tokens_from_call), sum(num_audio_tokens_from_helper["num_audio_tokens"]))
+
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):
         """
         Updated processor need to override a `replace_xxx_method` which is the only
         reliable way to tell if processor is old format or not.
         """
+        parent_class = processor_class.__mro__[1]
         child_method = getattr(processor_class, method_name)
-        base_method = getattr(ProcessorMixin, method_name)
+        base_method = getattr(parent_class, method_name)
         return child_method is not base_method
 
     def test_replacement_offsets(self):
@@ -1729,3 +2007,250 @@ class ProcessorTesterMixin:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
                 self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+
+    def test_no_redundant_default_kwargs(self):
+        """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
+        already has the same default.
+        """
+        # Processors whose defaults cannot be removed without breaking BC.
+        # Do not add new processors to this list: remove redundant defaults from the processor instead.
+        skipped_processors = {
+            "AriaProcessor",  # Hub config doesn't match processor defaults
+            "BridgeTowerProcessor",  # Hub config doesn't match processor defaults
+            "ColPaliProcessor",  # Hub config doesn't match processor defaults
+            "DeepseekOcr2Processor",  # Hub config doesn't match processor defaults
+            "Gemma3Processor",  # Hub config doesn't match processor defaults
+            "GotOcr2Processor",  # Hub config doesn't match processor defaults
+            "Granite4VisionProcessor",  # Hub config doesn't match processor defaults
+            "IdeficsProcessor",  # Hub config doesn't match processor defaults
+            "Kosmos2Processor",  # __call__ relies on add_special_tokens default
+            "Kosmos2_5Processor",  # Hub config doesn't match processor defaults
+            "LlavaNextProcessor",  # Hub config doesn't match processor defaults
+            "Pix2StructProcessor",  # __call__ relies on add_special_tokens default
+            "ShieldGemma2Processor",  # Hub config doesn't match processor defaults
+            "VideoLlama3Processor",  # Hub config doesn't match processor defaults
+        }
+        if self.processor_class.__name__ in skipped_processors:
+            self.skipTest(
+                f"Cannot remove redundant defaults from `{self.processor_class.__name__}` without breaking BC."
+            )
+
+        processor = self.get_processor()
+        processor_class = processor.__class__
+        processor_class_name = processor_class.__name__
+
+        for modality in MODALITY_TEST_SPECS:
+            kwargs_name = f"{modality}_kwargs"
+            if not hasattr(processor, kwargs_name):
+                continue
+
+            # Don't allow defaults if there is no subprocessor for that modality
+            subprocessor_attr_name = self.get_subprocessor_name(modality, processor_class.get_attributes())
+            if not hasattr(processor, subprocessor_attr_name):
+                raise ValueError(
+                    f"`{processor_class_name}` has default `{kwargs_name}` but no `{subprocessor_attr_name}`"
+                )
+
+            subprocessor = getattr(processor, subprocessor_attr_name)
+            subprocessor_class_name = subprocessor.__class__.__name__
+
+            # Defaults must not be identical to the subprocessor's defaults, otherwise they are redundant.
+            for attr_name, default_value in getattr(processor, kwargs_name).items():
+                # Check if the subprocessor's `__call__` has a default for this attribute (e.g. for tokenizers).
+                subprocessor_call_parameters = inspect.signature(subprocessor.__call__).parameters
+                if attr_name in subprocessor_call_parameters:
+                    subprocessor_default_call_value = subprocessor_call_parameters[attr_name].default
+                    self.assertNotEqual(
+                        subprocessor_default_call_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.__call__`'s default (`{subprocessor_default_call_value}`). "
+                            f"Keep the default in `{subprocessor_class_name}.__call__` and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+                    continue
+
+                # Check if the subprocessor has an attribute with the same name (e.g. for image processors).
+                if hasattr(subprocessor, attr_name):
+                    subprocessor_value = getattr(subprocessor, attr_name)
+                    self.assertNotEqual(
+                        subprocessor_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.{attr_name}` (`{subprocessor_value}`). Keep the default in `{subprocessor_class_name}` "
+                            f"and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+
+    def test_valid_processor_kwargs_set(self):
+        """Check that if a processor defines a custom `ProcessorKwargs` class it is set as `valid_processor_kwargs` on the processor."""
+        processor = self.get_processor()
+        processor_module = sys.modules[processor.__class__.__module__]
+        default_kwargs_class = (
+            OmniModalProcessingKwargs if isinstance(processor, OmniModalProcessorMixin) else ProcessingKwargs
+        )
+        expected_kwargs_class = vars(processor_module).get(
+            f"{processor.__class__.__name__}Kwargs", default_kwargs_class
+        )
+        self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)
+
+    @staticmethod
+    def _get_explicit_arguments(method):
+        return {
+            name
+            for name, param in inspect.signature(method).parameters.items()
+            if name != "self" and param.kind not in (param.VAR_POSITIONAL, param.VAR_KEYWORD)
+        }
+
+    def _get_valid_processor_kwargs_names(self):
+        kwargs_names = set()
+        for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
+            kwargs_names.add(name)
+
+            # Also add nested kwargs as _merge_kwargs promotes flat to nested kwargs.
+            if is_typeddict(annotation):
+                kwargs_names.update(annotation.__annotations__)
+        return kwargs_names
+
+    # TODO: Remove this method once we remove all the deprecated processor kwargs in v5.29.0
+    def _get_deprecated_processor_kwargs_names(self):
+        base_kwargs = {
+            "text_kwargs": TextKwargs,
+            "images_kwargs": ImagesKwargs,
+            "videos_kwargs": VideosKwargs,
+            "audio_kwargs": AudioKwargs,
+        }
+        deprecated_names = set()
+        for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
+            if is_typeddict(annotation) and annotation.__name__.startswith("Deprecated"):
+                deprecated_names.update(set(annotation.__annotations__) - set(base_kwargs[name].__annotations__))
+        return deprecated_names
+
+    def test_init_arguments_not_in_class_attributes(self):
+        """Check that explicit `__init__` arguments are not also class attributes.
+
+        This avoids having defaults defined in __init__ and as a class attribute.
+        """
+        processor_class = self.processor_class
+        init_arguments = self._get_explicit_arguments(processor_class.__init__)
+        overlapping_attributes = {name for name in init_arguments if hasattr(processor_class, name)}
+        self.assertFalse(
+            overlapping_attributes,
+            f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_attributes)} that are also "
+            f"class attributes of `{processor_class.__name__}`. Define the default only in `__init__`.",
+        )
+
+    def test_init_arguments_not_in_processor_kwargs(self):
+        """Check that explicit `__init__` arguments don't overlap with `valid_processor_kwargs`.
+
+        We want to avoid that arguments can have defaults in many different places.
+        An argument passed to __init__ should not be overrideable at call time and therefore not
+        be in valid_processor_kwargs.
+
+        This test might be too strict and we can relax it in the future. There is a case for
+        arguments that have a default in __init__ (and therefore the config) and that can be
+        modified at runtime through a __call__ argument. Image and video processors support
+        this use case.
+        """
+        # Processors whose `__init__` arguments cannot be removed without breaking BC.
+        # Do not add new processors to this list: update the processor instead.
+        skipped_processors = {
+            "IdeficsProcessor",  # add_end_of_utterance_token
+        }
+        processor_class = self.processor_class
+        if processor_class.__name__ in skipped_processors:
+            self.skipTest(f"Cannot remove `{processor_class.__name__}.__init__` arguments without breaking BC.")
+
+        init_arguments = self._get_explicit_arguments(processor_class.__init__)
+        overlapping_arguments = init_arguments & self._get_valid_processor_kwargs_names()
+        # Ignore image_seq_length for BC. It is in ImagesKwargs but is only used by the
+        # processor and not the image processor. It was added as a hack to save it as part
+        # of the image processor config.
+        overlapping_arguments -= {"image_seq_length"}
+        self.assertFalse(
+            overlapping_arguments,
+            f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_arguments)} that are also "
+            f"defined in `{processor_class.valid_processor_kwargs.__name__}`.",
+        )
+
+    def test_call_arguments_not_in_processor_kwargs(self):
+        """Check that explicit `__call__` arguments are not in `valid_processor_kwargs`.
+
+        This ensures that we don't duplicate arguments unnecessarily.
+        """
+        processor_class = self.processor_class
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        overlapping_kwargs = call_arguments & self._get_valid_processor_kwargs_names()
+        # Deprecated nested kwargs are kept for BC and can overlap with the explicit arguments that replace them.
+        overlapping_kwargs -= self._get_deprecated_processor_kwargs_names()
+        self.assertFalse(
+            overlapping_kwargs,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_kwargs)} that are also "
+            f"defined in `{processor_class.valid_processor_kwargs.__name__}`.  Explicit `__call__` arguments are reserved "
+            "for values only known at runtime (e.g. input text or image). Remove them from "
+            f"`{processor_class.valid_processor_kwargs.__name__} if this is the case, otherwise remove them from `__call__`.",
+        )
+
+    def test_call_arguments_not_in_attributes(self):
+        """Check that explicit `__call__` arguments are not in processor attributes.
+
+        This ensures that explicit arguments don't have attribute based default values.
+        """
+        processor = self.get_processor()
+        processor_class = self.processor_class
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        overlapping_attributes = {name for name in call_arguments if hasattr(processor, name)}
+        self.assertFalse(
+            overlapping_attributes,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_attributes)} that are "
+            f"also attributes of `{processor_class.__name__}`. Explicit `__call__` arguments must not have a processor "
+            "default value. They are reserved for values only known at runtime (e.g. input text or image).",
+        )
+
+    def test_call_arguments_default_none(self):
+        """Check that explicit `__call__` arguments either have no default or default to `None`.
+
+        This ensures that `__call__` arguments which can have defaults are in `valid_processor_kwargs` instead.
+        """
+        # Processors whose `__call__` defaults cannot be changed without breaking BC.
+        # Do not add new processors to this list: use `valid_processor_kwargs` for arguments with defaults.
+        skipped_processors = {
+            "AudioFlamingo3Processor",  # output_labels
+            "CsmProcessor",  # output_labels, depth_decoder_labels_ratio
+            "FunAsrNanoProcessor",  # output_labels
+            "FuyuProcessor",  # return_legacy_image_output
+            "GlmAsrProcessor",  # output_labels
+            "InstructBlipVideoProcessor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_token_type_ids, return_length, verbose
+            "LayoutLMv2Processor",  # add_special_tokens, padding, truncation, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "LayoutLMv3Processor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "LayoutXLMProcessor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "MossTranscribeDiarizeProcessor",  # output_labels
+            "MusicFlamingoProcessor",  # output_labels
+            "Nemotron3_5TranscribeProcessor",  # output_labels
+            "Qwen3ASRProcessor",  # output_labels
+            "VibeVoiceAsrProcessor",  # output_labels
+            "VibeVoiceProcessor",  # output_labels
+            "VoxtralRealtimeProcessor",  # is_streaming, is_first_audio_chunk
+        }
+        processor_class = self.processor_class
+        if processor_class.__name__ in skipped_processors:
+            self.skipTest(f"Cannot change the defaults of `{processor_class.__name__}.__call__` without breaking BC.")
+
+        parameters = inspect.signature(processor_class.__call__).parameters
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        non_none_defaults = {
+            name
+            for name in call_arguments
+            if parameters[name].default is not inspect.Parameter.empty and parameters[name].default is not None
+        }
+        self.assertFalse(
+            non_none_defaults,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(non_none_defaults)} with a default "
+            "other than `None`. Explicit `__call__` arguments must either have no default or default to `None`. "
+            "Arguments which can have a default must be added to `valid_processor_kwargs` instead.",
+        )

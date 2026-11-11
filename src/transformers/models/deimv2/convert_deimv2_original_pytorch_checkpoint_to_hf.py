@@ -102,12 +102,15 @@ MODEL_NAME_TO_HUB_REPO = {
 def get_deimv2_config(model_name: str) -> Deimv2Config:
     repo_id = MODEL_NAME_TO_HUB_REPO[model_name]
     config_path = hf_hub_download(repo_id=repo_id, filename="config.json")
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         orig_config = json.load(f)
 
     # COCO labels
     id2label = json.load(
-        open(hf_hub_download("huggingface/label-files", "coco-detection-mmdet-id2label.json", repo_type="dataset"))
+        open(
+            hf_hub_download("huggingface/label-files", "coco-detection-mmdet-id2label.json", repo_type="dataset"),
+            encoding="utf-8",
+        )
     )
     id2label = {int(k): v for k, v in id2label.items()}
 

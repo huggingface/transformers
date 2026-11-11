@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
+from transformers.utils.chat_template_utils import _REASONING_FIELDS
 
 
 if TYPE_CHECKING:
@@ -120,7 +121,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<think>",
                 "close": "</think>",
                 "content": "text",
@@ -148,11 +149,11 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
     # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
     # The chat template prefills the assistant turn with either "<think>\n" (thinking on) or
     # "<think>\n\n</think>\n\n" (default), which prefix-aware parsing picks up via start_anchor.
-    ("qwen3_5", "qwen3_5_moe"): {
+    ("qwen3_5", "qwen3_5_text", "qwen3_5_moe", "qwen3_5_moe_text"): {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<think>",
                 "close": "</think>",
                 "content": "text",
@@ -182,7 +183,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": ["<|turn>model\n", "<tool_response|>"],
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<|channel>thought\n",
                 "close": "<channel|>",
                 "content": "text",
@@ -236,6 +237,7 @@ def build_response_parser(
     processor,
     model: "PreTrainedModel",
     input_ids,
+    tools=None,
 ) -> "ResponseParser | None":
     """Build a streaming :class:`ResponseParser` for the current generation.
 
@@ -252,7 +254,7 @@ def build_response_parser(
     if template is None:
         return None
     tokenizer = getattr(processor, "tokenizer", processor)
-    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids))
+    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools)
 
 
 def _normalize_tool_call(value: dict) -> ToolCall:
@@ -292,6 +294,7 @@ def parse_assistant_message(
     generated_ids,
     input_ids,
     cleaned_content: str = "",
+    tools=None,
 ) -> tuple[str, str | None, list[ToolCall] | None]:
     """Parse a full assistant message into ``(content, reasoning, tool_calls)``.
 
@@ -307,11 +310,14 @@ def parse_assistant_message(
     if template is None:
         return cleaned_content, None, None
     tokenizer = getattr(processor, "tokenizer", processor)
-    parsed = tokenizer.parse_response(generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids))
+    parsed = tokenizer.parse_response(
+        generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools
+    )
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
-    reasoning = parsed.get("thinking")
+    # Response templates should name the field `reasoning_content`, but some on the Hub still use `thinking`
+    reasoning = next((parsed[field] for field in _REASONING_FIELDS if parsed.get(field) is not None), None)
     raw = parsed.get("tool_calls") or []
     tool_calls = [_normalize_tool_call(v) for v in raw] or None
     return content, reasoning, tool_calls
@@ -341,7 +347,7 @@ def response_events_to_chunks(events: list[dict]) -> list:
             text = ev.get("text") or ""
             if not text:
                 continue
-            if field == "thinking":
+            if field in _REASONING_FIELDS:
                 out.append(ReasoningText(text))
             elif field == "content":
                 out.append(text)

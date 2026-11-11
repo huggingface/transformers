@@ -23,6 +23,7 @@ from transformers import PI0Config, PI0Processor, Trainer, TrainingArguments, is
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_non_multi_accelerator,
     slow,
@@ -62,7 +63,7 @@ class PI0ModelTester:
         self.max_state_dim = 8
         self.max_action_dim = 8
         self.num_inference_steps = 3
-        self.image_token_index = 127
+        self.image_token_id = 127
         self.pad_token_id = 0
         self.num_image_tokens = (self.image_size // self.patch_size) ** 2 * self.num_cameras
         self.encoder_seq_length = 5
@@ -109,7 +110,7 @@ class PI0ModelTester:
             vlm_config={
                 "vision_config": self.vision_config,
                 "text_config": self.text_config,
-                "image_token_index": self.image_token_index,
+                "image_token_id": self.image_token_id,
                 "projection_dim": self.hidden_size,
             },
             chunk_size=self.chunk_size,
@@ -155,11 +156,7 @@ class PI0ModelTester:
 @require_torch
 class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PI0ForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_all_params_have_gradient = False
     has_attentions = True
     _is_composite = True
     additional_model_inputs = ["input_ids", "attention_mask", "state", "actions", "timestep"]
@@ -170,6 +167,28 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @slow
+    @require_torch_gpu
+    def test_sample_actions_cuda_graph_matches_eager(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for key in ("actions", "timestep"):
+            inputs_dict.pop(key)
+        model = PI0ForConditionalGeneration(config).eval().to(torch_device)
+
+        with torch.no_grad():
+            expected = model.sample_actions(**inputs_dict, num_steps=3)
+            side_stream = torch.cuda.Stream()
+            side_stream.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(side_stream):
+                model.sample_actions(**inputs_dict, num_steps=3)
+            torch.cuda.current_stream().wait_stream(side_stream)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph):
+                replayed = model.sample_actions(**inputs_dict, num_steps=3)
+            graph.replay()
+
+        torch.testing.assert_close(replayed, expected)
 
     def test_model_loss_per_sample(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -300,6 +319,21 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class PI0ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.libero_statistics = {
+            "state_mean": [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286],
+            "state_std": [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132],
+            "actions_mean": [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916],
+            "actions_std": [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958],
+        }
+
+    def test_pi0_libero_finetuned_loads_every_weight(self):
+        _, loading_info = PI0ForConditionalGeneration.from_pretrained(
+            "lerobot/pi0_libero_finetuned_v044", output_loading_info=True
+        )
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+
     def test_pi0_base_reference_values(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
@@ -374,7 +408,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
     def test_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
-        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **self.libero_statistics)
         model.config.loss_reduction = "none"
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
@@ -418,7 +452,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
     @require_torch_non_multi_accelerator
     def test_train_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
-        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **self.libero_statistics)
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
         train_actions = [small_data["action"][i : i + 50] for i in range(len(small_data) - 50)]

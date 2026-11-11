@@ -177,14 +177,11 @@ def invert_mask(attention_mask):
 
 
 def triu_onnx(x, diagonal=0):
-    l = x.shape[0]
-    arange = torch.arange(l, device=x.device)
-    mask = arange.expand(l, l)
-    arange = arange.unsqueeze(-1)
-    if diagonal:
-        arange = arange + diagonal
-    mask = mask >= arange
-    return x.masked_fill(mask == 0, 0)
+    logger.warning_once(
+        "`triu_onnx` is deprecated and will be removed in v5.22. It emulated `torch.triu`, which now "
+        "exports cleanly — use `torch.triu` instead."
+    )
+    return torch.triu(x, diagonal)
 
 
 def _prepare_fsmt_decoder_inputs(
@@ -207,8 +204,9 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
-        device=decoder_input_ids.device
+    causal_mask = torch.triu(
+        fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype, device=decoder_input_ids.device)),
+        diagonal=1,
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
@@ -354,16 +352,16 @@ class FSMTEncoder(nn.Module):
             input_ids (`torch.LongTensor`): tokens in the source language of shape
                 *(batch, src_len)*
             attention_mask (`torch.LongTensor`): indicating which indices are padding tokens
-            inputs_embeds (`torch.FloatTensor`):
+            inputs_embeds (`torch.Tensor`):
                 embedding vectors of shape *(batch, src_len, embed_dim)*
 
         Returns:
             BaseModelOutput or Tuple comprised of:
 
                 - **x** (`torch.Tensor`): the last encoder layer's output of shape *(src_len, batch, embed_dim)*
-                - **encoder_states** (`Tuple(torch.FloatTensor)`): all intermediate hidden states of shape *(src_len,
+                - **encoder_states** (`Tuple(torch.Tensor)`): all intermediate hidden states of shape *(src_len,
                   batch, embed_dim)*. Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (`Tuple(torch.FloatTensor)`): Attention weights for each layer.
+                - **all_attentions** (`Tuple(torch.Tensor)`): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
@@ -402,8 +400,13 @@ class FSMTEncoder(nn.Module):
                 encoder_states += (x,)
                 x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training and self.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 attn = None
             else:
                 x, attn = encoder_layer(
@@ -607,7 +610,7 @@ class FSMTDecoder(nn.Module):
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)
                 x = x.transpose(0, 1)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
@@ -815,13 +818,13 @@ class FSMTModel(PretrainedFSMTModel):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
@@ -950,7 +953,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
@@ -975,10 +978,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Translation:
 
