@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import sys
-import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Union
 
@@ -217,11 +216,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # All these transducers decode the same way (generate -> sequences); "tdt" is the transducer path.
             self.type = "tdt"
         elif decoder is not None:
-            warnings.warn(
+            logger.warning_once(
                 "Language model decoding with a pyctcdecode `decoder` is deprecated and will be removed in "
-                "Transformers v6. To keep language model decoding, call pyctcdecode directly: "
-                "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode",
-                FutureWarning,
+                "Transformers v6. To keep it, call pyctcdecode directly: "
+                "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
             )
             self.decoder = decoder
             self.type = "ctc_with_lm"

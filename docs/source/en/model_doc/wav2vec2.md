@@ -239,21 +239,26 @@ with torch.no_grad():
     logits = model(**inputs).logits.cpu().numpy()
 
 # was: processor_with_lm.batch_decode(logits, alpha=0.5, beta=1.0, beam_width=50).text
+
 # `alpha`, `beta`, `unk_score_offset` and `lm_score_boundary` are set on the decoder (values that are not passed are kept)
 decoder.reset_params(alpha=0.5, beta=1.0)
+
 # drop the frames padded with -100, as `batch_decode` does
 logits_list = [sample[(sample != -100.0).all(axis=-1)] for sample in logits]
+
 # `beam_width`, `beam_prune_logp`, `token_min_logp`, `hotwords` and `hotword_weight` are decoding arguments
 beams = decoder.decode_beams_batch(None, logits_list, beam_width=50)
 transcription = [sample_beams[0][0] for sample_beams in beams]
 ```
 
-For a single sample, `processor_with_lm.decode(logits[0]).text` becomes `decoder.decode_beams(logits[0])[0][0]`. Use
-`decode_beams` / `decode_beams_batch` rather than `decode` / `decode_batch`: the latter prune the beam history and can
-give different transcriptions. Pass a `multiprocessing.Pool` created with a `fork` context as the first argument of
-`decode_beams_batch` to decode in parallel. The beams are sorted best first and also carry the scores and word offsets:
-`(text, word_offsets, logit_score, lm_score)` for `decode_beams_batch`, `(text, last_lm_state, word_offsets,
-logit_score, lm_score)` for `decode_beams`.
+- **Single sample**: `processor_with_lm.decode(logits[0]).text` becomes `decoder.decode_beams(logits[0])[0][0]`.
+- **Use `decode_beams` / `decode_beams_batch`**, not `decode` / `decode_batch`: the latter prune the beam history and
+  can give different transcriptions.
+- **Parallel decoding**: pass a `multiprocessing.Pool` created with a `fork` context as the first argument of
+  `decode_beams_batch`.
+- **Beams** are sorted best first and also carry the scores and word offsets:
+  - `decode_beams_batch`: `(text, word_offsets, logit_score, lm_score)`;
+  - `decode_beams`: `(text, last_lm_state, word_offsets, logit_score, lm_score)`.
 
 To decode without the language model, take the most likely token at each frame:
 

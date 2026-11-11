@@ -16,7 +16,6 @@ from __future__ import annotations
 import importlib
 import json
 import os
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -689,14 +688,10 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
 
         kwargs["decoder"] = decoder
     except ImportError as error:
-        warnings.warn(
-            f"`{model_name}` ships an n-gram language model for `{processor_class}`, but it is not used and decoding "
-            f"falls back to greedy CTC ({error}). pyctcdecode and kenlm are no longer installed with "
-            "`transformers[audio]`, so transcriptions can differ from previous versions. Language model decoding is "
-            "deprecated and will be removed in Transformers v6. To keep language model decoding, install them or call "
-            "pyctcdecode directly: "
-            "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode",
-            FutureWarning,
+        logger.warning_once(
+            f"`{model_name}` ships an n-gram language model, but decoding falls back to greedy CTC ({error}), so "
+            "transcriptions can differ from previous versions. See: "
+            "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
         )
 
 
