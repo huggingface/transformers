@@ -4956,7 +4956,6 @@ def scoped_non_kernels(test):
     Decorator that temporarily disables kernels usage. Important for e.g. integration tests that rely on exact previous numbers.
     """
 
-    @require_kernels
     @functools.wraps(test)
     def wrapper(*args, **kwargs):
         with patch.dict("os.environ", {"USE_HUB_KERNELS": "NO"}):
@@ -4970,21 +4969,24 @@ def scoped_non_kernels(test):
 
 def scoped_non_kernels_class(test_class):
     """
-    Applies `scoped_non_kernels` on each test function individually.
+    Applies `scoped_non_kernels` to each test function and hook.
     """
+    class_hooks = {"setUpClass", "tearDownClass", "setup_class", "teardown_class"}
+    all_hooks = class_hooks | {"setUp", "tearDown", "setup_method", "teardown_method"}
+
     for name in dir(test_class):
-        if not name.startswith("test"):
+        if not (name.startswith("test") or name in all_hooks):
             continue
 
         test = getattr(test_class, name)
 
-        if not callable(test):
+        if not callable(test) or getattr(test, "_is_scoped_kernels", False):
             continue
 
-        if getattr(test, "_is_scoped_kernels", False):
-            continue
-
-        setattr(test_class, name, scoped_non_kernels(test))
+        if name in class_hooks and hasattr(test, "__func__"):
+            setattr(test_class, name, classmethod(scoped_non_kernels(test.__func__)))
+        else:
+            setattr(test_class, name, scoped_non_kernels(test))
 
     return test_class
 
