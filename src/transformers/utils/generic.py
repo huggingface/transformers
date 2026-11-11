@@ -869,6 +869,25 @@ class TransformersKwargs(TypedDict, total=False):
     position_ids: torch.LongTensor | None
     is_causal: bool | None
     seq_idx: torch.IntTensor | None
+    # Precomputed modality kwargs (see accepts_precomputed_kwargs)
+    image_cu_seqlens: torch.Tensor | None
+    image_max_seqlen: int | None
+    image_position_ids: torch.Tensor | None
+    image_sequence_lengths: torch.Tensor | None
+    image_split_sizes: tuple[int, ...] | None
+    image_window_index: torch.Tensor | None
+    image_cu_window_seqlens: torch.Tensor | None
+    image_max_window_seqlen: int | None
+    image_window_sequence_lengths: torch.Tensor | None
+    video_cu_seqlens: torch.Tensor | None
+    video_max_seqlen: int | None
+    video_position_ids: torch.Tensor | None
+    video_sequence_lengths: torch.Tensor | None
+    video_split_sizes: tuple[int, ...] | None
+    video_window_index: torch.Tensor | None
+    video_cu_window_seqlens: torch.Tensor | None
+    video_max_window_seqlen: int | None
+    video_window_sequence_lengths: torch.Tensor | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:

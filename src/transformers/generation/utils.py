@@ -176,6 +176,25 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "image_grids",
     "video_token_pooling",
     "video_grids",
+    # Precomputed modality kwargs (dropped after prefill)
+    "image_cu_seqlens",
+    "image_max_seqlen",
+    "image_position_ids",
+    "image_sequence_lengths",
+    "image_split_sizes",
+    "image_window_index",
+    "image_cu_window_seqlens",
+    "image_max_window_seqlen",
+    "image_window_sequence_lengths",
+    "video_cu_seqlens",
+    "video_max_seqlen",
+    "video_position_ids",
+    "video_sequence_lengths",
+    "video_split_sizes",
+    "video_window_index",
+    "video_cu_window_seqlens",
+    "video_max_window_seqlen",
+    "video_window_sequence_lengths",
 )
 
 

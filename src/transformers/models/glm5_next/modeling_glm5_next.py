@@ -1936,8 +1936,10 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
+        split_sizes = kwargs.pop("split_sizes", None)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        if split_sizes is None:
+            split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
@@ -2011,6 +2013,10 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
+            Precomputed multimodal RoPE offsets, prepared on CPU alongside `position_ids`.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

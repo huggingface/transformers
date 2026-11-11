@@ -193,6 +193,33 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester = Qwen2VLVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen2VLConfig, has_text_modality=False)
 
+    def test_prepared_prefill_fullgraph(self):
+        from transformers.vision_utils import prepare_qwen_vl_inputs
+
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs = {key: value.cpu() if isinstance(value, torch.Tensor) else value for key, value in inputs.items()}
+        model = Qwen2VLForConditionalGeneration(config).eval()
+        model.set_attn_implementation("eager")
+        inputs["use_cache"] = False
+        prepared = prepare_qwen_vl_inputs(config, inputs)
+        graphs = []
+
+        def backend(graph, example_inputs):
+            graphs.append(graph)
+            return graph.forward
+
+        try:
+            with torch.no_grad():
+                expected = model(**inputs).logits
+                compiled = torch.compile(model, backend=backend, fullgraph=True)
+                actual = compiled(**prepared).logits
+                torch.testing.assert_close(actual, expected)
+                compiled(**prepared)
+            self.assertEqual(len(graphs), 1)
+            torch.testing.assert_close(model.model.rope_deltas, prepared["rope_deltas"])
+        finally:
+            torch._dynamo.reset()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
