@@ -28,11 +28,9 @@ if is_torch_available():
 
 
 # Two adapters, whose control tokens sit at the top of the tester's small vocabulary. Picked so the
-# routing tests can write a readable prompt; `SWITCH_CACHE_LAYERS` of the model's layer budget goes
-# to the switch heads rather than to decoder layers.
+# routing tests can write a readable prompt.
 ADAPTER_TOKEN_IDS = [95, 96]
 ADAPTER_SUBSTITUTE_TOKEN_IDS = [10, 11]
-SWITCH_CACHE_LAYERS = 2
 
 
 class GraniteSwitchModelTester(CausalLMModelTester):
@@ -40,14 +38,8 @@ class GraniteSwitchModelTester(CausalLMModelTester):
         base_model_class = GraniteSwitchModel
 
     def __init__(self, parent, num_adapters=2, dual_stream=False, **kwargs):
-        # The switch heads occupy the first cache slots, and `num_hidden_layers` counts them, so the
-        # budget has to be raised for the model to still have the two decoder layers the common
-        # tests expect.
-        num_decoder_layers = kwargs.pop("num_hidden_layers", 2)
-        num_hidden_layers = num_decoder_layers + (SWITCH_CACHE_LAYERS if num_adapters > 0 else 0)
-        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers, **kwargs)
-        self.num_decoder_layers = num_decoder_layers
-        self.layer_types = ["full_attention"] * num_hidden_layers
+        super().__init__(parent=parent, **kwargs)
+        self.layer_types = ["full_attention"] * self.num_hidden_layers
         self.num_local_experts = 4
         self.num_experts_per_tok = 2
         self.shared_intermediate_size = self.intermediate_size
@@ -94,6 +86,52 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
         expected = torch.tensor([[5, first_substitute, 7, 8, second_substitute, 9, 9]], device=torch_device)
         torch.testing.assert_close(modified_input_ids, expected)
         self.assertFalse(any(token in modified_input_ids for token in ADAPTER_TOKEN_IDS))
+
+    def test_routing_a_prefix_agrees_with_routing_the_whole_sequence(self):
+        """The switch is stateless, so a decode step can be routed by replaying the prefix."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        switch = GraniteSwitchModel(config).to(torch_device).eval().switch
+        first, second = ADAPTER_TOKEN_IDS
+        input_ids = torch.tensor([[5, first, 7, 8, second, 9, 9]], device=torch_device)
+        with torch.no_grad():
+            whole_sequence, _ = switch(input_ids)
+            prefix, _ = switch(input_ids[:, :-1])
+        torch.testing.assert_close(whole_sequence[:, :-1], prefix)
+
+    def test_generation_hands_the_switch_the_whole_sequence(self):
+        """`prepare_inputs_for_generation` trims `input_ids` for the decoder but not for routing."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteSwitchForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[5, ADAPTER_TOKEN_IDS[0], 7, 8]], device=torch_device)
+        model_inputs = model.prepare_inputs_for_generation(input_ids, next_sequence_length=1)
+        self.assertEqual(model_inputs["input_ids"].shape, (1, 1))
+        torch.testing.assert_close(model_inputs["switch_input_ids"], input_ids)
+
+    def test_inputs_embeds_matches_input_ids(self):
+        """Embeddings stand in for ids exactly when token exchange has nothing to do.
+
+        Two things in this model read ids rather than hidden states. Routing can be handed the ids
+        separately, as `switch_input_ids`, so it is not what limits the embedding path. Token
+        exchange is: it rewrites a control token before the embedding lookup, which cannot be
+        applied to an embedding the caller has already computed. The two paths therefore agree
+        exactly on a sequence with no control tokens in it, and control tokens are the whole of
+        what they may disagree on -- which is what this checks, by clearing them first.
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteSwitchModel(config).to(torch_device).eval()
+
+        input_ids = inputs["input_ids"]
+        for control_token_id in ADAPTER_TOKEN_IDS:
+            input_ids = torch.where(input_ids == control_token_id, torch.ones_like(input_ids), input_ids)
+
+        with torch.no_grad():
+            from_ids = model(input_ids=input_ids, attention_mask=inputs.get("attention_mask"))
+            from_embeds = model(
+                inputs_embeds=model.get_input_embeddings()(input_ids),
+                attention_mask=inputs.get("attention_mask"),
+                switch_input_ids=input_ids,
+            )
+        torch.testing.assert_close(from_ids.last_hidden_state, from_embeds.last_hidden_state, rtol=0, atol=0)
 
     def test_adapters_start_as_the_identity(self):
         """`lora_B` is zero-initialized, so a freshly built model is still the base model."""

@@ -26,12 +26,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-# Decoder-layer cache slots the switch reserves at the front of the model when adapters are
-# present. The coded MultiSwitch engine owns two: a counting slot and a memory slot. Single
-# source of truth: `num_hidden_layers` on disk is inflated by this count, and the model
-# subtracts it to recover the physical decoder-layer count.
-SWITCH_CACHE_LAYERS = 2
-
 # The switch model is attention-only. The hybrid parent fills an unset `layer_types` with
 # all-`"linear_attention"` (mamba), which would size the per-layer cache wrongly, so the value
 # is pinned here instead. It must be a key of the dynamic-cache layer-type mapping.
@@ -285,21 +279,14 @@ class GraniteSwitchConfig(PreTrainedConfig):
                 "padding width is wrong."
             )
 
-        if self.num_hidden_layers <= SWITCH_CACHE_LAYERS:
-            raise ValueError(
-                f"num_hidden_layers ({self.num_hidden_layers}) must exceed SWITCH_CACHE_LAYERS "
-                f"({SWITCH_CACHE_LAYERS}) when adapters are present: the switch reserves that many cache "
-                "slots at the front of the model, and the remainder are the physical decoder layers."
-            )
-
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
         """Reject SingleSwitch checkpoints; MultiSwitch is the only engine.
 
-        A checkpoint built for the earlier SingleSwitch engine cannot run as MultiSwitch:
-        MultiSwitch reserves `SWITCH_CACHE_LAYERS == 2` cache slots where SingleSwitch reserved 1,
-        so a single-sized checkpoint has one decoder layer too few and its weights cannot map. There
-        is no auto-migration; it must be rebuilt.
+        A checkpoint built for the earlier SingleSwitch engine cannot run as MultiSwitch: it
+        carries a one-transition switch whose weights have no counterpart here, and its
+        `num_hidden_layers` follows the old convention of counting the switch's cache slots as
+        decoder layers. There is no auto-migration; it must be rebuilt.
 
         This is the one seam that still sees the raw on-disk config, so the rejection lives here.
         Two shapes identify such a checkpoint, with adapters present:

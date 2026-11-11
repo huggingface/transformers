@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2026-11-11.*
 
 # GraniteSwitch
 
@@ -43,9 +44,11 @@ Each adapter owns a control token. Routing happens in two stages:
 Routing is latest-wins, and a checkpoint composed with a base-reset token can also route back to the
 base model mid-sequence.
 
-Because `MultiSwitch` is implemented as attention, it needs two cache slots of its own. These are
-the first two layers of the cache, and `num_hidden_layers` in the config counts them, so a
-GraniteSwitch checkpoint reports two more layers than it has decoder layers.
+Both heads are computed from `input_ids` alone — no hidden state enters routing — so the switch
+keeps no cache and holds no state between calls. It is instead replayed over the whole sequence on
+every forward pass, and the model keeps the tail that matches the tokens it is decoding.
+`prepare_inputs_for_generation` is what supplies that sequence, as `switch_input_ids`, since a
+decode step's single new token says nothing about which control tokens preceded it.
 
 ### Shadow Residual
 
@@ -89,6 +92,10 @@ rather than of the model object.
   `.unique()` on the per-token adapter indices to find which adapters are present in a batch, which
   is data-dependent, so `_can_compile_fullgraph` is `False`.
 - Control tokens are freely generatable; nothing suppresses them during decoding.
+- Passing `inputs_embeds` instead of `input_ids` leaves routing nothing to read, and every token
+  takes the base model. Pass `switch_input_ids` alongside the embeddings to route anyway. Token
+  exchange cannot be recovered that way — an embedding the caller computed from a control token is
+  already the control token's own — so place control tokens through `input_ids`.
 - Granite's scalar multipliers all apply: `attention_multiplier`, `embedding_multiplier`,
   `residual_multiplier` and `logits_scaling`.
 - Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
