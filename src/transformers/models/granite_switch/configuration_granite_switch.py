@@ -99,9 +99,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
     cross_stream_rank (`int`, *optional*):
         LoRA rank of the layer-level `cross_stream` injection site. Required when `dual_stream` is
         `True`, and must be `None` otherwise, since the site is not allocated at all.
-    fused_add_norm (`bool`, *optional*, defaults to `False`):
-        Whether the decoder applies the residual add and the following norm as one fused operation.
-        This fixes the floating-point reduction order the checkpoint was built against.
     shared_intermediate_size (`int`, *optional*):
         Width of the dense shared MLP. Defaults to `intermediate_size` for a dense base, and to 0
         for a pure sparse-MoE base, where 0 is the "no shared MLP" sentinel: the layer is built
@@ -190,8 +187,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
 
     dual_stream: bool = False
     cross_stream_rank: int | None = None
-
-    fused_add_norm: bool = False
     # Some bases set `head_dim != hidden_size // num_attention_heads`, and the fused `qkv_proj`
     # output width is sized from it. Resolved in `__post_init__` so the value a checkpoint was built
     # against is serialized rather than re-derived by every reader.
