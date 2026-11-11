@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 
 import torch
@@ -27,7 +26,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -137,33 +136,41 @@ class Kolibri1_1Attention(nn.Module):
 
         self.q_norm = Kolibri1_1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Kolibri1_1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.kv_source_layer = config.kv_source_layers[layer_idx]
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
+        self.store_kv = config.kv_sharing_modes[layer_idx] == "store"
+        # Layers reading the K/V of another layer don't need any key/value weights
+        if self.is_kv_shared_layer:
+            del self.k_proj, self.v_proj, self.k_norm
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
+        shared_kv_states: KVSharingDict | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2))
+        if self.is_kv_shared_layer:
+            key_states, value_states = shared_kv_states[str(self.kv_source_layer)]
+        else:
+            key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2))
+            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # We use QK-norm
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
-        cos, sin = position_embeddings
-        # We use global NoPE for hybrid attention model
-        if self.sliding_window is None or self.is_sliding:
+        # Full-attention layers have no positional embeddings (NoPE), which layers sharing keys rely on
+        if self.is_sliding:
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
+        if past_key_values is not None and not self.is_kv_shared_layer:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if self.store_kv:
+            shared_kv_states[str(self.layer_idx)] = key_states, value_states
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -458,6 +465,13 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
         self.norm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Kolibri1_1RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        # Layers reading the K/V of another layer don't use their own key/value weights, if a checkpoint has them.
+        # Parent models collect these patterns from their children in their own `post_init`
+        self._keys_to_ignore_on_load_unexpected = {
+            rf"layers\.{i}\.self_attn\.(k_proj|v_proj|k_norm)\."
+            for i, layer in enumerate(self.layers)
+            if layer.self_attn.is_kv_shared_layer
+        }
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -471,7 +485,7 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -491,7 +505,6 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -499,7 +512,6 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
@@ -507,6 +519,8 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        # Keys and values shared across layers, for the current forward only
+        shared_kv_states = KVSharingDict()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
@@ -516,6 +530,7 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
+                shared_kv_states=shared_kv_states,
                 **kwargs,
             )
 

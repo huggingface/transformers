@@ -25,10 +25,19 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+_DEFAULT_KV_SOURCE_ORDINALS = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
+
+
 @auto_docstring(checkpoint="Aleph-Alpha/Kolibri-1.1")
 @strict
 class Kolibri1_1Config(PreTrainedConfig):
     r"""
+    kv_source_layers (`list[int]`, *optional*):
+        For each layer, the index of the layer whose keys and values it attends to. A full-attention layer that reads
+        those of an earlier layer has no key/value projections of its own. Defaults to Kolibri 1.1's layout: of its 10
+        full-attention layers, the 2nd and 3rd read the keys and values of the 1st, the 7th to 9th those of the 6th
+        and the 10th those of the 1st, while the 1st, 4th, 5th and 6th produce their own. Configs with more
+        full-attention layers must set it explicitly. The entries of sliding-attention layers must be their own index.
     mlp_only_layers (`list[int]`, *optional*):
         Indices of the layers with a dense MLP instead of a mixture of experts. Defaults to none.
     mlp_only_intermediate_size (`int`, *optional*):
@@ -101,26 +110,58 @@ class Kolibri1_1Config(PreTrainedConfig):
     shared_expert_intermediate_size: int = 512
     layer_types: list[str] | None = None
 
+    kv_source_layers: list[int] | None = None
     mlp_only_layers: list[int] | None = None
     mlp_only_intermediate_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        if self.mlp_only_layers is None:
-            self.mlp_only_layers = []
+        # `layer_types` is needed before the parent's `__post_init__`, to derive the default K/V sharing layout
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
+        if self.mlp_only_layers is None:
+            self.mlp_only_layers = []
+        full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
+        if self.kv_source_layers is None:
+            if len(full_layers) > len(_DEFAULT_KV_SOURCE_ORDINALS):
+                raise ValueError(
+                    f"The default `kv_source_layers` covers {len(_DEFAULT_KV_SOURCE_ORDINALS)} full-attention layers, "
+                    f"got {len(full_layers)}: set `kv_source_layers` explicitly."
+                )
+            self.kv_source_layers = list(range(len(self.layer_types)))
+            for layer_idx, source_ordinal in zip(full_layers, _DEFAULT_KV_SOURCE_ORDINALS):
+                self.kv_source_layers[layer_idx] = full_layers[source_ordinal]
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
         if "sliding_attention" in self.layer_types and (self.sliding_window is None or self.sliding_window <= 0):
             raise ValueError(f"Sliding-attention layers need a positive `sliding_window`, got {self.sliding_window}.")
+        if set(self.layer_types) - {"full_attention", "sliding_attention"}:
+            raise ValueError(f"Unsupported layer types: {sorted(set(self.layer_types))}.")
+        if len(self.kv_source_layers) != len(self.layer_types):
+            raise ValueError("`kv_source_layers` needs one entry per layer.")
+        for layer_idx, source in enumerate(self.kv_source_layers):
+            if self.layer_types[layer_idx] == "sliding_attention" and source != layer_idx:
+                raise ValueError(f"Sliding-attention layer {layer_idx} cannot read the K/V of another layer.")
+            if not 0 <= source <= layer_idx or self.kv_source_layers[source] != source:
+                raise ValueError(f"Layer {layer_idx} must read the K/V of an earlier layer that produces its own.")
+            if self.layer_types[source] != self.layer_types[layer_idx]:
+                raise ValueError(f"Layer {layer_idx} must read the K/V of a layer with the same attention type.")
         if not set(self.mlp_only_layers) <= set(range(self.num_hidden_layers)):
             raise ValueError(f"`mlp_only_layers` must be layer indices, got {self.mlp_only_layers}.")
         if self.mlp_only_layers and (self.mlp_only_intermediate_size or 0) <= 0:
             raise ValueError("`mlp_only_layers` need a positive `mlp_only_intermediate_size`.")
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        """For each layer, `"store"` if another layer reads its K/V, `"reuse"` if it reads another layer's, else `None`."""
+        sources = {source for layer_idx, source in enumerate(self.kv_source_layers) if source != layer_idx}
+        return [
+            "reuse" if source != layer_idx else "store" if layer_idx in sources else None
+            for layer_idx, source in enumerate(self.kv_source_layers)
+        ]
 
 
 __all__ = ["Kolibri1_1Config"]
