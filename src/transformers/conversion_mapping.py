@@ -64,7 +64,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_omni_moe_text": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
-    "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
@@ -79,13 +78,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MetaClip2VisionModel": "CLIPVisionModel",
     "mlcd_vision": "CLIPVisionModel",
     "mlcd": "CLIPVisionModel",
-    "SiglipVisionModel": "CLIPVisionModel",
-    "Siglip2VisionModel": "CLIPVisionModel",
     "xCLIPVisionModel": "CLIPVisionModel",
     "CLIPSegTextModel": "CLIPTextModel",
     "MetaClip2TextModel": "CLIPTextModel",
-    "SiglipTextModel": "CLIPTextModel",
-    "Siglip2TextModel": "CLIPTextModel",
     "xCLIPTextModel": "CLIPTextModel",
     "aria": "llava",
     "paligemma": "llava",
@@ -152,12 +147,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 
 def _build_checkpoint_conversion_mapping():
-    # HunYuan's per-head q/k norms were called `query_layernorm` / `key_layernorm`; every other model names them
-    # `q_norm` / `k_norm`.
-    hunyuan_qk_norm_renames = [
-        WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
-        WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
-    ]
     mapping = {
         "hy_v4": [
             # General HC prefix which is dropped
@@ -372,10 +361,19 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"^model\.vit", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
-            *hunyuan_qk_norm_renames,
+            # HunYuan's per-head q/k norms were called `query_layernorm` / `key_layernorm`; every other model names them
+            # `q_norm` / `k_norm`.
+            WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+            WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
         ],
-        "hunyuan_vl_text": [*hunyuan_qk_norm_renames],
-        "hunyuan_v1_dense": [*hunyuan_qk_norm_renames],
+        "hunyuan_vl_text": [
+            WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+            WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
+        ],
+        "hunyuan_v1_dense": [
+            WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+            WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
+        ],
         "ViTModel": [
             WeightRenaming(r"encoder\.layer\.", "layers."),
             WeightRenaming("attention.query", "q_proj"),
@@ -505,6 +503,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
         ],
         "kimi_k25": [
             # Same as llava, add `model` as prefix if needed
@@ -819,8 +818,99 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
         # Important to refer to classes by name, not model-type! Several classes share the same model type
-        "CLIPVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
-        "CLIPTextModel": [PrefixChange(prefix_to_remove="text_model")],
+        "CLIPVisionModel": [
+            PrefixChange(prefix_to_remove="vision_model"),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "CLIPTextModel": [
+            PrefixChange(prefix_to_remove="text_model"),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        # Siglip keeps `out_proj`, so it does not reuse the CLIP entries above
+        "SiglipVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
+        "Siglip2VisionModel": [PrefixChange(prefix_to_remove="vision_model")],
+        "SiglipTextModel": [PrefixChange(prefix_to_remove="text_model")],
+        "Siglip2TextModel": [PrefixChange(prefix_to_remove="text_model")],
+        "clip": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "clip_text_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "clip_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "altclip_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "chinese_clip": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "chinese_clip_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "clipseg": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "clipseg_text_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "clipseg_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "metaclip_2": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "metaclip_2_text_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "metaclip_2_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "mlcd_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "minimax_m3_vl_vision": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "sam3_lite_text_text_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "xclip": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.message_attn\.out_proj\.", ".message_attn.o_proj."),
+        ],
+        "xclip_text_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "xclip_vision_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.message_attn\.out_proj\.", ".message_attn.o_proj."),
+        ],
+        "eomt": [
+            WeightRenaming(r"\.attention\.out_proj\.", ".attention.o_proj."),
+        ],
+        "videomt": [
+            WeightRenaming(r"\.attention\.out_proj\.", ".attention.o_proj."),
+        ],
+        "aimv2": [
+            WeightRenaming(r"\.attention\.out_proj\.", ".attention.o_proj."),
+        ],
+        "aimv2_vision_model": [
+            WeightRenaming(r"\.attention\.out_proj\.", ".attention.o_proj."),
+        ],
+        "aimv2_text_model": [
+            WeightRenaming(r"\.attention\.out_proj\.", ".attention.o_proj."),
+        ],
+        "ovis2": [
+            WeightRenaming(r"\.attention\.out_proj\.", ".attention.o_proj."),
+        ],
+        "emu3_vqgan": [
+            WeightRenaming(r"\.out_proj\.", ".o_proj."),
+        ],
+        "Emu3VQVAE": [
+            WeightRenaming(r"\.out_proj\.", ".o_proj."),
+        ],
         "VideoLlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
@@ -1109,6 +1199,7 @@ def _build_checkpoint_conversion_mapping():
                     PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
                 ],
             ),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
         "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
@@ -1856,10 +1947,21 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 operations=[Chunk(dim=0)],
             ),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "unlimited_ocr_vision": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "unlimited_ocr_vision_encoder": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
         ],
         "tipsv2": [
             WeightRenaming("text_encoder", "text_model"),
             WeightRenaming("vision_encoder", "vision_model"),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        ],
+        "tipsv2_text_model": [
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
         ],
         "Tipsv2TextModel": [
             PrefixChange(prefix_to_remove="text_encoder"),
@@ -2106,6 +2208,12 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
+    mapping["hunyuan_v1_moe"] += [
+        WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
+    ]
 
     mapping["kolibri1"] = mapping["qwen2_moe"].copy()
     mapping["kolibri1"] += [
@@ -2406,52 +2514,6 @@ def _build_checkpoint_conversion_mapping():
         if model_type in mapping:
             continue
         mapping[model_type] = mapping[base_pattern].copy()
-
-    def attention_out_proj_renames(source=r"\.self_attn\.", target=".self_attn."):
-        return [WeightRenaming(source + r"out_proj\.", target + "o_proj.")]
-
-    for key in [
-        "clip",
-        "clip_text_model",
-        "clip_vision_model",
-        "CLIPTextModel",
-        "CLIPVisionModel",
-        "altclip",
-        "altclip_vision_model",
-        "AltCLIPVisionModel",
-        "chinese_clip",
-        "chinese_clip_vision_model",
-        "ChineseCLIPVisionModel",
-        "clipseg",
-        "clipseg_text_model",
-        "clipseg_vision_model",
-        "CLIPSegTextModel",
-        "CLIPSegVisionModel",
-        "metaclip_2",
-        "metaclip_2_text_model",
-        "metaclip_2_vision_model",
-        "MetaClip2TextModel",
-        "MetaClip2VisionModel",
-        "mlcd_vision_model",
-        "minimax_m3_vl_vision",
-        "step3p5_vision",
-        "tipsv2",
-        "tipsv2_text_model",
-        "unlimited_ocr_vision",
-        "unlimited_ocr_vision_encoder",
-        "UnlimitedOcrVisionEncoder",
-    ]:
-        mapping[key] = mapping.get(key, []) + attention_out_proj_renames()
-    for key in ["xclip", "xclip_text_model", "xclip_vision_model"]:
-        mapping[key] = mapping.get(key, []) + attention_out_proj_renames()
-    for key in ["xclip", "xclip_vision_model"]:
-        mapping[key] = mapping[key] + attention_out_proj_renames(r"\.message_attn\.", ".message_attn.")
-    mapping["sam3_lite_text_text_model"] = mapping.get("sam3_lite_text_text_model", []) + attention_out_proj_renames()
-    for key in ["eomt", "videomt", "aimv2", "aimv2_vision_model", "aimv2_text_model", "ovis2"]:
-        mapping[key] = mapping.get(key, []) + attention_out_proj_renames(r"\.attention\.", ".attention.")
-    for key in ["emu3_vqgan", "Emu3VQVAE"]:
-        mapping[key] = mapping.get(key, []) + attention_out_proj_renames(r"\.", ".")
-    mapping["hunyuan_v1_moe"] = mapping["hunyuan_v1_moe"] + hunyuan_qk_norm_renames
 
     return mapping
 
