@@ -170,7 +170,9 @@ for i, text in enumerate(processor.decode(generated_ids, skip_special_tokens=Tru
 
 ### Training
 
-Pass the target transcripts to `apply_transcription_request` with `transcription` to get the `labels` used to compute the loss.
+The model can be trained with the loss it outputs. Put the target transcript in an assistant turn of the
+[chat template](#chat-template) and pass `processor_kwargs={"output_labels": True}`. Everything but the transcript and
+its EOS is masked automatically (namely the audio placeholders, the language prompt and the padding).
 
 Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech transcripts are lowercased below.
 
@@ -190,8 +192,17 @@ ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sam
 speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
 text_samples = [text.lower() for text in ds["text"][:NUM_SAMPLES]]
 
-# Any supported language code, or `language=None` to train the language-agnostic mode
-inputs = processor.apply_transcription_request(speech_samples, language="en", transcription=text_samples)
+# Any supported language code, or no `language` item to train the language-agnostic mode
+conversations = [
+    [
+        {"role": "user", "content": [{"type": "audio", "audio": audio}, {"type": "language", "language": "en"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": text}]},
+    ]
+    for audio, text in zip(speech_samples, text_samples)
+]
+inputs = processor.apply_chat_template(
+    conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
+)
 inputs.to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss

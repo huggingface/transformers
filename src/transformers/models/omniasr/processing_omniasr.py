@@ -160,13 +160,11 @@ class OmniASRProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         language: str | list[str] | None = None,
-        transcription: str | list[str] | None = None,
         tokenize: bool = True,
         **kwargs: Unpack[OmniASRProcessorKwargs],
     ) -> BatchFeature | list[str]:
         """
-        Prepare inputs for speech recognition without manually writing the chat template, either for inference or,
-        when `transcription` is given, for training.
+        Prepare inputs for speech recognition without manually writing the chat template.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -177,9 +175,6 @@ class OmniASRProcessor(ProcessorMixin):
                 or one per audio. ISO 639-1 codes (e.g. `"en"`) are also accepted for the languages that have one.
                 `None` or `"auto"` selects the model's language-agnostic mode; naming the language explicitly gives
                 better transcription quality.
-            transcription (`str` or `list[str]`, *optional*):
-                Target transcript(s) for training, one per audio. When given, each transcript is written as the
-                assistant turn and `labels` are returned (see `output_labels` in [`~OmniASRProcessor.__call__`]).
             tokenize (`bool`, *optional*, defaults to `True`):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
                 the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
@@ -192,8 +187,7 @@ class OmniASRProcessor(ProcessorMixin):
 
         Returns:
             [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
-            outputs ready to be passed to [`OmniASRForConditionalGeneration.generate`], or to [`OmniASRForConditionalGeneration.forward`] to compute
-            the loss when `transcription` is given.
+            outputs ready to be passed to [`OmniASRForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
         batch_size = len(audio_items)
@@ -202,25 +196,17 @@ class OmniASRProcessor(ProcessorMixin):
 
         languages = prepare_prompt_input(language, batch_size, input_name="language")
 
-        is_training = transcription is not None
-        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
-        if is_training:
-            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
-
         conversations = []
-        for audio_item, lang, transcript in zip(audio_items, languages, transcriptions):
+        for audio_item, lang in zip(audio_items, languages):
             content = [make_audio_chat_template_content(audio_item)]
             if lang is not None:
                 content.append({"type": "language", "language": lang})
-            conversation = [{"role": "user", "content": content}]
-            if transcript is not None:
-                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
-            conversations.append(conversation)
+            conversations.append([{"role": "user", "content": content}])
 
         return self.apply_chat_template(
             conversations,
             tokenize=tokenize,
-            add_generation_prompt=not is_training,
+            add_generation_prompt=True,
             return_dict=True,
             **kwargs,
         )
