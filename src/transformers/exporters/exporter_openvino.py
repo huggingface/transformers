@@ -35,8 +35,7 @@ Extends [`DynamoExporter`] with the stages that turn an ``ExportedProgram`` into
    weights (see "16-bit models" below).
 5. **Stateful transformation** (``OpenVINOConfig.stateful``, on by default): fold
    round-tripped state tensors (KV cache, SSM states, …) into internal OV variables with a
-   fused ``beam_idx`` reorder. Optionally written to disk via ``openvino.save_model`` when
-   ``OpenVINOConfig.output_path`` is set.
+   fused ``beam_idx`` reorder.
 """
 
 from __future__ import annotations
@@ -49,12 +48,12 @@ import re
 from collections.abc import Mapping, MutableMapping
 from typing import Any
 
-from ..integrations.sdpa_attention import repeat_kv
 from ..utils import logging
 from ..utils.import_utils import is_openvino_available, is_openvino_greater_or_equal, is_torch_available
-from .configs import OpenVINOConfig
+from .configs import ExportFormat, OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
 from .exporter_onnx import disambiguate_io_names, patch_model_outputs
+from .metadata import ExportMetadata
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -74,6 +73,7 @@ if is_torch_available():
     from torch.export.decomp_utils import CustomDecompTable
 
     from ..integrations.moe import _default_apply_gate
+    from ..integrations.sdpa_attention import repeat_kv
     from ..modeling_utils import PreTrainedModel
 
 
@@ -81,7 +81,7 @@ if is_openvino_available():
     import numpy as np
     import openvino
     import openvino.opset14 as ov_ops
-    from openvino._offline_transformations import apply_make_stateful_transformation
+    from openvino._offline_transformations import apply_make_stateful_transformation, compress_model_transformation
     from openvino.frontend.pytorch import ConversionExtension
     from openvino.frontend.pytorch.fx_decoder import TorchFXPythonDecoder
 
@@ -102,32 +102,33 @@ class OpenVINOExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_openvino import OpenVINOExporter, OpenVINOConfig
 
     >>> exporter = OpenVINOExporter()
-    >>> ov_model = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
-    >>> exporter.export(model, inputs, config=OpenVINOConfig(output_path="model.xml"))
+    >>> exported = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
+    >>> ov_model = exported.program  # an `openvino.Model`
+    >>> exported.save_pretrained("exported")  # `openvino_model.xml` + `.bin`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.OPENVINO
+    config_class = OpenVINOConfig
+    program_suffix = ".xml"
+    program_prefix = "openvino_"
 
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
 
-    def export(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: OpenVINOConfig | dict[str, Any],
-    ) -> openvino.Model:
-        if isinstance(config, dict):
-            config = OpenVINOConfig(**config)
-        elif type(config) is not OpenVINOConfig:
-            raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
-
+        config: OpenVINOConfig,
+    ) -> tuple[openvino.Model, ExportMetadata]:
         # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
         with (
             apply_patches("openvino"),
             patch_16bit_model(model, sample_inputs) as sample_inputs,
             patch_model_outputs(model) as (inputs_names, outputs_names),
         ):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             # Converted before the model gets its dtypes back: the program's constants are its own tensors.
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
@@ -144,15 +145,38 @@ class OpenVINOExporter(DynamoExporter):
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
 
-        if config.output_path is not None:
-            openvino.save_model(ov_model, config.output_path, compress_to_fp16=config.compress_to_fp16)
+        if config.compress_to_fp16:
+            compress_model_transformation(ov_model)
 
-        return ov_model
+        _update_openvino_metadata(metadata, ov_model)
+        return ov_model, metadata
+
+    @classmethod
+    def save_program(cls, program: openvino.Model, path) -> None:
+        """Write the `.xml` graph and `.bin` weights at the precision the model already holds (`save_model` would
+        otherwise halve `float32` weights on its own)."""
+        openvino.save_model(program, str(path), compress_to_fp16=False)
+
+    @classmethod
+    def program_files(cls, filename: str) -> list[str]:
+        """The `.xml` graph and its `.bin` weights."""
+        return [filename, f"{filename.removesuffix('.xml')}.bin"]
+
+    @classmethod
+    def load_program(cls, path) -> openvino.Model:
+        return openvino.Core().read_model(str(path))
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
 # Small helpers for ``OpenVINOExporter.export`` — extracted for readability and so each stage
 # of the conversion has a single responsibility.
+
+
+def _update_openvino_metadata(metadata: ExportMetadata, ov_model: openvino.Model) -> None:
+    """Record the model's own port names: dotted leaf paths and, once stateful, no cache ports but a `beam_idx`
+    input."""
+    metadata.input_names = [port.get_any_name() for port in ov_model.inputs]
+    metadata.output_names = [port.get_any_name() for port in ov_model.outputs]
 
 
 def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:
