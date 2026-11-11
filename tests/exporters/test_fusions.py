@@ -166,3 +166,15 @@ class OpenVINOFusionTest(MemoryCleanupMixin, unittest.TestCase):
         )
         # q, k, v, o, gate, up and down per layer read u8 weights in the fused matmul instead of decompressing them
         self.assertGreaterEqual(precisions["u8"], 7 * model.config.num_hidden_layers)
+
+    def test_dynamic_repeated_keys_broadcast_in_numpy_mode(self):
+        # The plugin runs a bidirectional broadcast to a computed shape in float32 reference code, outside the graph's
+        # 16-bit precision; `repeat_kv`'s expand, for grouped-query attention, is one per key and value.
+        model = _model("llama", torch.bfloat16, num_attention_heads=4, num_key_value_heads=2)
+        inputs = {"input_ids": torch.tensor([[1, 5, 7, 9, 11]]), "attention_mask": torch.ones(1, 5, dtype=torch.long)}
+        program = OpenVINOExporter().export(model, inputs, OpenVINOConfig(dynamic=True)).components["model"].program
+        modes = collections.Counter(
+            op.get_attributes()["mode"] for op in program.get_ordered_ops() if op.get_type_name() == "Broadcast"
+        )
+        self.assertEqual(modes["bidirectional"], 0)
+        self.assertGreaterEqual(modes["numpy"], 2 * model.config.num_hidden_layers)
