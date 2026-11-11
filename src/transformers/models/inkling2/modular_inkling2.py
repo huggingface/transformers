@@ -1081,7 +1081,7 @@ class Inkling2TextModel(InklingTextModel):
                 **kwargs,
             )
             if decoder_layer.is_block_boundary:
-                block_states = torch.cat([block_states, hidden_states.unsqueeze(-2)], dim=-2)
+                block_states = torch.cat([block_states.to(hidden_states.device), hidden_states.unsqueeze(-2)], dim=-2)
             hidden_states = new_hidden_states
 
         hidden_states = self.final_input(block_states, hidden_states)[0]
