@@ -13,14 +13,24 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import torch
 
 from transformers.models.hy_v4.configuration_hy_v4 import HYV4Config
-from transformers.models.hy_v4.modeling_hy_v4 import HYV4ForCausalLM, HYV4RotaryEmbedding, apply_rotary_pos_emb
+from transformers.models.hy_v4.modeling_hy_v4 import (
+    HYV4ForCausalLM,
+    HYV4RotaryEmbedding,
+    apply_rotary_pos_emb,
+    rotate_half,
+)
 
 
 class HYV4RotaryTest(unittest.TestCase):
+    def test_rotate_half_rejects_odd_dimension(self):
+        with self.assertRaisesRegex(ValueError, "even final dimension"):
+            rotate_half(torch.zeros(1, 2, 7))
+
     def test_checkpoint_coordinates_match_complex_rotation(self):
         torch.manual_seed(123)
         config = HYV4Config(qk_rope_head_dim=8, rope_parameters={"rope_type": "default", "rope_theta": 10000.0})
@@ -64,7 +74,7 @@ class HYV4RotaryTest(unittest.TestCase):
             decode, _ = apply_rotary_pos_emb(token, token, cos, sin)
             torch.testing.assert_close(decode, prefill[:, :, start : start + 1], atol=0, rtol=0)
 
-    def test_model_cached_decode_matches_full_sequence(self):
+    def test_model_rope_matches_complex_rotation_and_cached_decode(self):
         torch.manual_seed(42)
         config = HYV4Config(
             vocab_size=32,
@@ -81,6 +91,8 @@ class HYV4RotaryTest(unittest.TestCase):
             index_head_dim=16,
             index_n_heads=4,
             index_topk=4,
+            indexer_types=["full", "shared"],
+            rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
             hc_mult=2,
             n_routed_experts=4,
             num_experts_per_tok=2,
@@ -91,13 +103,41 @@ class HYV4RotaryTest(unittest.TestCase):
         config._attn_implementation = "eager"
         model = HYV4ForCausalLM(config).eval()
         tokens = torch.tensor([[1, 5, 7, 8, 9, 10, 11]])
-        with torch.no_grad():
-            expected = model(tokens, use_cache=False).logits
-            prefill = model(tokens[:, :4], use_cache=True)
+        calls = {1: 0, 2: 0}  # MLA uses head axis 1; the indexer uses head axis 2.
+
+        def check_rotary(q, k, cos, sin, unsqueeze_dim=1):
+            actual = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=unsqueeze_dim)
+            dim = config.qk_rope_head_dim
+            angles = position_ids[..., None].float() * (10000.0 ** (-torch.arange(0, dim, 2).float() / dim))
+            phase = torch.polar(torch.ones_like(angles), angles).unsqueeze(unsqueeze_dim)
+            for raw, rotated in zip((q, k), actual):
+                pairs = raw.reshape(*raw.shape[:-1], dim // 2, 2).contiguous()
+                reference = torch.view_as_real(torch.view_as_complex(pairs) * phase).flatten(-2)
+                torch.testing.assert_close(rotated, reference, atol=2e-6, rtol=2e-6)
+            calls[unsqueeze_dim] += 1
+            return actual
+
+        # Observe the actual model path: bypassing the local helper must fail the call-count checks.
+        with (
+            torch.no_grad(),
+            patch("transformers.models.hy_v4.modeling_hy_v4.apply_rotary_pos_emb", side_effect=check_rotary),
+        ):
+            position_ids = torch.arange(tokens.shape[1]).unsqueeze(0)
+            expected = model(tokens, position_ids=position_ids, use_cache=False).logits
+            self.assertEqual(calls, {1: 2, 2: 1})
+            position_ids = torch.arange(4).unsqueeze(0)
+            prefill = model(tokens[:, :4], position_ids=position_ids, use_cache=True)
             actual = [prefill.logits]
             cache = prefill.past_key_values
             for position in range(4, tokens.shape[1]):
-                output = model(tokens[:, position : position + 1], past_key_values=cache, use_cache=True)
+                position_ids = torch.tensor([[position]])
+                output = model(
+                    tokens[:, position : position + 1],
+                    position_ids=position_ids,
+                    past_key_values=cache,
+                    use_cache=True,
+                )
                 actual.append(output.logits)
                 cache = output.past_key_values
+        self.assertEqual(calls, {1: 10, 2: 5})
         torch.testing.assert_close(torch.cat(actual, dim=1), expected, atol=1e-5, rtol=1e-4)

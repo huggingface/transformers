@@ -123,6 +123,8 @@ class HYV4RotaryEmbedding(nn.Module):
 
 def rotate_half(x):
     """Rotate consecutive pairs in the final feature dimension."""
+    if x.shape[-1] % 2 != 0:
+        raise ValueError("HYV4 rotary embeddings require an even final dimension.")
     x1 = x[..., ::2]
     x2 = x[..., 1::2]
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
@@ -418,7 +420,7 @@ class HYV4Attention(nn.Module):
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
-        # Non-interleave RoPE
+        # Apply adjacent-pair RoPE in checkpoint coordinates.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
