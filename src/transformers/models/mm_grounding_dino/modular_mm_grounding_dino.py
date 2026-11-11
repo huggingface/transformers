@@ -24,6 +24,7 @@ from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.modeling_grounding_dino import (
+    SPECIAL_TOKENS,
     GroundingDinoContrastiveEmbedding,
     GroundingDinoConvEncoder,
     GroundingDinoConvModel,
@@ -247,6 +248,10 @@ class MMGroundingDinoModel(GroundingDinoModel, MMGroundingDinoPreTrainedModel):
         )
         self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
 
+        self.special_tokens = nn.Buffer(
+            torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
+            persistent=False,
+        )
         self.post_init()
 
 

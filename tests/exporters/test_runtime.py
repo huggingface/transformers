@@ -29,6 +29,8 @@ Current coverage — the generation `decode` component:
   device, so the ONNX check runs in host memory everywhere and upgrades itself to device-resident
   buffers on CUDA (the max-performance path: in-place input updates, no per-step allocations or host
   round-trips) — a provider that copies instead of aliasing device memory only shows up there.
+
+Saving and loading exports is tested in `test_save_load.py`.
 """
 
 import copy
@@ -61,29 +63,31 @@ def _causal_mask(positions, cache_len):
     return (torch.arange(cache_len)[None, :] <= positions[:, None])[None, None]
 
 
+def _tiny_model():
+    config = LlamaConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        vocab_size=64,
+        max_position_embeddings=128,
+    )
+    return LlamaForCausalLM(config).eval()
+
+
+def _decompose_static_decode(model, prompt):
+    """Capture the multi-token `decode` component against a fixed-size `StaticCache`."""
+    inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
+    gen_config = GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
+    return decompose_for_generation(
+        model, copy.deepcopy(inputs), generation_config=gen_config, multi_token_decode=True
+    )["decode"]
+
+
 @slow
 @require_torch
 class ExportedDecodeRuntimeTest(unittest.TestCase):
-    def _tiny_model(self):
-        config = LlamaConfig(
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            vocab_size=64,
-            max_position_embeddings=128,
-        )
-        return LlamaForCausalLM(config).eval()
-
-    def _decompose_static_decode(self, model, prompt):
-        """Capture the multi-token `decode` component against a fixed-size `StaticCache`."""
-        inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
-        gen_config = GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
-        return decompose_for_generation(
-            model, copy.deepcopy(inputs), generation_config=gen_config, multi_token_decode=True
-        )["decode"]
-
     # ──────────────────── torch.export (Dynamo) ────────────────────
 
     @pytest.mark.torch_export_test
@@ -93,12 +97,12 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         torch.manual_seed(0)
-        model = self._tiny_model()
-        decode_model, decode_inputs = self._decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
+        model = _tiny_model()
+        decode_model, decode_inputs = _decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+            .program.module()
         )
 
         for query_len in (1, 2, 4):
@@ -124,12 +128,12 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         torch.manual_seed(0)
-        model = self._tiny_model()
-        decode_model, decode_inputs = self._decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
+        model = _tiny_model()
+        decode_model, decode_inputs = _decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+            .program.module()
         )
 
         past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
@@ -167,6 +171,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         Nothing here is tied to a device: it runs in host memory wherever ONNX Runtime is installed, and
         on a CUDA box with a matching build it upgrades itself to the max-performance path, where the
         buffers are device resident and a provider that copies instead of aliasing them would show up."""
+        import onnx_ir
         import onnxruntime as ort
         from onnxruntime.transformers.io_binding_helper import CudaSession
 
@@ -178,25 +183,23 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             provider, buffer_device = "CPUExecutionProvider", "cpu"
 
         torch.manual_seed(0)
-        model = self._tiny_model()
+        model = _tiny_model()
         prompt = torch.randint(0, 64, (1, 4))
-        decode_model, decode_inputs = self._decompose_static_decode(model, prompt)
-        onnx_program = OnnxExporter().export(
-            decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True, external_data=False)
+        decode_model, decode_inputs = _decompose_static_decode(model, prompt)
+        onnx_program = (
+            OnnxExporter().export(decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True)).program
         )
 
         # cache exposed as matched `input.<name>` / `output.<name>` pairs (graph-input order lines up
         # with the `StaticCache` pytree leaves below)
         cache_names = [
-            node.name[len("input.") :]
-            for node in onnx_program.model_proto.graph.input
-            if node.name.startswith("input.")
+            value.name[len("input.") :] for value in onnx_program.graph.inputs if value.name.startswith("input.")
         ]
         self.assertTrue(cache_names, "decode graph exposes no cache inputs")
         counter_name = next(name for name in cache_names if name.endswith("cumulative_length"))
         vocab_size = model.config.vocab_size
 
-        session = ort.InferenceSession(onnx_program.model_proto.SerializeToString(), providers=[provider])
+        session = ort.InferenceSession(onnx_ir.to_proto(onnx_program).SerializeToString(), providers=[provider])
         binding = CudaSession(session, torch.device(buffer_device))
         for name in cache_names:
             binding.set_buffer_sharing(f"input.{name}", f"output.{name}")

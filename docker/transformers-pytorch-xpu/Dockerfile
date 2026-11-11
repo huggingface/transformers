@@ -76,6 +76,7 @@ RUN uv pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-
 RUN uv pip install gptqmodel --no-cache-dir
 RUN uv pip install auto-round --no-cache-dir
 RUN uv pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[dev] diffusers trl sentence_transformers pytorch_msssim peft --no-cache-dir
+RUN uv pip install --upgrade --no-deps diffusers
 RUN uv pip install pydantic openai uvicorn fastapi --no-cache-dir
 
 # install liger-kernel

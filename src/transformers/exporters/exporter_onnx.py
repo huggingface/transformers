@@ -46,14 +46,16 @@ import functools
 import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import OnnxConfig
+from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
+from .metadata import ExportMetadata
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
@@ -66,7 +68,6 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
 
 
@@ -106,7 +107,7 @@ logger = logging.get_logger(__file__)
 
 
 class OnnxExporter(DynamoExporter):
-    """Exporter that converts a [`PreTrainedModel`] to an ONNX `ONNXProgram`.
+    """Exporter that converts a [`PreTrainedModel`] to an ONNX graph (an `onnx_ir.Model`).
 
     Example:
 
@@ -114,28 +115,27 @@ class OnnxExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
     >>> exporter = OnnxExporter()
-    >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
-    >>> outputs = onnx_program(**inputs)  # run in-memory
-    >>> exporter.export(model, inputs, config=OnnxConfig(output_path="model.onnx"))  # save to disk
+    >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
+    >>> onnx_model = exported.program  # an `onnx_ir.Model`
+    >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.ONNX
+    config_class = OnnxConfig
+    program_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
     tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
-    def export(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: OnnxConfig | dict[str, Any],
-    ) -> ONNXProgram:
-        if isinstance(config, dict):
-            config = OnnxConfig(**config)
-        elif type(config) is not OnnxConfig:
-            raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
-
+        config: OnnxConfig,
+    ) -> tuple[onnx_ir.Model, ExportMetadata]:
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -155,19 +155,52 @@ class OnnxExporter(DynamoExporter):
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
-        if config.output_path is not None:
-            onnx_program.save(
-                config.output_path,
-                include_initializers=config.export_params,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
-                external_data=config.external_data,
-            )
+        _update_onnx_metadata(metadata, onnx_program.model)
+        return onnx_program.model, metadata
 
-        return onnx_program
+    @classmethod
+    def save_program(cls, program: onnx_ir.Model, path) -> None:
+        """Weights go to a `<name>.onnx.data` sidecar file, so models past the 2 GB protobuf limit save too."""
+        onnx_ir.save(program, str(path), external_data=f"{Path(path).name}.data")
+
+    @classmethod
+    def program_files(cls, filename: str) -> list[str]:
+        return [filename, f"{filename}.data"]
+
+    @classmethod
+    def load_program(cls, path) -> onnx_ir.Model:
+        """The saved graph, its weights left in `model.onnx.data` until read. Its `meta["path"]` keeps the file, which
+        ONNX Runtime opens to read the weights itself."""
+        model = onnx_ir.load(str(path))
+        model.meta["path"] = str(path)
+        # The Hub cache links `model.onnx.data` to a blob outside the snapshot, which `onnx_ir` refuses to read: the
+        # weights are read from the blob instead. Only this file is redirected; any other location stays checked.
+        data = Path(path).with_name(f"{Path(path).name}.data")
+        if data.is_symlink():
+            for graph in model.graphs():
+                for value in graph.initializers.values():
+                    tensor = value.const_value
+                    if isinstance(tensor, onnx_ir.ExternalTensor) and Path(tensor.path) == data:
+                        value.const_value = onnx_ir.ExternalTensor(
+                            data.resolve(),
+                            tensor.offset,
+                            tensor.length,
+                            tensor.dtype,
+                            shape=tensor.shape,
+                            name=tensor.name,
+                        )
+        return model
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
 # Model forward wrapper and I/O naming used by OnnxExporter.export.
+
+
+def _update_onnx_metadata(metadata: ExportMetadata, onnx_model: onnx_ir.Model) -> None:
+    """Record the graph's own input and output names: dotted leaf paths, with `input.` / `output.` prefixes on mutated
+    inputs."""
+    metadata.input_names = [value.name for value in onnx_model.graph.inputs]
+    metadata.output_names = [value.name for value in onnx_model.graph.outputs]
 
 
 @contextmanager
