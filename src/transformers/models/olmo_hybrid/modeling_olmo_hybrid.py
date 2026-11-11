@@ -66,7 +66,6 @@ class OlmoHybridRMSNormGated(nn.Module):
         return hidden_states.to(input_dtype)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class OlmoHybridRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
