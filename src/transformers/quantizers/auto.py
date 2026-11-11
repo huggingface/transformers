@@ -470,12 +470,17 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         # `P.*`) names the module `P` under any prefix, and everything under it
         patterns = self.quantizers | checkpoint
         order = sorted(patterns, key=lambda pattern: ("*" in pattern) + (pattern == "*"))
-        self.patterns = {f"*{pattern.removesuffix('.*')}.*": patterns[pattern] for pattern in order}
+        self.patterns = [(f"*{pattern.removesuffix('.*')}.*", patterns[pattern]) for pattern in order]
         # One regex, the first matching pattern wins
-        self.matcher = re.compile("|".join(f"(?P<p{i}>{translate(glob)})" for i, glob in enumerate(self.patterns)))
-        # Each format's `renamed_names` as one regex too, for `rename_layer`
+        self.matcher = re.compile(
+            "|".join(f"(?P<p{i}>{translate(glob)})" for i, (glob, _) in enumerate(self.patterns))
+        )
+        # Each format's `renamed_names` as one regex too, with our names in order, for `rename_layer`
         self.renamers = {
-            quantizer: re.compile("|".join(f"(?P<p{i}>{translate(f'*.{n}')})" for i, n in enumerate(names)))
+            quantizer: (
+                re.compile("|".join(f"(?P<p{i}>{translate(f'*.{n}')})" for i, n in enumerate(names))),
+                list(names.values()),
+            )
             for quantizer in self.all_quantizers
             if quantizer.pre_quantized and (names := quantizer.renamed_names)
         }
@@ -483,7 +488,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def get_quantizer(self, name):
         "The quantizer of the first plan pattern naming the module or key `name` (a module's name ends with a dot)"
         match = self.matcher.match(f"{name}.")
-        return list(self.patterns.values())[int(match.lastgroup[1:])] if match else None
+        return self.patterns[int(match.lastgroup[1:])][1] if match else None
 
     def update_weight_conversions(self, weight_conversions, model):
         """
@@ -513,10 +518,9 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def rename_layer(self, key):
         "A checkpoint key in its layer's format names: the first glob of its `renamed_names` naming it, e.g. `*.scale`"
-        quantizer = self.get_quantizer(key)
-        match = self.renamers[quantizer].match(key) if quantizer in self.renamers else None
-        ours = list(quantizer.renamed_names.values())[int(match.lastgroup[1:])] if match else None
-        return key if match is None else f"{key.rpartition('.')[0]}.{ours}"
+        renamer, ours = self.renamers.get(self.get_quantizer(key), (None, None))
+        match = renamer.match(key) if renamer else None
+        return key if match is None else f"{key.rpartition('.')[0]}.{ours[int(match.lastgroup[1:])]}"
 
     def update_weight_transform(self, transform, model, name):
         """
@@ -612,7 +616,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
         }
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
-        self.patterns = {pattern: None if q in dequantized else q for pattern, q in self.patterns.items()}
+        self.patterns = [(glob, None if q in dequantized else q) for glob, q in self.patterns]
         if not self.all_quantizers:
             self.remove_quantization_config(model)
             return model

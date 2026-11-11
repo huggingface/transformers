@@ -582,8 +582,8 @@ class FP8DequantizeTest(unittest.TestCase):
         # converter has the dequantization
         from transformers.integrations.finegrained_fp8 import Fp8Dequantize
 
-        model = nn.Module()
-        model.norm = nn.LayerNorm(4, dtype=torch.bfloat16)
+        model = torch.nn.Module()
+        model.norm = torch.nn.LayerNorm(4, dtype=torch.bfloat16)
         output = Fp8Dequantize(None).convert({"weight": torch.ones(4)}, full_layer_name="norm.weight", model=model)
         self.assertEqual(output["norm.weight"].dtype, torch.bfloat16)
 
