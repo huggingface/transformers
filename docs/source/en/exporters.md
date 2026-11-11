@@ -31,12 +31,36 @@ in the modeling code.
 > [!WARNING]
 > The exporters are experimental. Many of the patches in this module work around specific upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in the test suite. Pin those versions in production tooling, and expect new patches to appear and old ones to disappear as upstream changes land.
 
-| Exporter               | Output                     | Runtime                                    |
-| ---------------------- | -------------------------- | ------------------------------------------ |
-| [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
-| [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
-| [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
-| [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
+| Exporter               | Program (`.program`)       | Saved as                      | Runtime                                    |
+| ---------------------- | -------------------------- | ----------------------------- | ------------------------------------------ |
+| [`DynamoExporter`]     | `ExportedProgram`          | `model.pt2`                   | Any PyTorch runtime, AOT compilation       |
+| [`OnnxExporter`]       | `onnx_ir.Model`            | `model.onnx`                  | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
+| [`ExecutorchExporter`] | `ExecutorchProgramManager` | `model.pte`                   | Mobile and edge devices (ExecuTorch)       |
+| [`OpenVINOExporter`]   | `openvino.Model`           | `openvino_model.xml` + `.bin` | OpenVINO runtime (Intel CPU/GPU/NPU)       |
+
+Every export returns an [`ExportedModel`], whose `components` map names to [`ExportedComponent`]s. A
+component holds the backend's program (`.program`) and the [`ExportMetadata`] recorded while tracing it
+(input and output names, precision, traced input shapes, export config). [`~HfExporter.export`] produces a single `"model"`
+component, so its program is directly `exported.program`. [`~ExportedModel.save_pretrained`] writes one
+file per component, an `export.json` manifest with each component's file and metadata, and the model config.
+
+[`~ExportedModel.from_pretrained`] loads it back, from a local directory or a Hub repo, with the same download kwargs
+as [`~PreTrainedModel.from_pretrained`]. Pass `subfolder` for an export kept next to the model's weights; only the
+export's own files are downloaded. Dynamo, ONNX, and OpenVINO
+programs load as the type the export returned. A loaded ONNX graph leaves its weights in `model.onnx.data` until they
+are read. An ExecuTorch `.pte` loads as an
+`executorch.runtime.Program`, since the `ExecutorchProgramManager` can't be rebuilt from the file.
+
+```python
+from transformers.exporters import ExportedModel
+
+exported.program  # the backend's program
+exported.save_pretrained("exported-model")  # model.<suffix>, export.json, config.json
+loaded = ExportedModel.from_pretrained("exported-model")
+```
+
+A directory holds one export, since `export.json` and `config.json` have fixed names. Keep exports to several
+formats in their own subfolders (`onnx/`, `openvino/`) and load them with `subfolder="onnx"`.
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the
 right config class from a dict. Both follow the same auto-class pattern in Transformers, which
@@ -49,7 +73,7 @@ export_config_dict = {"export_format": "onnx", "dynamic": True}
 config = AutoExportConfig.from_dict(export_config_dict)
 exporter = AutoHfExporter.from_config(config)
 
-onnx_program = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 ```
 
 ## Installation
@@ -132,7 +156,7 @@ config = DynamoConfig(dynamic=True)
 exported = exporter.export(model, inputs, config=config)
 
 # run the exported graph directly
-outputs = exported.module()(**inputs)
+outputs = exported.program.module()(**inputs)
 ```
 
 </hfoption>
@@ -148,14 +172,14 @@ inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-onnx_program = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 
 # save and load with ONNX Runtime
-onnx_program.save("model.onnx")
+exported.save_pretrained("qwen3-onnx")
 
 import onnxruntime as ort
 
-session = ort.InferenceSession("model.onnx")
+session = ort.InferenceSession("qwen3-onnx/model.onnx")
 ort_inputs = {k: v.numpy() for k, v in inputs.items()}
 outputs = session.run(None, ort_inputs)
 ```
@@ -178,15 +202,15 @@ inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-et_program = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 
 # save for on-device deployment
-et_program.save("model.pte")
+exported.save_pretrained("qwen3-executorch")
 
 # load and run via the ExecuTorch Python runtime
 from executorch.runtime import Runtime
 
-program = Runtime.get().load_program("model.pte")
+program = Runtime.get().load_program("qwen3-executorch/model.pte")
 method = program.load_method("forward")
 outputs = method.execute(list(inputs.values()))
 ```
@@ -204,13 +228,13 @@ inputs = tokenizer("Hello, world!", return_tensors="pt")
 
 exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
-ov_model = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 
-ov_model.save("model.xml")
+exported.save_pretrained("qwen3-openvino")
 
 # compile and run on CPU (or "GPU" / "NPU" if available)
 import openvino as ov
-compiled = ov.Core().compile_model(ov_model, "CPU")
+compiled = ov.Core().compile_model(exported.program, "CPU")
 ov_inputs = {k: v.numpy() for k, v in inputs.items()}
 outputs = compiled(ov_inputs)
 ```
@@ -278,7 +302,7 @@ config = OnnxConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-onnx_program = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -306,7 +330,7 @@ config = ExecutorchConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-et_program = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -333,7 +357,7 @@ config = OpenVINOConfig(
     # infers shape relations instead of verifying them against user-stated bounds.
     prefer_deferred_runtime_asserts_over_guards=True,
 )
-ov_model = exporter.export(model, inputs, config=config)
+exported = exporter.export(model, inputs, config=config)
 ```
 
 </hfoption>
@@ -372,8 +396,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ExportedProgram, "language_model": ExportedProgram, "lm_head": ExportedProgram, "decode": ExportedProgram}
+exported = exporter.export_for_generation(model, inputs, config=config)
+# exported: ExportedModel with "image_encoder", "language_model", "lm_head" and "decode",
+# each an ExportedComponent whose `.program` is an ExportedProgram
 ```
 
 </hfoption>
@@ -391,8 +416,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ONNXProgram, "language_model": ONNXProgram, "lm_head": ONNXProgram, "decode": ONNXProgram}
+exported = exporter.export_for_generation(model, inputs, config=config)
+# exported: ExportedModel with "image_encoder", "language_model", "lm_head" and "decode",
+# each an ExportedComponent whose `.program` is an onnx_ir.Model
 ```
 
 </hfoption>
@@ -410,8 +436,9 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": ExecutorchProgramManager, "language_model": ..., "lm_head": ..., "decode": ...}
+exported = exporter.export_for_generation(model, inputs, config=config)
+# exported: ExportedModel with "image_encoder", "language_model", "lm_head" and "decode",
+# each an ExportedComponent whose `.program` is an ExecutorchProgramManager
 ```
 
 </hfoption>
@@ -429,9 +456,13 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 
 exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config)
-# components = {"image_encoder": openvino.Model, "language_model": openvino.Model, "lm_head": openvino.Model, "decode": openvino.Model}
+exported = exporter.export_for_generation(model, inputs, config=config)
+# exported: ExportedModel with "image_encoder", "language_model", "lm_head" and "decode",
+# each an ExportedComponent whose `.program` is an openvino.Model
 ```
+
+`exported.save_pretrained(directory)` writes one file per component (`decode.onnx`, `lm_head.onnx`, ...),
+the manifest, the model config, and the generation config passed to `export_for_generation`.
 
 </hfoption>
 </hfoptions>
@@ -467,7 +498,7 @@ components = decompose_for_generation(model, inputs)
 exported = {}
 for name, (submodel, subinputs) in components.items():
     eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    exported[name] = exporter.export(submodel, subinputs, config=config)
+    exported[name] = exporter.export(submodel, subinputs, config=config).program
 ```
 
 ### Multi-token decode
@@ -488,8 +519,8 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# components["decode"] now accepts a variable number of query tokens
+exported = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+# exported.components["decode"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -500,8 +531,8 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# components["decode"] now accepts a variable number of query tokens
+exported = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+# exported.components["decode"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -512,8 +543,8 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
-components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# components["decode"] now accepts a variable number of query tokens
+exported = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+# exported.components["decode"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -547,7 +578,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 
 exporter = DynamoExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(
+exported = exporter.export_for_generation(
     model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
 )
 ```
@@ -561,7 +592,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 
 exporter = OnnxExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(
+exported = exporter.export_for_generation(
     model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
 )
 ```
@@ -575,7 +606,7 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(
+exported = exporter.export_for_generation(
     model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config, multi_token_decode=True
 )
 ```
@@ -594,7 +625,7 @@ with no host copies — as long as the runtime binds the caller's buffers rather
 own arena. What that takes is the only per-backend part left:
 
 - **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
-  `components["decode"].module()(...)` updates the cache tensors you pass in directly. Reuse the same
+  `exported.components["decode"].program.module()(...)` updates the cache tensors you pass in directly. Reuse the same
   tensors each step; nothing to configure.
 
 - **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
