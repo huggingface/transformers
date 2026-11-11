@@ -31,7 +31,7 @@ class HYV4Config(PreTrainedConfig):
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for routing. HYV4 selects experts globally, so this is 1 (one group holding every expert).
     topk_group (`int`, *optional*, defaults to 1):
-        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopkRouter` as a plain global top-k.
+        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopKRouter` as a plain global top-k.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by
         sparse MoE layers.

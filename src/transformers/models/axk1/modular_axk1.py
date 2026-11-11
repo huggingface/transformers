@@ -33,23 +33,22 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -145,15 +144,15 @@ class AXK1MLP(Qwen2MoeMLP):
     pass
 
 
-class AXK1TopkRouter(DeepseekV3TopkRouter):
+class AXK1TopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class AXK1Experts(DeepseekV3Experts):
+class AXK1Experts(Qwen2MoeExperts):
     pass
 
 
-class AXK1MoE(DeepseekV3MoE):
+class AXK1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
 
     The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
@@ -167,10 +166,11 @@ class AXK1MoE(DeepseekV3MoE):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
+        # diff from parent: norm on the block output
         return self.post_mlp_layernorm(hidden_states)
 
 
@@ -251,7 +251,7 @@ class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, AXK1TopkRouter):
+        if isinstance(module, AXK1TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK1Experts):

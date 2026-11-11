@@ -60,6 +60,7 @@ class LagunaConfig(PreTrainedConfig):
 
     model_type = "laguna"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts", "routed_scaling_factor": "moe_routed_scaling_factor"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

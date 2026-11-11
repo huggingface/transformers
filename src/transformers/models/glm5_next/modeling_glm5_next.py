@@ -113,40 +113,53 @@ class Glm5NextTextExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.swiglu_limit = config.swiglu_limit
+        self.act_fn = F.silu  # Simple swiglu instead of alpha
+        self.limit = config.swiglu_limit
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
+        # backends swapped in by `@use_experts_implementation` apply the same clamp +
+        # SiLU on top of their packed gate_up output instead of bypassing it.
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
 
     def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
+        final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        # Simple swiglu instead of alpha
-        return F.silu(gate) * up
+        return final_hidden_states
 
 
-class Glm5NextTextTopkRouter(nn.Module):
+class Glm5NextTextTopKRouter(nn.Module):
     def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -156,8 +169,8 @@ class Glm5NextTextTopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -172,25 +185,24 @@ class Glm5NextTextTopkRouter(nn.Module):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
-class Glm5NextTextMoE(nn.Module):
+class Glm5NextTextSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config: Glm5NextConfig):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
-        self.config = config
         self.experts = Glm5NextTextExperts(config)
-        self.gate = Glm5NextTextTopkRouter(config)
+        self.gate = Glm5NextTextTopKRouter(config)
         self.shared_experts = Glm5NextTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -198,9 +210,10 @@ class Glm5NextTextMoE(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
@@ -1287,7 +1300,9 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
         )
 
         self.mlp = (
-            Glm5NextTextMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm5NextTextMLP(config)
+            Glm5NextTextSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else Glm5NextTextMLP(config)
         )
 
         self.input_layernorm = Glm5NextTextRMSNorm(config.hidden_size, config.rms_norm_eps)
@@ -1372,7 +1387,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "attentions": Glm5NextTextAttention,
         "hidden_states": Glm5NextTextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm5NextTextTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -1421,7 +1436,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Glm5NextTextTopkRouter):
+        elif isinstance(module, Glm5NextTextTopKRouter):
             init.zeros_(module.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Glm5NextTextIndexer):

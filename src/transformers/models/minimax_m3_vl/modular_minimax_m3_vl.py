@@ -99,6 +99,11 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     hidden_size: int = 6144
     intermediate_size: int = 3072
     dense_intermediate_size: int = 12288
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "shared_expert_intermediate_size": "shared_intermediate_size",
+    }
+
     shared_intermediate_size: int = 3072
     num_hidden_layers: int = 60
     num_attention_heads: int = 64
@@ -317,7 +322,7 @@ class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 
-class MiniMaxM3VLDenseMLP(nn.Module):
+class MiniMaxM3VLMLP(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size=None):
         super().__init__()
         inter = config.dense_intermediate_size if intermediate_size is None else intermediate_size
@@ -339,42 +344,25 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
         self.swiglu_alpha = config.swiglu_alpha
-        self.swiglu_limit = config.swiglu_limit
         del self.act_fn
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # same as GPT OSS, but the weights are not interleaved
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
         glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
         return (up + 1.0) * glu
 
 
 class MiniMaxM3VLTopKRouter(MiniMaxM2TopKRouter):
-    def __init__(self, config: MiniMaxM3VLTextConfig):
-        super().__init__(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
-        routing_weights = F.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return router_logits, top_k_weights, top_k_index
+    # Sigmoid scoring (not softmax), as in M2.
+    pass
 
 
 class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):
     def __init__(self, config: MiniMaxM3VLTextConfig):
-        nn.Module.__init__(self)
-        self.gate = MiniMaxM3VLTopKRouter(config)
-        self.experts = MiniMaxM3VLExperts(config)
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
+        super().__init__(config)
 
 
 class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
@@ -609,7 +597,7 @@ class MiniMaxM3VLDecoderLayer(MixtralDecoderLayer):
         self.mlp = (
             MiniMaxM3VLSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
-            else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
+            else MiniMaxM3VLMLP(config, intermediate_size=config.dense_intermediate_size)
         )
         self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

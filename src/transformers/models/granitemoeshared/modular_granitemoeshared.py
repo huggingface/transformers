@@ -68,14 +68,14 @@ class GraniteMoeSharedMLP(Phi3MLP):
 
     def __init__(self, config):
         super().__init__(config)
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_expert_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.shared_expert_intermediate_size, config.hidden_size, bias=False)
 
 
 class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
     def __init__(self, config: GraniteMoeSharedConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
+        self.shared_mlp = None if config.shared_expert_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
     def forward(
         self,
@@ -107,7 +107,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states = self.block_sparse_moe(hidden_states)
+        moe_hidden_states = self.mlp(hidden_states)
 
         if self.shared_mlp is None:
             hidden_states = moe_hidden_states

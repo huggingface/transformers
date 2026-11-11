@@ -404,7 +404,7 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
     HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp\.experts\.\d+\.")
     HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
     GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
-    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.e_score_correction_bias")
+    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.gate\.e_score_correction_bias")
 
     def __init__(self, config=None):
         super().__init__(config=config)

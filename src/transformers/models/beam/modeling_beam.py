@@ -293,26 +293,36 @@ class BeamExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
-
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
         return (self.act_fn(gate.float()) * up.float()).to(gate.dtype)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
 
 class BeamMLP(nn.Module):
@@ -339,7 +349,9 @@ class BeamTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        # `routed_scaling_factor` is applied after expert aggregation in `BeamSparseMoeBlock`.
+        self.routed_scaling_factor = 1.0
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
@@ -347,15 +359,15 @@ class BeamTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
         )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1)[1]
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
@@ -364,15 +376,16 @@ class BeamTopKRouter(nn.Module):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            topk_weights /= topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-        # `routed_scaling_factor` is applied after expert aggregation in `BeamMoE`.
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
-class BeamMoE(nn.Module):
+class BeamSparseMoeBlock(nn.Module):
     def __init__(self, config: BeamConfig):
         super().__init__()
         self.experts = BeamExperts(config)
@@ -380,12 +393,13 @@ class BeamMoE(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-        final_hidden_states = final_hidden_states * self.routed_scaling_factor
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: scale the routed output
+        hidden_states = hidden_states * self.routed_scaling_factor
+        return hidden_states
 
 
 def depth_scaled_residual_add(
@@ -404,7 +418,7 @@ class BeamDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = BeamAttention(config, layer_idx)
 
-        self.mlp = BeamMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BeamMLP(config)
+        self.mlp = BeamSparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else BeamMLP(config)
 
         self.input_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)

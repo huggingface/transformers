@@ -101,14 +101,18 @@ class Cohere2MoeMLP(nn.Module):
 class Cohere2MoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config):
+    def __init__(self, config: Cohere2MoeConfig):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -128,8 +132,9 @@ class Cohere2MoeExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -138,62 +143,75 @@ class Cohere2MoeExperts(nn.Module):
 
 
 class Cohere2MoeTopKRouter(nn.Module):
+    """Top-k gating that returns the routing decisions without grouping tokens by expert.
+
+    Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
+    here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
+    experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
+    paths can compile cleanly.
+
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
-        router_scores, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+        top_k_weights, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)
         if self.expert_selection_fn == "softmax":
-            router_scores = F.softmax(router_scores, dim=1, dtype=torch.float)
+            top_k_weights = F.softmax(top_k_weights, dim=1, dtype=torch.float)
         elif self.expert_selection_fn == "sigmoid":
-            router_scores = F.sigmoid(router_scores)
+            top_k_weights = F.sigmoid(top_k_weights)
             if self.norm_topk_prob:
-                router_scores = router_scores / torch.sum(router_scores, dim=-1, keepdims=True)
+                top_k_weights = top_k_weights / torch.sum(top_k_weights, dim=-1, keepdims=True)
         else:
             raise ValueError("`expert_selection_fn` can only be `softmax` or `sigmoid`")
 
         # we cast back to the input dtype if it was upcasted in softmax
-        router_scores = router_scores.to(hidden_states.dtype)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, router_scores, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_shared_experts = config.num_shared_experts
-        self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
-
-        self.gate = Cohere2MoeTopKRouter(config)
         self.experts = Cohere2MoeExperts(config)
-        if self.num_shared_experts > 0:
-            self.shared_experts = Cohere2MoeMLP(
-                config,
-                intermediate_size=config.intermediate_size * config.num_shared_experts,
-            )
+        self.gate = Cohere2MoeTopKRouter(config)
+        self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
+        self.shared_experts = (
+            Cohere2MoeMLP(config, intermediate_size=config.intermediate_size * config.n_shared_experts)
+            if config.n_shared_experts > 0
+            else None
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        _, router_scores, selected_experts = self.gate(hidden_states_flat)
-        final_hidden_states = self.experts(hidden_states_flat, selected_experts, router_scores)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
-        if self.num_shared_experts > 0:
-            shared_expert_output = self.shared_experts(hidden_states_flat)
+        # diff from parent: optional shared experts, summed or averaged with the routed output
+        if self.shared_experts is not None:
+            shared_expert_output = self.shared_experts(residuals)
             if self.shared_expert_combination_strategy == "sum":
-                final_hidden_states = final_hidden_states + shared_expert_output
+                hidden_states = hidden_states + shared_expert_output
             elif self.shared_expert_combination_strategy == "average":
-                final_hidden_states = (final_hidden_states + shared_expert_output) / 2
+                hidden_states = (hidden_states + shared_expert_output) / 2
             else:
                 raise ValueError("`shared_expert_combination_strategy` can only be `sum` or `average`")
 
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

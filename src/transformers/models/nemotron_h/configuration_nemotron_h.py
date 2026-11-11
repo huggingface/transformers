@@ -81,7 +81,11 @@ class NemotronHConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron_h"
-    attribute_map = {"layer_types": "layers_block_type", "num_local_experts": "n_routed_experts"}
+    attribute_map = {
+        "layer_types": "layers_block_type",
+        "num_local_experts": "n_routed_experts",
+        "shared_expert_intermediate_size": "moe_shared_expert_intermediate_size",
+    }
     base_model_tp_plan = {
         "embeddings": "embedding_rowwise",
         "layers.*.mixer.experts.up_proj": "colwise",

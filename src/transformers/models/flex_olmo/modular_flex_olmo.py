@@ -26,14 +26,14 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..mistral.modeling_mistral import MistralMLP
-from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
     OlmoeForCausalLM,
-    OlmoeSparseMoeBlock,
-    OlmoeTopKRouter,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
@@ -130,11 +130,15 @@ class FlexOlmoAttention(Olmo2Attention):
     pass
 
 
-class FlexOlmoTopKRouter(OlmoeTopKRouter):
+class FlexOlmoTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 
-class FlexOlmoSparseMoeBlock(OlmoeSparseMoeBlock):
+class FlexOlmoExperts(MixtralExperts):
+    pass
+
+
+class FlexOlmoSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     pass
 
 

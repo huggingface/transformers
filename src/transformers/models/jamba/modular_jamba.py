@@ -19,7 +19,6 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -44,6 +43,8 @@ from ..mamba.modeling_mamba import (
 )
 from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_jamba import JambaConfig
 
 
@@ -289,25 +290,17 @@ class JambaExperts(MixtralExperts):
     pass
 
 
-class JambaTopKRouter(nn.Module):
+class JambaTopKRouter(Qwen2MoeTopKRouter):
     """Top-k of the softmax over the router logits, the selected weights left unnormalized. Returns
     `(router_logits, top_k_weights, top_k_index)`."""
 
     def __init__(self, config: JambaConfig):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = F.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        return router_logits, top_k_weights.to(hidden_states.dtype), top_k_index
+        super().__init__(config)
+        # diff from parent: Jamba never renormalizes the top-k weights
+        self.norm_topk_prob = False
 
 
-class JambaSparseMoeBlock(nn.Module):
+class JambaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -318,24 +311,6 @@ class JambaSparseMoeBlock(nn.Module):
     capacity factor to number of experts and thus waste computation
     and memory on padding.
     """
-
-    def __init__(self, config: JambaConfig):
-        super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.ffn_dim = config.intermediate_size
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
-
-        self.router = JambaTopKRouter(config)
-        self.experts = JambaExperts(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states
 
 
 class JambaAttentionDecoderLayer(GradientCheckpointingLayer):

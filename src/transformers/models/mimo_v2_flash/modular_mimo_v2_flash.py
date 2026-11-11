@@ -27,11 +27,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
@@ -40,7 +38,8 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
 from ..mixtral.modeling_mixtral import MixtralRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
@@ -173,29 +172,19 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         return inv_freq.to(device), attention_factor
 
 
-class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
+class MiMoV2FlashTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class MiMoV2FlashExperts(DeepseekV3Experts):
+class MiMoV2FlashExperts(Qwen2MoeExperts):
     pass
 
 
-class MiMoV2FlashMoE(DeepseekV3MoE):
+class MiMoV2FlashSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     """
-    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    Only difference from `DeepseekV3SparseMoeBlock` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
     """
-
-    def __init__(self, config: MiMoV2FlashConfig):
-        super().__init__(config)
-        del self.shared_experts
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
 
 
 class MiMoV2FlashMLP(Qwen2MoeMLP):

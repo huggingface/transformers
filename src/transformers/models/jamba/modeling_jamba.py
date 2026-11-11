@@ -650,6 +650,10 @@ class JambaExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -668,8 +672,9 @@ class JambaExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -684,15 +689,21 @@ class JambaTopKRouter(nn.Module):
     def __init__(self, config: JambaConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        # diff from parent: Jamba never renormalizes the top-k weights
+        self.norm_topk_prob = False
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = F.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        return router_logits, top_k_weights.to(hidden_states.dtype), top_k_index
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        if self.norm_topk_prob:
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(router_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 class JambaSparseMoeBlock(nn.Module):
@@ -709,20 +720,14 @@ class JambaSparseMoeBlock(nn.Module):
 
     def __init__(self, config: JambaConfig):
         super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.ffn_dim = config.intermediate_size
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
-
-        self.router = JambaTopKRouter(config)
         self.experts = JambaExperts(config)
+        self.gate = JambaTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         return hidden_states
 
 

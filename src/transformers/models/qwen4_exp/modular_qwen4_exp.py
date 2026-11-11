@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5Attention,
     Qwen3_5GatedDeltaNet,
@@ -59,10 +59,7 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeVisionModel,
 )
 from ..qwen3_next.modeling_qwen3_next import (
-    Qwen3NextExperts,
     Qwen3NextRMSNormGated,
-    Qwen3NextSparseMoeBlock,
-    Qwen3NextTopKRouter,
 )
 
 
@@ -508,20 +505,16 @@ class Qwen4ExpTextMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen4ExpTextExperts(Qwen3NextExperts):
+class Qwen4ExpTextExperts(Qwen2MoeExperts):
     pass
 
 
-class Qwen4ExpTextTopKRouter(Qwen3NextTopKRouter):
+class Qwen4ExpTextTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 
-class Qwen4ExpTextSparseMoeBlock(Qwen3NextSparseMoeBlock):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate = Qwen4ExpTextTopKRouter(config)
-        self.experts = Qwen4ExpTextExperts(config)
-        self.shared_expert = Qwen4ExpTextMLP(config, intermediate_size=config.shared_expert_intermediate_size)
+class Qwen4ExpTextSparseMoeBlock(Qwen2MoeSparseMoeBlock):
+    pass
 
 
 class Qwen4ExpTextGatedResidual(nn.Module):

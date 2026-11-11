@@ -148,9 +148,9 @@ class LagunaTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
         self.router_logit_softcapping = config.moe_router_logit_softcapping
 
@@ -164,15 +164,15 @@ class LagunaTopKRouter(nn.Module):
         if self.router_logit_softcapping > 0.0:
             router_logits = torch.tanh(router_logits / self.router_logit_softcapping) * self.router_logit_softcapping
         # Sigmoid instead of softmax normalization
-        routing_scores = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        scores_for_selection = routing_scores + self.e_score_correction_bias.to(routing_scores.dtype)
-        _, selected_experts = torch.topk(scores_for_selection, self.top_k, dim=-1)
-        routing_weights = routing_scores.gather(-1, selected_experts)
-        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        scores_for_choice = router_probs + self.e_score_correction_bias.to(router_probs.dtype)
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1)
+        top_k_weights = router_probs.gather(-1, top_k_index)
+        top_k_weights = top_k_weights / top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, routing_weights, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -181,12 +181,16 @@ class LagunaExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -206,8 +210,9 @@ class LagunaExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -221,20 +226,17 @@ class LagunaSparseMoeBlock(nn.Module):
         self.experts = LagunaExperts(config)
         self.gate = LagunaTopKRouter(config)
         self.shared_experts = LagunaMLP(config, intermediate_size=config.shared_expert_intermediate_size)
-        self.routed_scaling_factor = config.moe_routed_scaling_factor
+        self.routed_scaling_factor = config.routed_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        shared_output = self.shared_experts(hidden_states)
-
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
-        hidden_states = hidden_states + shared_output
-
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 

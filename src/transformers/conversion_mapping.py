@@ -46,7 +46,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
-    "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
     "deepseek_v32": "qwen2_moe",
@@ -56,7 +55,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
-    "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
     "mellum": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
@@ -65,7 +63,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_omni_moe_text": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
-    "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
@@ -157,6 +154,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 
 def _build_checkpoint_conversion_mapping():
+    granitemoe_block_renames = [
+        WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.router\.", r"\1.mlp.gate."),
+        WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.experts\.", r"\1.mlp.experts."),
+    ]
     mapping = {
         "hy_v4": [
             # General HC prefix which is dropped
@@ -748,6 +749,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
         "aria_text": [
+            WeightRenaming(r"(layers\.\d+)\.mlp\.router\.weight", r"\1.mlp.gate.weight"),
             WeightRenaming(
                 source_patterns=r"mlp\.experts\.fc1\.weight",
                 target_patterns="mlp.experts.gate_up_proj",
@@ -758,17 +760,19 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "granitemoe": [
+            WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.router\.weight", r"\1.mlp.gate.weight"),
+            WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.experts\.", r"\1.mlp.experts."),
             WeightRenaming(
-                source_patterns=r"block_sparse_moe\.input_linear\.weight",
-                target_patterns="block_sparse_moe.experts.gate_up_proj",
+                source_patterns=r"(layers\.\d+)\.block_sparse_moe\.input_linear\.weight",
+                target_patterns=r"\1.mlp.experts.gate_up_proj",
             ),
             WeightRenaming(
-                source_patterns=r"block_sparse_moe\.output_linear\.weight",
-                target_patterns="block_sparse_moe.experts.down_proj",
+                source_patterns=r"(layers\.\d+)\.block_sparse_moe\.output_linear\.weight",
+                target_patterns=r"\1.mlp.experts.down_proj",
             ),
             WeightRenaming(
-                source_patterns=r"block_sparse_moe\.router\.layer\.weight",
-                target_patterns="block_sparse_moe.router.weight",
+                source_patterns=r"(layers\.\d+)\.block_sparse_moe\.router\.layer\.weight",
+                target_patterns=r"\1.mlp.gate.weight",
             ),
         ],
         "GraniteSpeechModel": [
@@ -1255,8 +1259,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
         ],
         "phimoe": [
+            WeightRenaming(r"(layers\.\d+)\.mlp\.router\.weight", r"\1.mlp.gate.weight"),
             WeightRenaming(".block_sparse_moe.", ".mlp."),
-            WeightRenaming(".gate.weight", ".router.weight"),
             WeightConverter(
                 source_patterns=[
                     ".experts.*.w1.weight",
@@ -1287,6 +1291,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.feed_forward\.w1\.", target_patterns=r".feed_forward.gate_proj."),
             WeightRenaming(source_patterns=r"\.feed_forward\.w3\.", target_patterns=r".feed_forward.up_proj."),
             WeightRenaming(source_patterns=r"\.feed_forward\.w2\.", target_patterns=r".feed_forward.down_proj."),
+            WeightRenaming(r"\.feed_forward\.expert_bias", ".feed_forward.gate.e_score_correction_bias"),
             WeightConverter(
                 source_patterns=[
                     "feed_forward.experts.*.w1.weight",
@@ -1504,6 +1509,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "jamba": [
+            WeightRenaming(r"(layers\.\d+)\.feed_forward\.router\.weight", r"\1.feed_forward.gate.weight"),
             WeightConverter(
                 source_patterns=[
                     "feed_forward.experts.*.gate_proj.weight",
@@ -2160,7 +2166,7 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["granitemoeshared"] = mapping["granitemoe"].copy() + granitemoe_shared_mlp_renames
     mapping["granitemoehybrid"] = mapping["granitemoe"].copy() + granitemoe_shared_mlp_renames
-    mapping["granitemoe_swa"] = granitemoe_shared_mlp_renames.copy()
+    mapping["granitemoe_swa"] = granitemoe_shared_mlp_renames + granitemoe_block_renames
     modernbert_mlp_renames = [
         WeightRenaming(r"\.mlp\.Wi\.", ".mlp.gate_up_proj."),
         WeightRenaming(r"\.mlp\.Wo\.", ".mlp.down_proj."),
@@ -2187,9 +2193,19 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"^encoder\.", "pixio."),
     ]
 
-    mapping["minimax_m2"] = mapping["mixtral"].copy()
-    mapping["minimax_m2"] += [
-        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
+    mapping["minimax_m2"] = [
+        WeightRenaming(r"\.mlp\.e_score_correction_bias", ".mlp.gate.e_score_correction_bias"),
+        WeightRenaming(r"\.block_sparse_moe\.gate\.", ".mlp.gate."),
+        WeightRenaming(r"\.block_sparse_moe\.experts\.", ".mlp.experts."),
+        WeightRenaming(r"\.block_sparse_moe\.e_score_correction_bias", ".mlp.gate.e_score_correction_bias"),
+        *mapping["mixtral"][1:],
+    ]
+    mapping["longcat_flash"] = mapping["qwen2_moe"].copy() + [
+        WeightRenaming(r"(layers\.\d+)\.mlp\.router\.", r"\1.mlp.gate."),
+    ]
+    mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
+    mapping["hunyuan_v1_moe"] += [
+        WeightRenaming(r"\.mlp\.shared_mlp\.", ".mlp.shared_experts."),
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
@@ -2205,15 +2221,24 @@ def _build_checkpoint_conversion_mapping():
     mapping["mimo_v2_flash"] += [
         WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
     ]
+    mapping["afmoe"] = mapping["qwen2_moe"].copy()
+    mapping["afmoe"] += [
+        WeightRenaming(r"(layers\.\d+)\.mlp\.router\.gate\.weight", r"\1.mlp.gate.weight"),
+        WeightRenaming(r"(layers\.\d+)\.mlp\.expert_bias", r"\1.mlp.gate.e_score_correction_bias"),
+    ]
     mapping["flint"] = mapping["qwen2_moe"].copy()
     mapping["flint"] += [
         WeightRenaming("self_attn.softmax_offset", "self_attn.sinks"),
+        WeightRenaming(r"\.mlp\.shared_expert\.", ".mlp.shared_experts."),
     ]
     # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()
     mapping["hy_v3"] += [
+        WeightRenaming(
+            source_patterns=r"\.mlp\.e_score_correction_bias", target_patterns=".mlp.gate.e_score_correction_bias"
+        ),
         WeightRenaming(source_patterns=r"mlp\.router\.gate\.weight", target_patterns="mlp.gate.weight"),
-        WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.e_score_correction_bias"),
+        WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.gate.e_score_correction_bias"),
         WeightRenaming(source_patterns=r"mlp\.shared_mlp\.", target_patterns="mlp.shared_experts."),
     ]
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()

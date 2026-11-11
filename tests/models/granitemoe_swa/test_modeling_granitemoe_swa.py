@@ -41,6 +41,9 @@ class GraniteMoeSWAModelTester(CausalLMModelTester):
         # `sliding_window` stays larger than the short test sequences (matching gemma2/gpt_oss). Shared
         # experts stay disabled (`shared_intermediate_size=0`), matching the model's default.
 
+    def __init__(self, parent, shared_expert_intermediate_size=0, **kwargs):
+        super().__init__(parent, shared_expert_intermediate_size=shared_expert_intermediate_size, **kwargs)
+
 
 @require_torch
 class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):

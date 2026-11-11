@@ -61,6 +61,11 @@ class AfmoeConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "num_experts",
+        "n_shared_experts": "num_shared_experts",
+        "routed_scaling_factor": "route_scale",
+    }
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",

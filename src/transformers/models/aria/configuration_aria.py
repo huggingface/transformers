@@ -81,6 +81,7 @@ class AriaTextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_config_key = "text_config"
+    attribute_map = {"n_shared_experts": "moe_num_shared_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

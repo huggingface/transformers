@@ -274,20 +274,17 @@ class HYV3TopKRouter(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
         self.router_scaling_factor = config.router_scaling_factor
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        e_score_correction_bias: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        routing_weights = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        scores_for_choice = routing_weights + e_score_correction_bias
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
 
         top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
         # Key difference: extra scaling factor
@@ -302,12 +299,16 @@ class HYV3Experts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -327,8 +328,9 @@ class HYV3Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -336,33 +338,34 @@ class HYV3Experts(nn.Module):
         return final_hidden_states
 
 
-class HYV3MoE(nn.Module):
+class HYV3SparseMoeBlock(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config: HYV3Config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.gate = HYV3TopKRouter(config)
         self.experts = HYV3Experts(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
+        self.gate = HYV3TopKRouter(config)
+        self.shared_experts = HYV3MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
         self.enable_moe_fp32_combine = config.enable_moe_fp32_combine
-        shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
-        self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-
-        _, top_k_weights, top_k_index = self.gate(hidden_states, self.e_score_correction_bias)
-        routed_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
         # Key difference: optional float casting on combing shared experts
         if self.enable_moe_fp32_combine:
-            hidden_states = (routed_output.float() + self.shared_experts(hidden_states).float()).to(
-                hidden_states.dtype
-            )
+            hidden_states = (hidden_states.float() + self.shared_experts(residuals).float()).to(residuals.dtype)
         else:
-            hidden_states = routed_output + self.shared_experts(hidden_states)
+            hidden_states = hidden_states + self.shared_experts(residuals)
 
-        return hidden_states.reshape(batch_size, seq_len, hidden_dim)
+        return hidden_states
 
 
 class HYV3DecoderLayer(GradientCheckpointingLayer):
@@ -370,7 +373,7 @@ class HYV3DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = HYV3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HYV3MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
+        self.mlp = HYV3SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
         self.input_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -434,11 +437,10 @@ class HYV3PreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, HYV3TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV3Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, HYV3MoE):
-            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

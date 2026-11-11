@@ -214,6 +214,7 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
     }
     n_group: int | None = 1
     n_routed_experts: int = 64

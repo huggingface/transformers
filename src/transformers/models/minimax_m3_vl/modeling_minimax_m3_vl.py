@@ -159,7 +159,7 @@ class MiniMaxM3VLRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-class MiniMaxM3VLDenseMLP(nn.Module):
+class MiniMaxM3VLMLP(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size=None):
         super().__init__()
         inter = config.dense_intermediate_size if intermediate_size is None else intermediate_size
@@ -190,36 +190,45 @@ class MiniMaxM3VLExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.limit = config.swiglu_limit
         self.swiglu_alpha = config.swiglu_alpha
-        self.swiglu_limit = config.swiglu_limit
-
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # same as GPT OSS, but the weights are not interleaved
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
         glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
         return (up + 1.0) * glu
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
 
 class MiniMaxM3VLTopKRouter(nn.Module):
-    def __init__(self, config: MiniMaxM3VLTextConfig):
+    def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -229,12 +238,12 @@ class MiniMaxM3VLTopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
-        routing_weights = F.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
+        # Main difference to other Moe, using Sigmoid activation instead of Softmax
+        router_probs = F.sigmoid(router_logits.float())
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         return router_logits, top_k_weights, top_k_index
 
@@ -242,23 +251,20 @@ class MiniMaxM3VLTopKRouter(nn.Module):
 class MiniMaxM3VLSparseMoeBlock(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
-        self.gate = MiniMaxM3VLTopKRouter(config)
         self.experts = MiniMaxM3VLExperts(config)
+        self.gate = MiniMaxM3VLTopKRouter(config)
+        self.shared_experts = MiniMaxM3VLMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        shared_output = self.shared_experts(hidden_states)
-
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
-        hidden_states = hidden_states + shared_output
-
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 
@@ -633,7 +639,7 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
         self.mlp = (
             MiniMaxM3VLSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
-            else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
+            else MiniMaxM3VLMLP(config, intermediate_size=config.dense_intermediate_size)
         )
         self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

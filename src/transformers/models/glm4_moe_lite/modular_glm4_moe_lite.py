@@ -19,19 +19,18 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
-    Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeModel,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeRotaryEmbedding,
-    Glm4MoeTopkRouter,
+    Glm4MoeTopKRouter,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
@@ -143,7 +142,7 @@ class Glm4MoeLiteMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4MoeLiteTopkRouter(Glm4MoeTopkRouter):
+class Glm4MoeLiteTopKRouter(Glm4MoeTopKRouter):
     pass
 
 
@@ -151,11 +150,11 @@ class Glm4MoeLiteRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
-class Glm4MoeLiteExperts(Glm4MoeExperts):
+class Glm4MoeLiteExperts(Qwen2MoeExperts):
     pass
 
 
-class Glm4MoeLiteMoE(Glm4MoeMoE):
+class Glm4MoeLiteSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 
@@ -165,7 +164,11 @@ class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
 
-        self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
+        self.mlp = (
+            Glm4MoeLiteSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else Glm4MoeLiteMLP(config)
+        )
 
         self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)

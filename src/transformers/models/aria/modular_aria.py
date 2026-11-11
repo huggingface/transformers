@@ -46,7 +46,8 @@ from ...utils import (
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig, AutoTokenizer
 from ..clip.modeling_clip import CLIPMLP
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2SparseMoeBlock
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -81,6 +82,7 @@ class AriaTextConfig(LlamaConfig):
 
     model_type = "aria_text"
     base_config_key = "text_config"
+    attribute_map = {"n_shared_experts": "moe_num_shared_experts"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -605,10 +607,10 @@ class AriaSharedExpertsMLP(LlamaMLP):
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
-        self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
+        self.intermediate_size = config.intermediate_size * config.n_shared_experts
 
 
-class AriaTextTopKRouter(nn.Module):
+class AriaTextTopKRouter(GraniteMoeTopKRouter):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
@@ -616,13 +618,13 @@ class AriaTextTopKRouter(nn.Module):
     `(router_logits, top_k_weights, top_k_index)`.
     """
 
-    def __init__(self, config: AriaTextConfig):
-        super().__init__()
+    def __init__(self, config):
+        super().__init__(config)
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_topk
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
         top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
@@ -674,22 +676,14 @@ class AriaExperts(nn.Module):
         return final_hidden_states
 
 
-class AriaTextMoELayer(nn.Module):
+class AriaTextSparseMoeBlock(DeepseekV2SparseMoeBlock):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute, shared experts always run."""
 
     def __init__(self, config: AriaTextConfig):
-        super().__init__()
-        self.router = AriaTextTopKRouter(config)
+        super().__init__(config)
+        # diff from parent: Aria's own experts and shared-experts MLP
         self.experts = AriaExperts(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        original_shape = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
-        shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
-        return expert_output + shared_expert_output
 
 
 class AriaTextAttention(LlamaAttention):
@@ -711,7 +705,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = AriaTextMoELayer(config)
+        self.mlp = AriaTextSparseMoeBlock(config)
 
 
 @auto_docstring

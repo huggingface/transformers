@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPa
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -43,14 +43,15 @@ from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextDecoderLayer,
-    Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNorm,
-    Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
-from ..qwen3_vl_moe.modeling_qwen3_vl_moe import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeTextTopKRouter
+from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
+    Qwen3VLMoeForConditionalGeneration,
+    Qwen3VLMoeTextTopKRouter,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -180,7 +181,7 @@ class Qwen3_5MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen3_5MoeExperts(Qwen3NextExperts):
+class Qwen3_5MoeExperts(Qwen2MoeExperts):
     pass
 
 
@@ -189,7 +190,7 @@ class Qwen3_5MoeTopKRouter(Qwen3VLMoeTextTopKRouter):
     pass
 
 
-class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
+class Qwen3_5MoeSparseMoeBlock(Qwen2MoeSparseMoeBlock):
     pass
 
 
