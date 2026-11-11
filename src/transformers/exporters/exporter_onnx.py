@@ -170,10 +170,25 @@ class OnnxExporter(DynamoExporter):
     @classmethod
     def load_program(cls, path) -> onnx_ir.Model:
         """The saved graph, its weights left in `model.onnx.data` until read. Its `meta["path"]` keeps the file, which
-        ONNX Runtime opens to read the weights itself: loaded through symlinks (the Hub cache), `onnx_ir` can't read
-        them, nor save the graph again."""
+        ONNX Runtime opens to read the weights itself."""
         model = onnx_ir.load(str(path))
         model.meta["path"] = str(path)
+        # The Hub cache links `model.onnx.data` to a blob outside the snapshot, which `onnx_ir` refuses to read: the
+        # weights are read from the blob instead. Only this file is redirected; any other location stays checked.
+        data = Path(path).with_name(f"{Path(path).name}.data")
+        if data.is_symlink():
+            for graph in model.graphs():
+                for value in graph.initializers.values():
+                    tensor = value.const_value
+                    if isinstance(tensor, onnx_ir.ExternalTensor) and Path(tensor.path) == data:
+                        value.const_value = onnx_ir.ExternalTensor(
+                            data.resolve(),
+                            tensor.offset,
+                            tensor.length,
+                            tensor.dtype,
+                            shape=tensor.shape,
+                            name=tensor.name,
+                        )
         return model
 
 
