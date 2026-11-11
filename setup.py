@@ -84,7 +84,7 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder",
+    "hf-doc-builder>=0.6.0",
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.6",
@@ -122,7 +122,7 @@ _deps = [
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
-    "transformers-mlinter==0.1.5",
+    "transformers-mlinter==0.1.6",
     "ty==0.0.20",
     "sacremoses",
     "safetensors>=0.8.0",
@@ -144,6 +144,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
+    "transformers-mic[runtime]",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -211,6 +212,7 @@ extras["testing"] = (
         "pytest-timeout",
         "pytest-env",
         "timeout-decorator",
+        "transformers-mic[runtime]",
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests

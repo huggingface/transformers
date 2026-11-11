@@ -106,6 +106,9 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # graph on GPU for faster export testing)
 RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime-gpu
 
+# For OpenVINO export tests (nncf for the OpenVINO quantization tests)
+RUN python3 -m pip install --no-cache-dir openvino nncf
+
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
 

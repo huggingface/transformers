@@ -1924,6 +1924,16 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
 
+    def _logits_scored_by_loss(self, model, logits):
+        """
+        Returns the positions of `logits` that the language modeling loss is computed on, i.e. the ones
+        `shift_labels` lines up with. That is all of them for almost every head; override for heads whose logits
+        also cover positions the loss skips.
+
+        Currently only used by `test_causal_lm_loss_honors_shift_labels`, and only overridden by `GitModelTest`.
+        """
+        return logits
+
     def test_causal_lm_loss_honors_shift_labels(self):
         """
         Decoder-only LM heads shift ``labels`` by one internally to align them with the logits. Sequence and
@@ -1965,17 +1975,16 @@ class ModelTesterMixin(ExportTesterMixin):
                 set_seed(42)
                 model = model_class(model_config).to(torch_device).eval()
 
+                set_seed(42)
+                with torch.no_grad():
+                    probe_logits = getattr(model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None)
+
                 # `_prepare_for_class` builds targets only for the heads it knows about; read the shape off the
                 # logits for the others.
                 target_shape = self._prepare_for_class(inputs_dict, model_class, return_labels=True).get("labels")
                 if isinstance(target_shape, torch.Tensor):
                     target_shape = target_shape.shape
                 else:
-                    set_seed(42)
-                    with torch.no_grad():
-                        probe_logits = getattr(
-                            model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None
-                        )
                     if not isinstance(probe_logits, torch.Tensor) or probe_logits.ndim != 3:
                         self.skipTest(reason="Tester does not build targets for this head")
                     target_shape = probe_logits.shape[:2]
@@ -1986,22 +1995,29 @@ class ModelTesterMixin(ExportTesterMixin):
                     generator = torch.Generator().manual_seed(seed)
                     return torch.randint(2, target_shape, generator=generator, dtype=torch.long).to(torch_device)
 
-                def reported_loss(label_seed, shift_label_seed, model_class=model_class, model=model):
+                def reported_loss(labels, shift_labels, model_class=model_class, model=model):
                     inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                    inputs["labels"] = targets(label_seed)
-                    inputs["shift_labels"] = targets(shift_label_seed)
+                    inputs["labels"] = labels
+                    inputs["shift_labels"] = shift_labels
                     # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the three
                     # forward passes below differ only in the targets they are given.
                     set_seed(42)
                     with torch.no_grad():
                         return model(**inputs).loss
 
-                baseline = reported_loss(0, 0)
+                labels = targets(0)
+                # Two random `shift_labels` can leave the loss bit-identical: on nearly flat logits, the per-token
+                # changes cancel out in the mean (see #50533). The least likely tokens raise every per-token loss
+                # above the most likely ones, so the mean has to move.
+                scored_logits = self._logits_scored_by_loss(model, probe_logits)
+                most_likely, least_likely = scored_logits.argmax(dim=-1), scored_logits.argmin(dim=-1)
+
+                baseline = reported_loss(labels, most_likely)
                 self.assertIsNotNone(
                     baseline, msg=f"{model_class.__name__}: no loss is returned when targets are passed"
                 )
                 self.assertFalse(
-                    torch.equal(baseline, reported_loss(0, 1)),
+                    torch.equal(baseline, reported_loss(labels, least_likely)),
                     msg=(
                         f"{model_class.__name__}: the training loss does not depend on `shift_labels`. Pre-shifted "
                         f"targets are the only correct ones under sequence/context parallelism, so the loss must "
@@ -2009,7 +2025,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
                 self.assertTrue(
-                    torch.equal(baseline, reported_loss(1, 0)),
+                    torch.equal(baseline, reported_loss(targets(1), most_likely)),
                     msg=(
                         f"{model_class.__name__}: the training loss still depends on `labels` although "
                         f"`shift_labels` was passed. `shift_labels` holds the targets already aligned with the "
