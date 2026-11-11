@@ -1723,6 +1723,16 @@ def _layout(transform):
     return Layout(ops, {name: shape for name, (shape, _) in state.items()}, places)
 
 
+def _checkpoint_dtype(tensor):
+    "The dtype a checkpoint saved a tensor in: a tensor, or a safetensors slice (`None` if unknown)"
+    if isinstance(tensor, torch.Tensor):
+        return tensor.dtype
+    from safetensors.torch import _TYPES
+
+    name = tensor.get_dtype()
+    return _TYPES.get(name) or getattr(torch, {"F8_E8M0": "float8_e8m0fnu"}.get(name, ""), None)
+
+
 def _meta(tensor):
     "A meta tensor of a checkpoint tensor's shape: a tensor, or a safetensors slice"
     # TODO: the checkpoint's dtype too, once the plan is compiled
@@ -2084,7 +2094,8 @@ def convert_and_load_state_dict_in_model(
             buffers = {}
             for (pattern, position), (name, index) in layout.places.items():
                 key = mapping.collected_tensors[pattern][position]
-                if name not in buffers and (buffer_dtype := tensor_dtype(key)) is not None:
+                buffer_dtype = tensor_dtype(key) or _checkpoint_dtype(state_dict[key])  # `None`: kept as saved
+                if name not in buffers and buffer_dtype is not None:
                     buffers[name] = torch.empty(layout.shapes[name], dtype=buffer_dtype, device=param_device)
                 places[pattern, position] = buffers[name][index] if name in buffers else None
             if all(place is not None for place in places.values()):
