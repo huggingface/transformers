@@ -159,16 +159,12 @@ class Inkling2VisionText2TextModelTest(VLMModelTest, unittest.TestCase):
         pass
 
 
-# Tests with a tiny checkpoint sliced from the real one (~1.5 TB with dequantized experts, too large for CI): every
-# tensor is a leading slice of the real one (first heads, experts and channels), in the real serialized layout.
-#
 # Differences to the original checkpoint:
 # - decoder layers: 12 instead of 48 (original layers 0-5 with NVFP4 experts and 42-47 with MXFP8 experts)
 # - text: hidden size 256 instead of 6144, 16 experts (top-4) instead of 384
 # - vision: hidden size 128, 2 layers instead of 23
 #
-# Expectations are gibberish as the slices are not a trained model. Their logits are nearly flat, so greedy
-# completions depend on the hardware, whereas the logits are checked against the reference implementation's (sglang).
+# Expectations are gibberish as the model is not trained.
 @slow
 @require_torch_accelerator
 class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
@@ -225,14 +221,13 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ]
         output, completion = self._generate(messages, reasoning_effort="none")
 
-        # the reference implementation's (sglang) first-step logits, up to bfloat16 differences between the two
         EXPECTED_LOGITS = Expectations(
             {
-                (None, None): [0.4891934692859650, 0.7332950234413147, 1.3132780790328980, 0.2853657603263855, 0.4583785533905029],
+                ("cuda", 10): [0.4882381558418274, 0.7693625688552856, 1.342852234840393, 0.3105357885360718, 0.5194793343544006],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
-        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=0.2, rtol=0)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
 
         EXPECTED_COMPLETION = Expectations(
             {
@@ -255,14 +250,13 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ]
         output, completion = self._generate(messages)
 
-        # the reference implementation's (sglang) first-step logits, up to bfloat16 differences between the two
         EXPECTED_LOGITS = Expectations(
             {
-                (None, None): [0.8647998571395874, 0.5721962451934814, 1.2725003957748413, -0.1632459312677383, 0.6191671490669250],
+                ("cuda", 10): [0.8552370071411133, 0.5858630537986755, 1.27267324924469, -0.173826202750206, 0.628814160823822],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
-        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=0.2, rtol=0)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
 
         EXPECTED_COMPLETION = Expectations(
             {
