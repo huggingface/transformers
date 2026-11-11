@@ -428,6 +428,9 @@ class CohereCompassTextModel(CohereCompassPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1241,6 +1244,8 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
             position_ids = None
         return position_ids
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

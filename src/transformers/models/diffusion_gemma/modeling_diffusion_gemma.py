@@ -1063,6 +1063,9 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1494,6 +1497,8 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         return self.encoder.set_input_embeddings(new_embeddings)
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

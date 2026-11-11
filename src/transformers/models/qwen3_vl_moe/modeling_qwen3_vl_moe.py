@@ -844,6 +844,9 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1224,6 +1227,8 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             position_ids = None
         return position_ids
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1446,6 +1451,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

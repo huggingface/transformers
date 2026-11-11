@@ -36,6 +36,7 @@ from ...integrations import (
     use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -507,6 +508,7 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
+    @force_accelerate_hooks("conv1d")
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1593,6 +1595,8 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -2276,6 +2280,8 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
             position_ids = None
         return position_ids
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -2407,6 +2413,8 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

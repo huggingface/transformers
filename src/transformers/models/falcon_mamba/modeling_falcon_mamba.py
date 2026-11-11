@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import ModelOutput, auto_docstring
@@ -377,6 +378,7 @@ class FalconMambaMixer(nn.Module):
         init.ones_(self.b_layernorm.weight)
         init.ones_(self.c_layernorm.weight)
 
+    @force_accelerate_hooks(["conv1d", "dt_proj"])
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,

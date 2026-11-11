@@ -45,7 +45,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, select_hidden_states
+from ...utils.output_capturing import OutputRecorder, capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_aria import AriaConfig, AriaTextConfig
 
@@ -642,6 +642,9 @@ class AriaTextModel(AriaTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -896,6 +899,8 @@ class AriaModel(AriaPreTrainedModel):
         )
         return special_image_mask
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

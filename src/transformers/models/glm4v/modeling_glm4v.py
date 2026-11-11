@@ -1174,6 +1174,8 @@ class Glm4vModel(Glm4vPreTrainedModel):
             position_ids = None
         return position_ids
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1286,6 +1288,8 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

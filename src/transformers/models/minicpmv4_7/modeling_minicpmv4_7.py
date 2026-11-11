@@ -666,6 +666,8 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         )
         return special_mask
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1221,6 +1223,8 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

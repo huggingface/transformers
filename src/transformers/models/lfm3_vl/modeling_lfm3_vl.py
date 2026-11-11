@@ -601,6 +601,8 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -721,6 +723,8 @@ class Lfm3VlForConditionalGeneration(Lfm3VlPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

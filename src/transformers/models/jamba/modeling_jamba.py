@@ -38,12 +38,13 @@ from ...integrations import (
     use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import (
@@ -502,6 +503,7 @@ class JambaMambaMixer(nn.Module):
         self.use_mambapy = config.use_mambapy
         self.use_associative_scan = config.use_associative_scan
 
+    @force_accelerate_hooks(["conv1d", "dt_proj"])
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1006,6 +1008,8 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

@@ -941,6 +941,9 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1312,6 +1315,8 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             position_ids = None
         return position_ids
 
+    @can_return_tuple
+    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
