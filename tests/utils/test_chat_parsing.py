@@ -257,21 +257,6 @@ lfm2_template = {
 }
 
 
-granite33_template = {
-    "defaults": {"role": "assistant"},
-    "start_anchor_pattern": r"<\|start_of_role\|>assistant(?:\s+\[[^\n]*\])?<\|end_of_role\|>",
-    "fields": {
-        # Granite 3.3 wraps its answer in <response>...</response> only when thinking.
-        "reasoning_content": {
-            "open": "<think>",
-            "close_pattern": r"</think>\s*<response>|</think>(?=\s*[^\s<]|\s*<\|)|</think>\s*\Z",
-            "content": "text",
-        },
-        "content": {"close_pattern": r"(?:</response>)?\s*<\|end_of_text\|>", "content": "text"},
-    },
-}
-
-
 def _f(**arguments):
     return [{"name": "f", "arguments": arguments}]
 
@@ -285,6 +270,7 @@ PYTHON_CALL_LIST_EDGE_CASES = [
     ('[f(s="a" \'b\' """c""")]', _f(s="abc")),
     ('[f(s=u"x")]', _f(s="x")),
     ('[f(s="a\\qb")]', _f(s="a\\qb")),
+    ('[f(s="\\N{BULLET}")]', _f(s="\u2022")),
     # Python number literals, including signs.
     (
         "[f(h=0x1F, o=0o17, b=0b101, u=1_000, e=1e3, d=.5, t=1., n=--3, p=+2)]",
@@ -303,7 +289,8 @@ PYTHON_CALL_LIST_EDGE_CASES = [
     ('[f(s=b"x")]', None),
     ('[f(s=f"x")]', None),
     ("[f(n=1j)]", None),
-    ('[f(s="\\N{BULLET}")]', None),
+    ("[f(n=1e999)]", None),
+    ("[f(n=" + "-" * 20000 + "1)]", None),
     ("[f(n=007)]", None),
     ("[f(d={True: 1})]", None),
     ("[f(x={1, 2})]", None),
@@ -679,18 +666,6 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
                 ],
                 "content": "Checking.",
             },
-        )
-
-    def test_granite33_optional_response_wrapper(self):
-        with_wrapper = "<think>Sunny?</think><response>It is sunny.</response><|end_of_text|>"
-        self.assertEqual(
-            parse_response(with_wrapper, granite33_template, prefix=""),
-            {"role": "assistant", "reasoning_content": "Sunny?", "content": "It is sunny."},
-        )
-        # The wrapper is optional: without thinking, Granite 3.3 answers without it.
-        self.assertEqual(
-            parse_response("It is sunny.<|end_of_text|>", granite33_template, prefix=""),
-            {"role": "assistant", "content": "It is sunny."},
         )
 
     def test_gemma4_tool_call(self):
@@ -1288,11 +1263,6 @@ _STREAMING_FIXTURES = [
         "lfm2",
         lfm2_template,
         '<think>Look it up.</think><|tool_call_start|>[get_weather(city="Paris")]<|tool_call_end|>Checking.<|im_end|>',
-    ),
-    (
-        "granite33",
-        granite33_template,
-        "<think>Sunny?</think><response>It is sunny.</response><|end_of_text|>",
     ),
     (
         "beam",

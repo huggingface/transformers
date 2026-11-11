@@ -425,9 +425,11 @@ The accepted syntax is Python's own, with a few restrictions so other implementa
 match it exactly:
 
 - Any Python `str` literal is accepted: single, double and triple quotes, `r`/`u` prefixes, and implicit concatenation
-  (`"a" "b"`). Bytes, f-strings and named unicode escapes (`\N{...}`) are rejected.
-- Number literals follow Python, including `0x`/`0o`/`0b`, `1_000`, `.5`, `1e3` and unary `+`/`-`. Complex numbers are
-  rejected. Integers keep full precision in Python; JavaScript can only represent integers exactly up to 2^53.
+  (`"a" "b"`). Bytes and f-strings are rejected. Named unicode escapes (`\N{...}`) work in Python, but other
+  implementations may reject them because they need the Unicode name database.
+- Number literals follow Python, including `0x`/`0o`/`0b`, `1_000`, `.5`, `1e3` and unary `+`/`-`. Complex numbers
+  and floats that overflow to infinity (`1e999`) are rejected. Integers keep full precision in Python; JavaScript
+  can only represent integers exactly up to 2^53.
 - Positional arguments, `*args`/`**kwargs` and repeated keyword arguments are rejected.
 - `(x)` is just `x`; only `(x,)` and `()` are tuples. Comments and redundant parentheses are allowed.
 
