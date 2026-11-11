@@ -720,7 +720,12 @@ class GenerationMixin(ContinuousMixin):
         attention_mask = (
             kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
         )
-        if isinstance(cache, Cache) and cache.is_compileable and (attention_mask is None or attention_mask.ndim == 2):
+        if (
+            isinstance(cache, Cache)
+            and cache.is_compileable
+            and not all(cache.is_linear)
+            and (attention_mask is None or attention_mask.ndim == 2)
+        ):
             # Some models may overwrite the general one
             causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
             attention_mask = causal_mask_creation_function(
