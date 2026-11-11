@@ -345,7 +345,9 @@ def load_audio_as(
             - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
-    requires_backends(load_audio_as, ["soundfile", "soxr"])
+    requires_backends(load_audio_as, ["soundfile"])
+    if sampling_rate is not None:
+        requires_backends(load_audio_as, ["soxr"])  # only needed to resample
 
     if return_format not in ["base64", "dict", "buffer"]:
         raise ValueError(f"Invalid return_format: {return_format}. Must be 'base64', 'dict', or 'buffer'")
@@ -841,7 +843,7 @@ def mel_filter_bank(
         filter_freqs = mel_freqs
     else:
         # frequencies of FFT bins in Hz
-        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
+        fft_freqs = np.linspace(0, sampling_rate / 2, num_frequency_bins)
 
     mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(dtype, copy=False)
 

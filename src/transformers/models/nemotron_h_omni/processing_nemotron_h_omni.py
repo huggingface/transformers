@@ -218,8 +218,7 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         num_tokens = []
         for audio_item in audio:
             if isinstance(audio_item, str):
-                # `"soundfile"` matches the librosa loading this processor used before
-                waveform = load_audio(audio_item, sampling_rate=sampling_rate, backend="soundfile")
+                waveform = load_audio(audio_item, sampling_rate=sampling_rate)
             elif is_torch_available() and isinstance(audio_item, torch.Tensor):
                 waveform = audio_item.numpy() if audio_item.dim() == 1 else audio_item.squeeze().numpy()
             elif isinstance(audio_item, np.ndarray):
