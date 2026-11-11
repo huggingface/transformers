@@ -199,6 +199,21 @@ class KimiK25IntegrationTest(unittest.TestCase):
         ]
         cls.message3 = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
 
+        cls.message_video = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -344,3 +359,16 @@ class KimiK25IntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
         torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_video(self):
+        inputs = self.processor.apply_chat_template(
+            [self.message_video],
+            tokenize=True,
+            add_generation_prompt=True,
+            padding=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            self.model(**inputs).logits
