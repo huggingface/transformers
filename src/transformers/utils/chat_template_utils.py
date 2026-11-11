@@ -240,13 +240,23 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
 
     # Clean and store the sections
     description = description_match.group(1).strip() if description_match else None
-    docstring_args = args_match.group(1).strip() if args_match else None
     returns = returns_match.group(1).strip() if returns_match else None
 
     # Parsing the arguments into a dictionary
-    if docstring_args is not None:
-        docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
-        matches = args_split_re.findall(docstring_args)
+    if args_match is not None:
+        # Lines indented deeper than the argument names continue the previous description, even when they start
+        # with "word:" (e.g. "Default: 0" or "https://...")
+        args_block = docstring[docstring.rfind("\n", 0, args_match.start(1)) + 1 : args_match.end(1)]
+        first_arg = re.search(r"^([ \t]*)\w+:", args_block, flags=re.MULTILINE)
+        lines: list[str] = []
+        for line in args_block.split("\n"):
+            if not line.strip():  # Remove blank lines
+                continue
+            if lines and first_arg and len(line) - len(line.lstrip()) > len(first_arg.group(1)):
+                lines[-1] = f"{lines[-1].rstrip()} {line.strip()}"
+            else:
+                lines.append(line)
+        matches = args_split_re.findall("\n".join(lines))
         args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
     else:
         args_dict = {}

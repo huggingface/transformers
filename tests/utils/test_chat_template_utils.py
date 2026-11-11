@@ -594,6 +594,43 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_multiline_docstring_with_colons(self):
+        def fn(location: str, unit: str = "celsius"):
+            """
+            Test function
+
+            Args:
+                location: The location to get the temperature for.
+                    Example: "Paris, France"
+                unit: The unit to return the temperature in.
+                    Default: "celsius" (choices: ["celsius", "fahrenheit"])
+            """
+            pass
+
+        # Indented continuation lines belong to the description, even when they look like "name: description"
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": 'The location to get the temperature for. Example: "Paris, France"',
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": 'The unit to return the temperature in. Default: "celsius"',
+                    },
+                },
+                "required": ["location"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_return_none(self):
         def fn(x: int) -> None:
             """
