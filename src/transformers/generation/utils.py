@@ -4282,7 +4282,7 @@ class GenerationMixin(ContinuousMixin):
         use_inputs_embeds = False
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
             use_inputs_embeds = True
-        if cache is not None:
+        if cache is not None and not all(cache.is_linear):
             past_length = cache.get_seq_length()
             # It will be sliced as inputs_embeds = inputs_embeds[:, -next_sequence_length:, :] in `prepare_inputs_for_generation`
             if use_inputs_embeds:
