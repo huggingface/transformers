@@ -1316,8 +1316,8 @@ if is_onnxscript_available():
 # graph and every function via `apply_onnx_ir_fixes`.
 #
 # Unlike the other stages, this one is a plain `_IR_FIXES` list rather than a
-# decorator-driven registry — there's currently only one entry and we expect ORT
-# to fix the underlying bug upstream soon, so the registry boilerplate isn't worth it.
+# decorator-driven registry: there are few entries, each working around an ORT bug
+# expected to be fixed upstream, so the registry boilerplate isn't worth it.
 #
 # To add a new fix: implement `_fix_ir_*` and append to `_IR_FIXES`.
 
@@ -1329,8 +1329,42 @@ def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
             ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
 
+def _fix_ir_constant_gather_nd(graph_like: onnx_ir.Graph) -> None:
+    """Read a `GatherND` at constant indices (a mask indexed by constant grids, `attention_mask[batch_idx, kv_idx]`) as
+    a `Gather` over the indexed dimensions flattened into one: the same elements, and ORT's CUDA `GatherND` kernel
+    can't be replayed in a CUDA graph (microsoft/onnxruntime#33875)."""
+    for node in list(graph_like):
+        if (
+            node.op_type != "GatherND"
+            or node.domain not in ("", "ai.onnx")
+            or node.attributes.get_int("batch_dims", 0)
+        ):
+            continue
+        data, indices = node.inputs
+        if indices.const_value is None or data.shape is None or not all(isinstance(dim, int) for dim in data.shape):
+            continue
+        values = indices.const_value.numpy()
+        depth = values.shape[-1]
+        if not 0 < depth <= len(data.shape):
+            continue
+        indexed, kept = list(data.shape[:depth]), list(data.shape[depth:])
+        # Negative indices count from the end, as `GatherND` reads them.
+        flat = np.ravel_multi_index(tuple(np.moveaxis(values % np.array(indexed), -1, 0)), indexed).astype(np.int64)
+        shape = onnx_ir.node("Constant", [], {"value": onnx_ir.tensor(np.array([np.prod(indexed), *kept], np.int64))})
+        rows = onnx_ir.node("Reshape", [data, shape.outputs[0]])
+        positions = onnx_ir.node("Constant", [], {"value": onnx_ir.tensor(flat)})
+        gather = onnx_ir.node("Gather", [rows.outputs[0], positions.outputs[0]], {"axis": 0})
+        gathered, replacement = node.outputs[0], gather.outputs[0]
+        replacement.shape, replacement.dtype = gathered.shape, gathered.dtype
+        graph_like.insert_before(node, [shape, rows, positions, gather])
+        onnx_ir.convenience.replace_all_uses_with(gathered, replacement, replace_graph_outputs=True)
+        graph_like.remove(node, safe=True)
+        replacement.name = gathered.name
+
+
 _IR_FIXES = [
     _fix_ir_topk_sorted,
+    _fix_ir_constant_gather_nd,
 ]
 
 
