@@ -909,19 +909,18 @@ class ExportTesterMixin:
             return decompose_multimodal(model, inputs_dict)
         return {"model": (model, inputs_dict)}
 
-    def _collect_eager_outputs(self, components, output_types=None):
-        """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict. When given,
-        ``output_types`` is filled with each component's output class."""
-        eager_outputs = {}
+    def _collect_eager_outputs(self, components):
+        """Run eager forward for each component and return its leaf tensors and output class, as
+        ``({name: leaf_tensors}, {name: output_class})``."""
+        eager_outputs, eager_types = {}, {}
         for name, (model, inputs) in components.items():
             with torch.no_grad():
                 set_seed(1234)
                 outputs = model(**copy.deepcopy(inputs))
-                eager_outputs[name] = get_leaf_tensors(outputs)
-                assert eager_outputs[name], f"Eager outputs are empty for {name}."
-            if output_types is not None:
-                output_types[name] = type(outputs)
-        return eager_outputs
+            eager_outputs[name] = get_leaf_tensors(outputs)
+            eager_types[name] = type(outputs)
+            assert eager_outputs[name], f"Eager outputs are empty for {name}."
+        return eager_outputs, eager_types
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None):
         """Assert outputs are close, allowing up to 5% element-level mismatch.
@@ -977,8 +976,7 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_types = {}
-            eager_outputs = self._collect_eager_outputs(components, eager_types)
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1016,8 +1014,7 @@ class ExportTesterMixin:
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_types = {}
-            eager_outputs = self._collect_eager_outputs(components, eager_types)
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1052,8 +1049,7 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_types = {}
-            eager_outputs = self._collect_eager_outputs(components, eager_types)
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1096,7 +1092,7 @@ class ExportTesterMixin:
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
             components = self._prepare_export_model_and_inputs(model_class, device="cpu")
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1182,7 +1178,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 check_device = True
@@ -1201,12 +1197,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config).program
-
-                    with torch.no_grad():
-                        set_seed(1234)
-                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
-                        self.assertTrue(exported_outputs, "Exported outputs are empty.")
+                    exported = exporter.export(model, inputs, config=config)
+                    set_seed(1234)
+                    exported_outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
+                    self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
                     if not self._should_skip_exactness(
                         model_class,
@@ -1246,7 +1240,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1279,7 +1273,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1318,7 +1312,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
