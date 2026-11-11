@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import weakref
 from typing import Any
 
 from ...utils.import_utils import is_onnxruntime_available, is_onnxscript_available, is_torch_available
@@ -37,10 +38,10 @@ if is_onnxscript_available():
 
 # Past this much weight a graph opens from a file rather than serialized: protobuf caps a model at 2GB (torch's own
 # threshold, leaving room for the graph itself).
-_SERIALIZE_LIMIT = int(1.5 * 2**30)
+_SERIALIZED_WEIGHTS_LIMIT = int(1.5 * 2**30)
 
 
-def _providers(device=None) -> list:
+def _execution_providers(device=None) -> list:
     """The ONNX Runtime providers for `device`: CUDA when asked for, or by default when this build has it."""
     available = ort.get_available_providers()
     if device is None:
@@ -56,16 +57,9 @@ def _providers(device=None) -> list:
 class OnnxModelRunner(ModelRunner):
     """Runs an ONNX graph in an ONNX Runtime session opened for the device, its inputs and outputs bound in place."""
 
-    def __init__(
-        self,
-        metadata: ExportMetadata,
-        session: ort.InferenceSession,
-        directory: tempfile.TemporaryDirectory | None = None,
-    ):
+    def __init__(self, metadata: ExportMetadata, session: ort.InferenceSession):
         super().__init__(metadata)
         self.session = session
-        # The temporary file a large graph was opened from, kept as long as the session.
-        self.directory = directory
 
     @property
     def device(self) -> torch.device:
@@ -88,21 +82,28 @@ class OnnxModelRunner(ModelRunner):
         own list (TensorRT with its options, say), replaces the ones picked for `device`; `session_options` open the
         session (`intra_op_num_threads`: ONNX Runtime sizes its thread pool from every core of the machine, not the
         ones the process may run on)."""
-        source, directory = program.meta.get("path"), None
-        if source is None:
-            weights = sum(
-                value.const_value.nbytes
-                for value in program.graph.initializers.values()
-                if value.const_value is not None
+        if device is not None and providers is not None:
+            raise ValueError(
+                "Pass either `device` or `providers`: the providers choose the device (`device_id` in the CUDA or "
+                "TensorRT provider's options)."
             )
-            if weights < _SERIALIZE_LIMIT:
-                source = onnx_ir.to_proto(program).SerializeToString()
-            else:
-                directory = tempfile.TemporaryDirectory()
-                source = os.path.join(directory.name, "model.onnx")
-                onnx_ir.save(program, source, external_data="model.onnx.data")
-        session = ort.InferenceSession(source, session_options, providers=providers or _providers(device))
-        return cls(metadata, session, directory)
+        providers = providers or _execution_providers(device)
+        if "path" in program.meta:
+            return cls(metadata, ort.InferenceSession(program.meta["path"], session_options, providers=providers))
+
+        weights = sum(
+            value.const_value.nbytes for value in program.graph.initializers.values() if value.const_value is not None
+        )
+        if weights < _SERIALIZED_WEIGHTS_LIMIT:
+            serialized = onnx_ir.to_proto(program).SerializeToString()
+            return cls(metadata, ort.InferenceSession(serialized, session_options, providers=providers))
+        directory = tempfile.TemporaryDirectory()
+        path = os.path.join(directory.name, "model.onnx")
+        onnx_ir.save(program, path, external_data="model.onnx.data")
+        session = ort.InferenceSession(path, session_options, providers=providers)
+        # The CPU provider maps the weights file for as long as the session lives.
+        weakref.finalize(session, directory.cleanup)
+        return cls(metadata, session)
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
@@ -117,7 +118,7 @@ class OnnxModelRunner(ModelRunner):
         missing = [spec.name for spec in specs if spec.name.removeprefix("input.") not in leaves]
         if missing:
             raise ValueError(f"The graph takes {missing}, which {list(kwargs)} don't hold.")
-        binding, kept = self.session.io_binding(), []
+        binding, bound_buffers = self.session.io_binding(), []
         for spec in specs:
             leaf = leaves[spec.name.removeprefix("input.")]
             # Integers bind on host: ORT reads them on its CPU, where a GPU pointer is an illegal access.
@@ -125,7 +126,7 @@ class OnnxModelRunner(ModelRunner):
             tensor = (leaf.cpu() if on_host else leaf.to(device)).contiguous()
             # ORT refuses the null pointer of an empty tensor; a one-element stand-in serves.
             buffer = tensor if tensor.numel() else torch.empty(1, dtype=tensor.dtype, device=tensor.device)
-            kept.append(buffer)
+            bound_buffers.append(buffer)
             binding.bind_input(
                 spec.name,
                 "cpu" if on_host else "cuda",

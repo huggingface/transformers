@@ -18,18 +18,18 @@ from ...utils import _LazyModule
 
 _import_structure = {
     "base": ["ModelRunner"],
-    "dynamo": ["DynamoModelRunner"],
-    "executorch": ["ExecutorchModelRunner"],
-    "onnx": ["OnnxModelRunner"],
-    "openvino": ["OpenVINOModelRunner"],
+    "runner_dynamo": ["DynamoModelRunner"],
+    "runner_executorch": ["ExecutorchModelRunner"],
+    "runner_onnx": ["OnnxModelRunner"],
+    "runner_openvino": ["OpenVINOModelRunner"],
 }
 
 if TYPE_CHECKING:
     from .base import ModelRunner
-    from .dynamo import DynamoModelRunner
-    from .executorch import ExecutorchModelRunner
-    from .onnx import OnnxModelRunner
-    from .openvino import OpenVINOModelRunner
+    from .runner_dynamo import DynamoModelRunner
+    from .runner_executorch import ExecutorchModelRunner
+    from .runner_onnx import OnnxModelRunner
+    from .runner_openvino import OpenVINOModelRunner
 else:
     import sys
 

@@ -31,7 +31,7 @@ if is_openvino_available():
     import openvino
 
 
-def _openvino_device(device=None) -> str:
+def _openvino_device_name(device=None) -> str:
     """The OpenVINO device for a torch-style one: `AUTO` by default, `CPU`, or `GPU` for an Intel GPU (`xpu`)."""
     if device is None:
         return "AUTO"
@@ -59,7 +59,7 @@ def _physical_cores() -> int:
     return len(cores)
 
 
-def openvino_output(value, port) -> torch.Tensor:
+def openvino_output_tensor(value, port) -> torch.Tensor:
     """An inference result as a torch tensor. OpenVINO's Python API returns a bf16 output as a float16 array of the
     bf16 bits (NumPy has no bf16), which read as float16 give wrong values: reinterpret those bits as bf16."""
     if port.get_element_type() == openvino.Type.bf16:
@@ -98,7 +98,7 @@ class OpenVINOModelRunner(ModelRunner):
         physical cores. Both thread pools otherwise span every core, and torch's, which spins for a while after each op,
         slows the OpenVINO call next to it (EmbeddingGemma2 on 56 Xeon cores, torch pooling after each call: 69.5 ms
         with both pools on every core, 50.1 ms with 8 torch threads, OpenVINO alone 49.5 ms)."""
-        device = _openvino_device(device)
+        device = _openvino_device_name(device)
         defaults = {}
         if device == "CPU":
             precision = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}.get(metadata.dtype, "f32")
@@ -116,4 +116,4 @@ class OpenVINOModelRunner(ModelRunner):
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
         outputs = self.request.infer(feed, share_inputs=share_inputs, share_outputs=share_outputs)
-        return self.unflatten([openvino_output(outputs[port], port) for port in self.compiled_model.outputs])
+        return self.unflatten([openvino_output_tensor(outputs[port], port) for port in self.compiled_model.outputs])

@@ -266,8 +266,8 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 @slow
 @require_torch
 class ExportedModelTest(unittest.TestCase):
-    """A single-graph export runs like its source model on every backend: built from the export (`runtime()`), and
-    loaded from disk (`ExportedModel.from_pretrained`)."""
+    """A single-graph export runs like its source model on every backend: built from the export, and loaded from disk
+    (`ExportedModel.from_pretrained`)."""
 
     def _model_and_inputs(self):
         from transformers import BertConfig, BertModel
@@ -325,6 +325,38 @@ class ExportedModelTest(unittest.TestCase):
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         self._check_runs_like_eager(OnnxExporter(), OnnxConfig(dynamic=True), atol=1e-3, device="cpu")
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_runner_options(self):
+        import onnxruntime as ort
+
+        from transformers.exporters import ExportedModel, OnnxConfig, OnnxExporter
+
+        model, inputs = self._model_and_inputs()
+        with torch.no_grad():
+            expected = model(**inputs).last_hidden_state
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=True))
+        session_options = ort.SessionOptions()
+        session_options.intra_op_num_threads = 1
+        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+        provider = "CUDAExecutionProvider" if torch_device == "cuda" else "CPUExecutionProvider"
+        providers = [(provider, {"arena_extend_strategy": "kSameAsRequested"})]
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = ExportedModel.from_pretrained(directory, providers=providers, session_options=session_options)
+            torch.testing.assert_close(loaded(**inputs).last_hidden_state.cpu(), expected, atol=1e-3, rtol=1e-3)
+            session = next(iter(loaded.runners.values())).session
+            self.assertEqual(session.get_providers()[0], provider)
+            self.assertEqual(session.get_session_options().intra_op_num_threads, 1)
+            self.assertEqual(
+                session.get_session_options().graph_optimization_level, ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+            )
+            with self.assertRaisesRegex(TypeError, "revison"):
+                ExportedModel.from_pretrained(directory, revison="main")
+            with self.assertRaisesRegex(ValueError, "either `device` or `providers`"):
+                ExportedModel.from_pretrained(directory, device="cpu", providers=providers)
 
     @require_openvino
     @pytest.mark.openvino_export_test

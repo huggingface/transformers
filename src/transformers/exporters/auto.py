@@ -48,13 +48,13 @@ class ExportBackend:
 
 EXPORT_BACKENDS: dict[str, ExportBackend] = {
     "executorch": ExportBackend(
-        ExecutorchConfig, "exporter_executorch.ExecutorchExporter", "runners.executorch.ExecutorchModelRunner"
+        ExecutorchConfig, "exporter_executorch.ExecutorchExporter", "runners.runner_executorch.ExecutorchModelRunner"
     ),
     "openvino": ExportBackend(
-        OpenVINOConfig, "exporter_openvino.OpenVINOExporter", "runners.openvino.OpenVINOModelRunner"
+        OpenVINOConfig, "exporter_openvino.OpenVINOExporter", "runners.runner_openvino.OpenVINOModelRunner"
     ),
-    "dynamo": ExportBackend(DynamoConfig, "exporter_dynamo.DynamoExporter", "runners.dynamo.DynamoModelRunner"),
-    "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter", "runners.onnx.OnnxModelRunner"),
+    "dynamo": ExportBackend(DynamoConfig, "exporter_dynamo.DynamoExporter", "runners.runner_dynamo.DynamoModelRunner"),
+    "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter", "runners.runner_onnx.OnnxModelRunner"),
 }
 
 

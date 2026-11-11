@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 import os
 import tempfile
@@ -24,12 +25,12 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Unpack
+from typing import TYPE_CHECKING, Any
 
 from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
-from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
+from ..utils.hub import cached_file, cached_files, hf_api
 from .configs import ExportConfigMixin, ExportFormat
 from .metadata import ExportMetadata, register_treespec_types
 from .quantizers.utils import capture_calibration_inputs
@@ -143,11 +144,11 @@ class ExportedModel(PushToHubMixin):
         (see [`ModelRunner.__call__`]): with `share_outputs`, the outputs are valid until the next call."""
         name = self._single_component()
         runner = self.runners[name]
-        traced = runner.metadata.kwargs
-        unused = [name for name in kwargs if name not in traced]
+        traced_kwargs = runner.metadata.kwargs
+        unused = [name for name in kwargs if name not in traced_kwargs]
         if unused:
             logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
-        inputs = {name: value for name, value in kwargs.items() if name in traced}
+        inputs = {name: value for name, value in kwargs.items() if name in traced_kwargs}
         return runner(share_inputs=share_inputs, share_outputs=share_outputs, **inputs)
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
@@ -206,8 +207,14 @@ class ExportedModel(PushToHubMixin):
         pretrained_model_name_or_path: str | Path,
         *,
         device=None,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str = "main",
+        subfolder: str = "",
         trust_remote_code: bool = False,
-        **kwargs: Unpack[DownloadKwargs],
+        **runner_kwargs,
     ) -> ExportedModel:
         """Load what [`~ExportedModel.save_pretrained`] wrote: each component through its backend's
         [`~HfExporter.load_program`], with its metadata, and the configs saved next to them. The programs are loaded
@@ -218,16 +225,49 @@ class ExportedModel(PushToHubMixin):
                 A local directory, or a Hub repo id. From the Hub, only the files the manifest names are
                 downloaded, so an export can sit next to the model's own weights.
             device (`str` or `torch.device`, *optional*):
-                Where to run it (the backend's default when `None`). Call [`~ExportedModel.to`] for runner options.
+                Where to run it (the backend's default when `None`).
+            cache_dir (`Union[str, os.PathLike]`, *optional*):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                Whether or not to only look at local files (i.e., do not try to download the model).
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
+
+                </Tip>
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether to load the config of a model whose code lives in its repo, as for
                 [`~AutoConfig.from_pretrained`].
-            kwargs ([`~utils.hub.DownloadKwargs`], *optional*):
-                Download kwargs, as for [`~PreTrainedModel.from_pretrained`] (`subfolder`, `revision`, `token`, ...).
+            runner_kwargs (*optional*):
+                The backend's runner options, as for [`~ExportedModel.to`]: `providers` and `session_options` for
+                ONNX Runtime, `config` and `torch_threads` for OpenVINO.
         """
-        from .auto import EXPORT_BACKENDS, get_exporter_class
+        from .auto import EXPORT_BACKENDS, get_exporter_class, get_runner_class
 
-        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **kwargs)
+        download_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "token": token,
+            "revision": revision,
+            "subfolder": subfolder,
+        }
+        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **download_kwargs)
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
         if manifest.get("schema_version", 1) > EXPORT_SCHEMA_VERSION:
             logger.warning(
@@ -235,15 +275,22 @@ class ExportedModel(PushToHubMixin):
                 f"transformers reads ({EXPORT_SCHEMA_VERSION}): some fields might be ignored or misinterpreted."
             )
         exporter = get_exporter_class(manifest["export_format"])
+        runner_options = []
+        if EXPORT_BACKENDS[exporter.export_format].runner is not None:
+            parameters = inspect.signature(get_runner_class(exporter.export_format).from_program).parameters
+            runner_options = [name for name in parameters if name not in ("program", "metadata", "device")]
+        unknown = [name for name in runner_kwargs if name not in runner_options]
+        if unknown:
+            raise TypeError(f"Unknown kwargs {unknown}: the {exporter.export_format} runner takes {runner_options}.")
         program_files = [
             file for entry in manifest["components"].values() for file in exporter.program_files(entry["file"])
         ]
-        cached_files(pretrained_model_name_or_path, program_files, **kwargs)
+        cached_files(pretrained_model_name_or_path, program_files, **download_kwargs)
         cached_files(
             pretrained_model_name_or_path,
             [CONFIG_NAME, GENERATION_CONFIG_NAME],
             _raise_exceptions_for_missing_entries=False,
-            **kwargs,
+            **download_kwargs,
         )
         directory = Path(manifest_file).parent
         components = {}
@@ -264,7 +311,7 @@ class ExportedModel(PushToHubMixin):
         )
         model = cls(components, exporter.export_format, config=config, generation_config=generation_config)
         if EXPORT_BACKENDS[exporter.export_format].runner is not None:
-            model.to(device)
+            model.to(device, **runner_kwargs)
         return model
 
 

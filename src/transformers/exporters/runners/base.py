@@ -33,7 +33,7 @@ class ModelRunner(ABC):
         self.metadata = metadata
         self.out_spec = load_treespec(metadata.out_spec)
         # The scalars the program was traced with, which a caller may leave out (`generate` does).
-        self.constants = {name: spec["value"] for name, spec in metadata.kwargs.items() if "value" in spec}
+        self.traced_constants = {name: spec["value"] for name, spec in metadata.kwargs.items() if "value" in spec}
 
     @property
     @abstractmethod
