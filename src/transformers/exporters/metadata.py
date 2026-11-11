@@ -88,6 +88,14 @@ class ExportMetadata:
         return cls(**{name: value for name, value in values.items() if name in known})
 
 
+def module_dtype(module: torch.nn.Module) -> str:
+    """`module`'s floating-point precision, off its parameters: a split-out component is a plain `nn.Module` with no
+    `.dtype`."""
+    return str(
+        next((p.dtype for p in module.parameters() if p.is_floating_point()), torch.get_default_dtype())
+    ).removeprefix("torch.")
+
+
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
 ) -> ExportMetadata:
@@ -96,10 +104,7 @@ def build_export_metadata(
     return ExportMetadata(
         architecture=type(model).__name__,
         packages=_package_versions(packages),
-        # Off the parameters: a split-out component is a plain `nn.Module` with no `.dtype`.
-        dtype=str(
-            next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
-        ).removeprefix("torch."),
+        dtype=module_dtype(model),
         device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         kwargs={name: _describe_traced_kwarg(value) for name, value in inputs.items()},
         input_names=[spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"],
