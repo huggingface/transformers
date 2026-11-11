@@ -640,12 +640,42 @@ def is_torch_tpu_available(check_device: bool = False) -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_torch_supa_available(check_device: bool = False) -> bool:
+    """
+    Checks if `supa` is available through the `torch_supa` package, which registers Biren SUPA accelerators via
+    PyTorch's out-of-tree device backend mechanism (`PrivateUse1`, renamed to `supa`).
+
+    This helper is a pure query: it never imports `torch_supa` itself and never patches `torch`, so it stays
+    cheap and side-effect free on machines without Biren hardware.
+    """
+    if not is_torch_available() or not _is_package_available("torch_supa")[0]:
+        return False
+
+    import torch
+
+    if not hasattr(torch, "supa"):
+        return False
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no SUPA device is found
+            _ = torch.supa.device_count()
+            return torch.supa.is_available()
+        except RuntimeError:
+            return False
+    return torch.supa.is_available()
+
+
+@lru_cache
+@_make_compile_constant
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
 
     import torch
 
+    if is_torch_supa_available():
+        return torch.supa.is_bf16_supported()
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
     if is_torch_xpu_available():
@@ -730,6 +760,8 @@ def is_torch_tf32_available() -> bool:
         if f"{device_info.major}{device_info.minor}" >= "22":
             return True
         return False
+    if is_torch_supa_available():
+        return is_torch_greater_or_equal("2.9")
     torch_version = getattr(torch, "version")
     if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
