@@ -129,17 +129,16 @@ class TeleChatConfig(PreTrainedConfig):
     def convert_rope_params_to_dict(self, **kwargs):
         # The original code ignores `rope_scaling` and always applies its own stepwise NTK scaling instead
         kwargs.pop("rope_scaling", None)
-        rope_parameters = self.rope_parameters or {}
-        self.rope_parameters = {
-            "rope_type": "telechat_ntk",
-            "rope_theta": rope_parameters.get("rope_theta", kwargs.pop("rope_theta", self.default_theta)),
-            "original_max_position_embeddings": rope_parameters.get(
-                "original_max_position_embeddings", kwargs.pop("training_seqlen", 8192)
-            ),
-            "base_seqlen": rope_parameters.get("base_seqlen", kwargs.pop("base_seqlen", 4096)),
+        # Defaults from the original config keys, for configs whose `rope_parameters` don't set them yet
+        defaults = {
+            "rope_theta": kwargs.pop("rope_theta", self.default_theta),
+            "original_max_position_embeddings": kwargs.pop("training_seqlen", 8192),
+            "base_seqlen": kwargs.pop("base_seqlen", 4096),
         }
-        kwargs.pop("training_seqlen", None)
-        kwargs.pop("base_seqlen", None)
+        rope_parameters = self.rope_parameters or {}
+        self.rope_parameters = {"rope_type": "telechat_ntk"} | {
+            k: rope_parameters.get(k, v) for k, v in defaults.items()
+        }
         return super().convert_rope_params_to_dict(**kwargs)
 
     def _validate_telechat_ntk_rope_parameters(self, rope_parameters: dict, ignore_keys: set[str] | None = None):
