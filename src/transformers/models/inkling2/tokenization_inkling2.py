@@ -171,7 +171,7 @@ INKLING2_RESPONSE_TEMPLATE = {
 }
 
 
-# Custom tokenizer is needed because chat templates are missing from the hub checkpoint.
+# Custom tokenizer is only needed because chat templates are missing from the hub checkpoint.
 class Inkling2Tokenizer(TokenizersBackend):
     """
     Construct an Inkling2 (h200k) byte-level BPE tokenizer, backed by HuggingFace's *tokenizers* library.
@@ -187,7 +187,7 @@ class Inkling2Tokenizer(TokenizersBackend):
             The beginning of sequence token.
         eos_token (`str`, *optional*):
             The end of sequence token.
-        pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+        pad_token (`str`, *optional*):
             The padding token.
 
     The `chat_template` and `response_template` keyword arguments default to the Inkling2 templates.
@@ -203,7 +203,7 @@ class Inkling2Tokenizer(TokenizersBackend):
         unk_token: str | None = None,
         bos_token: str | None = None,
         eos_token: str | None = None,
-        pad_token: str | None = "<|endoftext|>",
+        pad_token: str | None = None,
         **kwargs,
     ):
         self._vocab = vocab if vocab is not None else {"<|endoftext|>": 0}
