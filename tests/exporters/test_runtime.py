@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     require_onnxscript,
     require_openvino,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -349,6 +350,33 @@ class ExportedModelTest(unittest.TestCase):
                 ExportedModel.from_pretrained(directory, revison="main")
             with self.assertRaisesRegex(ValueError, "either `device` or `providers`"):
                 ExportedModel.from_pretrained(directory, device="cpu", providers=providers)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_cuda_graph(self):
+        """A static export run with `enable_cuda_graph` replays a CUDA graph: each call's inputs are copied into the
+        buffers it was captured with, and its outputs copied out, so an earlier call's outputs survive the next."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        model = _tiny_model().to("cuda")
+        calls = [
+            {
+                "input_ids": torch.randint(0, 64, (2, 8), device="cuda"),
+                "attention_mask": torch.ones(2, 8, dtype=torch.long, device="cuda"),
+            }
+            for _ in range(3)
+        ]
+        exported = OnnxExporter().export(model, dict(calls[0]), OnnxConfig())
+        exported.to(providers=[("CUDAExecutionProvider", {"device_id": 0, "enable_cuda_graph": "1"})])
+        runner = exported.runners["model"]
+        self.assertTrue(runner.replays_cuda_graph)
+        with torch.no_grad():
+            outputs = [exported(**inputs).logits for inputs in calls]
+            for output, inputs in zip(outputs, calls):
+                torch.testing.assert_close(output, model(**inputs).logits, atol=1e-3, rtol=1e-3)
+        self.assertEqual(len(runner.cuda_graphs), 1)
 
     @require_openvino
     @pytest.mark.openvino_export_test
