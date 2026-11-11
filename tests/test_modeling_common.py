@@ -876,6 +876,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 

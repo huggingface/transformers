@@ -1250,6 +1250,20 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Concatenate(dim=0)],
             ),
         ],
+        "lara_mini": [
+            WeightRenaming(source_patterns=r"linear_attn\.out_norm\.", target_patterns="linear_attn.norm."),
+            # The checkpoints fuse the gated delta net input projections into one `in_proj`, rows `[q|k|v|z|b|a]`
+            WeightConverter(
+                source_patterns="linear_attn.in_proj",
+                target_patterns=[
+                    "linear_attn.in_proj_qkv",
+                    "linear_attn.in_proj_z",
+                    "linear_attn.in_proj_b",
+                    "linear_attn.in_proj_a",
+                ],
+                operations=[Split(dim=0)],
+            ),
+        ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [
             WeightRenaming(

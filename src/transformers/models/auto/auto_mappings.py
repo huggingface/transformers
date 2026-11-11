@@ -373,6 +373,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("kosmos_2_vision_model", "Kosmos2VisionConfig"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextConfig"),
         ("laguna", "LagunaConfig"),
+        ("lara_mini", "LaraMiniConfig"),
         ("lasr_ctc", "LasrCTCConfig"),
         ("lasr_encoder", "LasrEncoderConfig"),
         ("layoutlm", "LayoutLMConfig"),
