@@ -281,19 +281,14 @@ class XiaomiLens0Processor(ProcessorMixin):
         num_images = len(image_grids)
 
         if (mask_logits is None) != (mask_token_indices is None):
-            raise ValueError("mask_logits and mask_token_indices must either both be set or both be None.")
+            raise ValueError("mask_logits and mask_token_indices must be provided together")
         if mask_logits is None:
             mask_logits = [torch.empty(0, height * patch_size, width * patch_size) for _, height, width in image_grids]
             mask_token_indices = [torch.empty((0, 2), dtype=torch.long) for _ in image_grids]
         if len(mask_logits) != num_images or len(mask_token_indices) != num_images:
-            raise ValueError(
-                "Expected one mask tensor and one token-index tensor per image grid. "
-                f"But got {len(mask_logits)} masks, {num_images} images, and {len(mask_token_indices)} mask_token_indices."
-            )
+            raise ValueError("Make sure that you pass in as many mask_logits and mask_token_indices as images")
         if target_sizes is not None and len(target_sizes) != num_images:
-            raise ValueError(
-                f"Expected one target size per image. But got {len(target_sizes)} target sizes and {num_images} images"
-            )
+            raise ValueError("Make sure that you pass in as many target sizes as images")
 
         if target_sizes is None:
             target_sizes = [(height * patch_size, width * patch_size) for _, height, width in image_grids]
@@ -310,8 +305,7 @@ class XiaomiLens0Processor(ProcessorMixin):
         num_image_placeholders = images_per_sequence.sum().item()
         if num_image_placeholders != num_images:
             raise ValueError(
-                "The number of image placeholders must match the image grids. "
-                f"But got {num_image_placeholders} image placeholders and {num_images} image grids."
+                f"Image tokens and image grids do not match, tokens: {num_image_placeholders}, grids: {num_images}"
             )
 
         boxes_per_image = [[] for _ in image_grids]
@@ -340,7 +334,8 @@ class XiaomiLens0Processor(ProcessorMixin):
         ):
             if len(token_indices) != image_mask_logits.shape[0]:
                 raise ValueError(
-                    f"Image {image_index} has {len(token_indices)} mask token indices but received {image_mask_logits.shape[0]} masks."
+                    f"Mask logits and mask token indices do not match for image {image_index}, "
+                    f"mask logits: {image_mask_logits.shape[0]}, token indices: {len(token_indices)}"
                 )
             # Masks are in token order, so masks in the prompt come first
             num_prompt_masks = (token_indices[:, 1] < prompt_length).sum().item()
