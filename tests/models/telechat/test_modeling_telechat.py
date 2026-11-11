@@ -88,26 +88,23 @@ class TeleChatModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class TeleChatIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    # The checkpoints' configs don't set a dtype, so `dtype="auto"` would load them in fp32. The original code uses fp16
-    dtype = torch.float16 if is_torch_available() else None
-
     def test_model_3b_logits(self):
-        model = TeleChatForCausalLM.from_pretrained("Tele-AI/TeleChat2-3B", device_map="auto", dtype=self.dtype)
+        model = TeleChatForCausalLM.from_pretrained("Tele-AI/TeleChat2-3B", device_map="auto")
         input_ids = torch.tensor([[1, 1404, 1435, 1272, 1363, 1446, 334, 1279, 1306, 395]], device=model.device)
         logits = model(input_ids).logits.float().cpu()
 
         EXPECTED_MEAN = Expectations({
-            ("cuda", 10): torch.tensor([-4.919, -4.2666, -1.901, -2.9477, -1.5264, -2.575, -0.5755, -1.9635, -2.781, -1.7785]),
+            ("cuda", 10): torch.tensor([-4.9348, -4.2666, -1.8802, -2.955, -1.5048, -2.6213, -0.5889, -1.9853, -2.7734, -1.7984]),
         })  # fmt: skip
         EXPECTED_SLICE = Expectations({
-            ("cuda", 10): torch.tensor([-9.1016, -9.8984, -1.8105, -9.1875, -9.1797, -9.1797, -9.1797, -9.1797, -9.1797, -6.3086]),
+            ("cuda", 10): torch.tensor([-9.125, -9.9375, -1.7422, -9.25, -9.25, -9.25, -9.25, -9.25, -9.25, -6.2812]),
         })  # fmt: skip
         torch.testing.assert_close(logits.mean(-1)[0], EXPECTED_MEAN.get_expectation(), rtol=1e-2, atol=1e-2)
         torch.testing.assert_close(logits[0, 0, :10], EXPECTED_SLICE.get_expectation(), rtol=1e-2, atol=1e-2)
 
     def test_model_3b_generation(self):
         tokenizer = AutoTokenizer.from_pretrained("Tele-AI/TeleChat2-3B")
-        model = TeleChatForCausalLM.from_pretrained("Tele-AI/TeleChat2-3B", device_map="auto", dtype=self.dtype)
+        model = TeleChatForCausalLM.from_pretrained("Tele-AI/TeleChat2-3B", device_map="auto")
         inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         text = tokenizer.decode(output[0], skip_special_tokens=True)
