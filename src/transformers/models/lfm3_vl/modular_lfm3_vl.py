@@ -25,6 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested
 from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoConfig, AutoModel

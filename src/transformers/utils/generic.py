@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, resolve_internal_import
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, is_tracing, resolve_internal_import
 
 
 if TYPE_CHECKING:
@@ -527,7 +527,8 @@ class ModelOutput(OrderedDict):
             inner_dict = dict(self.items())
             # For BC
             if k in ("past_key_values", "cache_params"):
-                logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+                if not is_tracing():
+                    logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
                 k = "cache"
             return inner_dict[k]
         else:
@@ -536,7 +537,8 @@ class ModelOutput(OrderedDict):
     def __setattr__(self, name, value):
         # For BC
         if name in ("past_key_values", "cache_params"):
-            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+            if not is_tracing():
+                logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
             name = "cache"
         field_names = {field.name for field in fields(self)}
         if name in field_names and value is not None:
@@ -544,10 +546,31 @@ class ModelOutput(OrderedDict):
             super().__setitem__(name, value)
         super().__setattr__(name, value)
 
+    @property
+    def past_key_values(self):
+        """
+        This property is used for BC of output.past_key_values. Indeed, dynamo cannot trace the class if we override
+        `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
+        """
+        if not is_tracing():
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+        return self.cache
+
+    @property
+    def cache_params(self):
+        """
+        This property is used for BC of output.cache_params. Indeed, dynamo cannot trace the class if we override
+        `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
+        """
+        if not is_tracing():
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+        return self.cache
+
     def __setitem__(self, key, value):
         # For BC
         if key in ("past_key_values", "cache_params"):
-            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+            if not is_tracing():
+                logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
             key = "cache"
         # Will raise a KeyException if needed
         super().__setitem__(key, value)

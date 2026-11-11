@@ -29,12 +29,12 @@ from ...utils import auto_docstring
 @strict
 class UltrabertConfig(PreTrainedConfig):
     r"""
+    classifier_pooling (`str`, *optional*, defaults to `"cls"`):
+        Pooling method for sequence classification. Either `"cls"` or `"mean"`.
     sliding_window (`int`, *optional*, defaults to 128):
         Inclusive attention radius on either side of each token in sliding attention layers.
     prediction_head_size (`int`, *optional*, defaults to 768):
         Intermediate dimension of the two-layer masked language modeling prediction head.
-    classifier_pooling (`str`, *optional*, defaults to `"cls"`):
-        Pooling method for sequence classification. Either `"cls"` or `"mean"`.
     """
 
     model_type = "ultrabert"

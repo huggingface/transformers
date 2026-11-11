@@ -293,9 +293,7 @@ class FalconH1ModelTester:
             with torch.no_grad():
                 full_out = model(input_ids, use_cache=False).last_hidden_state
                 prefill = model(input_ids[:, :-1], use_cache=True)
-                step_out = model(
-                    input_ids[:, -1:], cache=prefill.cache, use_cache=True
-                ).last_hidden_state
+                step_out = model(input_ids[:, -1:], cache=prefill.cache, use_cache=True).last_hidden_state
 
             self.parent.assertEqual(step_out.shape, (input_ids.shape[0], 1, config.hidden_size))
             self.parent.assertTrue(

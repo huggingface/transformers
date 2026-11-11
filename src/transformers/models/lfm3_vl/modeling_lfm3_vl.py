@@ -33,6 +33,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
@@ -600,8 +601,6 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
-    @can_return_tuple
-    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -722,8 +721,6 @@ class Lfm3VlForConditionalGeneration(Lfm3VlPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @can_return_tuple
-    @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
