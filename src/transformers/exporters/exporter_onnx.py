@@ -300,22 +300,16 @@ def _patch_sdpa(original):
     zeros; ONNX Runtime evaluates the softmax literally and, when the mask is `-inf` (parakeet's
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
-
-    A boolean mask goes in as an additive one: torchlib guards its boolean softmax with an `IsNaN`/`Where`
-    over the whole `(query, key)` weight matrix, which the zeroing here already makes redundant.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
+        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         if attn_mask is None:
-            return original(query, key, value, attn_mask, *args, **kwargs)
+            return attn_output
         if attn_mask.dtype == torch.bool:
             unattended = ~attn_mask.any(dim=-1, keepdim=True)
-            attn_mask = torch.zeros(attn_mask.shape, dtype=query.dtype, device=query.device).masked_fill(
-                ~attn_mask, torch.finfo(query.dtype).min
-            )
         else:
             unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
-        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
 
@@ -668,21 +662,17 @@ def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return False
 
 
-# Each takes `(input, weight, bias, ...)`.
-_CONVOLUTIONS = frozenset(
-    {
+@register_fx_node_fix("onnx")
+def _fix_bfloat16_convolution(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Run a bf16 convolution in fp32: ONNX's `Conv` takes no bf16 before opset 22 (Qwen3.5's causal conv1d)."""
+    # Each takes `(input, weight, bias, ...)`.
+    convolutions = (
         torch.ops.aten.conv1d.default,
         torch.ops.aten.conv2d.default,
         torch.ops.aten.conv3d.default,
         torch.ops.aten.convolution.default,
-    }
-)
-
-
-@register_fx_node_fix("onnx")
-def _fix_bfloat16_convolution(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Run a bf16 convolution in fp32: ONNX's `Conv` takes no bf16 before opset 22 (Qwen3.5's causal conv1d)."""
-    if node.target not in _CONVOLUTIONS or node.meta.get("_bf16_convolution_cast"):
+    )
+    if node.target not in convolutions or node.meta.get("_bf16_convolution_cast"):
         return False
     value = node.args[0].meta.get("val") if isinstance(node.args[0], torch.fx.Node) else None
     if value is None or value.dtype != torch.bfloat16:

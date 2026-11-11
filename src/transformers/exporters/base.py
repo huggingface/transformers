@@ -31,15 +31,17 @@ from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import cached_file, cached_files, hf_api
+from ..utils.import_utils import is_torch_available
 from .configs import ExportConfigMixin, ExportFormat
 from .metadata import ExportMetadata, register_treespec_types
 from .quantizers.utils import capture_calibration_inputs
 from .utils import check_packages, decompose_for_generation
 
 
-if TYPE_CHECKING:
+if is_torch_available():
     import torch
 
+if TYPE_CHECKING:
     from ..cache_utils import Cache
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
@@ -123,7 +125,7 @@ class ExportedModel(PushToHubMixin):
     @property
     def dtype(self) -> torch.dtype:
         """The precision the export was traced at."""
-        return next(iter(self.runners.values())).dtype
+        return getattr(torch, next(iter(self.components.values())).metadata.dtype)
 
     def to(self, device=None, **runner_kwargs) -> ExportedModel:
         """Load the programs on their backend's runtime, on `device` (the backend's default when `None`).
@@ -145,10 +147,10 @@ class ExportedModel(PushToHubMixin):
         name = self._single_component()
         runner = self.runners[name]
         traced_kwargs = runner.metadata.kwargs
-        unused = [name for name in kwargs if name not in traced_kwargs]
+        unused = [key for key in kwargs if key not in traced_kwargs]
         if unused:
             logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
-        inputs = {name: value for name, value in kwargs.items() if name in traced_kwargs}
+        inputs = {key: value for key, value in kwargs.items() if key in traced_kwargs}
         return runner(share_inputs=share_inputs, share_outputs=share_outputs, **inputs)
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
