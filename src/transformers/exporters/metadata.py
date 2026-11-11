@@ -42,7 +42,7 @@ def _describe_traced_kwarg(value: Any) -> dict[str, Any]:
     return {"container": type(value).__name__}
 
 
-def traced_output_names(exported_program) -> list[str]:
+def _traced_output_names(exported_program) -> list[str]:
     """The model's output leaf names in order, read off the program's output pytree."""
     spec = exported_program.call_spec.out_spec
     placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
@@ -97,5 +97,5 @@ def build_export_metadata(
         device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         kwargs={name: _describe_traced_kwarg(value) for name, value in inputs.items()},
         input_names=[arg.name for arg in user_inputs],
-        output_names=traced_output_names(exported_program),
+        output_names=_traced_output_names(exported_program),
     )

@@ -70,11 +70,6 @@ def _backend_for(export_format: ExportFormat | str | None) -> ExportBackend:
     return EXPORT_BACKENDS[export_format]
 
 
-def get_export_config_class(export_format: ExportFormat | str | None) -> type[ExportConfigMixin]:
-    """The config class registered for a format."""
-    return _backend_for(export_format).config
-
-
 def get_exporter_class(export_format: ExportFormat | str | None) -> type[HfExporter]:
     """The exporter class registered for a format, imported on first use."""
     backend = _backend_for(export_format)
@@ -92,7 +87,7 @@ class AutoExportConfig:
 
     @classmethod
     def from_dict(cls, export_config_dict: dict):
-        return get_export_config_class(export_config_dict.get("export_format")).from_dict(export_config_dict)
+        return _backend_for(export_config_dict.get("export_format")).config.from_dict(export_config_dict)
 
 
 class AutoHfExporter:

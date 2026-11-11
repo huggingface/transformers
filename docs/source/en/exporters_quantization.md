@@ -51,9 +51,13 @@ calibration_dataset = [tokenizer(text, return_tensors="pt") for text in texts]
 inputs = tokenizer("An absolute delight from start to finish.", return_tensors="pt")
 
 config = OnnxConfig(dynamic=True, quantizer=OnnxRuntimeQuantizer(calibration_dataset=calibration_dataset))
-onnx_program = OnnxExporter().export(model, inputs, config).program
+exported = OnnxExporter().export(model, inputs, config)
+exported.save_pretrained("distilbert-sst2-int8-onnx")
 
-logits = onnx_program(**inputs)[0]
+import onnxruntime as ort
+
+session = ort.InferenceSession("distilbert-sst2-int8-onnx/model.onnx")
+logits = session.run(None, {name: tensor.numpy() for name, tensor in inputs.items()})[0]
 print(model.config.id2label[int(logits.argmax())])  # POSITIVE
 ```
 
@@ -105,7 +109,7 @@ inputs = tokenizer("Once upon a time", return_tensors="pt")
 
 x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
 config = DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86, calibration_dataset=calibration_dataset))
-components = DynamoExporter().export_for_generation(model, inputs, config)  # "prefill" and "decode" components
+exported = DynamoExporter().export_for_generation(model, inputs, config)  # "prefill" and "decode" components
 ```
 
 On OpenVINO, PT2E weights stay in full precision behind quantize/dequantize pairs, which OpenVINO converts to
@@ -158,7 +162,7 @@ onnx_int4 = OnnxConfig(quantizer=NNCFOnnxQuantizer(int4))
 # Dynamo: int8 on the FX graph
 dynamo_int8 = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
 
-ov_model = OpenVINOExporter().export(model, inputs, openvino_int4).program
+exported = OpenVINOExporter().export(model, inputs, openvino_int4)
 ```
 
 Int8 activations run int8 matmuls, which saturate on CPUs without VNNI (AVX2-only Intel and AMD Zen 2 and older), so
@@ -184,7 +188,7 @@ config = {
     "prefill": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86)),
     "decode": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(dynamic_x86)),
 }
-components = DynamoExporter().export_for_generation(model, inputs, config)
+exported = DynamoExporter().export_for_generation(model, inputs, config)
 ```
 
 The dict must name every component [`~exporters.utils.decompose_for_generation`] produces (a multimodal model adds its
