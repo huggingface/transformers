@@ -477,7 +477,12 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
     leaves = {path: openvino_input_value(tensor) for path, tensor in get_leaf_tensors(sample).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+    # `beam_idx` reorders the cache's batch axis: read it off a cache tensor (not a sliding layer's 0-d counter).
+    batched = [path for path, value in leaves.items() if len(value.shape)]
+    batch_path = next(
+        (path for path in batched if path.startswith("past_key_values.")), batched[0] if batched else None
+    )
+    batch = leaves[batch_path].shape[0] if batch_path is not None else 1
 
     def port_value(name: str) -> Any:
         path = name.removeprefix("input.")

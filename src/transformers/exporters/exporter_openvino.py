@@ -1460,15 +1460,16 @@ def _patch_interpolate(original):
 
     OV's ``Interpolate`` silently ignores ``antialias``, returning bit-for-bit the *non*-antialiased
     result, so a model that resamples with it (siglip2's position embeddings) exports subtly wrong.
-    Antialiased resampling is linear and separable: each output sample is a normalised triangle-filter
-    average of the inputs under its footprint, widened to the downsampling ratio. The weights depend only
+    Antialiased resampling is linear and separable: each output sample is a normalised average of the
+    inputs under its footprint, weighted by torch's filter (triangle for bilinear, cubic for bicubic),
+    widened to the downsampling ratio. The weights depend only
     on the two extents, so they are built here and applied as two matmuls that OV reproduces exactly --
     a real ``interpolate`` call would instead leave an `aten._upsample_bilinear2d_aa` node OV cannot
     convert. They are built from tensor ops throughout, so an extent read out of a tensor (siglip2 takes
     its target from `spatial_shapes`) stays symbolic rather than guarding on an unbacked size.
     """
 
-    def axis_weights(size_in, size_out, dtype, device):
+    def axis_weights(size_in, size_out, mode, dtype, device):
         in_index = torch.arange(size_in, dtype=torch.float32, device=device)
         out_index = torch.arange(size_out, dtype=torch.float32, device=device)
         # The ratio is carried into the graph as a tensor: OV miscompiles a `Divide` of two reduced
@@ -1477,8 +1478,14 @@ def _patch_interpolate(original):
         scale = torch.zeros((), dtype=torch.float32, device=device) + size_in / size_out
         support = scale.clamp(min=1.0)
         center = (out_index + 0.5) * scale
-        distance = (in_index[None, :] + 0.5 - center[:, None]) / support
-        weights = (1.0 - distance.abs()).clamp(min=0.0)
+        distance = ((in_index[None, :] + 0.5 - center[:, None]) / support).abs()
+        if mode == "bicubic":
+            # torch's cubic convolution kernel, `a = -0.5`.
+            near = (1.5 * distance - 2.5) * distance * distance + 1.0
+            far = ((-0.5 * distance + 2.5) * distance - 4.0) * distance + 2.0
+            weights = torch.where(distance <= 1.0, near, torch.where(distance < 2.0, far, 0.0))
+        else:
+            weights = (1.0 - distance).clamp(min=0.0)
         return (weights / weights.sum(-1, keepdim=True)).to(dtype)
 
     def patch(input, size=None, scale_factor=None, mode="nearest", align_corners=None, **kwargs):
@@ -1489,8 +1496,10 @@ def _patch_interpolate(original):
                 input, size=size, scale_factor=scale_factor, mode=mode, align_corners=align_corners, **kwargs
             )
         height_in, width_in = input.shape[-2:]
-        resized = torch.einsum("nchw,oh->ncow", input, axis_weights(height_in, height_out, input.dtype, input.device))
-        return torch.einsum("ncow,pw->ncop", resized, axis_weights(width_in, width_out, input.dtype, input.device))
+        height_weights = axis_weights(height_in, height_out, mode, input.dtype, input.device)
+        resized = torch.einsum("nchw,oh->ncow", input, height_weights)
+        width_weights = axis_weights(width_in, width_out, mode, input.dtype, input.device)
+        return torch.einsum("ncow,pw->ncop", resized, width_weights)
 
     return patch
 
