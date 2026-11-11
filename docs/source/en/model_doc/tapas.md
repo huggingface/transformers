@@ -220,7 +220,9 @@ index) and batch encode each table with its questions. This will make sure that 
 You can then fine-tune [`TapasForQuestionAnswering`] as follows (shown here for the weak supervision for aggregation case):
 
 ```python
-from transformers import AdamW, TapasConfig, TapasForQuestionAnswering
+from torch.optim import AdamW
+
+from transformers import TapasConfig, TapasForQuestionAnswering
 
 
 # this is the default WTQ configuration
@@ -237,7 +239,7 @@ config = TapasConfig(
 )
 model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config, device_map="auto")
 
-optimizer = AdamW(model.parameters(), lr=5e-5)
+optimizer = AdamW(model.parameters(), lr=5e-5, eps=1e-6, weight_decay=0.0)
 
 model.train()
 for epoch in range(2):  # loop over the dataset multiple times
