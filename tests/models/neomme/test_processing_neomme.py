@@ -150,6 +150,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def marker_ids(self) -> dict[str, int]:
         return {token: index for index, token in enumerate(self.special_tokens)}
 
+    @unittest.skip("NeoMME chat templates must declare the retrieval task")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @unittest.skip(reason="NeoMME image batches require matching image placeholders")
     def test_processor_with_multiple_inputs(self):
         pass

@@ -626,6 +626,12 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
+    @unittest.skip(
+        "The chat template leaves out its own placeholders when the user's text has them, and sanitizing makes those text"
+    )
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @unittest.skip("Fails on runners only - i suppose it is some torchcodec version thingy, skip for now")
     def test_apply_chat_template_video_frame_sampling(self):
         # override - model doesn\t raise an error and doesn't

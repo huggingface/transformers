@@ -69,12 +69,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import (
-    _CONTROL_TOKEN_END,
-    _CONTROL_TOKEN_START,
-    _get_template_variables,
-    render_jinja_template,
-)
+from .utils.chat_template_utils import _get_template_variables, encode_escaped_chat, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -98,10 +93,6 @@ if is_vision_available():
     from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
-
-# Matches where a mm placeholder isn't one that `mark_control_tokens` marked in user input
-_UNMARKED = f"(?<!{_CONTROL_TOKEN_START})"
-_MARKED_RE = re.compile(f"{_CONTROL_TOKEN_START}.*?{_CONTROL_TOKEN_END}")
 
 # type hinting: specifying the type of processor class that inherits from ProcessorMixin
 SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
@@ -218,9 +209,6 @@ class TextKwargs(TypedDict, total=False):
         return_text_replacement_offsets (`bool`, *optional*):
             Deprecated, use [`ProcessingKwargs.return_text_replacement_offsets`] instead.
             Whether to return character offsets for each mm placeholder and its replacement.
-        sanitize_control_tokens (`bool`, *optional*):
-            Whether the text was marked by `mark_control_tokens`: its marked control tokens are encoded as plain text,
-            and aren't expanded as mm placeholders. Set by `apply_chat_template(..., sanitize_control_tokens=True)`.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -247,7 +235,6 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
-    sanitize_control_tokens: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -678,11 +665,7 @@ class ProcessorMixin(PushToHubMixin):
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        # Marked control tokens are user text: they don't count as mm placeholders
-        unmarked_text = text
-        if kwargs.get("sanitize_control_tokens") and text is not None:
-            unmarked_text = [_MARKED_RE.sub("", sample) for sample in (text if isinstance(text, list) else [text])]
-        self.validate_inputs(images=images, text=unmarked_text, videos=videos, audio=audio, **kwargs)
+        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
@@ -715,7 +698,8 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            # Chats rendered with `sanitize_control_tokens=True` escape the control tokens that users typed
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -945,11 +929,11 @@ class ProcessorMixin(PushToHubMixin):
         # Plan: update all models and contrib to vllm, they might benefit largely from `replacement_offsets`
         token_groups = []
         if len(images_replacements) > 0 and (image_token := getattr(self, "image_token", None)) is not None:
-            token_groups.append(f"(?P<image>{_UNMARKED}{re.escape(image_token)})")
+            token_groups.append(f"(?P<image>{re.escape(image_token)})")
         if len(videos_replacements) > 0 and (video_token := getattr(self, "video_token", None)) is not None:
-            token_groups.append(f"(?P<video>{_UNMARKED}{re.escape(video_token)})")
+            token_groups.append(f"(?P<video>{re.escape(video_token)})")
         if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
-            token_groups.append(f"(?P<audio>{_UNMARKED}{re.escape(audio_token)})")
+            token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
 
         regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
         replacements_iters = {
@@ -2348,10 +2332,11 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
             sanitize_control_tokens (`bool`, defaults to `False`):
-                Whether to encode the control tokens found in the conversation, tools, documents and the template
-                variables passed as `**kwargs` as plain text, so that user input can't write them, nor mm placeholders.
-                See the tokenizer's `apply_chat_template`.
-                Requires `tokenize=True`.
+                If set, only the control tokens that the chat template writes itself are encoded as tokens. Control
+                tokens that come from the conversation, tools, documents or the template variables passed as
+                `**kwargs` are encoded as ordinary text. This works like it does in the tokenizer's
+                `apply_chat_template`, and also covers the processor's multimodal tokens, so text that contains them,
+                like `<image>`, isn't mistaken for an image. Requires `tokenize=True` and a fast tokenizer.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2372,14 +2357,18 @@ class ProcessorMixin(PushToHubMixin):
                 conversations, audio_loading_params, load_audio_from_video
             )
 
-        # `kwargs` overwrite special tokens if both are present
         if sanitize_control_tokens:
-            conversations, tools, documents, kwargs = self.tokenizer._mark_chat_inputs(
-                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
-            )
-            processor_kwargs["sanitize_control_tokens"] = True
+            if not tokenize or return_assistant_tokens_mask:
+                raise ValueError(
+                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                    "`return_assistant_tokens_mask=True`."
+                )
+            if not self.tokenizer.is_fast:
+                raise ValueError(
+                    "`sanitize_control_tokens=True` requires a fast tokenizer, but got a "
+                    f"{type(self.tokenizer).__name__}."
+                )
 
-        template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
@@ -2388,7 +2377,9 @@ class ProcessorMixin(PushToHubMixin):
             return_assistant_tokens_mask=return_assistant_tokens_mask,
             continue_final_message=continue_final_message,
             add_generation_prompt=add_generation_prompt,
-            **template_kwargs,
+            control_tokens=self._get_control_tokens(chat_template) if sanitize_control_tokens else None,
+            special_tokens_map=self.tokenizer.special_tokens_map,
+            **kwargs,  # `kwargs` overwrite special tokens if both are present
         )
 
         if not is_batched:
@@ -2453,6 +2444,20 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return out["input_ids"]
         return prompt
+
+    def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
+        """
+        The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input: the
+        tokenizer's control tokens, plus the multimodal tokens the processor expands, which not every template contains.
+        """
+        control_tokens = set(self.tokenizer._get_control_tokens(chat_template))
+        control_tokens.update(self.all_special_multimodal_tokens)
+        # Some processors also mark multimodal inputs with other tokens, like begin-of-image tokens
+        added_tokens = self.tokenizer.added_tokens_decoder
+        for token_id in [*self.image_token_ids, *self.video_token_ids, *self.audio_token_ids]:
+            if token_id in added_tokens:
+                control_tokens.add(added_tokens[token_id].content)
+        return tuple(sorted(control_tokens))
 
     def parse_response(
         self,
@@ -2548,7 +2553,7 @@ class ProcessorMixin(PushToHubMixin):
             token_id = getattr(self, f"{modality}_token_id", None)
             if token_str is not None and token_id is not None:
                 ids_count = [list(ids).count(token_id) for ids in input_ids]
-                text_count = [len(re.findall(_UNMARKED + re.escape(token_str), sample)) for sample in text]
+                text_count = [sample.count(token_str) for sample in text]
 
                 if ids_count != text_count:
                     raise ValueError(
@@ -2663,7 +2668,8 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            # Chats rendered with `sanitize_control_tokens=True` escape the control tokens that users typed
+            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:

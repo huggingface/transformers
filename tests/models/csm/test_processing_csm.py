@@ -291,6 +291,10 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         torch.testing.assert_close(input_ids, expected_ids)
 
+    @unittest.skip("CSM's chat template requires speaker ids as roles")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @unittest.skip("CSM doesn't need assistant masks as an audio generation model")
     def test_apply_chat_template_assistant_mask(self):
         pass

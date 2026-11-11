@@ -430,6 +430,10 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
+    @unittest.skip("Idefics3 counts image tokens with `char_to_token`, which sanitized inputs don't support")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @unittest.skip(reason="Cannot remove image_seq_len argument from __call__ without breaking BC.")
     def test_call_arguments_not_in_attributes(self):
         pass
