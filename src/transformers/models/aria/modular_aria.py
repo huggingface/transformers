@@ -739,6 +739,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
     base_model_prefix = "model"
+    _no_split_modules = ["AriaTextDecoderLayer"]
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
     input_modalities = ("image", "text")
