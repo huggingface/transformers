@@ -116,7 +116,8 @@ class OnnxModelRunner(ModelRunner):
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
-        through host arrays: sharing either way already. Inputs bind by name, the leaf's path (with an `input.` prefix
+        through host arrays, so `share_inputs` and `share_outputs` change nothing (outside a CUDA graph's replay). Inputs
+        bind by name, the leaf's path (with an `input.` prefix
         on a mutated one): the export prunes the ones the graph doesn't read (a linear-attention layer's mask)."""
         device = self.device
         on_gpu = device.type == "cuda"
@@ -169,7 +170,13 @@ class OnnxModelRunner(ModelRunner):
             self.cuda_graph = (binding, inputs)
         binding, inputs = self.cuda_graph
         for name, buffer in inputs.items():
-            buffer.copy_(leaves[name.removeprefix("input.")])
+            leaf = leaves[name.removeprefix("input.")]
+            # `copy_` would broadcast a smaller input into the captured buffer.
+            if leaf.shape != buffer.shape:
+                raise ValueError(
+                    f"The CUDA graph was captured with `{name}` of shape {tuple(buffer.shape)}, got {tuple(leaf.shape)}."
+                )
+            buffer.copy_(leaf)
         # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
         torch.cuda.current_stream(device).synchronize()
         self.session.run_with_iobinding(binding)

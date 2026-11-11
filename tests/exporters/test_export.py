@@ -1102,7 +1102,7 @@ class ExportTesterMixin:
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported = exporter.export(model, inputs, config=config)
                     executorch_outputs = _run_executorch_program(exported, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                    if executorch_outputs is None:  # ExecuTorch runtime limit
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
 
@@ -1324,6 +1324,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported = exporter.export(model, inputs, config=config)
                     executorch_outputs = _run_executorch_program(exported, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                    if executorch_outputs is None:  # ExecuTorch runtime limit
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))

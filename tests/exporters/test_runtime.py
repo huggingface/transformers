@@ -377,6 +377,8 @@ class ExportedModelTest(unittest.TestCase):
             for output, inputs in zip(outputs, calls):
                 torch.testing.assert_close(output, model(**inputs).logits, atol=1e-3, rtol=1e-3)
         self.assertIsNotNone(runner.cuda_graph)
+        with self.assertRaisesRegex(ValueError, "captured with"):
+            exported(**{name: tensor[:1] for name, tensor in calls[0].items()})
 
     @require_openvino
     @pytest.mark.openvino_export_test

@@ -277,8 +277,9 @@ class ExportedModel(PushToHubMixin):
                 f"transformers reads ({EXPORT_SCHEMA_VERSION}): some fields might be ignored or misinterpreted."
             )
         exporter = get_exporter_class(manifest["export_format"])
+        has_runner = EXPORT_BACKENDS[exporter.export_format].runner is not None
         runner_options = []
-        if EXPORT_BACKENDS[exporter.export_format].runner is not None:
+        if has_runner:
             parameters = inspect.signature(get_runner_class(exporter.export_format).from_program).parameters
             runner_options = [name for name in parameters if name not in ("program", "metadata", "device")]
         unknown = [name for name in runner_kwargs if name not in runner_options]
@@ -312,7 +313,7 @@ class ExportedModel(PushToHubMixin):
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
         model = cls(components, exporter.export_format, config=config, generation_config=generation_config)
-        if EXPORT_BACKENDS[exporter.export_format].runner is not None:
+        if has_runner:
             model.to(device, **runner_kwargs)
         return model
 

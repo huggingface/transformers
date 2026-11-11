@@ -60,5 +60,4 @@ class ModelRunner(ABC):
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run the program on the traced forward's kwargs. `share_inputs` reads them in place rather than from copies;
         `share_outputs` returns views of the backend's own output buffers rather than copies, which its next call
-        overwrites. A backend that always does one or the other ignores them (ONNX Runtime binds inputs in place and
-        hands its outputs over, a torch program copies neither)."""
+        overwrites. A backend that always does one or the other ignores them (a torch program copies neither)."""
