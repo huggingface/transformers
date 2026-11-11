@@ -16,13 +16,9 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..llama.configuration_llama import LlamaConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Tele-AI/TeleChat3-36B-Thinking")
@@ -68,20 +64,21 @@ class TeleChat3Config(LlamaConfig):
     pretraining_tp = AttributeError()
 
     def convert_rope_params_to_dict(self, **kwargs):
+        kwargs = super().convert_rope_params_to_dict(**kwargs)
         # The original checkpoints use a custom `"telechat3-yarn"` RoPE type, which is YaRN with 0.07 instead of 0.1
         # as the coefficient of its default attention factor. Convert it to plain YaRN with an explicit attention factor
-        rope_parameters = kwargs.get("rope_scaling") or self.rope_parameters
-        if rope_parameters is not None and "telechat3-yarn" in (
-            rope_parameters.get("rope_type"),
-            rope_parameters.get("type"),
-        ):
-            rope_parameters = {k: v for k, v in rope_parameters.items() if k != "type"}
+        rope_parameters = self.rope_parameters
+        if rope_parameters.get("rope_type") == "telechat3-yarn":
+            rope_parameters.pop("type", None)
             rope_parameters["rope_type"] = "yarn"
             if "original_max_position_embeddings" in rope_parameters:
                 # The original code derives the scaling factor from the context lengths, ignoring `factor`
                 rope_parameters["factor"] = (
                     self.max_position_embeddings / rope_parameters["original_max_position_embeddings"]
                 )
+            else:
+                # The base standardization sets this for `"yarn"`, but it saw `"telechat3-yarn"`
+                rope_parameters["original_max_position_embeddings"] = self.max_position_embeddings
             if rope_parameters.get("attention_factor") is None:
                 factor = rope_parameters["factor"]
                 mscale = rope_parameters.get("mscale")
@@ -95,9 +92,7 @@ class TeleChat3Config(LlamaConfig):
                 else:
                     attention_factor = get_mscale(factor)
                 rope_parameters["attention_factor"] = attention_factor
-            logger.info("Converted rope_type 'telechat3-yarn' to 'yarn' with an explicit `attention_factor`.")
-            kwargs["rope_scaling"] = rope_parameters
-        return PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
+        return kwargs
 
 
 __all__ = ["TeleChat3Config"]
