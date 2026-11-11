@@ -722,7 +722,8 @@ class XiaomiLens0Processor(Qwen3VLProcessor):
         Boxes and masks are expected in `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|><\mask>` format with
         box coordinates normalized to `[0, 1000]`. Both are optional. Masks require `mask_logits` and
         `mask_token_indices` to be set. If boxes and masks are detected, they are paired based on their
-        position in `sequences`, such that the first box is matched with the first mask and so on.
+        position in `sequences`, such that the first box is matched with the first mask and so on. Malformed or
+        unclosed boxes are skipped.
 
         Args:
             sequences (`torch.Tensor` of shape `(batch_size, sequence_length)`):
@@ -801,24 +802,16 @@ class XiaomiLens0Processor(Qwen3VLProcessor):
                     continue
 
                 if token_id == self.bbox_start_token_id:
-                    if bbox_start_index is not None:
-                        raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
                     bbox_start_index = token_index
-                elif token_id == self.bbox_end_token_id:
-                    if bbox_start_index is None:
-                        raise ValueError(f"Missing <bbox> in sequence {sequence_index}.")
+                elif token_id == self.bbox_end_token_id and bbox_start_index is not None:
                     coordinates = self.tokenizer.decode(
                         sequence_ids[bbox_start_index + 1 : token_index], skip_special_tokens=False
                     )
                     match = self.box_pattern.fullmatch(coordinates)
-                    if match is None:
-                        raise ValueError(f"Invalid bbox in sequence {sequence_index} at token {bbox_start_index}.")
                     image_index = image_indices[sequence_index][bbox_start_index]
-                    if image_index >= 0:
+                    if match is not None and image_index >= 0:
                         boxes_per_image[image_index].append([int(coordinate) for coordinate in match.groups()])
                     bbox_start_index = None
-            if bbox_start_index is not None:
-                raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
 
         results = []
         for image_index, (image_mask_logits, token_indices, (height, width)) in enumerate(
