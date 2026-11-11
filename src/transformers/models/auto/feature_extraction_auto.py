@@ -59,6 +59,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("inkling_mm_model", "InklingFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
+        ("lfm3_omni", "Lfm3AudioFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
