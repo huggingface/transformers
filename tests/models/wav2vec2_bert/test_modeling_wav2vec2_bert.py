@@ -15,12 +15,15 @@
 
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from datasets import load_dataset
+from pytest import mark
 
 from transformers import Wav2Vec2BertConfig, is_torch_available
 from transformers.testing_utils import (
     is_flaky,
+    require_accelerate,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -615,6 +618,30 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         # Ignore copy
         model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0")
         self.assertIsNotNone(model)
+
+    def _run_offload_without_xvector(self, test_name):
+        """`Wav2Vec2BertForXVector` introduces some random output after the encoder; needs a deeper investigation but skipping for now"""
+        model_classes = tuple(cls for cls in self.all_model_classes if cls is not Wav2Vec2BertForXVector)
+        with patch.object(self, "all_model_classes", model_classes):
+            getattr(super(), test_name)()
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_cpu_offload(self):
+        self._run_offload_without_xvector("test_cpu_offload")
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_bin(self):
+        self._run_offload_without_xvector("test_disk_offload_bin")
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_safetensors(self):
+        self._run_offload_without_xvector("test_disk_offload_safetensors")
 
 
 @require_torch

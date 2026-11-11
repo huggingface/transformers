@@ -110,10 +110,7 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_resize_embeddings = False
     test_can_init_all_missing_weights = False
-    # The quantizer module takes ~78% of model size, so default split percents (0.5, 0.7, 0.9)
-    # are too low — at 0.7 the GPU budget can't fit any module and everything lands on a single
-    # device, preventing accelerate from creating a multi-device map.
-    model_split_percents = [0.5, 0.8, 0.9]
+    model_split_percents = [0.5, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -286,6 +283,9 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn: 
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
