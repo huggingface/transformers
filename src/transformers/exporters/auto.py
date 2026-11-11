@@ -72,12 +72,6 @@ def register_backend(exporter: type[HfExporter], runner: type[ModelRunner] | Non
     EXPORT_BACKENDS[exporter.export_format] = ExportBackend(exporter.config_class, exporter, runner)
 
 
-def _import_class(path: str) -> type:
-    """A `"module.ClassName"` path in this package, imported."""
-    module_name, class_name = path.rsplit(".", 1)
-    return getattr(importlib.import_module(f".{module_name}", __package__), class_name)
-
-
 def _registered_backend(export_format: ExportFormat | str | None) -> ExportBackend:
     if export_format not in EXPORT_BACKENDS:
         raise ValueError(
@@ -86,17 +80,17 @@ def _registered_backend(export_format: ExportFormat | str | None) -> ExportBacke
     return EXPORT_BACKENDS[export_format]
 
 
-def get_export_config_class(export_format: ExportFormat | str | None) -> type[ExportConfigMixin]:
-    """The config class registered for a format."""
-    return _registered_backend(export_format).config
+def _resolve_class(value: type | str) -> type:
+    """A registered exporter or runner: the class itself, or imported from its `"module.ClassName"` path."""
+    if isinstance(value, str):
+        module_name, class_name = value.rsplit(".", 1)
+        return getattr(importlib.import_module(f".{module_name}", __package__), class_name)
+    return value
 
 
 def get_exporter_class(export_format: ExportFormat | str | None) -> type[HfExporter]:
     """The exporter class registered for a format, imported on first use."""
-    backend = _registered_backend(export_format)
-    if isinstance(backend.exporter, str):
-        backend.exporter = _import_class(backend.exporter)
-    return backend.exporter
+    return _resolve_class(_registered_backend(export_format).exporter)
 
 
 def get_runner_class(export_format: ExportFormat | str | None) -> type[ModelRunner]:
@@ -104,9 +98,7 @@ def get_runner_class(export_format: ExportFormat | str | None) -> type[ModelRunn
     backend = _registered_backend(export_format)
     if backend.runner is None:
         raise ValueError(f"Export format '{export_format}' has no runner registered, so its exports can't run.")
-    if isinstance(backend.runner, str):
-        backend.runner = _import_class(backend.runner)
-    return backend.runner
+    return _resolve_class(backend.runner)
 
 
 class AutoExportConfig:
@@ -117,7 +109,7 @@ class AutoExportConfig:
 
     @classmethod
     def from_dict(cls, export_config_dict: dict):
-        return get_export_config_class(export_config_dict.get("export_format")).from_dict(export_config_dict)
+        return _registered_backend(export_config_dict.get("export_format")).config.from_dict(export_config_dict)
 
 
 class AutoHfExporter:

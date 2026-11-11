@@ -36,7 +36,7 @@ class DynamoModelRunner(ModelRunner):
         super().__init__(metadata)
         self.module = module
         # The program flattens its kwargs by position, in the order its input spec lists them.
-        self.traced_order = load_treespec(metadata.in_spec).children_specs[1].context if metadata.in_spec else []
+        self.traced_order = load_treespec(metadata.in_spec).children_specs[1].context
 
     @property
     def device(self) -> torch.device:

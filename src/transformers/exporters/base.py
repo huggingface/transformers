@@ -92,15 +92,20 @@ class ExportedModel(PushToHubMixin):
     def __repr__(self) -> str:
         return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self.components)})"
 
+    def _single_component(self) -> str:
+        """The name of the export's one component: `.program` and calling it need a single graph."""
+        if len(self.components) != 1:
+            raise ValueError(
+                f"This export has {len(self.components)} components ({list(self.components)}): `.program` and "
+                "calling it need a single-graph export (`HfExporter.export`); take a component's program from "
+                "`.components[name]`."
+            )
+        return next(iter(self.components))
+
     @property
     def program(self):
         """The backend's own program, for a single-graph export."""
-        if len(self.components) != 1:
-            raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}), so there is "
-                "no single `.program`; take one from `.components[name]`."
-            )
-        return next(iter(self.components.values())).program
+        return self.components[self._single_component()].program
 
     @property
     def runners(self) -> dict[str, ModelRunner]:
@@ -136,12 +141,8 @@ class ExportedModel(PushToHubMixin):
         """Run a single-graph export, returning what the source model returns. Kwargs the export was not traced with
         are dropped, so a processor's whole output can be passed. `share_inputs` and `share_outputs` go to the runner
         (see [`ModelRunner.__call__`]): with `share_outputs`, the outputs are valid until the next call."""
-        if len(self.components) != 1:
-            raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}), whose runtime isn't "
-                "available yet; a single-graph export (`HfExporter.export`) runs."
-            )
-        runner = next(iter(self.runners.values()))
+        name = self._single_component()
+        runner = self.runners[name]
         traced = runner.metadata.kwargs
         unused = [name for name in kwargs if name not in traced]
         if unused:

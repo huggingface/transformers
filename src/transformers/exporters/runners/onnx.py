@@ -58,13 +58,11 @@ class OnnxModelRunner(ModelRunner):
 
     def __init__(
         self,
-        program: onnx_ir.Model,
         metadata: ExportMetadata,
         session: ort.InferenceSession,
         directory: tempfile.TemporaryDirectory | None = None,
     ):
         super().__init__(metadata)
-        self.program = program
         self.session = session
         # The temporary file a large graph was opened from, kept as long as the session.
         self.directory = directory
@@ -104,7 +102,7 @@ class OnnxModelRunner(ModelRunner):
                 source = os.path.join(directory.name, "model.onnx")
                 onnx_ir.save(program, source, external_data="model.onnx.data")
         session = ort.InferenceSession(source, session_options, providers=providers or _providers(device))
-        return cls(program, metadata, session, directory)
+        return cls(metadata, session, directory)
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
@@ -112,14 +110,13 @@ class OnnxModelRunner(ModelRunner):
         on a mutated one): the export prunes the ones the graph doesn't read (a linear-attention layer's mask)."""
         from torch.onnx._internal.exporter._core import torch_dtype_to_onnx_dtype
 
-        inputs = {name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}
         device = self.device
         on_gpu = device.type == "cuda"
-        leaves = get_leaf_tensors(inputs)
+        leaves = get_leaf_tensors(kwargs)
         specs = self.session.get_inputs()
         missing = [spec.name for spec in specs if spec.name.removeprefix("input.") not in leaves]
         if missing:
-            raise ValueError(f"The graph takes {missing}, which {list(inputs)} don't hold.")
+            raise ValueError(f"The graph takes {missing}, which {list(kwargs)} don't hold.")
         binding, kept = self.session.io_binding(), []
         for spec in specs:
             leaf = leaves[spec.name.removeprefix("input.")]
