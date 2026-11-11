@@ -70,8 +70,8 @@ class NVFP4HfQuantizer(HfQuantizer):
             raise ValueError("NVFP4 quantization does not support CPU or disk offload.")
         if len(cuda_devices) != 1:
             raise ValueError(
-                "NVFP4 quantization currently supports one CUDA device. Tensor parallelism and multi-device "
-                "`device_map` configurations are not supported yet."
+                "NVFP4 quantization currently supports one CUDA device per process: a multi-device `device_map` is not "
+                "supported yet (tensor parallelism is, NVFP4 layers stay whole on every rank)."
             )
         self.quantization_device = cuda_devices.pop()
 

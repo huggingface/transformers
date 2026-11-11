@@ -85,7 +85,7 @@ Most GGUF models are dequantized to full precision as they load, so they use as 
 
 ### Several methods in one model
 
-A quantization plan maps glob patterns, matched like the dtype plan's, to the config quantizing the params they match. Params no pattern matches stay unquantized. For example, FP8 attention and experts with NVFP4 shared experts:
+A quantization plan maps module names or glob patterns, matched like the dtype plan's, to the config quantizing the modules they match. Exact names are tried first and `"*"` last, the first match wins, and modules no pattern matches (or mapped to `None`) stay unquantized. For example, FP8 attention and experts with NVFP4 shared experts:
 
 ```py
 from transformers import FineGrainedFP8Config, Mistral4ForCausalLM, NVFP4Config
@@ -106,9 +106,19 @@ model = Mistral4ForCausalLM.from_pretrained(
 )
 ```
 
-Pass a plan of configs instead to change a single pattern, e.g. `NVFP4Config(dequantize=True)` for the shared experts only.
+Pass a plan of configs instead to change a single pattern of the stored plan, e.g. `{"*.mlp.shared_experts.*": NVFP4Config(dequantize=True)}` for the shared experts only. A config of another class than the saved one raises an error.
 
-Checkpoints that describe their mix another way load as a plan too, with no `quantization_config`: ModelOpt checkpoints (one `quant_algo`, or a `quant_algo` per layer, e.g. [NVFP4](./nvfp4) experts and [FP8](./finegrained_fp8) attention) and DeepSeek-V4's FP8 checkpoints with [MXFP4](./mxfp4) experts. To support a new one, see [Add a quantized format](./add_format).
+Checkpoints that describe their mix another way load as a plan too, with no `quantization_config`: ModelOpt checkpoints (one `quant_algo`, or a `quant_algo` per layer under `quantized_layers`, e.g. [NVFP4](./nvfp4) experts and [FP8](./finegrained_fp8) attention) and DeepSeek-V4's FP8 checkpoints with [MXFP4](./mxfp4) experts (`expert_dtype: "fp4"`).
+
+```py
+from transformers import AutoModelForCausalLM
+
+# ModelOpt `MIXED_PRECISION` checkpoint: each layer loads with its own config
+model = AutoModelForCausalLM.from_pretrained("my-org/model-nvfp4-fp8", device_map="cuda")
+print(model.config.quantization_config)  # the plan, {module pattern: config}
+```
+
+Only methods that swap modules through `quantized_module` can be mixed in one plan: AQLM, BitNet, EETQ, FP8, HIGGS, Metal, MXFP4, NVFP4 and SINQ. The others (bitsandbytes, AWQ, torchao, compressed-tensors, ...) quantize the whole model alone, and a plan mixing them with another method raises an error. To support a new checkpoint layout, see [Add a quantized format](./add_format).
 
 ## Save a quantized model
 

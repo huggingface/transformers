@@ -52,20 +52,54 @@ The quantizer then says which modules become `Mxfp4Experts` and what the checkpo
 
 ```py
 class Mxfp4HfQuantizer(HfQuantizer):
-    serialized_names = {"weight": ["weight", "weight_scale_inv"]}  # what a param is stored as
-    renamed_names = {"scale": "weight_scale_inv"}                 # DeepSeek-V4 saves `.scale`
+    # what each param is stored as: a linear's `weight`, and the fused experts' params
+    serialized_names = {
+        "weight": ["weight", "weight_scale_inv"],
+        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
+        "down_proj": ["down_proj", "down_proj_scale_inv"],
+    }
+    renamed_names = {"scale": "weight_scale_inv"}  # DeepSeek-V4 saves `.scale`
+
+    def get_load_operations(self):
+        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}
 
     def quantized_module(self, name, module):
         if name.endswith(".experts"):
             return Mxfp4Experts(module.config)
 ```
 
-`quantized_module` is called on meta for each module whose params the quantizer owns; returning `None` keeps the module.
-All quantizers of a plan swap their modules in one pass, so a quantizer never walks the model itself.
+- `serialized_names` lists the tensors a param is stored as. They load together, with the same ops.
+- `renamed_names` maps globs on the last names of a checkpoint key to ours, first match wins. It is applied per layer
+  (`rename_layer`), before anything else, so the rest of loading only sees our names. A glob can look further up the
+  key, e.g. NVFP4's `{"experts.*.input_scale": "weight_input_scale"}` renames only the experts' `input_scale`.
+- `get_load_operations` returns the op classes for `"deserialize"` and `"dequantize"`. `get_load_operation()` picks the
+  one for the config (`dequantize=True` or not). Here `Mxfp4Deserialize` passes DeepSeek-V4's tensors through as is,
+  since `Mxfp4Experts` stores them as the checkpoint does.
+- `quantized_module` is called on meta for each module the plan gives the quantizer; returning `None` keeps the module.
+  All quantizers of a plan swap their modules in one pass, so a quantizer never walks the model itself. Only formats
+  that swap modules this way can be mixed with others in a plan.
 
-Why nothing else: `serialized_names` is enough for the plan to load each expert's scale with its weight, through the
-same merge and concatenation the model applies to the weights. No load op is needed because the module stores the
-tensors exactly as the checkpoint does.
+The experts need nothing else: the model's own converters take each expert's scales along with its weight. A converter
+pattern ending in `.weight` also matches the tensors named after it (`weight_scale_inv`, ...), and they land in the
+target named like it:
+
+```text
+checkpoint keys (after rename_layer)              model converter                   targets
+mlp.experts.0.gate_proj.weight         ─┐
+mlp.experts.0.up_proj.weight            ├─ MergeModulelist + Concatenate ─→  mlp.experts.gate_up_proj
+mlp.experts.1.gate_proj.weight ...     ─┘   then deserialize
+mlp.experts.0.gate_proj.scale  → weight_scale_inv ─┐
+mlp.experts.0.up_proj.scale    → weight_scale_inv  ├─ same ops ──────────→  mlp.experts.gate_up_proj_scale_inv
+...                                               ─┘
+```
+
+With `dequantize=True` the converter reads the weights and their scales into the one target `gate_up_proj`, and the
+dequantize op runs first, on each expert, before the merge. `update_weight_transform` attaches the load op to a param
+once its first key matches a converter: after the converter's ops for deserialize, before them for dequantize.
+
+Under tensor parallelism, a param named after a planned one (`gate_up_proj_scale_inv`, GPT-OSS's `gate_up_proj_blocks`)
+shards like it. A format whose scales can't be sharded that way overrides `update_parallel_plan`, e.g. NVFP4 replicates
+its modules.
 
 ## 3. It needs a new kernel
 
@@ -111,7 +145,7 @@ class NVFP4HfQuantizer(HfQuantizer):
     def get_load_operations(self):
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
-    def get_quantize_ops(self):  # quantize a full-precision checkpoint on load (optional + will be moved to load ops soon
+    def get_quantize_ops(self):  # optional: quantize a full-precision checkpoint on load
         return NVFP4Quantize(self)
 ```
 
@@ -135,6 +169,10 @@ A new `quant_algo` that is another FP8 variant (step 1) is one line here, e.g.
 
 Layers ModelOpt leaves out keep the base `quant_method` if it is one (e.g. DeepSeek-V4's block `fp8`), else stay unquantized like its `ignore`d ones.
 
-Any checkpoint format that describes its layers some other way will get a function in `PLAN_CONVERTERS` that turns its `quantization_config` into a plan, `{module pattern: config}` (see `fp4_experts_plan` for DeepSeek-V4's `expert_dtype`). 
+A checkpoint format that describes its layers some other way adds a function turning its `quantization_config` into a
+plan, `{module pattern: config}`, or `None` for configs it doesn't handle (like `fp4_experts_plan` for DeepSeek-V4's
+`expert_dtype: "fp4"`), and calls it next to `modelopt_plan` in `get_hf_quantizer`. The plan's names are checkpoint
+module names: `AutoHfQuantizer` renames them to the model's, like the keys of their params.
 
-This enforces the creation of a `dtype_plan`, which ensures parallelism, load operations and etc are respected.
+`AutoHfQuantizer.from_plan` then builds one quantizer per distinct config, and the plan gives each module and param the
+quantizer of its pattern, for the module swap, the load ops and the parallel plan alike.

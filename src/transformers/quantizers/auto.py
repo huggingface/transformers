@@ -14,7 +14,6 @@
 # limitations under the License.
 import re
 import warnings
-from collections.abc import Callable
 from fnmatch import translate
 from typing import TypeGuard
 
@@ -197,10 +196,14 @@ class AutoQuantizationConfig:
         return quantization_config
 
 
-class AutoHfQuantizer:
+class AutoHfQuantizer(HfQuantizer):
     """
-     The Auto-HF quantizer class that takes care of automatically instantiating to the correct
-    `HfQuantizer` given the `QuantizationConfig`.
+    The Auto-HF quantizer: picks the `HfQuantizer` of a `QuantizationConfig` (`from_config`), or of each pattern
+    of a quantization plan (`from_plan`). An instance is the plan: like the dtype plan's, the glob pattern a module
+    or param matches picks its quantizer, the others stay unquantized. Every quantized model loads through one: a
+    single quantizer is the plan `{"*": q}`. It knows every module's quantizer, so it builds the conversions and
+    gives each param its ops; a quantizer only describes its format (`serialized_names`, `renamed_names`,
+    `get_load_operations`, `quantized_module`).
     """
 
     @classmethod
@@ -307,99 +310,37 @@ class AutoHfQuantizer:
             return False
         return True
 
-
-def register_quantization_config(method: str):
-    """Register a custom quantization configuration."""
-
-    def register_config_fn(cls):
-        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
-            raise ValueError(f"Config '{method}' already registered")
-
-        if not issubclass(cls, QuantizationConfigMixin):
-            raise TypeError("Config must extend QuantizationConfigMixin")
-
-        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
-        return cls
-
-    return register_config_fn
-
-
-def register_quantizer(name: str):
-    """Register a custom quantizer."""
-
-    def register_quantizer_fn(cls):
-        if name in AUTO_QUANTIZER_MAPPING:
-            raise ValueError(f"Quantizer '{name}' already registered")
-
-        if not issubclass(cls, HfQuantizer):
-            raise TypeError("Quantizer must extend HfQuantizer")
-
-        AUTO_QUANTIZER_MAPPING[name] = cls
-        return cls
-
-    return register_quantizer_fn
-
-
-def is_quantization_plan(quantization_config) -> TypeGuard[dict]:
-    "A plan maps module names or glob patterns to the config quantizing the modules they match (`None`: unquantized)"
-    return (
-        isinstance(quantization_config, dict)
-        and len(quantization_config) > 0
-        and all(
-            isinstance(config, (dict, QuantizationConfigMixin, type(None))) for config in quantization_config.values()
-        )
-    )
-
-
-# ModelOpt `quant_algo` -> its config. W4A16 NVFP4 loads with the W4A4 config, which quantizes activations
-MODELOPT_ALGOS = {
-    "NVFP4": NVFP4Config,
-    "W4A16_NVFP4": NVFP4Config,
-    "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
-    "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
-}
-
-
-def modelopt_plan(config: dict) -> dict | None:
-    """
-    ModelOpt's per-layer `quantized_layers`, or its single `quant_algo` for every layer. The layers it leaves out keep
-    the base `quant_method` if it is one (e.g. `fp8`), else stay unquantized like its `ignore`d ones.
-    """
-    if "quantized_layers" not in config and config.get("quant_algo") not in MODELOPT_ALGOS:
-        return None
-    layers = config.get("quantized_layers", {"*": config})
-    base = {key: value for key, value in config.items() if key != "quantized_layers"}
-    base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
-    plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
-    plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in layers.items()}
-    return plan | {"*": base} if base else plan
-
-
-def fp4_experts_plan(config: dict) -> dict | None:
-    "DeepSeek-V4's FP8 checkpoints, whose routed experts are MXFP4 (`expert_dtype: fp4`)"
-    if config.get("quant_method") != "fp8" or config.get("expert_dtype") != "fp4":
-        return None
-    return {
-        "*.mlp.experts": Mxfp4Config(),
-        "*": {key: value for key, value in config.items() if key != "expert_dtype"},
-    }
-
-
-# Saved formats that quantize per module, turned into a plan keyed by checkpoint module names. ModelOpt first: its
-# per-layer configs (e.g. NVFP4 experts) override DeepSeek's `expert_dtype`
-PLAN_CONVERTERS: dict[str, Callable[[dict], dict | None]] = {
-    "modelopt": modelopt_plan,
-    "fp4_experts": fp4_experts_plan,
-}
-
-
-class QuantizationPlanHfQuantizer(HfQuantizer):
-    """
-    The quantizers of a plan: like the dtype plan's, the glob pattern a module or param matches picks its quantizer,
-    the others stay unquantized. Every quantized model loads through one: a single quantizer is the plan `{"*": q}`.
-    It knows every module's quantizer, so it builds the conversions and gives each param its ops; a quantizer only
-    describes its format (`serialized_names`, `renamed_names`, `get_load_operations`, `quantized_module`).
-    """
+    @classmethod
+    def from_plan(cls, plan: dict, loading, pre_quantized: bool, checkpoint_names: bool = False):
+        """
+        The quantizer of each pattern of `plan`, one per distinct config. Loading a saved plan, the `quantization_config`
+        passed to `from_pretrained` brings loading attributes: for every pattern (one config or dict, e.g.
+        `{"dequantize": True}`), or per pattern (a plan of them). The saved plan may mix formats (e.g. fp8 + mxfp4).
+        """
+        if not is_quantization_plan(loading):
+            loading = dict.fromkeys(plan, loading)
+        quantizers, shared = {}, {}
+        for pattern, config in plan.items():
+            if config is None:
+                quantizers[pattern] = None
+                continue
+            if isinstance(config, dict):
+                config = AutoQuantizationConfig.from_dict(config)
+            attributes = loading.get(pattern) if pre_quantized else None
+            if isinstance(attributes, QuantizationConfigMixin):
+                if type(attributes).__name__ != type(config).__name__:
+                    raise ValueError(
+                        f"The model is quantized with {type(config).__name__} but you are passing a "
+                        f"{type(attributes).__name__} config. Please make sure to pass the same quantization config class "
+                        "to `from_pretrained` with different loading attributes."
+                    )
+                attributes = attributes.get_loading_attributes()
+            for key, value in (attributes or {}).items():
+                setattr(config, key, value)
+            if (key := repr(config)) not in shared:
+                shared[key] = cls.from_config(config, pre_quantized=pre_quantized)
+            quantizers[pattern] = shared[key]
+        return cls(quantizers, checkpoint_names)
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
         self.checkpoint_names = (
@@ -436,10 +377,10 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     @property
     def __class__(self):
         # `isinstance(hf_quantizer, Bnb4BitHfQuantizer)` keeps working for a single quantizer
-        return QuantizationPlanHfQuantizer if self.quantizer is None else type(self.quantizer)
+        return AutoHfQuantizer if self.quantizer is None else type(self.quantizer)
 
     def __reduce__(self):  # copied and pickled as the plan, not as `__class__`
-        return QuantizationPlanHfQuantizer, (self.quantizers,), self.__dict__
+        return AutoHfQuantizer, (self.quantizers,), self.__dict__
 
     def __getattr__(self, name):
         # A single quantizer's own attributes, e.g. GGUF's `metadata` or compressed-tensors' `compressor`
@@ -479,7 +420,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             }
             self.set_quantizers(renamed)
             self.checkpoint_names = False
-            model.config.quantization_config
 
         # Exact names first (the checkpoint's too, for `rename_layer` on its keys), then globs, `"*"` last. `P` (or
         # `P.*`) names the module `P` under any prefix, and everything under it
@@ -662,36 +602,81 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return all(quantizer.is_trainable for quantizer in self.all_quantizers)
 
 
-def plan_quantizers(plan: dict, loading, pre_quantized: bool) -> dict:
+def register_quantization_config(method: str):
+    """Register a custom quantization configuration."""
+
+    def register_config_fn(cls):
+        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(f"Config '{method}' already registered")
+
+        if not issubclass(cls, QuantizationConfigMixin):
+            raise TypeError("Config must extend QuantizationConfigMixin")
+
+        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
+        return cls
+
+    return register_config_fn
+
+
+def register_quantizer(name: str):
+    """Register a custom quantizer."""
+
+    def register_quantizer_fn(cls):
+        if name in AUTO_QUANTIZER_MAPPING:
+            raise ValueError(f"Quantizer '{name}' already registered")
+
+        if not issubclass(cls, HfQuantizer):
+            raise TypeError("Quantizer must extend HfQuantizer")
+
+        AUTO_QUANTIZER_MAPPING[name] = cls
+        return cls
+
+    return register_quantizer_fn
+
+
+def is_quantization_plan(quantization_config) -> TypeGuard[dict]:
+    "A plan maps module names or glob patterns to the config quantizing the modules they match (`None`: unquantized)"
+    return (
+        isinstance(quantization_config, dict)
+        and len(quantization_config) > 0
+        and all(
+            isinstance(config, (dict, QuantizationConfigMixin, type(None))) for config in quantization_config.values()
+        )
+    )
+
+
+# ModelOpt `quant_algo` -> its config. W4A16 NVFP4 loads with the W4A4 config, which quantizes activations
+MODELOPT_ALGOS = {
+    "NVFP4": NVFP4Config,
+    "W4A16_NVFP4": NVFP4Config,
+    "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
+    "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
+}
+
+
+def modelopt_plan(config: dict) -> dict | None:
     """
-    The quantizer of each pattern of `plan`, one per distinct config. Loading a saved plan, the `quantization_config`
-    passed to `from_pretrained` brings loading attributes: for every pattern (one config or dict, e.g.
-    `{"dequantize": True}`), or per pattern (a plan of them). The saved plan may mix formats (e.g. fp8 + mxfp4).
+    ModelOpt's per-layer `quantized_layers`, or its single `quant_algo` for every layer. The layers it leaves out keep
+    the base `quant_method` if it is one (e.g. `fp8`), else stay unquantized like its `ignore`d ones.
     """
-    if not is_quantization_plan(loading):
-        loading = dict.fromkeys(plan, loading)
-    quantizers, shared = {}, {}
-    for pattern, config in plan.items():
-        if config is None:
-            quantizers[pattern] = None
-            continue
-        if isinstance(config, dict):
-            config = AutoQuantizationConfig.from_dict(config)
-        attributes = loading.get(pattern) if pre_quantized else None
-        if isinstance(attributes, QuantizationConfigMixin):
-            if type(attributes).__name__ != type(config).__name__:
-                raise ValueError(
-                    f"The model is quantized with {type(config).__name__} but you are passing a "
-                    f"{type(attributes).__name__} config. Please make sure to pass the same quantization config class "
-                    "to `from_pretrained` with different loading attributes."
-                )
-            attributes = attributes.get_loading_attributes()
-        for key, value in (attributes or {}).items():
-            setattr(config, key, value)
-        if (key := repr(config)) not in shared:
-            shared[key] = AutoHfQuantizer.from_config(config, pre_quantized=pre_quantized)
-        quantizers[pattern] = shared[key]
-    return quantizers
+    if "quantized_layers" not in config and config.get("quant_algo") not in MODELOPT_ALGOS:
+        return None
+    layers = config.get("quantized_layers", {"*": config})
+    base = {key: value for key, value in config.items() if key != "quantized_layers"}
+    base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
+    plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
+    plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in layers.items()}
+    return plan | {"*": base} if base else plan
+
+
+def fp4_experts_plan(config: dict) -> dict | None:
+    "DeepSeek-V4's FP8 checkpoints, whose routed experts are MXFP4 (`expert_dtype: fp4`)"
+    if config.get("quant_method") != "fp8" or config.get("expert_dtype") != "fp4":
+        return None
+    return {
+        "*.mlp.experts": Mxfp4Config(),
+        "*": {key: value for key, value in config.items() if key != "expert_dtype"},
+    }
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
@@ -711,10 +696,11 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     )
     checkpoint_names = False
     if isinstance(quantization_params_from_config, dict) and not is_quantization_plan(quantization_params_from_config):
-        for convert in PLAN_CONVERTERS.values():
-            if (plan := convert(quantization_params_from_config)) is not None:
-                quantization_params_from_config, checkpoint_names = plan, True
-                break
+        # Saved formats quantizing per module, as a plan of checkpoint module names. ModelOpt first: its per-layer
+        # configs (e.g. NVFP4 experts) override DeepSeek's `expert_dtype`
+        plan = modelopt_plan(quantization_params_from_config) or fp4_experts_plan(quantization_params_from_config)
+        if plan is not None:
+            quantization_params_from_config, checkpoint_names = plan, True
     pre_quantized = quantization_params_from_config is not None
     plan_from_config = is_quantization_plan(quantization_params_from_config)
     if (
@@ -727,9 +713,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     saved_plan = quantization_params_from_config if plan_from_config else None
     user_plan = quantization_config if is_quantization_plan(quantization_config) else None
     if (plan := saved_plan or user_plan) is not None:
-        quantizers = plan_quantizers(plan, quantization_config, pre_quantized=plan_from_config)
-        hf_quantizer = QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
-        if not checkpoint_names:  # else `map_module_to_quantizer` sets it, in the model's names
+        hf_quantizer = AutoHfQuantizer.from_plan(plan, quantization_config, plan_from_config, checkpoint_names)
+        if not checkpoint_names:  # else the checkpoint's own config is kept, e.g. ModelOpt's `quantized_layers`
             config.quantization_config = hf_quantizer.quantization_config
     elif pre_quantized or quantization_config is not None:
         if pre_quantized:
@@ -740,7 +725,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
             config.quantization_config = quantization_config
 
         quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
-        hf_quantizer = QuantizationPlanHfQuantizer({"*": quantizer})
+        hf_quantizer = AutoHfQuantizer({"*": quantizer})
     else:
         hf_quantizer = None
 

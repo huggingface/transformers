@@ -31,9 +31,7 @@ from transformers import (
 )
 from transformers.quantizers.auto import (
     AutoHfQuantizer,
-    QuantizationPlanHfQuantizer,
     get_hf_quantizer,
-    plan_quantizers,
 )
 from transformers.testing_utils import require_kernels, require_torch, require_torch_gpu, slow
 from transformers.utils import is_torch_available
@@ -126,19 +124,19 @@ class QuantizationPlanTest(unittest.TestCase):
         bnb = AutoHfQuantizer.from_config(BitsAndBytesConfig(load_in_8bit=True))
         fp8 = AutoHfQuantizer.from_config(FineGrainedFP8Config(), pre_quantized=True)
         with self.assertRaisesRegex(ValueError, "can't be mixed"):
-            QuantizationPlanHfQuantizer({"*.mlp.*": bnb, "*": fp8})
-        QuantizationPlanHfQuantizer({"*": bnb})  # alone, it swaps its own modules as before
+            AutoHfQuantizer({"*.mlp.*": bnb, "*": fp8})
+        AutoHfQuantizer({"*": bnb})  # alone, it swaps its own modules as before
 
     def test_loading_attributes_keep_the_saved_config_class(self):
         # A saved FP8 plan takes `FineGrainedFP8Config(dequantize=True)`'s loading attributes, not another format's
         saved = {"*.mlp.*": {"quant_method": "fp8", "weight_block_size": [128, 128]}, "*": None}
-        quantizers = plan_quantizers(saved, FineGrainedFP8Config(dequantize=True), pre_quantized=True)
-        self.assertTrue(quantizers["*.mlp.*"].quantization_config.dequantize)
+        plan = AutoHfQuantizer.from_plan(saved, FineGrainedFP8Config(dequantize=True), pre_quantized=True)
+        self.assertTrue(plan.quantizers["*.mlp.*"].quantization_config.dequantize)
         with self.assertRaisesRegex(ValueError, "quantized with FineGrainedFP8Config but you are passing a"):
-            plan_quantizers(saved, BitsAndBytesConfig(load_in_8bit=True), pre_quantized=True)
+            AutoHfQuantizer.from_plan(saved, BitsAndBytesConfig(load_in_8bit=True), pre_quantized=True)
 
     def test_postprocess_drops_dequantized_patterns(self):
-        plan = QuantizationPlanHfQuantizer(
+        plan = AutoHfQuantizer(
             {
                 "*.self_attn.*": AutoHfQuantizer.from_config(
                     FineGrainedFP8Config(dequantize=True), pre_quantized=True
@@ -158,7 +156,7 @@ class QuantizationPlanTest(unittest.TestCase):
 
     def plan_from_config(self, quantization_config, **kwargs):
         config = DeepseekV4Config(**TINY_DEEPSEEK, **kwargs, quantization_config=dict(quantization_config))
-        with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):  # NVFP4 checks for a Blackwell GPU
+        with patch.object(AutoHfQuantizer, "validate_environment"):  # NVFP4 checks for a Blackwell GPU
             return get_hf_quantizer(config, None, None, True, {})[:2]
 
     def test_modelopt_per_layer_configs(self):
@@ -196,7 +194,7 @@ class QuantizationPlanTest(unittest.TestCase):
             model = DeepseekV4ForCausalLM(config)
         hf_quantizer.map_module_to_quantizer(model)
         # Reusing the config (now in the model's names) gives the same plan
-        with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):
+        with patch.object(AutoHfQuantizer, "validate_environment"):
             reloaded = get_hf_quantizer(config, None, None, True, {})[0]
         reloaded.map_module_to_quantizer(model)
         self.assertIn("layers.0.mlp.experts", reloaded.quantizers)
@@ -213,7 +211,7 @@ class QuantizationPlanTest(unittest.TestCase):
         ]:
             self.assertIs(hf_quantizer.get_quantizer(name), expected, name)
         # `None` leaves the modules unquantized, an exact name doesn't match a longer one
-        plan = QuantizationPlanHfQuantizer({"layers.1.mlp": nvfp4, "*.mlp.*": None})
+        plan = AutoHfQuantizer({"layers.1.mlp": nvfp4, "*.mlp.*": None})
         plan.map_module_to_quantizer(model)
         self.assertIs(plan.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
         self.assertIsNone(plan.get_quantizer("model.layers.11.mlp.experts.down_proj"))
