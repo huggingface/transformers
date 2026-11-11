@@ -27,8 +27,12 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..granite.modeling_granite import GraniteRotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+)
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
@@ -43,7 +47,7 @@ class GraniteMoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class GraniteMoeRotaryEmbedding(GraniteRotaryEmbedding):
+class GraniteMoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

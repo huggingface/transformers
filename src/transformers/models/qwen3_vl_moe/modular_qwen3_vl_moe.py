@@ -34,6 +34,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..llama.modeling_llama import LlamaRMSNorm
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
@@ -52,7 +53,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionAttention,
     Qwen3VLVisionBlock,
     Qwen3VLVisionModel,
-    Qwen3VLVisionRotaryEmbedding,
 )
 
 
@@ -227,7 +227,7 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
 
 
-class Qwen3VLMoeVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
+class Qwen3VLMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

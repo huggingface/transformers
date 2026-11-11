@@ -391,7 +391,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         self.patch_size = config.patch_size
         self.ln_pre = PixtralRMSNorm(config.hidden_size, eps=1e-5)
         self.transformer = PixtralTransformer(config)
-        self.patch_positional_embedding = PixtralVisionRotaryEmbedding(config)
+        self.rotary_emb = PixtralVisionRotaryEmbedding(config)
 
         self.post_init()
 
@@ -433,7 +433,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             )
             position_ids.append(torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1))
         position_ids = torch.cat(position_ids, dim=0)
-        position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
+        position_embeddings = self.rotary_emb(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):
             # Axial RoPE positions have two coordinates per patch, so they cannot

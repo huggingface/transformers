@@ -27,7 +27,8 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
-from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
     OlmoeForCausalLM,
@@ -113,7 +114,7 @@ class FlexOlmoRMSNorm(Olmo2RMSNorm):
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, so that the output cos and sin are returned
 # as float32 rather than the input type.
-class FlexOlmoRotaryEmbedding(Olmo2RotaryEmbedding):
+class FlexOlmoRotaryEmbedding(OlmoRotaryEmbedding):
     pass
 
 

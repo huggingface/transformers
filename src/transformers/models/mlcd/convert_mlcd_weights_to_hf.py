@@ -89,7 +89,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Vision embeddings
     r"conv1.weight":                                                r"vision_model.embeddings.patch_embedding.weight",
     r"class_embedding":                                             r"vision_model.embeddings.class_embedding",
-    r"vision_rotary_embedding":                                     r"vision_model.vision_rotary_embedding",
+    r"vision_rotary_embedding":                                     r"vision_model.rotary_emb",
     r"class_pos_emb":                                               r"vision_model.class_pos_emb",
     # Vision encoder
     r"transformer.resblocks_(\d+).ln_1.weight":                     r"vision_model.encoder.layers.\1.layer_norm1.weight",

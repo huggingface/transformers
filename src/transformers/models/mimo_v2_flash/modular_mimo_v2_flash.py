@@ -139,11 +139,11 @@ class MiMoV2FlashRMSNorm(LlamaRMSNorm):
 
 
 class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: MiMoV2FlashConfig, device=None):
+    def __init__(self, config: MiMoV2FlashConfig):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: MiMoV2FlashConfig, device=None, layer_type: str | None = None, **kwargs
+        config: MiMoV2FlashConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -166,7 +166,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):

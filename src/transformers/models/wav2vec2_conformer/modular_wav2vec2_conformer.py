@@ -112,7 +112,7 @@ class Wav2Vec2ConformerPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
     pass
 
 
-class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
+class Wav2Vec2ConformerRotaryEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
     """
@@ -480,7 +480,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         if config.position_embeddings_type == "relative":
             self.embed_positions = Wav2Vec2ConformerRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
-            self.embed_positions = Wav2Vec2ConformerRotaryPositionalEmbedding(config)
+            self.embed_positions = Wav2Vec2ConformerRotaryEmbedding(config)
         else:
             self.embed_positions = None
 
@@ -595,7 +595,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, Wav2Vec2ConformerRotaryPositionalEmbedding):
+        elif isinstance(module, Wav2Vec2ConformerRotaryEmbedding):
             dim = self.config.hidden_size // self.config.num_attention_heads
             base = self.config.rotary_embedding_base
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))

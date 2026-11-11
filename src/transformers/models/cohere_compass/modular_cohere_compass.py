@@ -166,8 +166,8 @@ class CohereCompassProcessor(Qwen3VLProcessor):
 
 # Same mrope interleaving pattern as Qwen3VL but this model has layer-types
 class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: CohereCompassTextConfig, device=None):
-        nn.Module.__init__()
+    def __init__(self, config: CohereCompassTextConfig):
+        nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
@@ -184,37 +184,12 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
-    def compute_default_rope_parameters(
-        config: CohereCompassTextConfig, device=None, layer_type: str | None = None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            layer_type (`str`):
-                The current layer type if the model has different RoPE parameters per type.
-                Should not be used unless `config.layer_types is not None`
-
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters[layer_type]["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
-
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
