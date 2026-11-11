@@ -14,6 +14,7 @@
 # limitations under the License.
 import inspect
 import unittest
+from unittest import mock
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -77,6 +78,21 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 2160},
             {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 4320},
         ]
+
+    def test_audio_kwargs_are_forwarded(self):
+        processor = self.get_processor()
+        text = f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
+        audio = np.zeros(16000, dtype=np.float32)
+
+        feature_extractor_type = type(processor.feature_extractor)
+        with mock.patch.object(
+            feature_extractor_type, "__call__", autospec=True, side_effect=feature_extractor_type.__call__
+        ) as feature_extractor:
+            inputs = processor(text=text, audio=audio, audio_kwargs={"padding": "longest"}, n_window=25)
+
+        self.assertEqual(feature_extractor.call_args.kwargs["padding"], "longest")
+        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
+        self.assertEqual(inputs["input_ids"][0].count(audio_token_id), 26)
 
     def test_post_process_multimodal_output_batched_audio(self):
         # Batched generation returns one waveform per sample, each trimmed to its own length.

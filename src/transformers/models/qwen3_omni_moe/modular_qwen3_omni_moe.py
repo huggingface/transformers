@@ -2843,9 +2843,8 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
-        return super().__call__(
-            text=text, images=images, videos=videos, audio=audio, audio_kwargs=audio_kwargs, **kwargs
-        )
+        kwargs["audio_kwargs"] = audio_kwargs
+        return super().__call__(text=text, images=images, videos=videos, audio=audio, **kwargs)
 
     def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:
         """

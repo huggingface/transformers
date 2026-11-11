@@ -178,6 +178,7 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
+        kwargs["audio_kwargs"] = audio_kwargs
         videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
         for key in ("seconds_per_chunk", "position_id_per_seconds"):
             if key in videos_kwargs:
