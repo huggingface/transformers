@@ -35,6 +35,8 @@ class XiaomiLens0MaskDecoderConfig(PreTrainedConfig):
         Number of channels the patch features are reduced to before upscaling.
     mask_embed_dim (`int`, *optional*, defaults to 32):
         Dimensionality of the per-pixel embeddings and of the `<|mask|>` token embeddings they are matched against.
+    scale_factor (`int`, *optional*, defaults to 4):
+        Factor by which the mask logits are upsampled.
     """
 
     model_type = "xiaomi_lens0_mask_decoder"
@@ -57,6 +59,7 @@ class XiaomiLens0MaskDecoderConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
+    scale_factor: int = 4
 
 
 @auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")

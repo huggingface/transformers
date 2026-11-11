@@ -645,7 +645,7 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         super().__init__(config)
         self.mask_embed = XiaomiLens0MaskEmbedding(config)
         self.pixel_decoder = XiaomiLens0PixelDecoder(config)
-        self.scale_factor = 4
+        self.scale_factor = config.scale_factor
 
         self.post_init()
 
@@ -673,7 +673,6 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         height, width = pixel_embeddings.shape[-2:]
         mask_logits = mask_embeddings @ pixel_embeddings.flatten(2) / self.config.mask_embed_dim**0.5
         mask_logits = mask_logits.view(batch_size, -1, height, width)
-        # Upsample masks to the resolution of the image passed to the vision encoder
         return F.interpolate(mask_logits, scale_factor=self.scale_factor, mode="bilinear", align_corners=False)
 
 
