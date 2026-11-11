@@ -28,6 +28,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_attr
 from ..auto import AutoConfig, AutoModel
 from ..mistral3.modeling_mistral3 import (
     Mistral3ForConditionalGeneration,
@@ -109,23 +110,14 @@ class LightOnOcrConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
 
 
-class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "do_pad": True,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
-
-
 class LightOnOcrProcessor(ProcessorMixin):
-    valid_processor_kwargs = LightOnOcrProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "do_pad": True,
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -175,8 +167,7 @@ class LightOnOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LightOnOcrProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
@@ -303,6 +294,8 @@ class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LightOnOcrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "LightOnOcrPreTrainedModel",  # noqa

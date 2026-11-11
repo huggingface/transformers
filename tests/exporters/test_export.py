@@ -74,6 +74,10 @@ from transformers.utils import is_executorch_available
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
+        "HunYuanVLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HunYuanVLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -230,11 +234,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "onnx.exactness": {
         "Wav2Vec2ForPreTraining": (
-            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
-            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
-            "with itself either."
+            "The quantizer picks codes with `argmax`; on near-tied logits ORT's rounding can pick another "
+            "code, and `codevector_perplexity` jumps far over the tolerance. See PR #50575."
         ),
-        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechSatForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "Wav2Vec2ConformerForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
         "PatchTSTForPretraining": (
             "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
             "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
@@ -447,8 +452,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+        "TimesFmModelForPrediction": (
+            "The left-padding patches attend to no key: OpenVINO gives them the uniform average, torch's fused "
+            "kernels zeros. The real patches and the predictions match."
+        ),
     },
     # OpenVINO, generate path only.
     "openvino.generate": {},
@@ -724,11 +734,12 @@ def _run_openvino_model(ov_model, inputs) -> dict:
 
     results = request.infer(feed)
     outputs = {}
+    declared = {name for output in ov_model.outputs for name in output.get_names()}
     for port in compiled.outputs:
-        # Compilation may merge a named output tensor with an intermediate that kept its
-        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
+        # Compilation may merge an output's tensor names with the ones of the intermediates it fused (a numeric id,
+        # `add_4:0`): take the name the exported model gave it.
         names = sorted(port.get_names())
-        name = next((n for n in names if not n.isdigit()), names[0])
+        name = next((n for n in names if n in declared), names[0])
         outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
 
     # Folded state tensors are outputs too — read them back so the returned dict covers the
@@ -989,6 +1000,12 @@ class ExportTesterMixin:
         attend to -- so each runtime fills it differently and no caller reads it; comparing those
         positions measures nothing.
         """
+        # exports keep a full cache on sliding-window layers, eager only the window: skip them
+        sliding = tuple(
+            key.removesuffix("_sliding_window_tensor") for key in expected if key.endswith("._sliding_window_tensor")
+        )
+        actual = {key: value for key, value in actual.items() if not key.startswith(sliding)}
+        expected = {key: value for key, value in expected.items() if not key.startswith(sliding)}
         # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
         # only a plain 2D `(batch, seq)` tensor maps onto output positions. NaViT-style vision models
         # (siglip2) mark their valid patches with `pixel_attention_mask` instead.

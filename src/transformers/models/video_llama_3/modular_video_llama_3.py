@@ -34,8 +34,9 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -58,7 +59,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -76,11 +76,28 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
 @strict
 class VideoLlama3VisionConfig(SiglipVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import VideoLlama3VisionConfig, VideoLlama3VisionModel
+
+    >>> # Initializing a VideoLlama3VisionConfig with google/video_llama_3-base-patch16-224 style configuration
+    >>> configuration = VideoLlama3VisionConfig()
+
+    >>> # Initializing a VideoLlama3VisionModel (with random weights) from the google/video_llama_3-base-patch16-224 style configuration
+    >>> model = VideoLlama3VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
 
     image_size = AttributeError()
+    vision_use_head = AttributeError()
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
 
@@ -689,17 +706,11 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         raise AttributeError("Not needed for VideoLLaMA3")
 
 
-class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class VideoLlama3Processor(Qwen3VLProcessor):
+    text_kwargs = AttributeError()
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -1119,6 +1130,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         videos_kwargs = {**videos_kwargs, "size": size}
         return super().get_num_of_video_patches(num_frames, height, width, videos_kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoLlama3ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "VideoLlama3VisionConfig",
