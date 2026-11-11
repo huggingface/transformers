@@ -87,6 +87,8 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
 @auto_docstring
 class HyperCLOVAXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
     config: HyperCLOVAXVisionV2Config
+    # Both towers are built with `AutoModel.from_config` and register their own layers in `post_init`
+    _no_split_modules = []
     input_modalities = ("image", "video", "text")
 
 

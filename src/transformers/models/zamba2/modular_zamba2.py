@@ -32,6 +32,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..mamba2.modeling_mamba2 import MambaRMSNormGated
 from ..zamba.modeling_zamba import (
     ZambaAttention,
     ZambaAttentionDecoderLayer,
@@ -49,25 +50,8 @@ from .configuration_zamba2 import Zamba2Config
 logger = logging.get_logger(__name__)
 
 
-class Zamba2RMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, group_size, eps=1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-        self.group_size = group_size
-
-    def forward(self, hidden_states, gate=None):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        if gate is not None:
-            hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        *prefix_dims, last_dim = hidden_states.shape
-        group_count = last_dim // self.group_size
-        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
-        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
-        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
-        return self.weight * hidden_states.to(input_dtype)
+class Zamba2RMSNormGated(MambaRMSNormGated):
+    pass
 
 
 class Zamba2RMSNorm(ZambaRMSNorm):

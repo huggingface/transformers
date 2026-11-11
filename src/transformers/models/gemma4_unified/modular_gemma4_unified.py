@@ -771,6 +771,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                     position_embeddings,
                     causal_mask_mapping,
                     logits_to_keep,
+                    cache=cache,
                     **kwargs,
                 )
 
@@ -798,6 +799,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         position_embeddings,
         causal_mask_mapping,
         logits_to_keep,
+        cache,
         **kwargs,
     ):
         """
@@ -820,10 +822,10 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         # Flex cannot slice mask
         elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
             can_optimize = False
-        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
         elif (
             self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
-            and logits_to_keep > 1
+            and (logits_to_keep > 1 or getattr(cache, "is_compileable", False))
             and any(mask is None for mask in causal_mask_mapping.values())
         ):
             can_optimize = False

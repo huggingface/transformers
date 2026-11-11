@@ -467,7 +467,10 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
 
 
-TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
+TEMPORAL_BLOCK_CLASSES = {
+    "linear_attention": RecurrentGemmaRecurrentBlock,
+    "sliding_attention": RecurrentGemmaAttention,
+}
 
 
 class RecurrentGemmaMlp(nn.Module):
@@ -656,13 +659,17 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_sliding_window_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache=cache,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask["sliding_attention"]
+        else:
+            causal_mask = create_sliding_window_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+                position_ids=position_ids,
+            )
 
         hidden_states = hidden_states * self.normalizer.type(hidden_states.dtype)
 

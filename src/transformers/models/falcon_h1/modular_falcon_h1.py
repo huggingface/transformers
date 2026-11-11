@@ -48,7 +48,6 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..mamba2.modeling_mamba2 import (
-    MambaRMSNormGated,
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
@@ -113,9 +112,9 @@ class FalconH1Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class FalconH1RMSNormGated(MambaRMSNormGated):
+class FalconH1RMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, n_groups=1, norm_before_gate=True):
-        super().__init__(hidden_size=hidden_size, eps=eps)
+        super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
         self.n_groups = n_groups
@@ -123,6 +122,7 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
+        input_ndim = hidden_states.ndim
 
         if not self.norm_before_gate and gate is not None:
             hidden_states = hidden_states * F.silu(gate.to(torch.float32))
@@ -142,7 +142,7 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
         hidden_states = self.weight.view(self.n_groups, int(dim // self.n_groups)) * hidden_states
         hidden_states = hidden_states.view(batch_size, seq_len, dim)
 
-        if seq_len == 1:
+        if input_ndim == 2:
             hidden_states = hidden_states.squeeze(1)
 
         if self.norm_before_gate and gate is not None:

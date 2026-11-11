@@ -302,7 +302,8 @@ class CohereAsrPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["CohereAsrEncoderLayer", "CohereAsrDecoderLayer"]
+    # The encoder is built with `AutoModel.from_config` and registers its own layers in `post_init`
+    _no_split_modules = ["CohereAsrDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
