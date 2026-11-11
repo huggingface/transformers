@@ -2311,6 +2311,22 @@ Port forwarding lets you serve models from a remote server. Make sure you have S
 ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_ssh_into_your_server
 ```
 
+## API key
+
+Pass `--api-key` to reject requests that don't send the key in an `Authorization: Bearer <key>` header, for example when the server listens on a public address. `/health` stays open.
+
+```sh
+transformers serve --host 0.0.0.0 --api-key my-key
+```
+
+The OpenAI client sends this header from its `api_key` argument.
+
+```py
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="my-key")
+```
+
 ## Reproducibility
 
 Pass a model as a positional argument to avoid per-request model hints and produce stable, repeatable runs.

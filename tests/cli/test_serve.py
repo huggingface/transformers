@@ -663,6 +663,27 @@ class TestAppRoutes(unittest.TestCase):
         resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
 
+    def test_api_key(self):
+        app = build_server(
+            self.model_manager,
+            self.chat_handler,
+            self.completion_handler,
+            self.response_handler,
+            self.transcription_handler,
+            systemone_handler=self.systemone_handler,
+            generation_state=GenerationState(),
+            api_key="my-key",
+        )
+
+        async def get(path, **kwargs):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+                return await c.get(path, **kwargs)
+
+        self.assertEqual(asyncio.run(get("/v1/models")).status_code, 401)
+        self.assertEqual(asyncio.run(get("/v1/models", headers={"Authorization": "Bearer other"})).status_code, 401)
+        self.assertEqual(asyncio.run(get("/v1/models", headers={"Authorization": "Bearer my-key"})).status_code, 200)
+        self.assertEqual(asyncio.run(get("/health")).status_code, 200)
+
 
 @slow
 @require_serve
