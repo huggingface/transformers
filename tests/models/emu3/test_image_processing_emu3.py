@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
@@ -124,6 +125,61 @@ class Emu3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processor(image, return_tensors="pt").pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    @parameterized.expand([(1, "np"), (2, "np"), (1, "pt"), (2, "pt")])
+    def test_image_sizes_after_channel_conversion(self, batch_size, return_tensors):
+        image_processor = Emu3ImageProcessor(**self.image_processor_dict)
+        images = [np.full((32, 48, 3), 100, dtype=np.uint8), np.full((48, 32, 3), 120, dtype=np.uint8)]
+        images = images[:batch_size]
+        reference = image_processor(images, return_tensors=return_tensors)
+        self.assertEqual(reference.image_sizes.tolist(), [[32, 48], [48, 32]][:batch_size])
+
+        for input_format in ("channels_first", "channels_last"):
+            inputs = [image.transpose(2, 0, 1) for image in images] if input_format == "channels_first" else images
+            for output_format in ("channels_first", "channels_last"):
+                with self.subTest(input_format=input_format, output_format=output_format):
+                    output = image_processor(
+                        inputs,
+                        input_data_format=input_format,
+                        data_format=output_format,
+                        return_tensors=return_tensors,
+                    )
+                    np.testing.assert_array_equal(output.image_sizes, reference.image_sizes)
+                    pixels = np.asarray(output.pixel_values)
+                    if output_format == "channels_last":
+                        pixels = pixels.transpose(0, 3, 1, 2)
+                    np.testing.assert_array_equal(pixels, reference.pixel_values)
+
+    def test_image_sizes_without_resize_or_padding(self):
+        image_processor = Emu3ImageProcessor(**self.image_processor_dict)
+        images = [np.full((31, 47, 3), 100, dtype=np.uint8), np.full((47, 31, 3), 120, dtype=np.uint8)]
+        for output_format in ("channels_first", "channels_last"):
+            with self.subTest(output_format=output_format):
+                output = image_processor(
+                    images,
+                    input_data_format="channels_last",
+                    data_format=output_format,
+                    do_resize=False,
+                    do_pad=False,
+                )
+                self.assertEqual(output.image_sizes, [(31, 47), (47, 31)])
+                for image, size in zip(output.pixel_values, output.image_sizes):
+                    self.assertEqual(image.shape[1:] if output_format == "channels_first" else image.shape[:2], size)
+
+    def test_padding_uses_output_channel_format(self):
+        image_processor = Emu3ImageProcessor(**self.image_processor_dict)
+        images = [np.full((3, width, 3), 100, dtype=np.uint8) for width in (16, 24)]
+        output = image_processor(
+            images,
+            input_data_format="channels_last",
+            data_format="channels_last",
+            do_convert_rgb=False,
+            do_resize=False,
+            return_tensors="np",
+        )
+        self.assertEqual(output.pixel_values.shape, (2, 3, 24, 3))
+        np.testing.assert_array_equal(output.image_sizes, [[3, 16], [3, 24]])
+        np.testing.assert_array_equal(output.pixel_values[0, :, 16:, :], 0)
 
     @unittest.skip(reason="Emu3ImageProcessor converts every input to RGB, so it does not accept 4 channel images")
     def test_call_numpy_4_channels(self):
