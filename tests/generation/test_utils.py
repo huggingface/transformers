@@ -4792,6 +4792,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "return_dict_in_generate": True,  # Required to return `cache`
         }
 
+        # noqa: NC001
         # TODO: We need to raise a warning in case the cache is not set correctly
         # with self.assertRaisesRegex(ValueError, "If you are manually initializing the cache"):
         #     cache = StaticCache(

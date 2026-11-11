@@ -554,7 +554,7 @@ class ModelOutput(OrderedDict):
         """
         if not is_tracing():
             logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
-        return self.cache
+        return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
 
     @property
     def cache_params(self):
@@ -564,7 +564,7 @@ class ModelOutput(OrderedDict):
         """
         if not is_tracing():
             logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
-        return self.cache
+        return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
 
     def __setitem__(self, key, value):
         # For BC
