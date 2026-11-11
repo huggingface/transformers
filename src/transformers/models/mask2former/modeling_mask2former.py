@@ -2189,17 +2189,16 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             init.normal_(module.level_embed, std=1.0)
 
         elif isinstance(module, Mask2FormerPredictionBlock):
-            # Meta's original MLP uses _reset_parameters: xavier_uniform_ on weights
-            # where p.dim() > 1, and leaves biases at PyTorch's default init.
-            # The base PreTrainedModel._init_weights would zero all biases, which is wrong.
-            # We apply xavier_uniform_ on weights and the default fan_in-based uniform
-            # on biases to match PyTorch's nn.Linear default.
+            # Meta's original MLP is just nn.Linear with default init, which is
+            # kaiming_uniform_(a=math.sqrt(5)) for weights and uniform_ for biases.
+            # The base PreTrainedModel._init_weights would apply normal_(std=0.02)
+            # on weights and zero all biases, which diverges from the original.
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
-                    init.xavier_uniform_(submodule.weight)
+                    init.kaiming_uniform_(submodule.weight, a=math.sqrt(5))
                     if submodule.bias is not None:
-                        fan_in = submodule.weight.shape[1]
-                        bound = 1.0 / (fan_in ** 0.5)
+                        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(submodule.weight)
+                        bound = 1.0 / math.sqrt(fan_in) if fan_in > 0 else 0
                         init.uniform_(submodule.bias, -bound, bound)
 
         elif isinstance(module, nn.Embedding):
