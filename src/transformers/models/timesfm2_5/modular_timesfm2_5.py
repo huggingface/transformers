@@ -27,6 +27,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..apertus.modeling_apertus import ApertusAttention
@@ -179,6 +180,7 @@ class TimesFm2_5Attention(ApertusAttention):
         super().__init__(config, layer_idx)
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,

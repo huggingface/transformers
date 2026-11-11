@@ -147,6 +147,7 @@ class BarkSelfAttention(nn.Module):
 
         return attn_output, attn_weights
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
@@ -209,6 +210,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         tensor = tensor.view(tensor.size()[:-2] + (num_heads * attn_head_size,))
         return tensor
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
@@ -293,6 +295,7 @@ class BarkBlock(GradientCheckpointingLayer):
 
         self.mlp = BarkMLP(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,

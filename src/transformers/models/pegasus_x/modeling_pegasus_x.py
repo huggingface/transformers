@@ -940,6 +940,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
     @capture_outputs
     @merge_with_config_defaults
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids=None,
