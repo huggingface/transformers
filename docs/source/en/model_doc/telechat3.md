@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 The original checkpoints use a custom `"telechat3-yarn"` RoPE type, which is YaRN with 0.07 instead of 0.1 as the coefficient of its default attention factor. [`TeleChat3Config`] converts it to `"yarn"` with an explicit `attention_factor` when the config is loaded.
 
-The auto classes load it with the Llama implementation ([`LlamaModel`], [`LlamaForCausalLM`], [`LlamaForSequenceClassification`], [`LlamaForQuestionAnswering`] and [`LlamaForTokenClassification`]), so only [`TeleChat3Config`] is specific to TeleChat3.
+The auto classes load it with the Llama implementation ([`LlamaModel`] and [`LlamaForCausalLM`]), so only [`TeleChat3Config`] is specific to TeleChat3.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
