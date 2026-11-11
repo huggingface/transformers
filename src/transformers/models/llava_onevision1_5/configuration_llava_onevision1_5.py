@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from huggingface_hub.dataclasses import strict
-from packaging import version
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
@@ -32,16 +31,16 @@ class LlavaOnevision15VisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
         Size of the projected visual features, matching the text backbone's hidden size.
-    layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-        Epsilon used by the vision encoder's layer normalization layers.
-    initializer_factor (`float`, *optional*, defaults to 1.0):
-        Scale factor for initializing the learned class token and its rotary position embedding.
     """
 
     model_type = "llava_onevision1_5_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
+    attribute_map = {
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "depth",
+        "text_hidden_size": "out_hidden_size",
+    }
 
     depth: int = 24
     hidden_size: int = 1024
@@ -57,6 +56,10 @@ class LlavaOnevision15VisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     layer_norm_eps: float = 1e-5
     initializer_factor: float = 1.0
+
+    def validate_architecture(self):
+        if self.temporal_patch_size != 1:
+            raise ValueError("LLaVA-OneVision-1.5 requires vision_config.temporal_patch_size=1")
 
 
 @auto_docstring(checkpoint="Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf")
@@ -75,7 +78,7 @@ class LlavaOnevision15Config(PreTrainedConfig):
 
     model_type = "llava_onevision1_5"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=LlavaOnevision15VisionConfig),
+        "vision_config": LlavaOnevision15VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
     }
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -89,26 +92,19 @@ class LlavaOnevision15Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = dict(self.vision_config)
-            self.vision_config["model_type"] = LlavaOnevision15VisionConfig.model_type
-            if "text_hidden_size" in self.vision_config:
-                self.vision_config.setdefault("out_hidden_size", self.vision_config.pop("text_hidden_size"))
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") in (
+            "rice_vit",
+            "llava_onevision1_5",
+        ):
+            # Published checkpoints predate the separate vision model type.
+            self.vision_config = {**self.vision_config, "model_type": LlavaOnevision15VisionConfig.model_type}
         if isinstance(self.text_config, dict) and self.text_config.get("model_type") == "LLaVAOneVision1_5_text":
             self.text_config = {**self.text_config, "model_type": "qwen3"}
-        # Before v5 the nested text setting controlled tying; the serialized root setting could differ.
-        if (
-            self.transformers_version is not None
-            and version.parse(self.transformers_version) < version.parse("5.0.0")
-            and self.text_config is not None
-        ):
-            self.tie_word_embeddings = (
-                self.text_config.get("tie_word_embeddings", False)
-                if isinstance(self.text_config, dict)
-                else self.text_config.tie_word_embeddings
-            )
         super().__post_init__(**kwargs)
-        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
+        # Published checkpoints use the text backbone's weight-tying setting.
+        self.tie_word_embeddings = self.text_config.tie_word_embeddings
+
+    def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:
             raise ValueError("vision_config.out_hidden_size must match text_config.hidden_size")
 

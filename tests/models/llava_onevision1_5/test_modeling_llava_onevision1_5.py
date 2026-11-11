@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,9 +17,6 @@ import copy
 import tempfile
 import unittest
 
-import numpy as np
-import requests
-
 from transformers import (
     AutoProcessor,
     LlavaOnevision15Config,
@@ -28,7 +25,6 @@ from transformers import (
     LlavaOnevision15VisionConfig,
     LlavaOnevision15VisionModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -41,225 +37,73 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
-
-if is_vision_available():
-    from PIL import Image
 
 
-class LlavaOnevision15Text2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        image_size=14,
-        seq_length=7,
-        ignore_index=-100,
-        bos_token_id=0,
-        eos_token_id=1,
-        pad_token_id=2,
-        vision_start_token_id=3,
-        vision_end_token_id=4,
-        image_token_id=5,
-        video_token_id=6,
-        vocab_size=500,
-        is_training=True,
-        text_config={
-            "attention_bias": False,
-            "attention_dropout": 0.0,
-            "hidden_act": "silu",
-            "hidden_size": 32,
-            "head_dim": 8,
-            "initializer_range": 0.02,
-            "intermediate_size": 37,
-            "tie_word_embeddings": False,
-            "layer_types": ["full_attention" for _ in range(2)],
-            "max_position_embeddings": 512,
-            "max_window_layers": 3,
-            "model_type": "qwen3",
-            "num_attention_heads": 4,
-            "num_hidden_layers": 2,
-            "num_key_value_heads": 4,
-            "rms_norm_eps": 1e-06,
-            "rope_scaling": None,
-            "rope_theta": 1000000.0,
-            "sliding_window": None,
-            "use_cache": True,
-            "use_sliding_window": False,
-            "vocab_size": 500,
-        },
-        vision_config={
-            "depth": 2,
-            "embed_dim": 32,
-            "hidden_act": "gelu",
-            "hidden_size": 32,
-            "in_channels": 3,
-            "initializer_range": 0.02,
-            "intermediate_size": 37,
-            "layer_norm_eps": 1e-05,
-            "model_type": "llava_onevision1_5_vision",
-            "num_heads": 4,
-            "patch_size": 14,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 1,
-            "out_hidden_size": 32,
-        },
-    ):
-        self.parent = parent
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.vocab_size = vocab_size
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
+class LlavaOnevision15ModelTester(VLMModelTester):
+    base_model_class = LlavaOnevision15Model
+    config_class = LlavaOnevision15Config
+    conditional_generation_class = LlavaOnevision15ForConditionalGeneration
 
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
-        self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.is_training = is_training
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 5)
+        kwargs.setdefault("video_token_id", 6)
+        kwargs.setdefault("vision_start_token_id", 3)
+        kwargs.setdefault("vision_end_token_id", 4)
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("num_attention_heads", 2)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("intermediate_size", 37)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("vision_hidden_size", 32)
+        kwargs.setdefault("vision_intermediate_size", 37)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("num_heads", 2)
+        kwargs.setdefault("out_hidden_size", 32)
+        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("patch_size", 4)
+        kwargs.setdefault("temporal_patch_size", 1)
+        kwargs.setdefault("spatial_merge_size", 2)
+        kwargs.setdefault("num_image_tokens", 4)
+        kwargs.setdefault("vision_hidden_act", "gelu")
+        super().__init__(parent, **kwargs)
 
-    def get_config(self):
-        return LlavaOnevision15Config(
-            text_config={**self.text_config, "pad_token_id": self.pad_token_id},
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id, self.vision_start_token_id, self.vision_end_token_id}
+
+    def create_pixel_values(self, batch_size=None):
+        batch_size = self.batch_size if batch_size is None else batch_size
+        return floats_tensor(
+            [batch_size * (self.image_size // self.patch_size) ** 2, self.num_channels * self.patch_size**2]
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
-                self.num_channels * (patch_size**2) * temporal_patch_size,
-            ]
-        )
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
+        input_ids[:, 0] = self.vision_start_token_id
+        input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
+        input_ids[:, 1 + self.num_image_tokens] = self.vision_end_token_id
+        return input_ids
 
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        input_ids[:, 0] = self.pad_token_id
-        attention_mask[:, 0] = 0
-
-        input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
-        input_ids[:, self.num_image_tokens] = self.image_token_id
-        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size=None):
+        batch_size = self.batch_size if batch_size is None else batch_size
+        side = self.image_size // self.patch_size
+        return {"image_grid_thw": torch.tensor([[1, side, side]] * batch_size, device=torch_device)}
 
 
 @require_torch
-class LlavaOnevision15ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    """
-    Model tester for `LlavaOnevision15ForConditionalGeneration`.
-    """
-
-    all_model_classes = (
-        (
-            LlavaOnevision15Model,
-            LlavaOnevision15ForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {"image-text-to-text": LlavaOnevision15ForConditionalGeneration} if is_torch_available() else {}
-    )
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = LlavaOnevision15Text2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaOnevision15Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_reverse_loading_mapping(self):
-        # Legacy checkpoints need prefix changes only for the model with the LM head.
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
-    def test_config_instances_and_legacy_tying(self):
-        config = self.model_tester.get_config()
-        text_dict = config.text_config.to_dict()
-        vision_dict = config.vision_config.to_dict()
-        original = copy.deepcopy((text_dict, vision_dict))
-        restored = LlavaOnevision15Config(text_config=text_dict, vision_config=vision_dict)
-        self.assertEqual((text_dict, vision_dict), original)
-        from_instances = LlavaOnevision15Config(text_config=config.text_config, vision_config=config.vision_config)
-        self.assertIs(from_instances.text_config, config.text_config)
-        self.assertIs(from_instances.vision_config, config.vision_config)
-        legacy = restored.to_dict()
-        legacy["tie_word_embeddings"] = True
-        legacy["text_config"]["tie_word_embeddings"] = False
-        for saved_version in ("4.58.0.dev0", "5.0.0.dev0"):
-            legacy["transformers_version"] = saved_version
-            self.assertFalse(LlavaOnevision15Config(**legacy).tie_word_embeddings)
-
-    def test_forward_and_generation_use_1d_positions(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
-        position_ids = torch.arange(inputs["input_ids"].shape[1], device=torch_device).unsqueeze(0)
-        with torch.no_grad():
-            automatic = model(**inputs).logits
-            explicit = model(**inputs, position_ids=position_ids).logits
-            generation_positions = inputs["attention_mask"].cumsum(-1) - 1
-            generation_positions.masked_fill_(inputs["attention_mask"] == 0, 1)
-            padded = model(**inputs, position_ids=generation_positions).logits
-            generated = model.generate(
-                **inputs, max_new_tokens=2, do_sample=False, output_logits=True, return_dict_in_generate=True
-            )
-            extended = {**inputs, "input_ids": generated.sequences[:, :-1]}
-            extended["attention_mask"] = torch.cat(
-                (inputs["attention_mask"], torch.ones_like(inputs["input_ids"][:, :1])), dim=-1
-            )
-            extended["position_ids"] = extended["attention_mask"].cumsum(-1) - 1
-            extended["position_ids"].masked_fill_(extended["attention_mask"] == 0, 1)
-            uncached = model(**extended, use_cache=False).logits[:, -1]
-        torch.testing.assert_close(automatic, explicit)
-        torch.testing.assert_close(generated.logits[0], padded[:, -1])
-        torch.testing.assert_close(generated.logits[1], uncached, atol=1e-5, rtol=1e-4)
+class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = LlavaOnevision15ModelTester
 
     def test_generate_multiple_sequences_preserves_image_features(self):
+        """Beam and sample expansion must preserve the image features associated with each prompt."""
         config = self.model_tester.get_config()
         config.vision_config.spatial_merge_size = 2
         model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
@@ -270,7 +114,7 @@ class LlavaOnevision15ForConditionalGenerationModelTest(ModelTesterMixin, Genera
         inputs = {
             "input_ids": input_ids,
             "attention_mask": torch.ones_like(input_ids),
-            "pixel_values": floats_tensor([16, 3 * 14 * 14]),
+            "pixel_values": floats_tensor([16, 3 * config.vision_config.patch_size**2]),
             "image_grid_thw": torch.tensor([[1, 4, 4]], device=torch_device),
         }
         with torch.no_grad():
@@ -291,54 +135,6 @@ class LlavaOnevision15ForConditionalGenerationModelTest(ModelTesterMixin, Genera
                         output.logits[0], logits.expand(expansion_size, -1), atol=1e-5, rtol=1e-4
                     )
 
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
-            curr_input_dict = copy.deepcopy(input_dict)
-
-            # remove one image but leave the image token in text
-            patch_size = config.vision_config.patch_size
-            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                )
-
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-            )
-
-
-@require_torch
-class LlavaOnevision15VisionModelTest(unittest.TestCase):
-    all_model_classes = (LlavaOnevision15VisionModel,) if is_torch_available() else ()
-
     @slow
     @require_torch_greater_or_equal("2.11")
     def test_export_preserves_class_tokens_and_frame_isolation(self):
@@ -351,7 +147,7 @@ class LlavaOnevision15VisionModelTest(unittest.TestCase):
         model = LlavaOnevision15VisionModel(config).to(torch_device).eval()
         # One image and two video frames, with 16 patches per frame.
         inputs = {
-            "hidden_states": floats_tensor([48, 3 * 14 * 14]),
+            "pixel_values": floats_tensor([48, 3 * 14 * 14]),
             "grid_thw": torch.tensor([[1, 4, 4], [2, 4, 4]], device=torch_device),
         }
         for dynamic in (False, True):
@@ -359,16 +155,16 @@ class LlavaOnevision15VisionModelTest(unittest.TestCase):
                 sample = copy.deepcopy(inputs)
                 exported = DynamoExporter().export(model, sample, config=DynamoConfig(dynamic=dynamic))
                 # Replay with new pixels and aspect ratio, retaining 16 patches per frame.
-                sample["hidden_states"] = floats_tensor([48, 3 * 14 * 14])
+                sample["pixel_values"] = floats_tensor([48, 3 * 14 * 14])
                 sample["grid_thw"] = torch.tensor([[1, 2, 8], [2, 2, 8]], device=torch_device)
                 model, sample, _ = prepare_for_export(model, sample)
                 with torch.no_grad():
                     actual = exported.module()(**sample)
-                    expected = model(sample["hidden_states"], sample["grid_thw"])
+                    expected = model(sample["pixel_values"], sample["grid_thw"])
                     separate = torch.cat(
                         [
                             model(frame, sample["grid_thw"][:1]).pooler_output
-                            for frame in sample["hidden_states"].split(16)
+                            for frame in sample["pixel_values"].split(16)
                         ]
                     )
                 torch.testing.assert_close(actual.last_hidden_state, expected.last_hidden_state)
@@ -423,7 +219,7 @@ class LlavaOnevision15VisionModelTest(unittest.TestCase):
         expected = {name: p.grad.clone() for name, p in model.named_parameters()}
         for reentrant in (True, False):
             model.zero_grad(set_to_none=True)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": reentrant})
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": reentrant})
             model(pixels, grid).pooler_output.square().sum().backward()
             for name, p in model.named_parameters():
                 torch.testing.assert_close(p.grad, expected[name])
@@ -432,273 +228,144 @@ class LlavaOnevision15VisionModelTest(unittest.TestCase):
 
 
 @require_torch
-class LlavaOnevision15ForConditionalGenerationIntegrationTest(unittest.TestCase):
+class LlavaOnevision15IntegrationTest(unittest.TestCase):
+    model_id = "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf"
+
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", padding_side="left"
-        )
+        self.processor = AutoProcessor.from_pretrained(self.model_id, padding_side="left")
         self.messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What kind of dog is this?"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
+                    },
+                    {"type": "text", "text": "Describe the image."},
                 ],
             }
         ]
-        url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
-
-        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
-    def test_small_model_integration_test(self):
+    def _check_image_generation(self, attn_implementation):
         model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device, attn_implementation=attn_implementation
         )
-
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
-
-        expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
-        torch.testing.assert_close(expected_input_ids, inputs.input_ids[0].tolist()[:17])
-
-        expected_pixel_slice = torch.tensor(
-            [
-                [0.8792, 0.8792, 0.9084],
-                [1.1858, 1.1858, 1.2296],
-                [1.2004, 1.2004, 1.2150],
-                [1.4340, 1.4340, 1.4194],
-                [1.3902, 1.4048, 1.4194],
-                [1.5216, 1.5362, 1.5362],
-            ],
-            dtype=torch.float32,
-            device="cpu",
-        )
-        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=5e-4, rtol=1e-5)
-
-        # verify generation
-        inputs = inputs.to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their"
-        expected_decoded_text = Expectations({
-            (None, None): EXPECTED_DECODED_TEXT,
-            ("cuda", (8, 0)): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, which is known for its friendly and outgoing nature, making it a popular choice as a family pet or",
-        }).get_expectation()  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            expected_decoded_text,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium to large size, short coat, and friendly demeanor. Labradors are known',
-        ]  # fmt: skip
-        expected_decoded_texts = Expectations(
-            {(None, None): EXPECTED_DECODED_TEXT, ("cuda", (8, 0)): [EXPECTED_DECODED_TEXT[0]] * 2}
-        ).get_expectation()
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            expected_decoded_texts,
-        )
-
-    @slow
-    def test_small_model_integration_test_expand(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
-
-        # Multiple samples can choose different continuations when BF16 logits tie.
-        expected_prefix = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever"
-        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(len(decoded_texts), 3)
-        for text in decoded_texts:
-            self.assertTrue(text.startswith(expected_prefix), text)
-
-    @slow
-    def test_small_model_integration_test_batch_wo_image(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        messages2 = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is one plus one?"},
-        ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
-            'system\nYou are a helpful assistant.\nuser\nWhat is one plus one?\nassistant\nOne plus one equals two.',
-        ]  # fmt: skip
-        expected_decoded_texts = Expectations({
-            (None, None): EXPECTED_DECODED_TEXT,
-            ("cuda", (8, 0)): [
-                "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, which is known for its friendly and outgoing nature, making it a popular choice as a family pet or",
-                EXPECTED_DECODED_TEXT[1],
-            ],
-        }).get_expectation()  # fmt: skip
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            expected_decoded_texts,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch_different_resolutions(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        image2 = self.image.resize((224, 224))
-        inputs = self.processor(
-            text=[text, text2],
-            images=[self.image, image2],
-            padding=True,
-            return_tensors="pt",
-        ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        expected_decoded_texts = Expectations(
+        inputs = self.processor.apply_chat_template(
+            self.messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
+        with torch.no_grad():
+            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        expected = Expectations(
             {
                 (None, None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Golden Retriever, known for their friendly and tolerant attitudes and intelligence. They are often used as guide dogs, search and',
-                ],
-                ("cuda", (8, 0)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Golden Retriever, identifiable by its golden coat and friendly demeanor.',
+                    "The image depicts a snow leopard walking on a snowy surface. The snow leopard is characterized by its thick"
+                ]
+            }
+        ).get_expectation()
+        self.assertEqual(text, expected)
+
+    @slow
+    @require_torch_gpu
+    def test_image_generation(self):
+        self._check_image_generation("sdpa")
+
+    @slow
+    @require_torch_gpu
+    @require_flash_attn
+    def test_image_generation_flash_attention_2(self):
+        self._check_image_generation("flash_attention_2")
+
+    @slow
+    @require_torch_gpu
+    def test_batched_generation(self):
+        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
+        text_only = [{"role": "user", "content": [{"type": "text", "text": "What is one plus one?"}]}]
+        conversations = [self.messages, self.messages, text_only]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            processor_kwargs={"padding": True},
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        with torch.no_grad():
+            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        expected = Expectations(
+            {
+                (None, None): [
+                    "The image depicts a snow leopard walking on a snowy surface. The snow leopard is characterized by its thick",
+                    "The image depicts a snow leopard walking on a snowy surface. The snow leopard is characterized by its thick",
+                    "One plus one equals two.",
+                ]
+            }
+        ).get_expectation()
+        self.assertEqual(text, expected)
+
+    @slow
+    @require_torch_gpu
+    def test_video_generation(self):
+        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "Describe the video."},
                 ],
             }
-        ).get_expectation()  # fmt: skip
-
-        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
-        for i, (expected, decoded) in enumerate(zip(expected_decoded_texts, decoded_texts)):
-            self.assertEqual(
-                decoded,
-                expected,
-                f"Decoded text {i}:\n{repr(decoded)}\ndoes not match expected decoded text:\n{repr(expected)}",
-            )
-
-    @slow
-    @require_flash_attn
-    @require_torch_gpu
-    def test_small_model_integration_test_batch_flashatt2(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        expected_decoded_text = Expectations({
-            ("cuda", None): 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
-            ("rocm", (9, 4)): 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium to large size, short coat, and friendly demeanor. Labradors are known'
-        }).get_expectation()  # fmt: skip
-
-        # Since the test is to generate twice the same text, we just test twice against the expected decoded text
-        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(decoded_texts[0], expected_decoded_text)
-        self.assertEqual(decoded_texts[1], expected_decoded_text)
-
-    @slow
-    @require_flash_attn
-    @require_torch_gpu
-    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        messages2 = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is one plus one?"},
         ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        expected_decoded_text = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their",
-            "system\nYou are a helpful assistant.\nuser\nWhat is one plus one?\nassistant\nOne plus one equals two.",
-        ]
-
-        decoded_text = self.processor.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(decoded_text, expected_decoded_text)
-
-    @slow
-    @require_torch_gpu
-    def test_small_model_integration_test_with_video(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
-        )
-        messages = [{"role": "user", "content": [{"type": "video"}, {"type": "text", "text": "Describe the video."}]}]
-        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        video = np.stack([np.asarray(self.image), np.asarray(self.image.transpose(Image.Transpose.FLIP_LEFT_RIGHT))])
-        inputs = self.processor(text=[text], videos=[video], do_sample_frames=False, return_tensors="pt").to(
-            torch_device
-        )
-        self.assertEqual(inputs.video_grid_thw[0, 0].item(), 2)
+        inputs = self.processor.apply_chat_template(
+            messages,
+            processor_kwargs={"num_frames": 2},
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
         with torch.no_grad():
-            features = model.get_video_features(
-                inputs.pixel_values_videos, inputs.video_grid_thw, return_dict=True
-            ).pooler_output
-            logits = model(**inputs, logits_to_keep=1).logits[:, -1]
-            generated = model.generate(
-                **inputs,
-                do_sample=False,
-                min_new_tokens=2,
-                max_new_tokens=2,
-                output_logits=True,
-                return_dict_in_generate=True,
-            )
-        self.assertEqual(features[0].shape[0], (inputs.input_ids == model.config.video_token_id).sum().item())
-        self.assertTrue(torch.isfinite(features[0]).all().item())
-        self.assertTrue(torch.isfinite(logits).all().item())
-        torch.testing.assert_close(generated.logits[0], logits.float())
-        self.assertEqual(generated.sequences.shape[-1], inputs.input_ids.shape[-1] + 2)
+            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        expected = Expectations(
+            {
+                (None, None): [
+                    "The image is a black and white photograph of a person lying on their back on a mat, with"
+                ]
+            }
+        ).get_expectation()
+        self.assertEqual(text, expected)
+
+    @slow
+    @require_torch_gpu
+    def test_base_checkpoint_loading(self):
+        model, info = LlavaOnevision15Model.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device, output_loading_info=True
+        )
+        self.assertFalse(info["missing_keys"])
+        self.assertFalse(info["mismatched_keys"])
+        self.assertFalse(info["error_msgs"])
+        self.assertLessEqual(set(info["unexpected_keys"]), {"lm_head.weight"})
+        inputs = self.processor.apply_chat_template(
+            self.messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
+        with torch.no_grad():
+            output = model(**inputs)
+        self.assertEqual(
+            output.last_hidden_state.shape, (*inputs.input_ids.shape, model.config.text_config.hidden_size)
+        )
