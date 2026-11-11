@@ -37,19 +37,16 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.auto.register_backend
 
-[[autodoc]] exporters.auto.get_exporter_class
-
-[[autodoc]] exporters.auto.get_export_config_class
-
 ## HfExporter
 
 [[autodoc]] exporters.base.HfExporter
 
-## ExportArtifacts
+## ExportedModel
 
-[[autodoc]] exporters.base.ExportArtifacts
+[[autodoc]] exporters.base.ExportedModel
+    - __call__
     - program
-    - runtime
+    - to
     - save_pretrained
     - from_pretrained
 
@@ -61,16 +58,9 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.metadata.ExportMetadata
 
-## ExportedModel
-
-[[autodoc]] exporters.runtimes.base.ExportedModel
-    - from_pretrained
-
 ## ModelRunner
 
 [[autodoc]] exporters.runtimes.base.ModelRunner
-
-[[autodoc]] exporters.auto.get_runner_class
 
 ## DynamoExporter
 

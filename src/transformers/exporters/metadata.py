@@ -85,24 +85,23 @@ class ExportMetadata:
 
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
-) -> dict[str, Any]:
-    """Record a graph's precision, traced kwargs and flat input/output order. Precision and device are read off the
-    parameters, since a split-out component is a plain `nn.Module` with no `.dtype`."""
-    metadata = {
-        "architecture": type(model).__name__,
-        "packages": _package_versions(packages),
-        "dtype": str(
+) -> ExportMetadata:
+    """Record a graph's precision, traced kwargs, flat input/output order and pytree specs."""
+    input_specs = exported_program.graph_signature.input_specs
+    return ExportMetadata(
+        architecture=type(model).__name__,
+        packages=_package_versions(packages),
+        # Off the parameters: a split-out component is a plain `nn.Module` with no `.dtype`.
+        dtype=str(
             next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
         ).removeprefix("torch."),
-        "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
-        "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
-    }
-    input_specs = exported_program.graph_signature.input_specs
-    metadata["input_names"] = [spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"]
-    metadata["output_names"] = traced_output_names(exported_program)
-    metadata["in_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec)
-    metadata["out_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec)
-    return metadata
+        device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
+        kwargs={name: _traced_kwarg(value) for name, value in inputs.items()},
+        input_names=[spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"],
+        output_names=traced_output_names(exported_program),
+        in_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec),
+        out_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec),
+    )
 
 
 def register_treespec_types(dumped: str) -> None:

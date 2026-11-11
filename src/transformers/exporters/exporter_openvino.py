@@ -54,6 +54,7 @@ from ..utils.import_utils import is_openvino_available, is_openvino_greater_or_e
 from .configs import ExportFormat, OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
 from .exporter_onnx import disambiguate_io_names, patch_model_outputs
+from .metadata import ExportMetadata
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -119,10 +120,8 @@ class OpenVINOExporter(DynamoExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: OpenVINOConfig | dict[str, Any],
-    ) -> tuple[openvino.Model, dict[str, Any]]:
-        config = self._as_config(config)
-
+        config: OpenVINOConfig,
+    ) -> tuple[openvino.Model, ExportMetadata]:
         # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
         with (
             apply_patches("openvino"),
@@ -130,7 +129,7 @@ class OpenVINOExporter(DynamoExporter):
             patch_model_outputs(model) as (inputs_names, outputs_names, out_specs),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
-            metadata["out_spec"] = torch.utils._pytree.treespec_dumps(out_specs[-1])
+            metadata.out_spec = torch.utils._pytree.treespec_dumps(out_specs[-1])
             # Converted before the model gets its dtypes back: the program's constants are its own tensors.
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
@@ -150,7 +149,7 @@ class OpenVINOExporter(DynamoExporter):
         if config.compress_to_fp16:
             compress_model_transformation(ov_model)
 
-        update_openvino_metadata(metadata, ov_model)
+        _update_openvino_metadata(metadata, ov_model)
         return ov_model, metadata
 
     @classmethod
@@ -174,11 +173,11 @@ class OpenVINOExporter(DynamoExporter):
 # of the conversion has a single responsibility.
 
 
-def update_openvino_metadata(metadata: dict[str, Any], ov_model: openvino.Model) -> None:
-    """Record the OpenVINO model's own port names: dotted leaf paths, and once `stateful`, no cache ports but a
-    `beam_idx` input."""
-    metadata["input_names"] = [port.get_any_name() for port in ov_model.inputs]
-    metadata["output_names"] = [port.get_any_name() for port in ov_model.outputs]
+def _update_openvino_metadata(metadata: ExportMetadata, ov_model: openvino.Model) -> None:
+    """Record the model's own port names: dotted leaf paths and, once stateful, no cache ports but a `beam_idx`
+    input."""
+    metadata.input_names = [port.get_any_name() for port in ov_model.inputs]
+    metadata.output_names = [port.get_any_name() for port in ov_model.outputs]
 
 
 def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:

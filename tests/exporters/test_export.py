@@ -756,7 +756,7 @@ def _run_executorch_program(exported, inputs):
     XNNPACK-delegate failure): a runtime limitation, not a transformers export defect."""
     set_seed(1234)
     try:
-        return list(get_leaf_tensors(exported.runtime()(**inputs)).values())
+        return list(get_leaf_tensors(exported(**inputs)).values())
     except (RuntimeError, MemoryError) as e:
         if _is_executorch_runtime_limit(e):
             return None
@@ -995,7 +995,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    runtime = exporter.export(model, inputs, config=config).runtime()
+                    runtime = exporter.export(model, inputs, config=config)
 
                     set_seed(1234)
                     outputs = runtime(**copy.deepcopy(inputs))
@@ -1034,7 +1034,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    runtime = exporter.export(model, inputs, config=config).runtime()
+                    runtime = exporter.export(model, inputs, config=config)
                     set_seed(1234)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), eager_types[name])
@@ -1070,7 +1070,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    runtime = exporter.export(model, inputs, config=config).runtime()
+                    runtime = exporter.export(model, inputs, config=config)
                     set_seed(1234)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), eager_types[name])

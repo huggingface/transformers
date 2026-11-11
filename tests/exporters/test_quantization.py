@@ -329,7 +329,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def test_export_for_generation_fans_out_calibration(self):
         """`export_for_generation` hands each component's export a copy of the quantizer holding that component's
         captured calibration set in place of the generate-level `calibration_dataset`."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
+        from transformers.exporters import DynamoConfig, DynamoExporter, ExportMetadata
 
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
@@ -337,7 +337,12 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         ]
         config = DynamoConfig(quantizer=self._pt2e_quantizer("x86", calibration))
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
-        with patch.object(DynamoExporter, "export_program", autospec=True, return_value=(None, {})) as export:
+        with patch.object(
+            DynamoExporter,
+            "export_program",
+            autospec=True,
+            side_effect=lambda *args, **kwargs: (None, ExportMetadata()),
+        ) as export:
             DynamoExporter().export_for_generation(
                 self._dense_model(),
                 inputs,
@@ -408,15 +413,19 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
             "lm_head": DynamoConfig(dynamic=True),
         }
-        components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
+        exported = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        self.assertTrue(_has_quantize_ops(components["language_model"].program), "language_model should be quantized")
-        self.assertTrue(_has_quantize_ops(components["decode"].program), "decode should be quantized")
-        self.assertFalse(_has_quantize_ops(components["lm_head"].program), "lm_head should stay fp32")
+        self.assertTrue(
+            _has_quantize_ops(exported.components["language_model"].program), "language_model should be quantized"
+        )
+        self.assertTrue(_has_quantize_ops(exported.components["decode"].program), "decode should be quantized")
+        self.assertFalse(_has_quantize_ops(exported.components["lm_head"].program), "lm_head should stay fp32")
         # the recipes really differ: decode is dynamically quantized, language_model statically
-        self.assertTrue(_has_dynamic_quant_ops(components["decode"].program), "decode should be dynamically quantized")
+        self.assertTrue(
+            _has_dynamic_quant_ops(exported.components["decode"].program), "decode should be dynamically quantized"
+        )
         self.assertFalse(
-            _has_dynamic_quant_ops(components["language_model"].program), "language_model should be static"
+            _has_dynamic_quant_ops(exported.components["language_model"].program), "language_model should be static"
         )
 
 

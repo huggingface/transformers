@@ -22,7 +22,7 @@ DON'T touch:
   instantiate concrete exporters directly.
 - **Config dict round-trips** — configs are built via constructor calls, never serialised.
 - **Registration edge cases** — type-check rejections in ``register_backend``.
-- **``ExportArtifacts`` saving** — the manifest ``save_pretrained`` writes next to the components.
+- **``ExportedModel`` saving** — the manifest ``save_pretrained`` writes next to the components.
 - **`patch_attributes` restore-on-exception** — the happy path is exercised but the exception
   branch never fires in real exports.
 - The **`decompose_prefill_decode` guard** against generators that bypass the top-level
@@ -33,23 +33,18 @@ DON'T touch:
 Everything below targets one of those gaps.
 """
 
-import dataclasses
 import json
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from unittest import mock
 
 from transformers import BertConfig, GenerationConfig
-from transformers.exporters import (
-    EXPORT_BACKENDS,
-    AutoExportConfig,
-    AutoHfExporter,
-    get_exporter_class,
-    register_backend,
-)
+from transformers.exporters import AutoExportConfig, AutoHfExporter, register_backend
 from transformers.exporters import utils as exporter_utils
-from transformers.exporters.base import ExportArtifacts, ExportedComponent, HfExporter
+from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
+from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
@@ -100,7 +95,7 @@ class AutoExportConfigTest(unittest.TestCase):
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
 
     def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "No export format"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format None"):
             AutoExportConfig.from_dict({})
 
     def test_from_dict_unknown_format_raises(self):
@@ -133,11 +128,11 @@ class AutoHfExporterTest(unittest.TestCase):
     def test_from_config_raises_on_unknown_format(self):
         with self.assertRaisesRegex(ValueError, "Unknown export format"):
             AutoHfExporter.from_config({"export_format": "not_a_real_backend"})
-        with self.assertRaisesRegex(ValueError, "No export format"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format None"):
             AutoHfExporter.from_config({})
 
 
-@dataclasses.dataclass
+@dataclass
 class _StubConfig(DynamoConfig):
     export_format: str = "stub"
 
@@ -150,7 +145,7 @@ class _StubExporter(HfExporter):
     program_suffix = ".txt"
 
     def export_program(self, model, sample_inputs, config):
-        return "program", {"input_names": list(sample_inputs)}
+        return "program", ExportMetadata(input_names=list(sample_inputs))
 
     @classmethod
     def save_program(cls, program, path):
@@ -192,18 +187,18 @@ class RegistrationTest(unittest.TestCase):
         self.assertNotIn("stub", EXPORT_BACKENDS)
 
 
-class ExportArtifactsTest(unittest.TestCase):
+class ExportedModelTest(unittest.TestCase):
     def test_export_returns_single_model_component(self):
-        artifacts = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
-        self.assertEqual(list(artifacts), ["model"])
-        self.assertEqual(artifacts.program, "program")
-        self.assertEqual(artifacts["model"].metadata.input_names, ["input_ids"])
+        exported = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
+        self.assertEqual(list(exported.components), ["model"])
+        self.assertEqual(exported.program, "program")
+        self.assertEqual(exported.components["model"].metadata.input_names, ["input_ids"])
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
-        artifacts = ExportArtifacts({"prefill": component, "decode": component}, "stub")
+        exported = ExportedModel({"prefill": component, "decode": component}, "stub")
         with self.assertRaisesRegex(ValueError, "2 components"):
-            artifacts.program
+            exported.program
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
@@ -214,27 +209,27 @@ class ExportArtifactsTest(unittest.TestCase):
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend(_StubExporter)
             with tempfile.TemporaryDirectory() as directory:
-                ExportArtifacts(components, "stub", config, generation_config).save_pretrained(directory)
+                ExportedModel(components, "stub", config, generation_config).save_pretrained(directory)
                 self.assertTrue((Path(directory) / "decode.txt").is_file())
-                loaded = ExportArtifacts.from_pretrained(directory)
+                loaded = ExportedModel.from_pretrained(directory)
         self.assertEqual(loaded.export_format, "stub")
         self.assertEqual(
-            {name: component.program for name, component in loaded.items()},
+            {name: component.program for name, component in loaded.components.items()},
             {
                 "prefill": "prefill program",
                 "decode": "decode program",
             },
         )
-        self.assertEqual(loaded["prefill"].metadata, components["prefill"].metadata)
+        self.assertEqual(loaded.components["prefill"].metadata, components["prefill"].metadata)
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
 
     def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(OSError, "export.json"):
-                ExportArtifacts.from_pretrained(directory)
+                ExportedModel.from_pretrained(directory)
             with self.assertRaisesRegex(OSError, "export.json"):
-                ExportArtifacts.from_pretrained(directory, subfolder="onnx")
+                ExportedModel.from_pretrained(directory, subfolder="onnx")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -262,7 +257,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "factory boom"):
             with patch_attributes(
                 [
-                    (a, "method", lambda original: (lambda: "a-patched")),
+                    (a, "method", lambda original: lambda: "a-patched"),
                     (b, "method", _bad_factory),
                 ]
             ):

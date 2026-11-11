@@ -52,7 +52,7 @@ from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig, ExportFormat
-from .metadata import build_export_metadata
+from .metadata import ExportMetadata, build_export_metadata
 from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
 
 
@@ -94,9 +94,8 @@ class DynamoExporter(HfExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: DynamoConfig | dict[str, Any],
-    ) -> tuple[ExportedProgram, dict[str, Any]]:
-        config = self._as_config(config)
+        config: DynamoConfig,
+    ) -> tuple[ExportedProgram, ExportMetadata]:
         if config.quantizer is not None:
             config.quantizer.validate_environment(config.export_format)
 

@@ -18,17 +18,8 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
-    "auto": [
-        "EXPORT_BACKENDS",
-        "AutoExportConfig",
-        "AutoHfExporter",
-        "ExportBackend",
-        "get_export_config_class",
-        "get_exporter_class",
-        "get_runner_class",
-        "register_backend",
-    ],
-    "base": ["ExportArtifacts", "ExportedComponent", "HfExporter"],
+    "auto": ["AutoExportConfig", "AutoHfExporter", "register_backend"],
+    "base": ["ExportedComponent", "ExportedModel", "HfExporter"],
     "configs": [
         "DynamoConfig",
         "ExecutorchConfig",
@@ -54,21 +45,12 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
-    "runtimes": ["ExportedModel", "ModelRunner"],
+    "runtimes": ["ModelRunner"],
 }
 
 if TYPE_CHECKING:
-    from .auto import (
-        EXPORT_BACKENDS,
-        AutoExportConfig,
-        AutoHfExporter,
-        ExportBackend,
-        get_export_config_class,
-        get_exporter_class,
-        get_runner_class,
-        register_backend,
-    )
-    from .base import ExportArtifacts, ExportedComponent, HfExporter
+    from .auto import AutoExportConfig, AutoHfExporter, register_backend
+    from .base import ExportedComponent, ExportedModel, HfExporter
     from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
     from .exporter_dynamo import DynamoExporter
     from .exporter_executorch import ExecutorchExporter
@@ -87,7 +69,7 @@ if TYPE_CHECKING:
         OnnxRuntimeStaticConfig,
         PT2EQuantizer,
     )
-    from .runtimes import ExportedModel, ModelRunner
+    from .runtimes import ModelRunner
 else:
     import sys
 
