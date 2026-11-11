@@ -103,11 +103,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         torch.manual_seed(0)
         model = _tiny_model()
         decode_model, decode_inputs = _decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
-        decode = (
-            DynamoExporter()
-            .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .program.module()
-        )
+        decode = DynamoExporter().export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
 
         for query_len in (1, 2, 4):
             with self.subTest(query_len=query_len):
@@ -134,11 +130,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         torch.manual_seed(0)
         model = _tiny_model()
         decode_model, decode_inputs = _decompose_static_decode(model, torch.randint(0, 64, (1, 4)))
-        decode = (
-            DynamoExporter()
-            .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .program.module()
-        )
+        decode = DynamoExporter().export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
 
         past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
         past_key_values.reset()

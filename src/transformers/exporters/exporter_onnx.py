@@ -116,6 +116,7 @@ class OnnxExporter(DynamoExporter):
 
     >>> exporter = OnnxExporter()
     >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
+    >>> outputs = exported(**inputs)  # on ONNX Runtime
     >>> onnx_model = exported.program  # an `onnx_ir.Model`
     >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```

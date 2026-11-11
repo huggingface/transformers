@@ -103,6 +103,7 @@ class OpenVINOExporter(DynamoExporter):
 
     >>> exporter = OpenVINOExporter()
     >>> exported = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
+    >>> outputs = exported(**inputs)  # on OpenVINO
     >>> ov_model = exported.program  # an `openvino.Model`
     >>> exported.save_pretrained("exported")  # `openvino_model.xml` + `.bin`, its metadata and the model config
     ```

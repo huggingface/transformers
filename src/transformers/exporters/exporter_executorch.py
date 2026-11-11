@@ -120,6 +120,7 @@ class ExecutorchExporter(DynamoExporter):
 
     >>> exporter = ExecutorchExporter()
     >>> exported = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
+    >>> outputs = exported(**inputs)  # on the ExecuTorch runtime
     >>> exported.save_pretrained("exported")  # `model.pte`, its metadata and the model config
     ```
     """

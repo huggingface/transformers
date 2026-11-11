@@ -77,7 +77,7 @@ class DynamoExporter(HfExporter):
 
     >>> exporter = DynamoExporter()
     >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.program.module()(**inputs)
+    >>> outputs = exported(**inputs)
     >>> exported.save_pretrained("exported")  # `model.pt2`, its metadata and the model config
     ```
     """
