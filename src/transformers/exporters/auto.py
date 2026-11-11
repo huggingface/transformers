@@ -29,7 +29,7 @@ from .configs import (
     OnnxConfig,
     OpenVINOConfig,
 )
-from .runtimes.base import ModelRunner
+from .runners.base import ModelRunner
 
 
 logger = logging.get_logger(__name__)
@@ -48,15 +48,13 @@ class ExportBackend:
 
 EXPORT_BACKENDS: dict[str, ExportBackend] = {
     "executorch": ExportBackend(
-        ExecutorchConfig, "exporter_executorch.ExecutorchExporter", "runtimes.runner_executorch.ExecutorchModelRunner"
+        ExecutorchConfig, "exporter_executorch.ExecutorchExporter", "runners.executorch.ExecutorchModelRunner"
     ),
     "openvino": ExportBackend(
-        OpenVINOConfig, "exporter_openvino.OpenVINOExporter", "runtimes.runner_openvino.OpenVINOModelRunner"
+        OpenVINOConfig, "exporter_openvino.OpenVINOExporter", "runners.openvino.OpenVINOModelRunner"
     ),
-    "dynamo": ExportBackend(
-        DynamoConfig, "exporter_dynamo.DynamoExporter", "runtimes.runner_dynamo.DynamoModelRunner"
-    ),
-    "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter", "runtimes.runner_onnx.OnnxModelRunner"),
+    "dynamo": ExportBackend(DynamoConfig, "exporter_dynamo.DynamoExporter", "runners.dynamo.DynamoModelRunner"),
+    "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter", "runners.onnx.OnnxModelRunner"),
 }
 
 

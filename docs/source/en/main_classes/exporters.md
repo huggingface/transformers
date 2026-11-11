@@ -60,7 +60,7 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 ## ModelRunner
 
-[[autodoc]] exporters.runtimes.base.ModelRunner
+[[autodoc]] exporters.runners.base.ModelRunner
 
 ## DynamoExporter
 

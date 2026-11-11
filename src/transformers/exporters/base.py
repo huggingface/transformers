@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from ..cache_utils import Cache
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
-    from .runtimes.base import ModelRunner
+    from .runners.base import ModelRunner
 
 
 logger = logging.get_logger(__name__)

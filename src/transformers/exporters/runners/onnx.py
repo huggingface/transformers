@@ -93,7 +93,9 @@ class OnnxModelRunner(ModelRunner):
         source, directory = program.meta.get("path"), None
         if source is None:
             weights = sum(
-                value.const_value.nbytes for value in program.graph.initializers.values() if value.const_value
+                value.const_value.nbytes
+                for value in program.graph.initializers.values()
+                if value.const_value is not None
             )
             if weights < _SERIALIZE_LIMIT:
                 source = onnx_ir.to_proto(program).SerializeToString()
