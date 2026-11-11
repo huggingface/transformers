@@ -71,7 +71,6 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
         question_type_ids: torch.LongTensor,
         labels: torch.Tensor | None = None,
         loss_weights: torch.Tensor | None = None,
-        num_items_in_batch: torch.Tensor | int | None = None,
         **kwargs,
     ) -> JevDecisionOutput:
         r"""
@@ -81,15 +80,10 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
             must sum to one over that question's active options.
         loss_weights (`torch.Tensor` of shape `(1, num_questions)`, *optional*):
             Per-question weights. The weighted loss is divided by the number of valid questions, not the sum of weights.
-        num_items_in_batch (`int` or `torch.Tensor`, *optional*):
-            Number of valid questions used to normalize loss across accumulated microbatches. Defaults to the local
-            valid-question count. Pass this explicitly when accumulating batches with different question counts.
         """
         # A batch of one prompt
         marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]
-        hidden_states = self.model(input_ids=input_ids, use_cache=False, return_dict=True, **kwargs).last_hidden_state[
-            0
-        ]
+        hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state[0]
         logits = self.proj(hidden_states[marks - 1].to(self.proj.weight.dtype))
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
@@ -107,7 +101,7 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
                 is_score=question_type_ids == Question.questions_types.index("score"),
                 rps_weight=self.config.rps_weight,
                 loss_weights=loss_weights,
-                num_items_in_batch=num_items_in_batch,
+                **kwargs,
             )
         return JevDecisionOutput(loss=loss, logits=scores)
 
