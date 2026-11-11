@@ -69,14 +69,14 @@ with torch.no_grad():
     outputs = model.generate(
         **inputs,
         return_dict_in_generate=True,
-        output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+        output_hidden_states=[-1],
         max_new_tokens=1024,
     )
     hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
     mask_logits, mask_token_indices = model.decode_masks(
         outputs.sequences,
         hidden_states=hidden_states,
-        image_hidden_states=outputs.image_hidden_states,
+        image_hidden_states=outputs.image_last_hidden_state,
         image_grid_thw=inputs.image_grid_thw,
     )
 results = processor.post_process_grounding(

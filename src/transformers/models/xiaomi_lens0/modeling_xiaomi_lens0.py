@@ -835,7 +835,7 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, XiaomiLens
         ...     outputs = model.generate(
         ...         **inputs,
         ...         return_dict_in_generate=True,
-        ...         output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+        ...         output_hidden_states=[-1],
         ...         max_new_tokens=1024,
         ...     )
         ...     hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)

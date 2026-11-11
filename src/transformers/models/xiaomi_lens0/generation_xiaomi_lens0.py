@@ -28,11 +28,11 @@ class XiaomiLens0GenerateOutput(GenerateDecoderOnlyOutput):
         Processed prediction scores, one tensor per generated token. Returned when `output_scores=True`.
     logits (`tuple[torch.FloatTensor]`, *optional*):
         Unprocessed language-model logits, one tensor per generated token. Returned when `output_logits=True`.
-    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
+    image_last_hidden_state (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
         Vision patch features before spatial merging, in original input-image order.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_last_hidden_state: torch.FloatTensor | None = None
 
 
 class XiaomiLens0GenerationMixin(GenerationMixin):
@@ -46,7 +46,7 @@ class XiaomiLens0GenerationMixin(GenerationMixin):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ):
-        # Custom generate to return image_hidden_states for mask decoding.
+        # Custom generate to return image_last_hidden_state for mask decoding.
         if (
             pixel_values is not None or kwargs.get("pixel_values_videos") is not None
         ) and mm_encoder_outputs is not None:
@@ -59,14 +59,14 @@ class XiaomiLens0GenerationMixin(GenerationMixin):
             )
 
         image_outputs = mm_encoder_outputs.get("image")
-        image_hidden_states = None if image_outputs is None else image_outputs.last_hidden_state
+        image_last_hidden_state = None if image_outputs is None else image_outputs.last_hidden_state
 
         result = super().generate(
             inputs, generation_config=generation_config, mm_encoder_outputs=mm_encoder_outputs, **kwargs
         )
 
         if isinstance(result, GenerateDecoderOnlyOutput):
-            return XiaomiLens0GenerateOutput(**result, image_hidden_states=image_hidden_states)
+            return XiaomiLens0GenerateOutput(**result, image_last_hidden_state=image_last_hidden_state)
         return result
 
 

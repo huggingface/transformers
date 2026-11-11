@@ -368,7 +368,7 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 do_sample=False,
                 return_dict_in_generate=True,
                 output_logits=True,
-                output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+                output_hidden_states=[-1],
             )
             hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
             mask_logits, mask_token_indices = model.decode_masks(
@@ -427,7 +427,7 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 do_sample=False,
                 return_dict_in_generate=True,
                 output_logits=True,
-                output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+                output_hidden_states=[-1],
             )
             hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
             mask_logits, mask_token_indices = model.decode_masks(

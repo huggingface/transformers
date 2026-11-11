@@ -159,7 +159,7 @@ class XiaomiLens0Config(Qwen3_5Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
-        PreTrainedConfig.validate_architecture()
+        PreTrainedConfig.validate_architecture(self)
         if self.mask_decoder_config.hidden_size != self.text_config.hidden_size:
             raise ValueError("mask_decoder_config.hidden_size must match text_config.hidden_size")
         if self.mask_decoder_config.vision_hidden_size != self.vision_config.hidden_size:
@@ -507,7 +507,7 @@ class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration, Xiaom
         ...     outputs = model.generate(
         ...         **inputs,
         ...         return_dict_in_generate=True,
-        ...         output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+        ...         output_hidden_states=[-1],
         ...         max_new_tokens=1024,
         ...     )
         ...     hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
