@@ -645,6 +645,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         encoder_outputs = self.encoder(
@@ -675,6 +676,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
         embedding_output,
         encoder_hidden_states,
         past_key_values,
+        position_ids=None,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
@@ -682,6 +684,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                position_ids=position_ids,
             )
         else:
             attention_mask = create_bidirectional_mask(

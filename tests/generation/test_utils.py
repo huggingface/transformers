@@ -2315,6 +2315,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
+            # BERT-like models only use a causal mask with `is_decoder=True`, as in the other generation tests
+            config.is_decoder = True
+
             if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
                 self.skipTest("Model dummy inputs should contain text input ids")
 

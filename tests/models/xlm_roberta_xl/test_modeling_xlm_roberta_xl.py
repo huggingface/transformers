@@ -624,14 +624,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip("XLM Roberta XL doesn't work for some reason, FIXME")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("XLM Roberta XL doesn't work for some reason, FIXME")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
 
 @require_torch
 class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
