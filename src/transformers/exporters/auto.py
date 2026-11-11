@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
 
 from ..utils import logging
@@ -30,6 +29,7 @@ from .configs import (
     OpenVINOConfig,
 )
 from .runners.base import ModelRunner
+from .utils import import_dotted_path
 
 
 logger = logging.get_logger(__name__)
@@ -82,10 +82,7 @@ def _backend_for(export_format: ExportFormat | str | None) -> ExportBackend:
 
 def _resolve_class(value: type | str) -> type:
     """A registered exporter or runner: the class itself, or imported from its `"module.ClassName"` path."""
-    if isinstance(value, str):
-        module_name, class_name = value.rsplit(".", 1)
-        return getattr(importlib.import_module(f".{module_name}", __package__), class_name)
-    return value
+    return import_dotted_path(f"{__package__}.{value}") if isinstance(value, str) else value
 
 
 def get_exporter_class(export_format: ExportFormat | str | None) -> type[HfExporter]:
@@ -120,5 +117,6 @@ class AutoHfExporter:
 
     @classmethod
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
-        export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
-        return get_exporter_class(export_config_dict.get("export_format"))(**kwargs)
+        if isinstance(export_config, ExportConfigMixin):
+            return get_exporter_class(export_config.export_format)(**kwargs)
+        return get_exporter_class(export_config.get("export_format"))(**kwargs)

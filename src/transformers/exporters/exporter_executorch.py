@@ -73,12 +73,6 @@ if is_torch_available():
     from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
 
-    # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
-    _RUNTIME_ASSERT_TARGETS = (
-        torch.ops.aten._assert_tensor_metadata.default,
-        torch.ops.aten._assert_scalar.default,
-    )
-
 
 if is_executorch_available():
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
@@ -254,9 +248,11 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     can be a non-contiguous broadcast view (e.g. a batch dim expanded from 1), whose stride-0 is
     captured on the input placeholder and later rejected by `spec_prop` ("0 in strides is not
     supported"). `.contiguous()` is a no-op for already-contiguous tensors, so cache buffers keep
-    their identity for in-place static-cache writes.
+    their identity for in-place static-cache writes. In place, so precomputed kwargs reach the caller.
     """
-    return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
+    for name, value in sample_inputs.items():
+        sample_inputs[name] = torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), value)
+    return sample_inputs
 
 
 def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
@@ -1184,50 +1180,6 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
             len(seen),
             details,
         )
-
-
-@register_fx_program_fix("executorch")
-def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
-    """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts before lowering.
-
-    ``_assert_scalar`` lowers a ``torch._check`` on an unbacked symint (e.g. the image-token
-    count in ``get_placeholder_mask``) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
-    ``Piecewise`` result the ``_ModuleStackTracer`` used by ``to_edge_transform_and_lower``'s
-    decomposition pass cannot proxy (``... is not tracked with proxy``). The range facts these
-    asserts encode survive on ``exported_program.range_constraints`` (further capped by
-    ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
-    ``_assert_tensor_metadata`` (input dtype/device/layout) has no ``range_constraints`` equivalent,
-    but ExecuTorch re-validates every input's spec against the method signature at load / ``set_inputs``,
-    so those checks are re-established at runtime rather than lost.
-    """
-    for module in exported_program.graph_module.modules():
-        if not isinstance(module, torch.fx.GraphModule):
-            continue
-        asserts = [
-            node
-            for node in module.graph.nodes
-            if node.op == "call_function" and node.target in _RUNTIME_ASSERT_TARGETS
-        ]
-        # Erase the asserts and only the symint feeders they leave dead, walking back from each assert's
-        # inputs. We avoid a global `eliminate_dead_code` on purpose: it also visits unrelated dead nodes
-        # and on some graphs (e.g. `minimax_m3_vl` under static shapes) trips an fx `SystemError`/`KeyError`
-        # inside `_update_args_kwargs` erasing an unrelated `expand_as`. Targeted removal only touches the
-        # assert chain, so those unrelated nodes are left for the downstream lowering passes to clean up.
-        stack = [feeder for node in asserts for feeder in node.all_input_nodes]
-        for node in asserts:
-            module.graph.erase_node(node)
-        # A feeder can be reached more than once (shared input / diamond); track erased nodes so we
-        # never call `erase_node` twice on the same one (its `users` is empty after the first erase,
-        # which would otherwise pass the guard below and corrupt the graph).
-        erased = set()
-        while stack:
-            feeder = stack.pop()
-            if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
-                continue
-            stack.extend(feeder.all_input_nodes)
-            module.graph.erase_node(feeder)
-            erased.add(feeder)
-        module.recompile()
 
 
 @register_fx_program_fix("executorch")

@@ -45,7 +45,6 @@ import copy
 import functools
 import operator
 from collections.abc import MutableMapping, Sequence
-from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -55,12 +54,13 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
-from .metadata import ExportMetadata
+from .metadata import ExportMetadata, record_output_structure
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
-    duplicate_leaf_tensors,
-    get_leaf_tensors,
+    disambiguate_io_names,
+    patch_model_outputs,
+    quantize_converted_model,
     register_fx_node_fix,
     register_patch,
 )
@@ -135,7 +135,7 @@ class OnnxExporter(DynamoExporter):
         sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig,
     ) -> tuple[onnx_ir.Model, ExportMetadata]:
-        with patch_model_outputs(model) as (inputs_names, outputs_names, out_specs), apply_patches("onnx"):
+        with patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs), apply_patches("onnx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
@@ -143,21 +143,18 @@ class OnnxExporter(DynamoExporter):
                 exported_program,
                 args=(),
                 input_names=inputs_names,
-                output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
                 opset_version=config.opset_version,
                 optimize=config.optimize,
             )
 
+        _name_graph_outputs(onnx_program.model.graph, outputs_names)
         apply_onnx_ir_fixes(onnx_program)
 
-        quantizer = config.quantizer
-        if quantizer is not None and not quantizer.quantizes_fx_graph:
-            onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
-
-        _update_onnx_metadata(metadata, onnx_program.model, out_specs[-1])
-        return onnx_program.model, metadata
+        onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
+        record_output_structure(metadata, traced_outputs[-1])
+        return onnx_model, metadata
 
     @classmethod
     def save_program(cls, program: onnx_ir.Model, path) -> None:
@@ -194,56 +191,20 @@ class OnnxExporter(DynamoExporter):
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
-# Model forward wrapper and I/O naming used by OnnxExporter.export.
+# Output naming.
 
 
-def _update_onnx_metadata(
-    metadata: ExportMetadata, onnx_model: onnx_ir.Model, out_spec: torch.utils._pytree.TreeSpec
-) -> None:
-    """Record the graph's own input and output names (dotted leaf paths, with `input.` / `output.` prefixes on mutated
-    inputs), and the spec of what the model returned."""
-    metadata.input_names = [value.name for value in onnx_model.graph.inputs]
-    metadata.output_names = [value.name for value in onnx_model.graph.outputs]
-    metadata.out_spec = torch.utils._pytree.treespec_dumps(out_spec)
-
-
-@contextmanager
-def patch_model_outputs(model):
-    """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
-    and capture the input/output tensor names from the traced forward in the yielded
-    `(inputs_names, outputs_names, out_specs)` lists, with the pytree spec of what the model returned. Traced ints
-    in it (a sliding cache's length) are no graph outputs, so they are made concrete and join the spec's context.
-    """
-
-    inputs_names: list[str] = []
-    outputs_names: list[str] = []
-    out_specs: list[torch.utils._pytree.TreeSpec] = []
-    original_forward = model.forward
-
-    @functools.wraps(original_forward)
-    def patched_forward(*args, **kwargs):
-        # Before the forward: a lazily initialized cache grows its tensors during it, which aren't graph inputs.
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
-        original_outputs = original_forward(*args, **kwargs)
-        concrete = torch.utils._pytree.tree_map_only(torch.SymInt, lambda value: value.node.hint, original_outputs)
-        out_specs.append(torch.utils._pytree.tree_structure(concrete))
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_outputs))
-        outputs_names.extend(outputs.keys())
-        return outputs
-
-    try:
-        model.forward = patched_forward
-        yield inputs_names, outputs_names, out_specs
-    finally:
-        model.forward = original_forward
-
-
-def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
-    """Prefix any name that appears in both lists with `input.` / `output.`."""
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-    return inputs_names, outputs_names
+def _name_graph_outputs(graph: onnx_ir.Graph, names: list[str]) -> None:
+    """Name the graph's outputs; one that returns an input as is goes through an `Identity`, so the input keeps its
+    name."""
+    for index, (value, name) in enumerate(zip(list(graph.outputs), names)):
+        if value.is_graph_input():
+            identity = onnx_ir.node("Identity", [value])
+            output = identity.outputs[0]
+            output.shape, output.type = value.shape, value.type
+            graph.append(identity)
+            graph.outputs[index] = value = output
+        value.name = name
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
@@ -399,38 +360,6 @@ def _patch_optimize_ir(original):
         return original(model, *args, **kwargs)
 
     return patch
-
-
-def _patch_cummax_or_cummin(original, *, mode: str):
-    """Decompose cummax/cummin via triangular-mask reduction (O(N^2) memory)."""
-
-    def patch(input, dim):
-        n = input.shape[dim]
-        x = input.movedim(dim, -1)  # (..., n)
-        x_grid = x.unsqueeze(-2).expand(*x.shape[:-1], n, n)  # (..., n, n)
-        include = torch.ones(n, n, dtype=torch.bool, device=input.device).tril()
-        if input.dtype == torch.bool:
-            fill_val = mode != "max"
-        elif input.is_floating_point():
-            fill_val = torch.finfo(input.dtype).min if mode == "max" else torch.finfo(input.dtype).max
-        else:
-            fill_val = torch.iinfo(input.dtype).min if mode == "max" else torch.iinfo(input.dtype).max
-        fill = torch.full((), fill_val, dtype=input.dtype, device=input.device)
-        masked = torch.where(include, x_grid, fill)
-        out = masked.max(dim=-1) if mode == "max" else masked.min(dim=-1)
-        return out.values.movedim(-1, dim), out.indices.movedim(-1, dim)
-
-    return patch
-
-
-@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
-def _patch_cummax(original):
-    return _patch_cummax_or_cummin(original, mode="max")
-
-
-@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
-def _patch_cummin(original):
-    return _patch_cummax_or_cummin(original, mode="min")
 
 
 @register_patch("onnx", "torch.chunk", "torch.Tensor.chunk")
@@ -812,28 +741,6 @@ def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> boo
     with gm.graph.inserting_before(node):
         new = gm.graph.call_function(torch.ops.aten.index_put.default, args=node.args, kwargs=node.kwargs)
     node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-_ASSERTION_OPS = set()
-if is_torch_available():
-    _ASSERTION_OPS.update(
-        {
-            torch.ops.aten._assert_async.default,
-            torch.ops.aten._assert_async.msg,
-            torch.ops.aten._assert_scalar.default,
-            torch.ops.aten._assert_tensor_metadata.default,
-            torch.ops.aten.sym_constrain_range_for_size.default,
-        }
-    )
-
-
-@register_fx_node_fix("onnx")
-def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Erase assertion / shape-constraint nodes that have no ONNX equivalent."""
-    if node.target not in _ASSERTION_OPS:
-        return False
     gm.graph.erase_node(node)
     return True
 

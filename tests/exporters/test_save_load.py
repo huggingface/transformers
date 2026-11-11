@@ -79,8 +79,8 @@ class DynamoSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
 @require_onnxruntime
 @pytest.mark.onnx_export_test
 class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
-    def test_saved_metadata_names_match_model(self):
-        """The saved metadata names the inputs and outputs of the saved `.onnx` file, cache pairs included."""
+    def test_saved_graph_prefixes_mutated_inputs(self):
+        """The saved `.onnx` file names a mutated cache's inputs with an `input.` prefix."""
         import onnxruntime as ort
 
         from transformers.exporters import OnnxConfig, OnnxExporter
@@ -88,9 +88,7 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, _ = self._save_and_load_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
             session = ort.InferenceSession(str(Path(directory) / entry["file"]), providers=["CPUExecutionProvider"])
-            self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
-            self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
-        self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
+        self.assertTrue(any(node.name.startswith("input.") for node in session.get_inputs()))
 
     def test_saved_program_runs(self):
         """A loaded `.onnx` runs like the exported program, ONNX Runtime reading its weights from
@@ -216,9 +214,8 @@ class ExecutorchSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
 @require_openvino
 @pytest.mark.openvino_export_test
 class OpenVINOSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
-    def test_saved_metadata_names_match_model(self):
-        """The saved metadata names the ports of the saved `.xml` model: with `stateful`, no cache ports and a
-        `beam_idx` input."""
+    def test_saved_model_is_stateful(self):
+        """The saved `.xml` model, `stateful`, has no cache ports but a `beam_idx` input."""
         import openvino
 
         from transformers.exporters import OpenVINOConfig, OpenVINOExporter
@@ -227,9 +224,7 @@ class OpenVINOSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
             entry, _ = self._save_and_load_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
             self.assertEqual(entry["file"], "openvino_model.xml")
             ov_model = openvino.Core().read_model(str(Path(directory) / entry["file"]))
-            self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
-            self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
-        self.assertIn("beam_idx", entry["metadata"]["input_names"])
+        self.assertIn("beam_idx", [port.get_any_name() for port in ov_model.inputs])
 
     def test_loaded_model_saves_in_place(self):
         """A loaded model saves back into the directory it was read from, whose weights OpenVINO still maps."""

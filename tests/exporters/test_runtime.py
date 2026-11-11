@@ -403,7 +403,7 @@ class ExportedModelTest(unittest.TestCase):
         exported = OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig())
         self.assertIs(model.model.norm.input_min._base, base)
         # The graph takes and returns float32, the trace's, and runs in the model's own precision.
-        self.assertEqual(exported.components["model"].metadata.dtype, "float32")
+        self.assertEqual(exported.components["model"].metadata.export_dtype, "float32")
         for option in ("INFERENCE_PRECISION_HINT", "KV_CACHE_PRECISION"):
             self.assertEqual(exported.program.get_rt_info(["runtime_options", option]).astype(str), "bf16")
         # OpenVINO hands a bf16 model's outputs back in fp32.
@@ -452,6 +452,88 @@ class ExportedModelTest(unittest.TestCase):
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         self._check_loads_cache_output(OnnxExporter(), OnnxConfig())
+
+    def _check_runs_non_tensor_outputs(self, exporter, config):
+        """Outputs that are no graph outputs come back as the model returned them, also once saved and loaded: the
+        `None`s of hidden states asked for by layer index (`output_hidden_states=[2]`), MaskFormer-Swin's spatial
+        sizes."""
+        from transformers.exporters import ExportedModel
+        from transformers.modeling_outputs import BaseModelOutput
+
+        class NonTensorOutputs(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.scale = torch.nn.Parameter(torch.full((1,), 2.0))
+
+            def forward(self, hidden_states):
+                hidden_states = hidden_states * self.scale
+                return BaseModelOutput(
+                    last_hidden_state=hidden_states, hidden_states=(None, (4, 5), hidden_states + 1)
+                )
+
+        model, inputs = NonTensorOutputs().eval(), {"hidden_states": torch.randn(4, 5)}
+        with torch.no_grad():
+            expected = model(**inputs)
+        exported = exporter.export(model, dict(inputs), config)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            for outputs in (
+                exported.to("cpu")(**inputs),
+                ExportedModel.from_pretrained(directory, device="cpu")(**inputs),
+            ):
+                self.assertEqual(outputs.hidden_states[:2], (None, (4, 5)))
+                torch.testing.assert_close(outputs.hidden_states[2], expected.hidden_states[2])
+                torch.testing.assert_close(outputs.last_hidden_state, expected.last_hidden_state)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_non_tensor_outputs(self):
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        self._check_runs_non_tensor_outputs(OnnxExporter(), OnnxConfig())
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino_non_tensor_outputs(self):
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        self._check_runs_non_tensor_outputs(OpenVINOExporter(), OpenVINOConfig())
+
+    def test_unsaveable_outputs_refused(self):
+        from transformers.exporters.metadata import ExportMetadata, record_output_structure
+
+        with self.assertRaisesRegex(ValueError, "can't save"):
+            record_output_structure(ExportMetadata(), {"logits": torch.ones(1), "device": torch.device("cpu")})
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_bool_and_passthrough_outputs(self):
+        """A bool output comes back as bool, and an output returning an input as is leaves the input its name, also
+        without the optimizer (ProphetNet's encoder states)."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        class BoolAndPassthrough(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.scale = torch.nn.Parameter(torch.full((1,), 2.0))
+
+            def forward(self, hidden_states, encoder_states):
+                return {
+                    "logits": hidden_states * self.scale,
+                    "mask": hidden_states > 0,
+                    "encoder_last_hidden_state": encoder_states,
+                }
+
+        model = BoolAndPassthrough().eval()
+        inputs = {"hidden_states": torch.randn(2, 3), "encoder_states": torch.randn(2, 4)}
+        exported = OnnxExporter().export(model, dict(inputs), OnnxConfig(optimize=False))
+        self.assertEqual([value.name for value in exported.program.graph.inputs], list(inputs))
+        outputs = exported.to("cpu")(**inputs)
+        self.assertEqual(outputs["mask"].dtype, torch.bool)
+        torch.testing.assert_close(outputs["mask"], inputs["hidden_states"] > 0)
+        torch.testing.assert_close(outputs["encoder_last_hidden_state"], inputs["encoder_states"])
 
     def test_call_refuses_several_components(self):
         from transformers.exporters import ExportedComponent, ExportedModel, ExportMetadata

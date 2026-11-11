@@ -20,7 +20,7 @@ from typing import Any
 
 from ...utils.import_utils import is_openvino_available, is_torch_available
 from ..metadata import ExportMetadata
-from ..quantizers.utils import openvino_feed
+from ..utils import openvino_feed
 from .base import ModelRunner
 
 

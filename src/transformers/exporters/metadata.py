@@ -23,7 +23,7 @@ from typing import Any
 
 from .. import __version__
 from ..utils.import_utils import _is_package_available, is_torch_available
-from .utils import get_leaf_tensors
+from .utils import module_dtype
 
 
 if is_torch_available():
@@ -41,17 +41,7 @@ def _describe_traced_kwarg(value: Any) -> dict[str, Any]:
         }
     if isinstance(value, Mapping):
         return {"leaves": {str(key): _describe_traced_kwarg(leaf) for key, leaf in value.items()}}
-    # A scalar (or `None`) is a constant of the program: its value, which a torch program still takes.
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return {"value": value}
     return {"container": type(value).__name__}
-
-
-def _traced_output_names(exported_program) -> list[str]:
-    """The model's output leaf names in order, read off the program's output pytree."""
-    spec = exported_program.call_spec.out_spec
-    placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
-    return list(get_leaf_tensors(torch.utils._pytree.tree_unflatten(placeholders, spec)))
 
 
 def _package_versions(packages: Iterable[str]) -> dict[str, str]:
@@ -70,16 +60,17 @@ class ExportMetadata:
 
     architecture: str | None = None
     packages: dict[str, str] = field(default_factory=dict)
-    dtype: str | None = None
-    device: str | None = None
+    export_config: dict[str, Any] = field(default_factory=dict)
+    export_dtype: str | None = None
+    export_device: str | None = None
     kwargs: dict[str, dict] = field(default_factory=dict)
-    # Flat graph order.
-    input_names: list[str] = field(default_factory=list)
-    output_names: list[str] = field(default_factory=list)
-    # `torch.export`'s input and output pytree specs, as `treespec_dumps` writes them.
+    # Pytree specs, from `treespec_dumps`.
     in_spec: str | None = None
     out_spec: str | None = None
-    export_config: dict[str, Any] = field(default_factory=dict)
+    # Scalar kwargs traced as constants.
+    in_constants: dict[str, Any] = field(default_factory=dict)
+    # Non-tensor output leaves, as `[leaf index, value]`.
+    out_constants: list = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, values: Mapping[str, Any]) -> ExportMetadata:
@@ -88,30 +79,35 @@ class ExportMetadata:
         return cls(**{name: value for name, value in values.items() if name in known})
 
 
-def module_dtype(module: torch.nn.Module) -> str:
-    """`module`'s floating-point precision, off its parameters: a split-out component is a plain `nn.Module` with no
-    `.dtype`."""
-    return str(
-        next((p.dtype for p in module.parameters() if p.is_floating_point()), torch.get_default_dtype())
-    ).removeprefix("torch.")
-
-
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
 ) -> ExportMetadata:
-    """Record a graph's precision, traced kwargs, flat input/output order and pytree specs."""
-    input_specs = exported_program.graph_signature.input_specs
+    """Record a graph's precision, traced kwargs, constants and pytree specs."""
     return ExportMetadata(
         architecture=type(model).__name__,
         packages=_package_versions(packages),
-        dtype=module_dtype(model),
-        device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
+        export_dtype=str(module_dtype(model) or torch.get_default_dtype()).removeprefix("torch."),
+        export_device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         kwargs={name: _describe_traced_kwarg(value) for name, value in inputs.items()},
-        input_names=[spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"],
-        output_names=_traced_output_names(exported_program),
+        in_constants={
+            name: value
+            for name, value in inputs.items()
+            if value is None or isinstance(value, (bool, int, float, str))
+        },
         in_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec),
         out_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec),
     )
+
+
+def record_output_structure(metadata: ExportMetadata, outputs: Any) -> None:
+    """Record what the model returned for a graph that returns its tensors only: the spec, and the other leaves."""
+    leaves, spec = torch.utils._pytree.tree_flatten(outputs)
+    constants = [[index, leaf] for index, leaf in enumerate(leaves) if not isinstance(leaf, torch.Tensor)]
+    unsaveable = [leaf for _, leaf in constants if not (leaf is None or isinstance(leaf, (bool, int, float, str)))]
+    if unsaveable:
+        raise ValueError(f"The model returns {unsaveable}, which an export can't save: only tensors and scalars.")
+    metadata.out_spec = torch.utils._pytree.treespec_dumps(spec)
+    metadata.out_constants = constants
 
 
 def register_treespec_types(dumped: str) -> None:

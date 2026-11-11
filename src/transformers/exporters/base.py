@@ -125,7 +125,7 @@ class ExportedModel(PushToHubMixin):
     @property
     def dtype(self) -> torch.dtype:
         """The precision the export was traced at."""
-        return getattr(torch, next(iter(self.components.values())).metadata.dtype)
+        return getattr(torch, next(iter(self.components.values())).metadata.export_dtype)
 
     def to(self, device=None, **runner_kwargs) -> ExportedModel:
         """Load the programs on their backend's runtime, on `device` (the backend's default when `None`).
@@ -344,7 +344,7 @@ class HfExporter(ABC):
     def __init__(self):
         self.validate_environment()
 
-    def validate_environment(self, *args, **kwargs):
+    def validate_environment(self):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
         check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
 

@@ -32,8 +32,7 @@ class ModelRunner(ABC):
     def __init__(self, metadata: ExportMetadata):
         self.metadata = metadata
         self.out_spec = load_treespec(metadata.out_spec)
-        # The scalars the program was traced with, which a caller may leave out (`generate` does).
-        self.traced_constants = {name: spec["value"] for name, spec in metadata.kwargs.items() if "value" in spec}
+        self.out_constants = dict(metadata.out_constants)
 
     @property
     @abstractmethod
@@ -43,12 +42,16 @@ class ModelRunner(ABC):
     @property
     def dtype(self) -> torch.dtype:
         """The precision the program was exported at."""
-        return getattr(torch, self.metadata.dtype)
+        return getattr(torch, self.metadata.export_dtype)
 
     def unflatten(self, outputs: list) -> Any:
-        """The model's own outputs, rebuilt from a program's flat ones, where they come last (after the copies of
-        mutated inputs a lowering adds)."""
-        return torch.utils._pytree.tree_unflatten(outputs[len(outputs) - self.out_spec.num_leaves :], self.out_spec)
+        """Rebuild the model's outputs from the program's flat ones (which come last) and the recorded constants."""
+        tensors = iter(outputs[len(outputs) - (self.out_spec.num_leaves - len(self.out_constants)) :])
+        leaves = [
+            self.out_constants[index] if index in self.out_constants else next(tensors)
+            for index in range(self.out_spec.num_leaves)
+        ]
+        return torch.utils._pytree.tree_unflatten(leaves, self.out_spec)
 
     @classmethod
     @abstractmethod

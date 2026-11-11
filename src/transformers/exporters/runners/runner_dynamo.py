@@ -48,7 +48,7 @@ class DynamoModelRunner(ModelRunner):
         return cls(module if device is None else module.to(device), metadata)
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
-        kwargs = {**self.traced_constants, **kwargs}
+        kwargs = {**self.metadata.in_constants, **kwargs}
         ordered = {name: kwargs[name] for name in self.traced_kwarg_order if name in kwargs}
         with torch.no_grad():
             return self.module(**ordered, **{name: value for name, value in kwargs.items() if name not in ordered})

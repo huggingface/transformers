@@ -23,8 +23,8 @@ from typing import Any
 
 from ...utils.import_utils import is_onnx_available, is_onnxruntime_available, is_onnxscript_available
 from ..configs import ExportFormat
+from ..utils import onnx_feed
 from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
-from .utils import onnx_feed
 
 
 if is_onnx_available():
