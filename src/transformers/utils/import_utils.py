@@ -174,7 +174,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.18.0"
+KERNELS_MIN_VERSION = "0.18.2"
 KERNELS_MAX_VERSION = "0.19.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
@@ -1067,6 +1067,21 @@ def is_onnxscript_available() -> bool:
 @_make_compile_constant
 def is_openvino_available() -> bool:
     return _is_package_available("openvino")[0]
+
+
+@lru_cache
+def is_openvino_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2026.5.0.dev20260901
+    matches 2026.5.0).
+    """
+    available, openvino_version = _is_package_available("openvino", return_version=True)
+    if not available:
+        return False
+    if accept_dev:
+        return version.parse(version.parse(openvino_version).base_version) >= version.parse(library_version)
+    return version.parse(openvino_version) >= version.parse(library_version)
 
 
 @lru_cache

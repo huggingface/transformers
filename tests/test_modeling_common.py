@@ -645,10 +645,12 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
                     mock.reset_mock()
 
-        # all non-eager implementations must numerically match eager
+        # all non-eager implementations must numerically match eager. The experts are computed in a different order,
+        # so half precision outputs can differ by a few rounding steps (1 step is ~1.2e-4 around 0.2 in fp16)
+        tol = {torch.float32: 1e-4, torch.float16: 1e-3, torch.bfloat16: 5e-3}[dtype]
         eager_outputs = outputs.pop("eager")
         for impl, impl_outputs in outputs.items():
-            torch.testing.assert_close(eager_outputs, impl_outputs, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(eager_outputs, impl_outputs, rtol=tol, atol=tol)
 
 
 def _config_zero_init(config):
@@ -1923,6 +1925,16 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
 
+    def _logits_scored_by_loss(self, model, logits):
+        """
+        Returns the positions of `logits` that the language modeling loss is computed on, i.e. the ones
+        `shift_labels` lines up with. That is all of them for almost every head; override for heads whose logits
+        also cover positions the loss skips.
+
+        Currently only used by `test_causal_lm_loss_honors_shift_labels`, and only overridden by `GitModelTest`.
+        """
+        return logits
+
     def test_causal_lm_loss_honors_shift_labels(self):
         """
         Decoder-only LM heads shift ``labels`` by one internally to align them with the logits. Sequence and
@@ -1964,17 +1976,16 @@ class ModelTesterMixin(ExportTesterMixin):
                 set_seed(42)
                 model = model_class(model_config).to(torch_device).eval()
 
+                set_seed(42)
+                with torch.no_grad():
+                    probe_logits = getattr(model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None)
+
                 # `_prepare_for_class` builds targets only for the heads it knows about; read the shape off the
                 # logits for the others.
                 target_shape = self._prepare_for_class(inputs_dict, model_class, return_labels=True).get("labels")
                 if isinstance(target_shape, torch.Tensor):
                     target_shape = target_shape.shape
                 else:
-                    set_seed(42)
-                    with torch.no_grad():
-                        probe_logits = getattr(
-                            model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None
-                        )
                     if not isinstance(probe_logits, torch.Tensor) or probe_logits.ndim != 3:
                         self.skipTest(reason="Tester does not build targets for this head")
                     target_shape = probe_logits.shape[:2]
@@ -1985,22 +1996,29 @@ class ModelTesterMixin(ExportTesterMixin):
                     generator = torch.Generator().manual_seed(seed)
                     return torch.randint(2, target_shape, generator=generator, dtype=torch.long).to(torch_device)
 
-                def reported_loss(label_seed, shift_label_seed, model_class=model_class, model=model):
+                def reported_loss(labels, shift_labels, model_class=model_class, model=model):
                     inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                    inputs["labels"] = targets(label_seed)
-                    inputs["shift_labels"] = targets(shift_label_seed)
+                    inputs["labels"] = labels
+                    inputs["shift_labels"] = shift_labels
                     # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the three
                     # forward passes below differ only in the targets they are given.
                     set_seed(42)
                     with torch.no_grad():
                         return model(**inputs).loss
 
-                baseline = reported_loss(0, 0)
+                labels = targets(0)
+                # Two random `shift_labels` can leave the loss bit-identical: on nearly flat logits, the per-token
+                # changes cancel out in the mean (see #50533). The least likely tokens raise every per-token loss
+                # above the most likely ones, so the mean has to move.
+                scored_logits = self._logits_scored_by_loss(model, probe_logits)
+                most_likely, least_likely = scored_logits.argmax(dim=-1), scored_logits.argmin(dim=-1)
+
+                baseline = reported_loss(labels, most_likely)
                 self.assertIsNotNone(
                     baseline, msg=f"{model_class.__name__}: no loss is returned when targets are passed"
                 )
                 self.assertFalse(
-                    torch.equal(baseline, reported_loss(0, 1)),
+                    torch.equal(baseline, reported_loss(labels, least_likely)),
                     msg=(
                         f"{model_class.__name__}: the training loss does not depend on `shift_labels`. Pre-shifted "
                         f"targets are the only correct ones under sequence/context parallelism, so the loss must "
@@ -2008,7 +2026,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
                 self.assertTrue(
-                    torch.equal(baseline, reported_loss(1, 0)),
+                    torch.equal(baseline, reported_loss(targets(1), most_likely)),
                     msg=(
                         f"{model_class.__name__}: the training loss still depends on `labels` although "
                         f"`shift_labels` was passed. `shift_labels` holds the targets already aligned with the "
@@ -5607,6 +5625,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_image_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5622,6 +5641,49 @@ class ModelTesterMixin(ExportTesterMixin):
 
             set_value_subconfigs(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def _check_features_ignore_output_hidden_states(self, model_class, config, inputs_dict, method_name):
+        """
+        The features are the same whether or not all hidden states are requested. Models that build their features
+        from `vision_feature_layer(s)` only capture those hidden states by default, matching a full capture.
+        """
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k != "output_hidden_states"}
+        model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = getattr(model, method_name)(**inputs_dict, return_dict=True)
+            outputs_all = getattr(model, method_name)(**inputs_dict, output_hidden_states=True, return_dict=True)
+
+        def features(output):
+            return {
+                k: features(v) if isinstance(v, dict) else v
+                for k, v in output.items()
+                if not k.endswith(("hidden_states", "attentions")) and isinstance(v, (torch.Tensor, dict, tuple, list))
+            }
+
+        torch.testing.assert_close(features(outputs), features(outputs_all))
+
+        # Most models only capture hidden states when requested, so there is nothing to compare
+        hidden_states = outputs.hidden_states
+        if hidden_states is None:
+            return
+
+        hidden_states_all = outputs_all.hidden_states
+        self.assertIsNotNone(hidden_states_all, "`output_hidden_states=True` should capture all hidden states")
+        self.assertEqual(len(hidden_states), len(hidden_states_all))
+        for h, h_all in zip(hidden_states, hidden_states_all):
+            self.assertIsNotNone(h_all, "`output_hidden_states=True` should capture all hidden states")
+            if h is not None:
+                torch.testing.assert_close(h, h_all)
+
+        uses_vision_feature_layer = False
+        for sub_config in [config, *(getattr(config, key, None) for key in config.sub_configs)]:
+            uses_vision_feature_layer |= getattr(sub_config, "vision_feature_layer", None) is not None
+
+        if uses_vision_feature_layer:
+            self.assertTrue(
+                any(h is None for h in hidden_states),
+                "Features built from `vision_feature_layer` should only capture the hidden states they use",
+            )
 
     def test_get_image_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
@@ -5757,6 +5819,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_audio_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5937,6 +6000,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_video_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -6187,6 +6251,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 inputs = self._prepare_for_class(inputs_dict, model_class)
 
                 # Despite the previous skip based on decorators, some models do not propagate the outputs correctly.......
+                torch.manual_seed(0)  # Some models are random in eval (e.g. ViTMAE's masking)
                 out = model(**inputs, output_hidden_states=True)
                 if "hidden_states" in out:
                     hidden_states = out.hidden_states
@@ -6197,28 +6262,29 @@ class ModelTesterMixin(ExportTesterMixin):
                         f"{model_class.__name__} does not propagate hidden states correctly or uses another name"
                     )
 
-                skips_first_input = any(
-                    not module._can_record_outputs["hidden_states"].capture_initial_hidden_state
+                # Indices select hidden states as they appear in the full output, so negative indices count from the end.
+                # They are resolved from the config, so every capturing model's config must define the number of layers
+                supports_negative_indices = all(
+                    getattr(module.config, getattr(specs, "num_hidden_layers_key", "num_hidden_layers"), None)
+                    is not None
                     for module in model.modules()
                     if isinstance(module, PreTrainedModel)
-                    and hasattr(
-                        (module._can_record_outputs or {}).get("hidden_states", None), "capture_initial_hidden_state"
-                    )
+                    and (specs := (module._can_record_outputs or {}).get("hidden_states")) is not None
                 )
-                N_layers = len(hidden_states) if skips_first_input else len(hidden_states) - 1
-                # Capture one every 2 layers
-                indices_to_capture = list(range(0, N_layers, 2))
+                num_hidden_states = len(hidden_states)
+                indices_to_capture = [*range(0, num_hidden_states, 2)]
+                if supports_negative_indices:
+                    indices_to_capture.append(-1)
+                torch.manual_seed(0)
                 out = model(**inputs, output_hidden_states=indices_to_capture)
-
-                hidden_states = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
-                # hidden_states = out.hidden_states
-                # We should have the same number of captured hidden_states, i.e. we do not add the first input
-                self.assertEqual(len(hidden_states), N_layers)
-                # assert we correctly captured the layers
-                self.assertTrue(all(hidden_states[i] is None for i in range(N_layers) if i not in indices_to_capture))
-                self.assertTrue(
-                    all(isinstance(hidden_states[i], torch.Tensor) for i in range(N_layers) if i in indices_to_capture)
-                )
+                captured = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
+                self.assertEqual(len(captured), num_hidden_states)
+                kept = {i % num_hidden_states for i in indices_to_capture}
+                for i in range(num_hidden_states):
+                    if i in kept:
+                        torch.testing.assert_close(captured[i], hidden_states[i])
+                    else:
+                        self.assertIsNone(captured[i])
 
     @require_kernels
     @require_torch_accelerator

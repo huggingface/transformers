@@ -212,7 +212,7 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
 
 
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
-    valid_processor_kwargs = AttributeError()
+    images_kwargs = AttributeError()
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "num_local_patches", "patches_grid"]
 
     def __init__(
@@ -631,6 +631,8 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
 
 @auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
+    config: UnlimitedOcrVisionConfig
+
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         del self.query_768_resolution

@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoModel
 from .configuration_deepseek_vl_hybrid import DeepseekVLHybridConfig
 
@@ -381,12 +382,12 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
 
+    @select_hidden_states(lambda self: self.global_attn_index + 1)
     def get_high_res_image_features(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        kwargs["output_hidden_states"] = True
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
             return_dict=True,
