@@ -107,7 +107,8 @@ class ExportedModelPushToHubTester(unittest.TestCase):
         self.assertEqual(loaded.components["model"].metadata, exported.components["model"].metadata)
         self.assertEqual(loaded.config.hidden_size, exported.config.hidden_size)
         torch.testing.assert_close(
-            _run_onnx_program(loaded.program, inputs), _run_onnx_program(exported.program, inputs)
+            _run_onnx_program(loaded.program, inputs),
+            _run_onnx_program(exported.program, inputs),
         )
 
     def test_push_to_hub(self):

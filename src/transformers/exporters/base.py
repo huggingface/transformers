@@ -235,7 +235,7 @@ class HfExporter(ABC):
                 Backend-specific configuration.
 
         Returns:
-            `tuple[Any, ExportMetadata]`: The backend's program object (`ExportedProgram`, `ONNXProgram`,
+            `tuple[Any, ExportMetadata]`: The backend's program object (`ExportedProgram`, `onnx_ir.Model`,
             `ExecutorchProgramManager`, `openvino.Model`) and the metadata recorded while tracing it
             ([`~exporters.metadata.build_export_metadata`]), returned separately since only some formats can
             carry it.

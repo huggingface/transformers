@@ -692,16 +692,25 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
+def _run_onnx_program(onnx_model, inputs) -> dict:
+    """Run an ONNX graph (an `onnx_ir.Model`) as an `ONNXProgram` and return outputs as a `{name: torch.Tensor}` dict.
+    A loaded graph runs from its saved file (`meta["path"]`), whose weights `onnx_ir` can't read through symlinks.
 
-    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
-    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
+    Outputs come back on CPU whatever device eager ran on, so callers compare them the same way across backends (with
+    `check_device=False`).
     """
+    import onnxruntime as ort
+    from torch.onnx import ONNXProgram
+
+    onnx_program = ONNXProgram(onnx_model, None)
+    if (path := onnx_model.meta.get("path")) is not None:
+        # The providers `ONNXProgram` picks for a fresh graph, so a loaded one runs where it would.
+        available = ort.get_available_providers()
+        providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+        onnx_program.initialize_inference_session(lambda _: ort.InferenceSession(path, providers=providers))
     set_seed(1234)
-    onnx_inputs = get_leaf_tensors(inputs)
-    onnx_outputs = onnx_program(**onnx_inputs)
-    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
+    onnx_outputs = onnx_program(**get_leaf_tensors(inputs))
+    onnx_names = (re.sub(r"^output\.", "", value.name) for value in onnx_model.graph.outputs)
     return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
 
 

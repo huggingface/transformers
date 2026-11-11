@@ -80,7 +80,7 @@ def _openvino_op_counts(ov_model) -> tuple[int, int]:
 
 def _has_onnx_quantize_ops(program) -> bool:
     """The exported ONNX graph carries QDQ (`QuantizeLinear`) nodes."""
-    return any(node.op_type == "QuantizeLinear" for node in program.model_proto.graph.node)
+    return any(node.op_type == "QuantizeLinear" for node in program.graph)
 
 
 class QuantizationTesterMixin(MemoryCleanupMixin):
@@ -486,7 +486,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             .program
         )
         quantize_op = "DynamicQuantizeLinear" if dynamic else "QuantizeLinear"
-        self.assertTrue(any(node.op_type == quantize_op for node in program.model_proto.graph.node))
+        self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
@@ -530,7 +530,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
         )
         quantize_op = "DequantizeLinear" if weights_only else "QuantizeLinear"
-        self.assertTrue(any(node.op_type == quantize_op for node in program.model_proto.graph.node))
+        self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
@@ -552,7 +552,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         program = (
             OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
         )
-        lm_head = [node for node in program.model.graph if node.op_type == "MatMul"][-1]
+        lm_head = [node for node in program.graph if node.op_type == "MatMul"][-1]
         self.assertEqual(lm_head.inputs[1].producer().op_type, "DequantizeLinear")
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
@@ -595,10 +595,9 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         program = (
             OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
         )
-        # the IR model: `model_proto` would serialize past the limit
-        self.assertTrue(any(node.op_type == quantize_op for node in program.model.graph))
-        logits = program(**inputs)[0]
-        self.assertTrue(torch.isfinite(torch.as_tensor(logits)).all())
+        self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
+        logits = next(iter(_run_onnx_program(program, copy.deepcopy(inputs)).values()))
+        self.assertTrue(torch.isfinite(logits).all())
 
     @parameterized.expand(
         [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
@@ -611,7 +610,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def test_nncf_torch_fx_onnx(self, family, weights_only):
         """`NNCFTorchFXQuantizer` quantizes the FX graph for ONNX too: full quantization becomes QDQ nodes, weight
         compression int8 initializers; both run in ONNX Runtime."""
-        import onnx
+        import onnx_ir
 
         from transformers.exporters import OnnxConfig, OnnxExporter
 
@@ -624,8 +623,8 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         config = OnnxConfig(dynamic=False, optimize=not weights_only, quantizer=quantizer)
         program = OnnxExporter().export(model, copy.deepcopy(inputs), config).program
         if weights_only:
-            initializers = program.model_proto.graph.initializer
-            self.assertTrue(any(tensor.data_type == onnx.TensorProto.INT8 for tensor in initializers))
+            initializers = program.graph.initializers.values()
+            self.assertTrue(any(value.dtype == onnx_ir.DataType.INT8 for value in initializers))
         else:
             self.assertTrue(_has_onnx_quantize_ops(program))
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))

@@ -311,6 +311,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         Nothing here is tied to a device: it runs in host memory wherever ONNX Runtime is installed, and
         on a CUDA box with a matching build it upgrades itself to the max-performance path, where the
         buffers are device resident and a provider that copies instead of aliasing them would show up."""
+        import onnx_ir
         import onnxruntime as ort
         from onnxruntime.transformers.io_binding_helper import CudaSession
 
@@ -332,15 +333,13 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         # cache exposed as matched `input.<name>` / `output.<name>` pairs (graph-input order lines up
         # with the `StaticCache` pytree leaves below)
         cache_names = [
-            node.name[len("input.") :]
-            for node in onnx_program.model_proto.graph.input
-            if node.name.startswith("input.")
+            value.name[len("input.") :] for value in onnx_program.graph.inputs if value.name.startswith("input.")
         ]
         self.assertTrue(cache_names, "decode graph exposes no cache inputs")
         counter_name = next(name for name in cache_names if name.endswith("cumulative_length"))
         vocab_size = model.config.vocab_size
 
-        session = ort.InferenceSession(onnx_program.model_proto.SerializeToString(), providers=[provider])
+        session = ort.InferenceSession(onnx_ir.to_proto(onnx_program).SerializeToString(), providers=[provider])
         binding = CudaSession(session, torch.device(buffer_device))
         for name in cache_names:
             binding.set_buffer_sharing(f"input.{name}", f"output.{name}")
