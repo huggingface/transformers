@@ -2427,6 +2427,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
 
         return create_masks_for_generate(**mask_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs

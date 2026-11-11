@@ -762,6 +762,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1588,6 +1589,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,

@@ -1353,6 +1353,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1539,6 +1540,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             vision_model_output=vision_model_output,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,

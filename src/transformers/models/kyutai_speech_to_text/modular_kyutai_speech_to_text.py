@@ -24,6 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 from ..llama.modeling_llama import LlamaForCausalLM
@@ -389,6 +390,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         return inputs, input_name, model_kwargs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         *args,

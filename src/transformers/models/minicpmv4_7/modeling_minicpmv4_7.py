@@ -1304,6 +1304,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
     def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
         return self.model.get_video_features(*args, **kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,

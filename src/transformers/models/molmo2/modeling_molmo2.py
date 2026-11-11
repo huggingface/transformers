@@ -1042,6 +1042,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self, input_ids, inputs_embeds=None, use_cache=True, is_first_iteration=False, **kwargs
     ):

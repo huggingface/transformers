@@ -1982,6 +1982,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         self.code_predictor.generation_config.do_sample = generation_config.do_sample
         return generation_config, model_kwargs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,

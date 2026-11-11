@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_xlnet import XLNetConfig
 
 
@@ -1232,6 +1233,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, cache=None, use_mems=None, is_first_iteration=False, **kwargs):
         # Overwritten -- this model has unique input preparation
 

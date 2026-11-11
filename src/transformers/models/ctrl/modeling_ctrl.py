@@ -435,6 +435,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, cache=None, use_cache=None, is_first_iteration=False, **kwargs):
         # Overwritten -- `token_type_ids` are created in custom way inside model`
 

@@ -1162,6 +1162,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
         return inputs, input_name, model_kwargs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,

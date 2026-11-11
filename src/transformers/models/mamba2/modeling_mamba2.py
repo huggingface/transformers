@@ -856,6 +856,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,

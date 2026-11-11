@@ -1009,6 +1009,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, cache=None, attention_mask=None, **kwargs):
         # During Whisper longform generation with condition_on_prev_tokens=True, shorter sequences
         # in a batch are left-padded. Compute decoder_position_ids from decoder_attention_mask so

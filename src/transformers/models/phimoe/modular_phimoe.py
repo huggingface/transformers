@@ -23,6 +23,7 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
@@ -349,7 +350,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,

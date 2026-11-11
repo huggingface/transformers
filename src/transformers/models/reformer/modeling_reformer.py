@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_reformer import ReformerConfig
 
 
@@ -2256,6 +2257,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         # Overwritten -- attention mask or input ids size doesn't match with actual input size
         return None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self, input_ids, cache=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
     ):

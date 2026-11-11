@@ -1219,6 +1219,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
