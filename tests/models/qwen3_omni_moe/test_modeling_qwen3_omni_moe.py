@@ -19,7 +19,6 @@ import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
-import librosa
 import pytest
 import requests
 
@@ -39,7 +38,9 @@ from transformers.testing_utils import (
     Expectations,
     backend_device_count,
     get_cpu_ram_total_gib,
+    is_librosa_available,
     require_flash_attn,
+    require_librosa,
     require_torch,
     require_torch_accelerator,
     run_first,
@@ -58,6 +59,9 @@ from ...test_modeling_common import (
 )
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
+
+if is_librosa_available():
+    import librosa
 
 if is_torch_available():
     import torch
@@ -691,6 +695,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
 
 
 @require_torch
+@require_librosa
 class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
 

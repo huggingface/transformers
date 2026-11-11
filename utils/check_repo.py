@@ -183,9 +183,7 @@ IGNORE_NON_TESTED = [
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
-    "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
-    "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
     "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
     "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
