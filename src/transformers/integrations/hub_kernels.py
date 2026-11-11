@@ -809,7 +809,12 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
 # NOTE: Add suppressed layers here if they are dynamically added like gguf kernel layers
 @suppress_kernels_logging(layers={"RMSNormZeroCentered", "SoftmaxTopKRouter", "Qwen3_5GatedDeltaNet"})
-def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_config: "KernelConfig | None" = None):
+def kernelize(
+    model: "PreTrainedModel",
+    mode: "Mode | None" = None,
+    kernel_config: "KernelConfig | None" = None,
+    device_map: dict | None = None,
+):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
@@ -817,17 +822,21 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_confi
 
     used_mode = model.kernels_mode if mode is None else mode
     used_kernel_config = model.kernel_config if kernel_config is None else kernel_config
+    # Under offloading we do not match the expected device and hence infer based on one value that actually still lives on device
+    if device_map is not None:
+        # Save for future rekernalizations
+        model._kernels_device = next(
+            (device for device in device_map.values() if device not in ("cpu", "disk")),
+            "cpu",
+        )
+    used_device = get_device_type(getattr(model, "_kernels_device", None) or model.device)
 
     if used_kernel_config is not None:
         inherit_mapping = not used_kernel_config.use_local_kernel and used_kernel_config.inherit_mapping
         with use_kernel_mapping(used_kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-            _kernels_kernelize(
-                model, device=get_device_type(model.device), mode=used_mode, use_fallback=KernelizeFallback.ALL
-            )
+            _kernels_kernelize(model, device=used_device, mode=used_mode, use_fallback=KernelizeFallback.ALL)
     else:
-        _kernels_kernelize(
-            model, device=get_device_type(model.device), mode=used_mode, use_fallback=KernelizeFallback.ALL
-        )
+        _kernels_kernelize(model, device=used_device, mode=used_mode, use_fallback=KernelizeFallback.ALL)
 
     model._use_kernels = True
 

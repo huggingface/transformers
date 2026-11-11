@@ -3848,7 +3848,13 @@ class PreTrainedModel(
 
         return dtype_plan
 
-    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
+    def set_use_kernels(
+        self,
+        use_kernels,
+        kernel_config: KernelConfig | None = None,
+        mode: "Mode | None" = None,
+        device_map: dict | None = None,
+    ):
         """
         Set whether or not to use the `kernels` library to kernelize some layers of the model.
         Args:
@@ -3859,6 +3865,8 @@ class PreTrainedModel(
             mode (`Mode`, *optional*):
                 The mode that should be applied during `kernelize`. Optional, defaults to either training or inference mode
                 based on the internal `training` flag.
+            device_map (`dict`, *optional*):
+                The resolved device map used to infer and cache the execution device when parameters are offloaded.
         """
         if use_kernels:
             if not is_kernels_available():
@@ -3902,7 +3910,7 @@ class PreTrainedModel(
                 self.reset_kernels()
                 self._use_kernels = True  # Keep the desired flag
             else:
-                kernelize(self)
+                kernelize(self, device_map=device_map)
         else:
             # Reset kernelization
             self.use_kernels = False
@@ -4487,7 +4495,7 @@ class PreTrainedModel(
             )
             loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
-        model.set_use_kernels(use_kernels, kernel_config, kernels_mode)
+        model.set_use_kernels(use_kernels, kernel_config, kernels_mode, device_map)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
