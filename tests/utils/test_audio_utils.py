@@ -2055,10 +2055,7 @@ class LoadAudioSoundfileTester(unittest.TestCase):
                     with self.subTest(
                         audio_format=audio_format, num_channels=num_channels, sampling_rate=sampling_rate
                     ):
-                        try:
-                            data = self._encode(num_channels, sampling_rate, audio_format)
-                        except Exception:
-                            self.skipTest(f"libsndfile cannot encode {audio_format}")
+                        data = self._encode(num_channels, sampling_rate, audio_format)
                         path = self._write(data, f".{audio_format.lower()}")
                         audio = load_audio(path, sampling_rate=16000, backend="soundfile")
                         expected = librosa.load(path, sr=16000)[0]
@@ -2070,6 +2067,12 @@ class LoadAudioSoundfileTester(unittest.TestCase):
         with self.assertWarns(FutureWarning):
             audio = load_audio(path, sampling_rate=16000, backend="librosa")
         np.testing.assert_array_equal(audio, load_audio(path, sampling_rate=16000, backend="soundfile"))
+
+    def test_bytes_input(self):
+        data = self._encode(2, 44100, "FLAC")
+        audio = load_audio(data, sampling_rate=16000, backend="soundfile")
+        expected = load_audio(base64.b64encode(data).decode(), sampling_rate=16000, backend="soundfile")
+        np.testing.assert_array_equal(audio, expected)
 
     def test_auto_falls_back_to_soundfile_without_torchcodec(self):
         data = self._encode(2, 44100, "FLAC")

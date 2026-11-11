@@ -130,8 +130,8 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
-    "soundfile>=0.13.0",
-    "soxr>=0.5.0",
+    "soundfile>=0.13.0",  # first version with wheels on every supported platform and Python
+    "soxr>=0.5.0",  # first version with wheels on every supported platform and Python
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",

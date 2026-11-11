@@ -15,7 +15,6 @@
 Handler for the /v1/audio/transcriptions endpoint.
 """
 
-import base64
 from typing import TYPE_CHECKING
 
 from ...audio_utils import load_audio
@@ -129,7 +128,7 @@ class TranscriptionHandler:
     ) -> dict:
         """Load audio bytes and convert to model inputs."""
         sampling_rate = audio_processor.feature_extractor.sampling_rate
-        audio_array = load_audio(base64.b64encode(file_bytes).decode("ascii"), sampling_rate=sampling_rate)
+        audio_array = load_audio(file_bytes, sampling_rate=sampling_rate)
         audio_inputs = audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt").to(
             audio_model.device
         )
