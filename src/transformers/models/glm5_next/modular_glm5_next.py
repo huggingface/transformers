@@ -802,6 +802,8 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
 
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
+        # k-pool candidates are scored in `forward`, not by a top-k selector
+        del self.topk_selector
 
         self.index_kpool = config.index_kpool
         self.index_kpool_always_select_tail = config.index_kpool_always_select_tail

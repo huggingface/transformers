@@ -150,6 +150,71 @@ class Dots3NoteTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+class Dots3NoteTextIndexerTopkSelector(nn.Module):
+    """
+    Scores the keys and selects the top-k for each query of a DSA indexer.
+
+    It holds no weights and is the only part of the indexer that reads or writes the indexer key cache, so a runtime
+    that manages that cache itself can replace it and keep the model-specific projections, normalization and rotary
+    embedding of the indexer.
+
+    This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
+    and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
+    are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
+    scores directly in bf16/fp32.
+    """
+
+    def __init__(self, config: "Dots3NoteTextConfig", layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.index_topk: int = config.index_topk
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        weights: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        scaling: float,
+        cache: Cache | None = None,
+    ) -> torch.Tensor:
+        """
+        Computes `index_score[b,s,t] = Σ_h (weights[b,s,h] · relu(scaling · query[b,s,h,:] · key[b,t,:]))` and
+        selects the top-k keys.
+
+        Args:
+            query: Indexer queries after normalization and rotary embedding, `[B, S, H, D]`.
+            key: Indexer keys of the current tokens after normalization and rotary embedding, `[B, S, D]`.
+            weights: Per-head weights of the scores, `[B, S, H]`.
+            attention_mask: Attention mask of the layer, `[B, 1, S, T]`.
+            scaling: Scale of the dot products, applied before the ReLU.
+            cache: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`.
+        """
+        if cache is not None:
+            key = cache.update_indexer(key, self.layer_idx)
+
+        scores = torch.matmul(query.float(), key.transpose(-1, -2).float().unsqueeze(1)) * scaling
+        scores = F.relu(scores)
+
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask is not None:
+            # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
+            attention_mask = attention_mask[:, 0, :, :]
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+            else:
+                index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+
+
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
     Applies interleaved Rotary Position Embedding to the query and key tensors.
@@ -219,6 +284,7 @@ class Dots3NoteTextIndexer(nn.Module):
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
+        self.topk_selector = Dots3NoteTextIndexerTopkSelector(config, layer_idx)
 
     @torch.no_grad()
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -241,7 +307,7 @@ class Dots3NoteTextIndexer(nn.Module):
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            attention_mask: Attention mask of the layer, `[B, 1, S, T]`.
             cache: Cache object containing the indexer key cache for this layer.
 
         Returns:
@@ -262,24 +328,9 @@ class Dots3NoteTextIndexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-        if cache is not None:
-            k = cache.update_indexer(k, self.layer_idx)
-
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return self.topk_selector(q, k, weights, attention_mask, self.softmax_scale, cache=cache)  # [B, S, topk]
 
 
 class Dots3NoteTextMLP(nn.Module):
@@ -572,7 +623,7 @@ class Dots3NoteTextAttention(nn.Module):
                 hidden_states,
                 q_resid,
                 position_embeddings,
-                attention_mask[:, 0],
+                attention_mask,
                 position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
                 cache=cache,
             )

@@ -38,18 +38,18 @@ if is_torch_available():
     import torch
 
     from transformers import MistralLarge4ForConditionalGeneration, MistralLarge4Model
-    from transformers.models.mistral_large4.modeling_mistral_large4 import MistralLarge4TextIndexer
+    from transformers.models.mistral_large4.modeling_mistral_large4 import MistralLarge4TextIndexerTopkSelector
 
 
 @contextmanager
 def indexer_leaky_relu():
-    """Swaps `F.relu` for `F.leaky_relu` in the body of the indexer forward (whatever decorators wrap it).
+    """Swaps `F.relu` for `F.leaky_relu` in the body of the indexer top-k selector forward (whatever decorators wrap it).
 
     With random weights, the indexer's ReLU zeroes many scores and `topk` breaks those exact ties differently depending
     on tensor shapes (cache type, padding). A leaky ReLU keeps the scores distinct, so tests comparing such code paths
     select the same tokens. The real ReLU is covered by the integration tests, on trained weights.
     """
-    forward = inspect.unwrap(MistralLarge4TextIndexer.forward)
+    forward = inspect.unwrap(MistralLarge4TextIndexerTopkSelector.forward)
     code = forward.__code__
     forward.__code__ = code.replace(co_names=tuple("leaky_relu" if n == "relu" else n for n in code.co_names))
     try:

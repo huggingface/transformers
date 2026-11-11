@@ -350,12 +350,11 @@ class AXK2Attention(DeepseekV32Attention):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
-            attention_mask[:, 0, :, :],
+            attention_mask,
             position_ids,  # Kept for BC
             cache=cache,
         )
