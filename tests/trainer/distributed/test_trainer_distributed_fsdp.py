@@ -24,7 +24,6 @@ from functools import partial
 from pathlib import Path
 from unittest.mock import patch
 
-from packaging import version
 from parameterized import parameterized
 
 from tests.trainer.trainer_test_utils import TrainerIntegrationCommon, get_regression_trainer  # noqa
@@ -44,7 +43,6 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import set_seed
 from transformers.utils import (
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -399,21 +397,21 @@ class TestFSDPConfigPluginArgs(TestCasePlus):
         self.assertEqual(plugin_args["mixed_precision_policy"], "bf16")
 
     def test_activation_checkpointing_offload(self):
-        if not is_accelerate_available("1.15.0"):
-            self.skipTest("test requires accelerate version >= 1.15.0")
+        fsdp_config = {"activation_checkpointing": True, "activation_checkpointing_offload": True}
 
-        for value in (True, False):
+        # The option needs `accelerate>=1.15.0`. The version check is patched so both outcomes run on any version.
+        with patch("transformers.training_args.is_accelerate_available", return_value=True):
+            self.assertIs(self.get_plugin_args(fsdp_config)["activation_checkpointing_offload"], True)
             # An explicit `False` is forwarded too, so that it wins over `FSDP_ACTIVATION_CHECKPOINTING_OFFLOAD`.
-            fsdp_config = {"activation_checkpointing": True, "activation_checkpointing_offload": value}
-            self.assertIs(self.get_plugin_args(fsdp_config)["activation_checkpointing_offload"], value)
+            fsdp_config["activation_checkpointing_offload"] = False
+            self.assertIs(self.get_plugin_args(fsdp_config)["activation_checkpointing_offload"], False)
 
-    def test_activation_checkpointing_offload_requires_recent_accelerate(self):
-        def is_accelerate_1_14_available(min_version="1.14.0"):
-            return version.parse(min_version) <= version.parse("1.14.0")
-
-        with patch("transformers.training_args.is_accelerate_available", is_accelerate_1_14_available):
+        with patch(
+            "transformers.training_args.is_accelerate_available",
+            side_effect=lambda min_version=None: min_version != "1.15.0",
+        ):
             with self.assertRaisesRegex(ValueError, "accelerate>=1.15.0"):
-                self.get_plugin_args({"activation_checkpointing": True, "activation_checkpointing_offload": True})
+                self.get_plugin_args(fsdp_config)
 
 
 # ---------------------------------------------------------------------------
