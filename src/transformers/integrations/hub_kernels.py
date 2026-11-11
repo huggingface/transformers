@@ -822,13 +822,10 @@ def kernelize(
 
     used_mode = model.kernels_mode if mode is None else mode
     used_kernel_config = model.kernel_config if kernel_config is None else kernel_config
-    # Under offloading we do not match the expected device and hence infer based on one value that actually still lives on device
+    # Offloaded parameters may be on "meta", so we infer accelerate's actual executed device from the device map
     if device_map is not None:
-        # Save for future rekernalizations
-        model._kernels_device = next(
-            (device for device in device_map.values() if device not in ("cpu", "disk")),
-            "cpu",
-        )
+        # Cache for future (re-)kernelizations
+        model._kernels_device = next(iter(set(device_map.values()) - {"cpu", "disk"}), "cpu")
     used_device = get_device_type(getattr(model, "_kernels_device", None) or model.device)
 
     if used_kernel_config is not None:
