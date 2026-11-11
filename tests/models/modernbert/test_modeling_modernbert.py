@@ -13,6 +13,7 @@
 # limitations under the License.
 import os
 import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -44,6 +45,7 @@ if is_torch_available():
         ModernBertForTokenClassification,
         ModernBertModel,
     )
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 class ModernBertModelTester:
@@ -291,6 +293,59 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_float16_mean_pooling_does_not_overflow(self):
+        config = self.model_tester.get_config()
+        config.classifier_pooling = "mean"
+
+        seq_length = 8192
+        attention_mask = torch.ones((1, seq_length), dtype=torch.long)
+        input_ids = torch.ones((1, seq_length), dtype=torch.long)
+        hidden_states = torch.full((1, seq_length, config.hidden_size), 30.0, dtype=torch.float16)
+
+        model = ModernBertForSequenceClassification(config).half().eval()
+        with (
+            torch.no_grad(),
+            patch.object(model.model, "forward", return_value=BaseModelOutput(last_hidden_state=hidden_states)),
+        ):
+            logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+        self.assertTrue(torch.isfinite(logits).all())
+
+        attention_mask = torch.ones((1, 2, seq_length), dtype=torch.long)
+        input_ids = torch.ones((1, 2, seq_length), dtype=torch.long)
+        hidden_states = torch.full((2, seq_length, config.hidden_size), 30.0, dtype=torch.float16)
+
+        model = ModernBertForMultipleChoice(config).half().eval()
+        with (
+            torch.no_grad(),
+            patch.object(model.model, "forward", return_value=BaseModelOutput(last_hidden_state=hidden_states)),
+        ):
+            logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+        self.assertTrue(torch.isfinite(logits).all())
+
+    def test_bfloat16_mean_pooling_keeps_input_dtype(self):
+        config = self.model_tester.get_config()
+        config.classifier_pooling = "mean"
+
+        attention_mask = torch.ones((1, 2, config.max_position_embeddings), dtype=torch.long)
+        input_ids = torch.ones((1, 2, config.max_position_embeddings), dtype=torch.long)
+        hidden_states = torch.zeros((2, config.max_position_embeddings, config.hidden_size), dtype=torch.bfloat16)
+
+        model = ModernBertForMultipleChoice(config).to(dtype=torch.bfloat16).eval()
+        head_input_dtypes = []
+
+        def capture_head_input(hidden_states):
+            head_input_dtypes.append(hidden_states.dtype)
+            return hidden_states
+
+        with (
+            torch.no_grad(),
+            patch.object(model.model, "forward", return_value=BaseModelOutput(last_hidden_state=hidden_states)),
+            patch.object(model.head, "forward", side_effect=capture_head_input),
+        ):
+            model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.assertEqual(head_input_dtypes, [torch.bfloat16])
 
     @slow
     def test_model_from_pretrained(self):

@@ -596,9 +596,12 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
                 attention_mask = torch.ones(
                     last_hidden_state.shape[:2], device=last_hidden_state.device, dtype=torch.bool
                 )
-            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
-                dim=1, keepdim=True
-            )
+            input_dtype = last_hidden_state.dtype
+            pooling_dtype = torch.float32 if input_dtype == torch.float16 else input_dtype
+            last_hidden_state = (
+                (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1, dtype=pooling_dtype)
+                / attention_mask.sum(dim=1, keepdim=True)
+            ).to(input_dtype)
 
         pooled_output = self.head(last_hidden_state)
         pooled_output = self.drop(pooled_output)
@@ -812,7 +815,11 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         # If classifier_pooling is "mean", pool the hidden states by averaging over the sequence length
         elif self.config.classifier_pooling == "mean":
             num_non_pad_tokens = attention_mask.sum(dim=1, keepdim=True)
-            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / num_non_pad_tokens
+            input_dtype = last_hidden_state.dtype
+            pooling_dtype = torch.float32 if input_dtype == torch.float16 else input_dtype
+            last_hidden_state = (
+                (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1, dtype=pooling_dtype) / num_non_pad_tokens
+            ).to(input_dtype)
 
         pooled_output = self.head(last_hidden_state)
         pooled_output = self.drop(pooled_output)
