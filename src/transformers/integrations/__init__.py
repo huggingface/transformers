@@ -122,9 +122,7 @@ _import_structure = {
         "run_hp_search_wandb",
     ],
     "liger": ["apply_liger_kernel"],
-    "metal_quantization": [
-        "MetalLinear",
-    ],
+    "metal_quantization": ["MetalLinear"],
     "moe": [
         "batched_mm_experts_forward",
         "grouped_mm_experts_forward",
