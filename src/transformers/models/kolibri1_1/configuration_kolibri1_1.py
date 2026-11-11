@@ -25,6 +25,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+_DEFAULT_INDEX_ORDINALS = (0, 2, 3, 5)
 _DEFAULT_KV_SOURCE_ORDINALS = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
 
 
@@ -32,12 +33,28 @@ _DEFAULT_KV_SOURCE_ORDINALS = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
 @strict
 class Kolibri1_1Config(PreTrainedConfig):
     r"""
+    index_layers (`list[int]`, *optional*):
+        Indices of the full-attention layers that select a new pool of candidate keys (indexers). Every other
+        full-attention layer rescores the pool of the closest preceding indexer (reindexer). Must contain the first
+        full-attention layer. Defaults to Kolibri 1.1's layout: the 1st, 3rd, 4th and 6th full-attention layers.
     kv_source_layers (`list[int]`, *optional*):
         For each layer, the index of the layer whose keys and values it attends to. A full-attention layer that reads
         those of an earlier layer has no key/value projections of its own. Defaults to Kolibri 1.1's layout: of its 10
         full-attention layers, the 2nd and 3rd read the keys and values of the 1st, the 7th to 9th those of the 6th
         and the 10th those of the 1st, while the 1st, 4th, 5th and 6th produce their own. Configs with more
         full-attention layers must set it explicitly. The entries of sliding-attention layers must be their own index.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of keys each query of a sparse layer selects from its pool, besides the sink and local tokens.
+    index_pool_size (`int`, *optional*, defaults to 16384):
+        Number of keys in an indexer's pool. Queries that see no more keys than this select from all of them.
+    index_compression (`int`, *optional*, defaults to 16):
+        Number of consecutive keys an indexer averages into one summary when scoring blocks for its pool.
+    index_num_heads (`int`, *optional*, defaults to 12):
+        Number of leading query heads used to score keys, at most the number of query heads of key head 0.
+    index_num_local_tokens (`int`, *optional*, defaults to 128):
+        Number of most recent tokens, including the query itself, that every query of a sparse layer attends to.
+    index_num_sink_tokens (`int`, *optional*, defaults to 8):
+        Number of leading tokens that every query of a sparse layer attends to.
     mlp_only_layers (`list[int]`, *optional*):
         Indices of the layers with a dense MLP instead of a mixture of experts. Defaults to none.
     mlp_only_intermediate_size (`int`, *optional*):
@@ -110,12 +127,19 @@ class Kolibri1_1Config(PreTrainedConfig):
     shared_expert_intermediate_size: int = 512
     layer_types: list[str] | None = None
 
+    index_layers: list[int] | None = None
     kv_source_layers: list[int] | None = None
+    index_topk: int = 2048
+    index_pool_size: int = 16384
+    index_compression: int = 16
+    index_num_heads: int = 12
+    index_num_local_tokens: int = 128
+    index_num_sink_tokens: int = 8
     mlp_only_layers: list[int] | None = None
     mlp_only_intermediate_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        # `layer_types` is needed before the parent's `__post_init__`, to derive the default K/V sharing layout
+        # `layer_types` is needed before the parent's `__post_init__`, to derive the default sparse layout
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
@@ -123,6 +147,8 @@ class Kolibri1_1Config(PreTrainedConfig):
         if self.mlp_only_layers is None:
             self.mlp_only_layers = []
         full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
+        if self.index_layers is None:
+            self.index_layers = [full_layers[o] for o in _DEFAULT_INDEX_ORDINALS if o < len(full_layers)]
         if self.kv_source_layers is None:
             if len(full_layers) > len(_DEFAULT_KV_SOURCE_ORDINALS):
                 raise ValueError(
@@ -140,6 +166,11 @@ class Kolibri1_1Config(PreTrainedConfig):
             raise ValueError(f"Sliding-attention layers need a positive `sliding_window`, got {self.sliding_window}.")
         if set(self.layer_types) - {"full_attention", "sliding_attention"}:
             raise ValueError(f"Unsupported layer types: {sorted(set(self.layer_types))}.")
+        full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
+        if sorted(set(self.index_layers)) != self.index_layers or not set(self.index_layers) <= set(full_layers):
+            raise ValueError(f"`index_layers` must be increasing full-attention layers, got {self.index_layers}.")
+        if full_layers and full_layers[0] not in self.index_layers:
+            raise ValueError("The first full-attention layer must be an indexer.")
         if len(self.kv_source_layers) != len(self.layer_types):
             raise ValueError("`kv_source_layers` needs one entry per layer.")
         for layer_idx, source in enumerate(self.kv_source_layers):
@@ -149,6 +180,12 @@ class Kolibri1_1Config(PreTrainedConfig):
                 raise ValueError(f"Layer {layer_idx} must read the K/V of an earlier layer that produces its own.")
             if self.layer_types[source] != self.layer_types[layer_idx]:
                 raise ValueError(f"Layer {layer_idx} must read the K/V of a layer with the same attention type.")
+        if self.index_pool_size % self.index_compression:
+            raise ValueError("`index_pool_size` must be a multiple of `index_compression`.")
+        if self.head_dim % 16:
+            raise ValueError("NVFP4 rounding of keys and values needs a `head_dim` that is a multiple of 16.")
+        if not 0 < self.index_num_heads <= self.num_attention_heads // self.num_key_value_heads:
+            raise ValueError("`index_num_heads` must be between 1 and the number of query heads of key head 0.")
         if not set(self.mlp_only_layers) <= set(range(self.num_hidden_layers)):
             raise ValueError(f"`mlp_only_layers` must be layer indices, got {self.mlp_only_layers}.")
         if self.mlp_only_layers and (self.mlp_only_intermediate_size or 0) <= 0:
@@ -162,6 +199,15 @@ class Kolibri1_1Config(PreTrainedConfig):
             "reuse" if source != layer_idx else "store" if layer_idx in sources else None
             for layer_idx, source in enumerate(self.kv_source_layers)
         ]
+
+    @property
+    def index_source_layers(self) -> list[int | None]:
+        """For each layer, the indexer whose pool it selects keys from, or `None` for sliding-attention layers."""
+        sources, latest = [], None
+        for layer_idx, layer_type in enumerate(self.layer_types):
+            latest = layer_idx if layer_idx in self.index_layers else latest
+            sources.append(latest if layer_type == "full_attention" else None)
+        return sources
 
 
 __all__ = ["Kolibri1_1Config"]

@@ -21,7 +21,19 @@ Kolibri 1.1 is Aleph Alpha's successor to [Kolibri 1](./kolibri1).
 Comparison to Kolibri 1:
 - It keeps the mixture-of-experts layers and the sliding-window attention layers of Kolibri 1.
 - The first two layers have a dense MLP instead of a mixture of experts.
-- Full-attention layers (every fifth layer) can attend to the keys and values of an earlier full-attention layer. Only the 5th, 20th, 25th and 30th layers compute their own. The other full-attention layers attend to those of the closest preceding of these, except the 50th layer, which attends to those of the 5th.
+- Its full-attention layers (every fifth layer) attend sparsely.
+- Full-attention layers can attend to the keys and values of an earlier full-attention layer. Only the 5th, 20th, 25th and 30th layers compute their own. The other full-attention layers attend to those of the closest preceding of these, except the 50th layer, which attends to those of the 5th.
+
+The sparse attention is designed as follows:
+
+- Every query attends to the 8 first tokens, the 128 most recent tokens and the 2048 highest scoring other keys. Queries that see no more keys than that attend to all of them.
+- Keys are scored without learned weights: by the ReLU of the logits of the first 12 query heads against key head 0, averaged over these heads.
+- Indexer layers (the 5th, 15th, 20th and 30th) first pick a pool of 16384 candidate keys: all of them for short contexts, otherwise the 1024 blocks of 16 consecutive keys whose averaged key scores highest. The other full-attention layers rescore the pool of the closest preceding indexer.
+
+The sparse attention keys and values, as well as the routing queries and keys, are rounded to NVFP4.
+
+This is a reference implementation. Sparse layers apply their key selection as an explicit attention mask, so only the eager and SDPA attention implementations are supported, selecting keys costs time and memory quadratic in the prompt length, and every decoding step rescans the whole context. A prefill of about 50k tokens fits on two 180 GB GPUs; 128k tokens does not.
+
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer

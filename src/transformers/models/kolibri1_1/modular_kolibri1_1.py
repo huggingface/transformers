@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
@@ -42,6 +43,7 @@ from ..kolibri1.modeling_kolibri1 import (
 )
 
 
+_DEFAULT_INDEX_ORDINALS = (0, 2, 3, 5)
 _DEFAULT_KV_SOURCE_ORDINALS = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
 
 
@@ -49,12 +51,28 @@ _DEFAULT_KV_SOURCE_ORDINALS = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
 @strict
 class Kolibri1_1Config(Kolibri1Config):
     r"""
+    index_layers (`list[int]`, *optional*):
+        Indices of the full-attention layers that select a new pool of candidate keys (indexers). Every other
+        full-attention layer rescores the pool of the closest preceding indexer (reindexer). Must contain the first
+        full-attention layer. Defaults to Kolibri 1.1's layout: the 1st, 3rd, 4th and 6th full-attention layers.
     kv_source_layers (`list[int]`, *optional*):
         For each layer, the index of the layer whose keys and values it attends to. A full-attention layer that reads
         those of an earlier layer has no key/value projections of its own. Defaults to Kolibri 1.1's layout: of its 10
         full-attention layers, the 2nd and 3rd read the keys and values of the 1st, the 7th to 9th those of the 6th
         and the 10th those of the 1st, while the 1st, 4th, 5th and 6th produce their own. Configs with more
         full-attention layers must set it explicitly. The entries of sliding-attention layers must be their own index.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of keys each query of a sparse layer selects from its pool, besides the sink and local tokens.
+    index_pool_size (`int`, *optional*, defaults to 16384):
+        Number of keys in an indexer's pool. Queries that see no more keys than this select from all of them.
+    index_compression (`int`, *optional*, defaults to 16):
+        Number of consecutive keys an indexer averages into one summary when scoring blocks for its pool.
+    index_num_heads (`int`, *optional*, defaults to 12):
+        Number of leading query heads used to score keys, at most the number of query heads of key head 0.
+    index_num_local_tokens (`int`, *optional*, defaults to 128):
+        Number of most recent tokens, including the query itself, that every query of a sparse layer attends to.
+    index_num_sink_tokens (`int`, *optional*, defaults to 8):
+        Number of leading tokens that every query of a sparse layer attends to.
     mlp_only_layers (`list[int]`, *optional*):
         Indices of the layers with a dense MLP instead of a mixture of experts. Defaults to none.
     mlp_only_intermediate_size (`int`, *optional*):
@@ -71,12 +89,19 @@ class Kolibri1_1Config(Kolibri1Config):
 
     model_type = "kolibri1_1"
 
+    index_layers: list[int] | None = None
     kv_source_layers: list[int] | None = None
+    index_topk: int = 2048
+    index_pool_size: int = 16384
+    index_compression: int = 16
+    index_num_heads: int = 12
+    index_num_local_tokens: int = 128
+    index_num_sink_tokens: int = 8
     mlp_only_layers: list[int] | None = None
     mlp_only_intermediate_size: int | None = None
 
     def __post_init__(self, **kwargs):
-        # `layer_types` is needed before the parent's `__post_init__`, to derive the default K/V sharing layout
+        # `layer_types` is needed before the parent's `__post_init__`, to derive the default sparse layout
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
@@ -84,6 +109,8 @@ class Kolibri1_1Config(Kolibri1Config):
         if self.mlp_only_layers is None:
             self.mlp_only_layers = []
         full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
+        if self.index_layers is None:
+            self.index_layers = [full_layers[o] for o in _DEFAULT_INDEX_ORDINALS if o < len(full_layers)]
         if self.kv_source_layers is None:
             if len(full_layers) > len(_DEFAULT_KV_SOURCE_ORDINALS):
                 raise ValueError(
@@ -99,6 +126,11 @@ class Kolibri1_1Config(Kolibri1Config):
         super().validate_architecture()
         if set(self.layer_types) - {"full_attention", "sliding_attention"}:
             raise ValueError(f"Unsupported layer types: {sorted(set(self.layer_types))}.")
+        full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
+        if sorted(set(self.index_layers)) != self.index_layers or not set(self.index_layers) <= set(full_layers):
+            raise ValueError(f"`index_layers` must be increasing full-attention layers, got {self.index_layers}.")
+        if full_layers and full_layers[0] not in self.index_layers:
+            raise ValueError("The first full-attention layer must be an indexer.")
         if len(self.kv_source_layers) != len(self.layer_types):
             raise ValueError("`kv_source_layers` needs one entry per layer.")
         for layer_idx, source in enumerate(self.kv_source_layers):
@@ -108,6 +140,12 @@ class Kolibri1_1Config(Kolibri1Config):
                 raise ValueError(f"Layer {layer_idx} must read the K/V of an earlier layer that produces its own.")
             if self.layer_types[source] != self.layer_types[layer_idx]:
                 raise ValueError(f"Layer {layer_idx} must read the K/V of a layer with the same attention type.")
+        if self.index_pool_size % self.index_compression:
+            raise ValueError("`index_pool_size` must be a multiple of `index_compression`.")
+        if self.head_dim % 16:
+            raise ValueError("NVFP4 rounding of keys and values needs a `head_dim` that is a multiple of 16.")
+        if not 0 < self.index_num_heads <= self.num_attention_heads // self.num_key_value_heads:
+            raise ValueError("`index_num_heads` must be between 1 and the number of query heads of key head 0.")
         if not set(self.mlp_only_layers) <= set(range(self.num_hidden_layers)):
             raise ValueError(f"`mlp_only_layers` must be layer indices, got {self.mlp_only_layers}.")
         if self.mlp_only_layers and (self.mlp_only_intermediate_size or 0) <= 0:
@@ -122,6 +160,159 @@ class Kolibri1_1Config(Kolibri1Config):
             for layer_idx, source in enumerate(self.kv_source_layers)
         ]
 
+    @property
+    def index_source_layers(self) -> list[int | None]:
+        """For each layer, the indexer whose pool it selects keys from, or `None` for sliding-attention layers."""
+        sources, latest = [], None
+        for layer_idx, layer_type in enumerate(self.layer_types):
+            latest = layer_idx if layer_idx in self.index_layers else latest
+            sources.append(latest if layer_type == "full_attention" else None)
+        return sources
+
+
+def nvfp4_fake_quantize(hidden_states: torch.Tensor) -> torch.Tensor:
+    """
+    Round to NVFP4 and back: E2M1 values with one E4M3 scale per 16 consecutive values of the last dimension, rounded
+    to nearest-even. Kolibri 1.1 was trained with its sparse attention keys and values, and its routing queries and
+    keys, rounded like this.
+    """
+    blocks = hidden_states.float().unflatten(-1, (-1, 16))
+    scale = (blocks.abs().amax(-1, keepdim=True) / 6).clamp(2**-9, 448).to(torch.float8_e4m3fn).float()
+    scaled = blocks / scale
+    magnitude = scaled.abs().clamp(max=6)
+    # E2M1 magnitudes are spaced by 0.5 below 2, by 1 below 4 and by 2 up to 6. `round` breaks ties to even
+    step = torch.where(magnitude < 2, 0.5, torch.where(magnitude < 4, 1.0, 2.0))
+    rounded = torch.round(magnitude / step) * step
+    return (rounded.copysign(scaled) * scale).flatten(-2).to(hidden_states.dtype)
+
+
+class Kolibri1_1Indexer(nn.Module):
+    """
+    Selects the keys each query of a sparse layer attends to. It has no weights: keys and queries are scored by the
+    ReLU of the logits of the first `index_num_heads` query heads against key head 0, averaged over these heads, both
+    rounded to NVFP4 beforehand.
+
+    An indexer selects a pool of `index_pool_size` candidate keys for each query: all of them for short contexts,
+    otherwise the blocks of `index_compression` keys whose averaged key scores highest. Every sparse layer then
+    attends to the `index_topk` highest scoring keys of the pool of its indexer, plus the first
+    `index_num_sink_tokens` and the last `index_num_local_tokens` tokens. Queries that see no more keys than this
+    budget attend to all of them. Ties are broken towards earlier keys, as the radix selection of the reference kernels.
+
+    The visible keys of a query must be contiguous (masks with gaps are not supported).
+    """
+
+    def __init__(self, config: Kolibri1_1Config, layer_idx: int):
+        super().__init__()
+        self.pool_source_layer = config.index_source_layers[layer_idx]
+        self.is_pool_source = layer_idx in config.index_layers
+        self.num_heads = config.index_num_heads
+        self.topk = config.index_topk
+        self.pool_size = config.index_pool_size
+        self.compression = config.index_compression
+        self.num_local_tokens = config.index_num_local_tokens
+        self.num_sink_tokens = config.index_num_sink_tokens
+        self.head_weight = config.head_dim**-0.5 / config.index_num_heads
+        # Bounds the [queries, keys] float32 scores computed at once (256 MB, plus as much again for temporaries).
+        self.max_scores = 2**26
+
+    def score(self, queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+        """Score `[num_heads, num_queries, head_dim]` queries against `[num_keys, head_dim]` keys."""
+        # Scoring is quadratic in the sequence length overall: this is a reference, not a fast implementation.
+        scores = queries.new_zeros(queries.shape[1], keys.shape[0])
+        for head_queries in queries:
+            scores += (head_queries @ keys.T).relu()
+        return scores * self.head_weight
+
+    @staticmethod
+    def top_k_mask(scores: torch.Tensor, k: int) -> torch.Tensor:
+        """Mask of the `k` highest finite scores of each row; ties go to the lowest indices."""
+        k = min(k, scores.shape[-1])
+        kth_score = scores.topk(k, dim=-1).values[..., -1:]
+        # Scores strictly above the k-th one are always kept
+        above = scores > kth_score
+        # Scores equal to the k-th one share the remaining slots, lowest indices first; `-inf` is never kept
+        tied = (scores == kth_score) & (kth_score > float("-inf"))
+        free_slots = k - above.sum(-1, keepdim=True)
+        tie_rank = tied.cumsum(-1, dtype=torch.int32)  # 1-based position of each tie within its row
+        return above | (tied & (tie_rank <= free_slots))
+
+    def query_groups(self, visible: torch.Tensor):
+        """Yield the batch index, first visible key, query rows and number of visible keys of each group of queries
+        sharing their first visible key, split in chunks of at most `max_scores` scores."""
+        lengths = visible.sum(-1)
+        starts = visible.int().argmax(-1)
+        for batch_idx in range(visible.shape[0]):
+            for start in starts[batch_idx].unique().tolist():
+                rows = (starts[batch_idx] == start).nonzero().squeeze(-1)
+                for chunk in rows.split(max(1, self.max_scores // (visible.shape[-1] - start))):
+                    yield batch_idx, start, chunk, lengths[batch_idx, chunk, None]
+
+    def select_pool(self, queries: torch.Tensor, keys: torch.Tensor, visible: torch.Tensor) -> torch.Tensor:
+        pool = visible.clone()
+        compression = self.compression
+        for batch_idx, start, rows, lengths in self.query_groups(visible):
+            long_rows = lengths.squeeze(-1) > self.pool_size
+            if not long_rows.any():
+                continue
+            rows, lengths = rows[long_rows], lengths[long_rows]
+            document_keys = keys[batch_idx, 0, start:]
+            num_blocks = document_keys.shape[0] // compression
+            blocks = document_keys[: num_blocks * compression].float().unflatten(0, (num_blocks, compression))
+            summaries = nvfp4_fake_quantize(blocks.sum(1) / compression)
+            routing_queries = nvfp4_fake_quantize(queries[batch_idx, : self.num_heads, rows]).float()
+            scores = self.score(routing_queries, summaries)
+            # The block of a query's newest tokens is only complete if their number is a multiple of `compression`.
+            # An incomplete block competes with a zero score, later blocks are not visible
+            scores = nn.functional.pad(scores, (0, 1))
+            blocks = torch.arange(num_blocks + 1, device=scores.device)
+            scores = torch.where(blocks < lengths // compression, scores, 0.0)
+            scores = scores.masked_fill(blocks >= (lengths + compression - 1) // compression, float("-inf"))
+            chosen = self.top_k_mask(scores, self.pool_size // compression)
+            chosen = chosen.repeat_interleave(compression, dim=-1)[:, : document_keys.shape[0]]
+            pool[batch_idx, rows, start:] = chosen & visible[batch_idx, rows, start:]
+        return pool
+
+    def select_tokens(
+        self, queries: torch.Tensor, keys: torch.Tensor, visible: torch.Tensor, pool: torch.Tensor
+    ) -> torch.Tensor:
+        selected = visible.clone()
+        budget = self.topk + self.num_local_tokens + self.num_sink_tokens
+        for batch_idx, start, rows, lengths in self.query_groups(visible):
+            long_rows = lengths.squeeze(-1) > budget
+            if not long_rows.any():
+                continue
+            rows, lengths = rows[long_rows], lengths[long_rows]
+            routing_keys = nvfp4_fake_quantize(keys[batch_idx, 0, start:]).float()
+            routing_queries = nvfp4_fake_quantize(queries[batch_idx, : self.num_heads, rows]).float()
+            scores = self.score(routing_queries, routing_keys)
+            positions = torch.arange(routing_keys.shape[0], device=scores.device)
+            sinks = positions < self.num_sink_tokens
+            local = (positions >= lengths - self.num_local_tokens) & (positions < lengths)
+            # Sinks and local tokens are always selected, so we only need to choose among the remaining candidates
+            candidates = pool[batch_idx, rows, start:] & ~sinks & (positions < lengths - self.num_local_tokens)
+            chosen = self.top_k_mask(scores.masked_fill(~candidates, float("-inf")), self.topk)
+            selected[batch_idx, rows, start:] = chosen | sinks | local
+        return selected
+
+    @torch.no_grad()
+    def forward(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        shared_kv_states: KVSharingDict,
+    ) -> torch.Tensor:
+        """Return the mask of the keys each query attends to, of the same shape as the 4D `attention_mask`."""
+        visible = attention_mask[:, 0] if attention_mask.dtype == torch.bool else attention_mask[:, 0] == 0
+        # `Kolibri1_1Model.forward` drops the pool once the last layer selecting from it is done
+        pool_key = f"index_pool_{self.pool_source_layer}"
+        if self.is_pool_source:
+            pool = self.select_pool(query_states, key_states, visible)
+            shared_kv_states[pool_key] = (pool,)
+        else:
+            (pool,) = shared_kv_states[pool_key]
+        return self.select_tokens(query_states, key_states, visible, pool).unsqueeze(1)
+
 
 class Kolibri1_1Attention(Kolibri1Attention):
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
@@ -132,6 +323,7 @@ class Kolibri1_1Attention(Kolibri1Attention):
         # Layers reading the K/V of another layer don't need any key/value weights
         if self.is_kv_shared_layer:
             del self.k_proj, self.v_proj, self.k_norm
+        self.indexer = None if self.is_sliding else Kolibri1_1Indexer(config, layer_idx)
 
     def forward(
         self,
@@ -152,7 +344,7 @@ class Kolibri1_1Attention(Kolibri1Attention):
             key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2))
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Full-attention layers have no positional embeddings (NoPE), which layers sharing keys rely on
+        # Full-attention layers have no positional embeddings (NoPE): sparse layers sharing keys and pools need them
         if self.is_sliding:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -161,6 +353,22 @@ class Kolibri1_1Attention(Kolibri1Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         if self.store_kv:
             shared_kv_states[str(self.layer_idx)] = key_states, value_states
+
+        if self.indexer is not None:
+            if attention_mask is None:
+                raise ValueError(
+                    "Sparse attention layers need an explicit 4D attention mask to overlay their selection."
+                )
+            selected_mask = self.indexer(query_states, key_states, attention_mask, shared_kv_states)
+            if attention_mask.dtype == torch.bool:
+                # The selection only ever keeps visible keys
+                attention_mask = selected_mask
+            else:
+                # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
+                attention_mask = attention_mask.masked_fill(~selected_mask, torch.finfo(attention_mask.dtype).min)
+            # Sparse layers attend to NVFP4 keys and values, rounded with a straight-through gradient
+            key_states = key_states + (nvfp4_fake_quantize(key_states) - key_states).detach()
+            value_states = value_states + (nvfp4_fake_quantize(value_states) - value_states).detach()
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -212,7 +420,11 @@ class Kolibri1_1DecoderLayer(Kolibri1DecoderLayer):
 
 
 class Kolibri1_1PreTrainedModel(Kolibri1PreTrainedModel):
-    pass
+    # Sparse layers apply their key selection as an explicit mask
+    _supports_flash_attn = False
+    _supports_flex_attn = False
+    # Key selection has data-dependent control flow
+    _can_compile_fullgraph = False
 
 
 class Kolibri1_1Model(Kolibri1Model):
@@ -224,6 +436,12 @@ class Kolibri1_1Model(Kolibri1Model):
             rf"layers\.{i}\.self_attn\.(k_proj|v_proj|k_norm)\."
             for i, layer in enumerate(self.layers)
             if layer.self_attn.is_kv_shared_layer
+        }
+        # The pool of each indexer is a `[B, L, L]` mask: it is dropped after the last layer selecting from it
+        sources = config.index_source_layers
+        self._pools_freed_after = {
+            max(i for i, s in enumerate(sources) if s == source): f"index_pool_{source}"
+            for source in config.index_layers
         }
 
     @merge_with_config_defaults
@@ -263,14 +481,32 @@ class Kolibri1_1Model(Kolibri1Model):
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                # Sparse layers overlay their key selection on an explicit mask
+                "full_attention": create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
+        elif causal_mask_mapping.get("full_attention") is None and "full_attention" in self.config.layer_types:
+            # Generic mask creation, e.g. in `generate` with a static cache, may skip the causal mask, which it only
+            # does without padding
+            causal_mask_mapping = {
+                **causal_mask_mapping,
+                "full_attention": create_causal_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=None,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                    allow_is_causal_skip=False,
+                ),
             }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        # Keys and values shared across layers, for the current forward only
+        # Keys and values shared across layers, and the pools of the indexers, for the current forward only. Keeping
+        # the pools in this dict lets `KVSharingDict.to` move them across devices with `device_map`
         shared_kv_states = KVSharingDict()
+        # Layers may be recomputed for gradients (gradient checkpointing), and then need the pools again
+        free_pools = not self.training and not torch.is_grad_enabled()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
@@ -283,6 +519,8 @@ class Kolibri1_1Model(Kolibri1Model):
                 shared_kv_states=shared_kv_states,
                 **kwargs,
             )
+            if free_pools and i in self._pools_freed_after:
+                del shared_kv_states[self._pools_freed_after[i]]
 
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
