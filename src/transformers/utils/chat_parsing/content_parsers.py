@@ -105,7 +105,11 @@ def _xml_inline(text: str, args: dict) -> dict:
     merge = args.get("merge_duplicates", False)
 
     out: dict[str, Any] = {}
-    for m in re.finditer(tag_pattern, text, flags=re.DOTALL):
+    try:
+        iterator = re.finditer(tag_pattern, text, flags=re.DOTALL)
+    except (re.error, RuntimeError) as e:
+        raise ValueError(f"xml-inline: invalid 'tag_pattern' regex: {e}") from e
+    for m in iterator:
         groups = m.groupdict()
         key = groups.get("key")
         if key is None:
