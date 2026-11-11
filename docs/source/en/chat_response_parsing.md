@@ -421,6 +421,16 @@ usually combined with `transform_each`. The text is parsed with Python's `ast` m
 values must be literals: strings, numbers, lists, tuples (returned as lists), dicts with string keys, `True`/`False`/`None`,
 or their JSON spellings `true`/`false`/`null`. Bare identifiers are accepted as dict keys. It has no `content_args`.
 
+The accepted syntax is Python's own, with a few restrictions so other implementations (such as Transformers.js) can
+match it exactly:
+
+- Any Python `str` literal is accepted: single, double and triple quotes, `r`/`u` prefixes, and implicit concatenation
+  (`"a" "b"`). Bytes, f-strings and named unicode escapes (`\N{...}`) are rejected.
+- Number literals follow Python, including `0x`/`0o`/`0b`, `1_000`, `.5`, `1e3` and unary `+`/`-`. Complex numbers are
+  rejected. Integers keep full precision in Python; JavaScript can only represent integers exactly up to 2^53.
+- Positional arguments, `*args`/`**kwargs` and repeated keyword arguments are rejected.
+- `(x)` is just `x`; only `(x,)` and `()` are tuples. Comments and redundant parentheses are allowed.
+
 ```python
 field = {
     "tool_calls": {

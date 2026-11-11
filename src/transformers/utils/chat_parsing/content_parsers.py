@@ -17,7 +17,9 @@ and parses it into a single key in the output message dictionary. Functions are 
 from __future__ import annotations
 
 import ast
+import io
 import json
+import tokenize
 import warnings
 from typing import Any
 
@@ -165,16 +167,31 @@ def _python_literal(node: ast.expr, text: str) -> Any:
     raise ValueError(f"python-call-list: unsupported value {ast.unparse(node)!r}. Content: {text!r}")
 
 
+_NAMED_ESCAPE = re.compile(r"(?<!\\)(?:\\\\)*\\N\{")
+
+
+def _reject_named_escapes(source: str, text: str) -> None:
+    # `\N{...}` needs the full Unicode name database, which other implementations (e.g. Transformers.js)
+    # can't reasonably ship, so it is rejected to keep the format portable. Raw strings are unaffected.
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type == tokenize.STRING:
+            prefix = token.string[: len(token.string) - len(token.string.lstrip("rRbBuUfF"))]
+            if "r" not in prefix.lower() and _NAMED_ESCAPE.search(token.string):
+                raise ValueError(f"python-call-list: named unicode escapes are not supported. Content: {text!r}")
+
+
 def _python_call_list(text: str, args: dict) -> list[dict]:
     """Parse a Python-style list of keyword-argument calls, e.g. `[get_weather(city="Paris")]`,
     into `[{"name": ..., "arguments": {...}}]`. Model output is parsed with `ast`, never evaluated."""
+    source = text.strip()
     try:
         # Invalid escapes like `\q` are kept verbatim, as in Python, without warning about model output.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", SyntaxWarning)
-            tree = ast.parse(text.strip(), mode="eval").body
+            tree = ast.parse(source, mode="eval").body
     except SyntaxError as e:
         raise ValueError(f"python-call-list: could not parse region.\nContent: {text!r}\nError: {e}") from e
+    _reject_named_escapes(source, text)
     if not isinstance(tree, ast.List):
         raise ValueError(f"python-call-list: expected a list of calls. Content: {text!r}")
     calls = []
@@ -183,6 +200,8 @@ def _python_call_list(text: str, args: dict) -> list[dict]:
             raise ValueError(f"python-call-list: expected a call to a named function. Content: {text!r}")
         if call.args or any(keyword.arg is None for keyword in call.keywords):
             raise ValueError(f"python-call-list: only keyword arguments are supported. Content: {text!r}")
+        if len({keyword.arg for keyword in call.keywords}) != len(call.keywords):
+            raise ValueError(f"python-call-list: keyword argument repeated. Content: {text!r}")
         arguments = {keyword.arg: _python_literal(keyword.value, text) for keyword in call.keywords}
         calls.append({"name": call.func.id, "arguments": arguments})
     return calls

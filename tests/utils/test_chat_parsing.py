@@ -272,6 +272,47 @@ granite33_template = {
 }
 
 
+def _f(**arguments):
+    return [{"name": "f", "arguments": arguments}]
+
+
+# (input, expected) pairs for `python-call-list`; `None` means the input must be rejected.
+PYTHON_CALL_LIST_EDGE_CASES = [
+    # Every Python str literal form is accepted.
+    ('[f(s="""a"b""")]', _f(s='a"b')),
+    ("[f(s='''x\ny''')]", _f(s="x\ny")),
+    ('[f(s=r"C:\\new", t=R"\\N{x}")]', _f(s="C:\\new", t="\\N{x}")),
+    ('[f(s="a" \'b\' """c""")]', _f(s="abc")),
+    ('[f(s=u"x")]', _f(s="x")),
+    ('[f(s="a\\qb")]', _f(s="a\\qb")),
+    # Python number literals, including signs.
+    (
+        "[f(h=0x1F, o=0o17, b=0b101, u=1_000, e=1e3, d=.5, t=1., n=--3, p=+2)]",
+        _f(h=31, o=15, b=5, u=1000, e=1000.0, d=0.5, t=1.0, n=3, p=2),
+    ),
+    # `(1)` is just `1`; only `(1,)` and `()` are tuples.
+    ("[f(t=(1,), p=(1), e=())]", _f(t=[1], p=1, e=[])),
+    # Comments, redundant parentheses, JSON-style names as dict keys, unicode identifiers.
+    ("[f(x=1)  # note\n]", _f(x=1)),
+    ("[(f(x=1))]", _f(x=1)),
+    ("[f(d={true: 1, null: 2})]", _f(d={"true": 1, "null": 2})),
+    ("[größe(wert=1)]", [{"name": "größe", "arguments": {"wert": 1}}]),
+    # Rejected: positional or repeated arguments, non-str literals, non-literals, Python syntax errors.
+    ("[f(1, 3.5)]", None),
+    ("[f(x=1, x=2)]", None),
+    ('[f(s=b"x")]', None),
+    ('[f(s=f"x")]', None),
+    ("[f(n=1j)]", None),
+    ('[f(s="\\N{BULLET}")]', None),
+    ("[f(n=007)]", None),
+    ("[f(d={True: 1})]", None),
+    ("[f(x={1, 2})]", None),
+    ("[f(x=-True)]", None),
+    ("[if(x=1)]", None),
+    ('[f(s="a\nb")]', None),
+]
+
+
 class ChatResponseTemplateParserTest(unittest.TestCase):
     def test_response_template_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -1005,6 +1046,16 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "python-call-list"):
                 parse(bad)
 
+    def test_python_call_list_edge_cases(self):
+        # Mirrored in Transformers.js (tests/utils/chat_parsing.test.js) so both ports agree on the format.
+        for text, expected in PYTHON_CALL_LIST_EDGE_CASES:
+            with self.subTest(text=text):
+                if expected is None:
+                    with self.assertRaisesRegex(ValueError, "python-call-list"):
+                        parse_content(text, "python-call-list", {})
+                else:
+                    self.assertEqual(parse_content(text, "python-call-list", {}), expected)
+
     def test_unknown_content_parser_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
@@ -1389,7 +1440,7 @@ class ResponseEventStreamTest(unittest.TestCase):
     def test_dirty_flag_marks_structured_regions(self):
         """A template with one text field and one structured field per parser
         family: text/int/float/bool stream chunks with `dirty=False`, while
-        json/xml-inline/kv-lines/python-call-list and wrapper-stripped text stream
+        json/xml-inline/kv-lines/python-call-list stream
         chunks with `dirty=True`, and those dirty chunks concatenate to the raw region body before parsing."""
         spec = {
             "defaults": {"role": "assistant"},
