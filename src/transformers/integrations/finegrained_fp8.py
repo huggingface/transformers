@@ -1074,7 +1074,18 @@ class Fp8Dequantize(ConversionOps):
                     f"Fp8Dequantize: weight/scale count mismatch for {key} "
                     f"({len(weights)} weights vs {len(scales)} scales)."
                 )
-            result[key] = [self._dequantize_one(w, s, output_dtype=output_dtype) for w, s in zip(weights, scales)]
+            if (
+                len(weights) > 1
+                and len({(w.shape, s.shape) for w, s in zip(weights, scales)}) == 1
+                and scales[0].ndim == 2
+            ):
+                # e.g. every expert's at once: one batched dequantization instead of one per expert
+                dequantized = self._dequantize_one(
+                    torch.stack(weights), torch.stack(scales), output_dtype=output_dtype
+                )
+                result[key] = list(dequantized.unbind(0))
+            else:
+                result[key] = [self._dequantize_one(w, s, output_dtype=output_dtype) for w, s in zip(weights, scales)]
         return result
 
     @property

@@ -24,7 +24,8 @@ from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
-from copy import deepcopy
+from copy import copy, deepcopy
+from dataclasses import dataclass, replace
 from fnmatch import fnmatchcase
 from itertools import chain
 from typing import TYPE_CHECKING, Any
@@ -837,6 +838,7 @@ class WeightTransform:
         "_was_used",
         "scope_prefix",
         "base_model_prefix",
+        "layout",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -859,6 +861,9 @@ class WeightTransform:
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
         self.scope_prefix: str | None = None
         self.base_model_prefix: str | None = None
+
+        # Where the checkpoint's tensors land in the outputs of the first ops, if they only lay them out (see `Layout`)
+        self.layout: Layout | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -1241,9 +1246,11 @@ class WeightConverter(WeightTransform):
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
-        collected_tensors = self.materialize_tensors()
+        collected_tensors, operations = self.materialize_tensors(), self.operations
+        if self.layout is not None and self.layout.buffers is not None:  # read into the outputs of its first ops
+            collected_tensors, operations = dict(self.layout.buffers), operations[self.layout.ops :]
 
-        for op in self.operations:
+        for op in operations:
             with log_conversion_errors(layer_name, loading_info, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
@@ -1307,6 +1314,7 @@ def spawn_materialize(
     dtype=None,
     sharding_op: DtensorShardOperation | None = None,
     tensor_idx: int | None = None,
+    out: torch.Tensor | None = None,
 ) -> Future | Callable:
     """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
 
@@ -1316,6 +1324,9 @@ def spawn_materialize(
     """
 
     def _job():
+        if out is not None:  # its place in the param it loads into
+            out.copy_(tensor[...])
+            return None
         if sharding_op is not None:
             return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
         return _materialize_copy(tensor, device, dtype)
@@ -1639,6 +1650,79 @@ def _param(quantizer, key):
     return key, None
 
 
+@dataclass
+class Layout:
+    """
+    Where the checkpoint's tensors of a transform land, when its first `ops` only lay them out (merges and
+    concatenations): the outputs' `shapes`, and the `places` of the tensors, `{(pattern, position): (output, index)}`.
+    The loader allocates the outputs (`buffers`) and reads each tensor into its place, instead of running those ops.
+    """
+
+    ops: int
+    shapes: dict
+    places: dict
+    buffers: dict | None = None
+
+
+def _join(pieces, dim, stack):
+    "Pieces `(shape, [(slot, index)])` stacked (along a new `dim`) or concatenated along `dim`"
+    shape, places, offset = pieces[0][0], [], 0
+    for i, (piece_shape, piece_places) in enumerate(pieces):
+        if piece_shape[:dim] + piece_shape[dim + 1 :] != shape[:dim] + shape[dim + 1 :] or (
+            stack and piece_shape != shape
+        ):
+            return None
+        for slot, index in piece_places:
+            if stack:
+                places.append((slot, index[:dim] + (i,) + index[dim:]))
+            else:
+                span = slice(offset + index[dim].start, offset + index[dim].stop)
+                places.append((slot, index[:dim] + (span,) + index[dim + 1 :]))
+        offset += 0 if stack else piece_shape[dim]
+    return (
+        shape[:dim] + (len(pieces),) + shape[dim:] if stack else shape[:dim] + (offset,) + shape[dim + 1 :]
+    ), places
+
+
+def _layout(transform):
+    "The `Layout` of `transform`'s first ops, if they only merge and concatenate its tensors, else `None`"
+    if not isinstance(transform, WeightConverter):
+        return None
+    state = {
+        p: [(tuple(t.shape), [((p, i), tuple(slice(0, n) for n in t.shape))]) for i, t in enumerate(ts)]
+        for p, ts in transform.collected_tensors.items()
+    }
+    ops = 0
+    for op in transform.operations:
+        if isinstance(op, MergeModulelist):
+            size = len(state)
+            state = {
+                op.get_target_pattern(size, p, transform.target_patterns): _join(v, op.dim, stack=True)
+                if isinstance(v, list)
+                else v
+                for p, v in state.items()
+            }
+        elif isinstance(op, Concatenate):
+            order = [p for p in transform.source_patterns if p in state] + [
+                p for p in state if p not in transform.source_patterns
+            ]
+            pieces = [piece for p in order for piece in (state[p] if isinstance(state[p], list) else [state[p]])]
+            state = {
+                op.get_target_pattern(transform.target_patterns): _join(
+                    pieces, op.dim, stack=len(pieces[0][0]) <= op.dim
+                )
+            }
+        else:
+            break
+        if any(v is None for v in state.values()):
+            return None
+        ops += 1
+    if ops == 0 or any(isinstance(v, list) for v in state.values()):
+        return None
+    places = {slot: (name, index) for name, (_, piece) in state.items() for slot, index in piece}
+    return Layout(ops, {name: shape for name, (shape, _) in state.items()}, places)
+
+
 def _meta(tensor):
     "A meta tensor of a checkpoint tensor's shape: a tensor, or a safetensors slice"
     # TODO: the checkpoint's dtype too, once the plan is compiled
@@ -1646,16 +1730,37 @@ def _meta(tensor):
     return torch.empty(shape, device="meta")
 
 
-def _outputs(transform, target, state_dict, model):
-    "The keys `transform` produces, run on meta tensors of the checkpoint's: `{target}` if its ops need real data"
+def _trace(transform, target, state_dict, model):
+    """
+    `(outputs, layout)`: the keys `transform` produces, run on meta tensors of the checkpoint's (`{target}` if its
+    ops need real data), and where its first ops lay the tensors out (see `Layout`)
+    """
     transform = deepcopy(transform)
     transform.collected_tensors = {
         p: [_meta(state_dict[k]) for k in ks] for p, ks in transform.collected_tensors.items()
     }
+    layout = _layout(transform)
     try:
-        return set(transform.convert(target, model=model, config=model.config))
+        return set(transform.convert(target, model=model, config=model.config)), layout
     except Exception:  # e.g. a format's load op reading a lookup table
-        return {target}
+        return {target}, None
+
+
+def _traced(traces, transform, target, state_dict, model):
+    "`_trace`, once per template: targets equal up to their indices, of tensors of the same shapes, trace alike"
+    shapes = tuple(
+        (p, tuple(tuple(_meta(state_dict[k]).shape) for k in ks)) for p, ks in transform.collected_tensors.items()
+    )
+    signature = (INDEX.sub("*", target), type(transform), tuple(transform.source_patterns), shapes)
+    if signature not in traces:
+        traces[signature] = (target, *_trace(transform, target, state_dict, model))
+    first, outputs, layout = traces[signature]
+    indices, filled = INDEX.findall(target), set()
+    for output in outputs:
+        if INDEX.findall(output) != INDEX.findall(first):
+            return _trace(transform, target, state_dict, model)
+        filled.add(INDEX.sub(lambda _, s=iter(indices): next(s), output))
+    return filled, layout
 
 
 def _resolve(keys, model_keys, renamings, converters, hf_quantizer, prefix):
@@ -1666,7 +1771,16 @@ def _resolve(keys, model_keys, renamings, converters, hf_quantizer, prefix):
     renamed = rename_keys({key: key for key in keys}, renamings, converters, prefix, model_keys)
     get_quantizer = (lambda *names: None) if hf_quantizer is None else hf_quantizer.get_quantizer
     owners = {key: get_quantizer(key, renamed[key][0]) for key in keys}
-    params = {key: _param(owners[key], key) for key in keys}
+    # Once per template: the suffix of the key `_param` replaces, and by what
+    suffixes, params = {}, {}
+    for key in keys:
+        template = (owners[key], INDEX.sub("*", key))
+        if template not in suffixes:
+            param, role = _param(owners[key], key)
+            common = len(os.path.commonprefix([key, param]))
+            suffixes[template] = len(key) - common, param[common:], role
+        cut, suffix, role = suffixes[template]
+        params[key] = key[: len(key) - cut] + suffix, role
     if any(param != key for key, (param, _) in params.items()):
         renamed = rename_keys(
             {key: param for key, (param, _) in params.items()}, renamings, converters, prefix, model_keys
@@ -1738,11 +1852,11 @@ def _quantize(target, transform, quantizer, param, companions, model):
         stored = quantizer.serialized_names.get(name, names)[role]
         companion = f"{module}.{stored}"
         if companion not in transforms:
-            transforms[companion] = (
-                deepcopy(transform) if pattern else WeightConverter(stored, stored, [_IdentityOp()])
-            )
+            transforms[companion] = copy(transform) if pattern else WeightConverter(stored, stored, [_IdentityOp()])
+            # Its own tensors, of other shapes than the param's
             transforms[companion].collected_tensors = defaultdict(list)
             transforms[companion].layer_targets = defaultdict(set)
+            transforms[companion].layout = None
         transforms[companion].add_tensor(companion, key, pattern or stored, key)
     for transform in transforms.values():
         transform.operations = [*transform.operations, load]
@@ -1776,9 +1890,9 @@ def build_load_plan(state_dict, model, weight_mapping, hf_quantizer=None):
         transforms[target].add_tensor(target, key, pattern or key, key)
 
     # 2. Their exact outputs, run on meta, then their quantizer's ops
-    plan, unexpected = {}, set()
+    plan, unexpected, traces = {}, set(), {}
     for target, transform in transforms.items():
-        outputs = _outputs(transform, target, state_dict, model)
+        outputs, transform.layout = _traced(traces, transform, target, state_dict, model)
         unexpected |= outputs - model_keys.keys()
         if not (loaded := sorted(outputs & model_keys.keys())):
             continue
@@ -1957,19 +2071,38 @@ def convert_and_load_state_dict_in_model(
         if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
             param_device = "cpu"
 
-        # 4. Read the checkpoint keys the plan collected. A converter collects its tensors into lists (e.g. one tensor
-        # per expert); the position in the list lets the sharding op tell which slice of the param each one is
+        def tensor_dtype(key):
+            if hf_quantizer is None or not hf_quantizer.pre_quantized:
+                return _dtype
+            return hf_quantizer.get_new_dtype(mapping, state_dict[key], _dtype)
+
+        # 4. Read the checkpoint keys the plan collected. Laid out by the plan, each into its place in the outputs of
+        # the first ops, allocated once. Else into lists (e.g. one tensor per expert): the position in the list lets
+        # the sharding op tell which slice of the param each one is
+        layout, places = mapping.layout, {}
+        if layout is not None and sharding_op is None and param_device != "disk":
+            buffers = {}
+            for (pattern, position), (name, index) in layout.places.items():
+                key = mapping.collected_tensors[pattern][position]
+                if name not in buffers and (buffer_dtype := tensor_dtype(key)) is not None:
+                    buffers[name] = torch.empty(layout.shapes[name], dtype=buffer_dtype, device=param_device)
+                places[pattern, position] = buffers[name][index] if name in buffers else None
+            if all(place is not None for place in places.values()):
+                mapping.layout = replace(layout, buffers=buffers)
+            else:
+                mapping.layout, places = None, {}
+        else:
+            mapping.layout = None
         for source_pattern, keys in mapping.collected_tensors.items():
             mapping.collected_tensors[source_pattern] = [
                 spawn_materialize(
                     thread_pool,
                     state_dict[key],
                     param_device,
-                    _dtype
-                    if hf_quantizer is None or not hf_quantizer.pre_quantized
-                    else hf_quantizer.get_new_dtype(mapping, state_dict[key], _dtype),
+                    tensor_dtype(key),
                     sharding_op=sharding_op,
                     tensor_idx=idx if isinstance(mapping, WeightConverter) else None,
+                    out=places.get((source_pattern, idx)),
                 )
                 for idx, key in enumerate(keys)
             ]
