@@ -184,7 +184,8 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 @require_torch
 @require_librosa
 class SlaneyMelFiltersTest(unittest.TestCase):
-    """The native mel filters of the parakeet-family feature extractors must stay bit-exact with librosa's."""
+    """The parakeet-family feature extractors' mel filters must stay bit-exact with librosa's (see
+    `test_mel_filter_bank_slaney_float32_matches_librosa` for the shared function over many configs)."""
 
     def test_mel_filters_match_librosa(self):
         import librosa
@@ -194,31 +195,15 @@ class SlaneyMelFiltersTest(unittest.TestCase):
             NemotronAsrStreamingFeatureExtractor,
             CohereAsrFeatureExtractor,
         ]:
-            for sampling_rate, n_fft, feature_size in itertools.product(
-                [8000, 16000, 44100], [256, 512, 1024], [64, 80, 128]
-            ):
-                with self.subTest(
-                    feature_extractor_class.__name__, sr=sampling_rate, n_fft=n_fft, n_mels=feature_size
-                ):
-                    expected = librosa.filters.mel(
-                        sr=sampling_rate,
-                        n_fft=n_fft,
-                        n_mels=feature_size,
-                        fmin=0.0,
-                        fmax=sampling_rate / 2,
-                        norm="slaney",
-                    )
-                    mel_filters = feature_extractor_class._slaney_mel_filters(sampling_rate, n_fft, feature_size)
-                    self.assertEqual(mel_filters.dtype, expected.dtype)
-                    np.testing.assert_array_equal(mel_filters, expected)
-
-            feature_extractor = feature_extractor_class()
-            expected = librosa.filters.mel(
-                sr=feature_extractor.sampling_rate,
-                n_fft=feature_extractor.n_fft,
-                n_mels=feature_extractor.feature_size,
-                fmin=0.0,
-                fmax=feature_extractor.sampling_rate / 2,
-                norm="slaney",
-            )
-            np.testing.assert_array_equal(feature_extractor.mel_filters.numpy(), expected)
+            with self.subTest(feature_extractor_class.__name__):
+                feature_extractor = feature_extractor_class()
+                expected = librosa.filters.mel(
+                    sr=feature_extractor.sampling_rate,
+                    n_fft=feature_extractor.n_fft,
+                    n_mels=feature_extractor.feature_size,
+                    fmin=0.0,
+                    fmax=feature_extractor.sampling_rate / 2,
+                    norm="slaney",
+                )
+                self.assertEqual(feature_extractor.mel_filters.dtype, torch.float32)
+                np.testing.assert_array_equal(feature_extractor.mel_filters.numpy(), expected)

@@ -770,6 +770,7 @@ def mel_filter_bank(
     norm: str | None = None,
     mel_scale: str = "htk",
     triangularize_in_mel_space: bool = False,
+    dtype: str | np.dtype = np.float64,
 ) -> np.ndarray:
     """
     Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
@@ -809,6 +810,10 @@ def mel_filter_bank(
         triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
             If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
             should be set to `true` in order to get the same results as `torchaudio` when computing mel filters.
+        dtype (`str` or `np.dtype`, *optional*, defaults to `np.float64`):
+            Data type of the returned filters. The triangular filters are computed in float64 and cast to `dtype`
+            before the `"slaney"` normalization. With `norm="slaney"`, `mel_scale="slaney"` and `dtype=np.float32`,
+            the result is bit-exact with `librosa.filters.mel(..., norm="slaney")` (transposed).
 
     Returns:
         `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
@@ -838,7 +843,7 @@ def mel_filter_bank(
         # frequencies of FFT bins in Hz
         fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
 
-    mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
+    mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(dtype, copy=False)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel

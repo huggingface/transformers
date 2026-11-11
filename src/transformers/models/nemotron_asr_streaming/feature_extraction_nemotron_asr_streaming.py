@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from ...audio_utils import hertz_to_mel, mel_to_hertz
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, logging
@@ -89,30 +89,19 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.win_length = win_length
         self.preemphasis = preemphasis
-        mel_filters = self._slaney_mel_filters(sampling_rate, n_fft, feature_size)
-        self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
-        self.mel_filters_dtype = mel_filters_dtype
-
-    @staticmethod
-    def _slaney_mel_filters(sampling_rate: int, n_fft: int, num_mel_filters: int) -> np.ndarray:
-        """
-        Slaney-normalized mel filters of shape `(num_mel_filters, n_fft // 2 + 1)`, bit-exact with
-        `librosa.filters.mel(sr=sampling_rate, n_fft=n_fft, n_mels=num_mel_filters, fmin=0.0, norm="slaney")`: each
-        band is rounded to float32 before the slaney normalization, as librosa does ([`~audio_utils.mel_filter_bank`]
-        works in float64 and differs slightly).
-        """
-        fft_freqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
-        mel_freqs = mel_to_hertz(
-            np.linspace(0.0, hertz_to_mel(sampling_rate / 2, mel_scale="slaney"), num_mel_filters + 2),
+        # float32 rounding before the slaney normalization: bit-exact with `librosa.filters.mel(..., norm="slaney")`
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=n_fft // 2 + 1,
+            num_mel_filters=feature_size,
+            min_frequency=0.0,
+            max_frequency=sampling_rate / 2,
+            sampling_rate=sampling_rate,
+            norm="slaney",
             mel_scale="slaney",
+            dtype=np.float32,
         )
-        filter_diff = np.diff(mel_freqs)
-        ramps = np.subtract.outer(mel_freqs, fft_freqs)
-        mel_filters = np.zeros((num_mel_filters, len(fft_freqs)), dtype=np.float32)
-        for i in range(num_mel_filters):
-            mel_filters[i] = np.maximum(0, np.minimum(-ramps[i] / filter_diff[i], ramps[i + 2] / filter_diff[i + 1]))
-        mel_filters *= (2.0 / (mel_freqs[2 : num_mel_filters + 2] - mel_freqs[:num_mel_filters]))[:, np.newaxis]
-        return mel_filters
+        self.mel_filters = torch.from_numpy(np.ascontiguousarray(mel_filters.T))
+        self.mel_filters_dtype = mel_filters_dtype
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
         dtype = getattr(torch, self.mel_filters_dtype)

@@ -14,6 +14,7 @@
 
 import base64
 import io
+import itertools
 import os
 import shutil
 import tempfile
@@ -306,6 +307,46 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         ])
         # fmt: on
         self.assertTrue(np.allclose(mel_filters, expected))
+
+    def test_mel_filter_bank_default_dtype_is_float64(self):
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=257,
+            num_mel_filters=80,
+            min_frequency=0.0,
+            max_frequency=8000,
+            sampling_rate=16000,
+            norm="slaney",
+            mel_scale="slaney",
+        )
+        self.assertEqual(mel_filters.dtype, np.float64)
+
+    @require_librosa
+    def test_mel_filter_bank_slaney_float32_matches_librosa(self):
+        # float32 rounding before the slaney normalization is what librosa does: the result must be bit-exact
+        for sampling_rate, n_fft, num_mel_filters in itertools.product(
+            [8000, 16000, 22050, 24000, 44100, 48000], [256, 400, 512, 1024], [64, 80, 128]
+        ):
+            with self.subTest(sr=sampling_rate, n_fft=n_fft, n_mels=num_mel_filters):
+                mel_filters = mel_filter_bank(
+                    num_frequency_bins=n_fft // 2 + 1,
+                    num_mel_filters=num_mel_filters,
+                    min_frequency=0.0,
+                    max_frequency=sampling_rate / 2,
+                    sampling_rate=sampling_rate,
+                    norm="slaney",
+                    mel_scale="slaney",
+                    dtype=np.float32,
+                )
+                expected = librosa.filters.mel(
+                    sr=sampling_rate,
+                    n_fft=n_fft,
+                    n_mels=num_mel_filters,
+                    fmin=0.0,
+                    fmax=sampling_rate / 2,
+                    norm="slaney",
+                )
+                self.assertEqual(mel_filters.dtype, expected.dtype)
+                np.testing.assert_array_equal(mel_filters.T, expected)
 
     def test_window_function(self):
         window = window_function(16, "hann")
