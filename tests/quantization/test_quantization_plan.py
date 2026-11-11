@@ -29,7 +29,12 @@ from transformers import (
     Mxfp4Config,
     NVFP4Config,
 )
-from transformers.quantizers.auto import AutoHfQuantizer, QuantizationPlanHfQuantizer, get_hf_quantizer
+from transformers.quantizers.auto import (
+    AutoHfQuantizer,
+    QuantizationPlanHfQuantizer,
+    get_hf_quantizer,
+    plan_quantizers,
+)
 from transformers.testing_utils import require_kernels, require_torch, require_torch_gpu, slow
 from transformers.utils import is_torch_available
 
@@ -123,6 +128,14 @@ class QuantizationPlanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "can't be mixed"):
             QuantizationPlanHfQuantizer({"*.mlp.*": bnb, "*": fp8})
         QuantizationPlanHfQuantizer({"*": bnb})  # alone, it swaps its own modules as before
+
+    def test_loading_attributes_keep_the_saved_config_class(self):
+        # A saved FP8 plan takes `FineGrainedFP8Config(dequantize=True)`'s loading attributes, not another format's
+        saved = {"*.mlp.*": {"quant_method": "fp8", "weight_block_size": [128, 128]}, "*": None}
+        quantizers = plan_quantizers(saved, FineGrainedFP8Config(dequantize=True), pre_quantized=True)
+        self.assertTrue(quantizers["*.mlp.*"].quantization_config.dequantize)
+        with self.assertRaisesRegex(ValueError, "quantized with FineGrainedFP8Config but you are passing a"):
+            plan_quantizers(saved, BitsAndBytesConfig(load_in_8bit=True), pre_quantized=True)
 
     def test_postprocess_drops_dequantized_patterns(self):
         plan = QuantizationPlanHfQuantizer(

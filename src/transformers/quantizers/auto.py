@@ -667,6 +667,12 @@ def plan_quantizers(plan: dict, loading, pre_quantized: bool) -> dict:
             config = AutoQuantizationConfig.from_dict(config)
         attributes = loading.get(pattern) if pre_quantized else None
         if isinstance(attributes, QuantizationConfigMixin):
+            if type(attributes).__name__ != type(config).__name__:
+                raise ValueError(
+                    f"The model is quantized with {type(config).__name__} but you are passing a "
+                    f"{type(attributes).__name__} config. Please make sure to pass the same quantization config class "
+                    "to `from_pretrained` with different loading attributes."
+                )
             attributes = attributes.get_loading_attributes()
         for key, value in (attributes or {}).items():
             setattr(config, key, value)
