@@ -128,15 +128,19 @@ def _export_for_ort(model, ort_fusions, inputs=None, dynamic=True):
     """The prefill and decode programs of `model`, fused for `ort_fusions`."""
     if inputs is None:
         inputs = {"input_ids": torch.tensor([[1, 5, 7, 9, 11]]), "attention_mask": torch.ones(1, 5, dtype=torch.long)}
-    return OnnxExporter().export_for_generation(
-        model, dict(inputs), OnnxConfig(dynamic=dynamic, ort_fusions=ort_fusions), GenerationConfig(max_new_tokens=3)
+    exported = OnnxExporter().export_for_generation(
+        model,
+        dict(inputs),
+        OnnxConfig(dynamic=dynamic, ort_fusions=ort_fusions),
+        generation_config=GenerationConfig(max_new_tokens=3),
     )
+    return {name: component.program for name, component in exported.components.items()}
 
 
 def _decode_feeds(program, vocab_size):
     """Inputs for one new token after a random past cache."""
     generator = np.random.default_rng(0)
-    inputs = {value.name: [int(dim) for dim in value.shape] for value in program.model.graph.inputs}
+    inputs = {value.name: [int(dim) for dim in value.shape] for value in program.graph.inputs}
     past_length = next(shape[2] for name, shape in inputs.items() if "past_key_values" in name)
     feeds = {}
     for name, shape in inputs.items():
@@ -155,12 +159,12 @@ def _run(program, feeds):
     import onnx_ir as ir
     import onnxruntime as ort
 
-    session = ort.InferenceSession(ir.to_proto(program.model).SerializeToString(), providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(ir.to_proto(program).SerializeToString(), providers=["CPUExecutionProvider"])
     return session.run(None, {item.name: feeds[item.name] for item in session.get_inputs()})
 
 
 def _group_query_attentions(program):
-    return [node for node in program.model.graph.all_nodes() if node.op_type == "GroupQueryAttention"]
+    return [node for node in program.graph.all_nodes() if node.op_type == "GroupQueryAttention"]
 
 
 @slow
@@ -173,7 +177,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
 
     def assert_fused(self, model, program, fusions, component=None):
         num_layers = model.config.num_hidden_layers
-        ops = collections.Counter(node.op_type for node in program.model.graph.all_nodes())
+        ops = collections.Counter(node.op_type for node in program.graph.all_nodes())
         self.assertEqual({op: ops[op] for op in fusions}, {op: n * num_layers for op, n in fusions.items()}, component)
 
     @parameterized.expand([(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ORT_FUSIONS])
@@ -185,12 +189,12 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_forward_matches_plain_export(self):
         model = _ort_model()
         inputs = _padded_inputs(model)
-        fused = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, ort_fusions="cpu"))
-        plain = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False))
+        fused = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, ort_fusions="cpu")).program
+        plain = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False)).program
         self.assert_fused(model, fused, ORT_FUSIONS["cpu"])
-        ops = {node.op_type for node in fused.model.graph.all_nodes()}
+        ops = {node.op_type for node in fused.graph.all_nodes()}
         self.assertLessEqual({"SimplifiedLayerNormalization", "SkipSimplifiedLayerNormalization"}, ops)
-        self.assertFalse(any(node.domain == "com.microsoft" for node in plain.model.graph.all_nodes()))
+        self.assertFalse(any(node.domain == "com.microsoft" for node in plain.graph.all_nodes()))
         feeds = {name: value.numpy() for name, value in inputs.items()}
         np.testing.assert_allclose(_run(fused, feeds)[0], _run(plain, feeds)[0], atol=1e-4, rtol=1e-4)
 
@@ -232,7 +236,7 @@ def _decode(model, multi_token_decode=True, quantizer=None):
         generation_config=GenerationConfig(max_new_tokens=3),
         multi_token_decode=multi_token_decode,
     )
-    return exported["decode"]
+    return exported.components["decode"].program
 
 
 def _compiled_ops(ov_model):
