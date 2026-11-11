@@ -62,7 +62,7 @@ def register_backend(exporter: type[HfExporter]) -> None:
     EXPORT_BACKENDS[exporter.export_format] = ExportBackend(exporter.config_class, exporter)
 
 
-def _registered_backend(export_format: ExportFormat | str | None) -> ExportBackend:
+def _backend_for(export_format: ExportFormat | str | None) -> ExportBackend:
     if export_format not in EXPORT_BACKENDS:
         raise ValueError(
             f"Unknown export format {export_format!r} — registered formats are {sorted(EXPORT_BACKENDS)}."
@@ -72,12 +72,12 @@ def _registered_backend(export_format: ExportFormat | str | None) -> ExportBacke
 
 def get_export_config_class(export_format: ExportFormat | str | None) -> type[ExportConfigMixin]:
     """The config class registered for a format."""
-    return _registered_backend(export_format).config
+    return _backend_for(export_format).config
 
 
 def get_exporter_class(export_format: ExportFormat | str | None) -> type[HfExporter]:
     """The exporter class registered for a format, imported on first use."""
-    backend = _registered_backend(export_format)
+    backend = _backend_for(export_format)
     if isinstance(backend.exporter, str):
         module_name, class_name = backend.exporter.rsplit(".", 1)
         backend.exporter = getattr(importlib.import_module(f".{module_name}", __package__), class_name)

@@ -31,7 +31,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
 from .configs import ExportConfigMixin, ExportFormat
-from .metadata import ExportMetadata, export_config_metadata
+from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
 from .utils import check_packages, decompose_for_generation
 
@@ -117,21 +117,21 @@ class ExportedModel(PushToHubMixin):
             repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(directory)
 
-        components = {}
+        entries = {}
         # Written aside, then moved over the old files: a program loaded from this directory may still read them
         # (OpenVINO maps its weights), and a moved file leaves the one it replaces readable.
         with tempfile.TemporaryDirectory(dir=directory) as staging:
             for name, component in self.components.items():
                 filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
                 exporter.save_program(component.program, Path(staging) / filename)
-                components[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
+                entries[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
             for file in Path(staging).iterdir():
                 os.replace(file, directory / file.name)
 
         manifest = {
             "schema_version": EXPORT_SCHEMA_VERSION,
             "export_format": str(self.export_format),
-            "components": components,
+            "components": entries,
         }
         (directory / EXPORT_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         if self.config is not None:
@@ -285,7 +285,7 @@ class HfExporter(ABC):
         elif not isinstance(config, self.config_class):
             raise TypeError(f"Expected config to be a {self.config_class.__name__} or dict, got {type(config)}")
         program, metadata = self.export_program(model, sample_inputs, config=config)
-        metadata.export_config = export_config_metadata(config)
+        metadata.export_config = json.loads(config.to_json_string())
         return ExportedComponent(program, metadata)
 
     def export(
