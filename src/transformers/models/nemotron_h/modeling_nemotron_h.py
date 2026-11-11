@@ -1236,6 +1236,7 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         return model_inputs
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
         # table doesn't enumerate, so we return both masks the forward needs as a dict.

@@ -1892,6 +1892,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
         special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -3266,6 +3267,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         inputs_tensor: torch.Tensor,

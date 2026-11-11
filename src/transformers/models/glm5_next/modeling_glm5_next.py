@@ -2357,6 +2357,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         return mm_encoder_output
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, **_):
         # We only use the base 2D mask as the indexer is reliant on the padding, not the expanded masks.
         # I.e. 4D masks are built afterwards after subsets have been selected in the indexer.

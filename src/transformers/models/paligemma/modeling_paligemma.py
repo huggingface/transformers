@@ -418,6 +418,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         return model_inputs
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,

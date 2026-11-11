@@ -446,6 +446,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         rope_deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
         return position_ids, rope_deltas.long()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,

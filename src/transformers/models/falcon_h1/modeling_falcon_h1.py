@@ -1188,6 +1188,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         )
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         # Every FalconH1 decoder layer is hybrid (attention + mamba in the same block), so the layer-type
         # dispatch table can't enumerate sub-patterns. We return both masks the layer needs as a dict.

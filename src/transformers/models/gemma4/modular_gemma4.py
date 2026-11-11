@@ -2397,6 +2397,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         return self.model.get_image_features(pixel_values, image_position_ids, **kwargs)
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,

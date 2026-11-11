@@ -576,6 +576,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         self,
         config: BloomConfig,

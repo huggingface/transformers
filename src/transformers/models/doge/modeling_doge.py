@@ -805,6 +805,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         )
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         mask_kwargs = {
             "config": config.get_text_config(),

@@ -797,6 +797,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
         )
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         # TODO: @eustlb, remove once `masking_utils.create_masks_for_generate` skips the layers without attention
         # (Nemotron-H `moe` / `mlp`), which also removes `NemotronHForCausalLM.create_masks_for_generate`

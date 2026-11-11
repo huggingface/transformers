@@ -1149,6 +1149,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         self.language_model.embed_tokens_per_layer = value
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,

@@ -1188,6 +1188,7 @@ class HunYuanVLModel(Qwen2VLModel):
         rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, rope_deltas
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.LongTensor | None,

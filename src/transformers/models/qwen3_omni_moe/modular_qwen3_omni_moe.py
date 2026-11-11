@@ -1778,6 +1778,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         inputs_tensor: torch.Tensor,

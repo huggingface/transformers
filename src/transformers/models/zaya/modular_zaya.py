@@ -671,6 +671,7 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         # ZAYA decoder layers are hybrid: attention consumes the causal/sliding mask, while CCA uses a 2D padding
         # mask to zero tokens before the convolutional projection.

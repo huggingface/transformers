@@ -300,6 +300,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
