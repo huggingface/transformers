@@ -95,7 +95,7 @@ class AutoExportConfigTest(unittest.TestCase):
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
 
     def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "No export format"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format None"):
             AutoExportConfig.from_dict({})
 
     def test_from_dict_unknown_format_raises(self):
@@ -128,7 +128,7 @@ class AutoHfExporterTest(unittest.TestCase):
     def test_from_config_raises_on_unknown_format(self):
         with self.assertRaisesRegex(ValueError, "Unknown export format"):
             AutoHfExporter.from_config({"export_format": "not_a_real_backend"})
-        with self.assertRaisesRegex(ValueError, "No export format"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format None"):
             AutoHfExporter.from_config({})
 
 
