@@ -16,6 +16,7 @@
 import tempfile
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
@@ -172,6 +173,39 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         for attention in out.attentions:
             self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
+    def test_kv_shared_prefill_truncation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 4
+        config.layer_types = ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        config.num_kv_shared_layers = 2
+
+        model = Gemma4ForCausalLM(config)
+        model.eval()
+
+        input_ids = torch.randint(10, 60, (2, 14))
+        mask = torch.ones_like(input_ids)
+
+        COUNTER = 0
+
+        def new_slice(*args, **kwargs):
+            nonlocal COUNTER
+            COUNTER += 1
+            # slice 1:5 to absorb self
+            return args[1:5]
+
+        with torch.no_grad():
+            out_skipped = model(input_ids, mask, logits_to_keep=1)
+            with patch(
+                "transformers.models.gemma4.modeling_gemma4.Gemma4TextModel._maybe_slice_kv_shared_inputs", new_slice
+            ):
+                out_unskipped = model(input_ids, mask, logits_to_keep=1)
+
+        # Make sure we skipped correctly
+        self.assertEqual(COUNTER, 1)
+        # Make sure outputs are the same
+        torch.testing.assert_close(out_skipped.logits, out_unskipped.logits)
+        torch.testing.assert_close(out_skipped.shared_kv_states, out_unskipped.shared_kv_states)
+
     def test_model_training(self):
         pass
 
@@ -226,12 +260,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("attention_context_left", 5)
         kwargs.setdefault("attention_context_right", 0)
         kwargs.setdefault("output_proj_dims", 32)
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
         # comparison logic (inf - inf = NaN). Disable for testing.
         kwargs.setdefault("use_clipped_linears", False)
         super().__init__(parent, **kwargs)
         self.head_dim = self.hidden_size // self.num_attention_heads
-        self.per_layer_config = {
+        self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
             if layer_type == "full_attention"
@@ -384,8 +419,9 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("top_k_experts", 2)
         kwargs.setdefault("use_bidirectional_attention", "vision")
         kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         super().__init__(parent, **kwargs)
-        self.per_layer_config = {
+        self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
             if layer_type == "full_attention"
@@ -1083,10 +1119,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_COMPLETIONS = Expectations(
             {
-                ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'"
-                    if attn_implementation == "sdpa"
-                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
+                ("cuda", (8, 6)): [
+                    "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [

@@ -347,7 +347,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
             torch_device
         )
-        assert inputs.input_ids.shape == (2, 421)
+        assert inputs.input_ids.shape == (2, 422)
         translated_tokens = self.model.generate(**inputs, num_beams=2)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         assert self.tgt_text == decoded

@@ -249,6 +249,7 @@ if TYPE_CHECKING:
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jev import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *
@@ -268,6 +269,7 @@ if TYPE_CHECKING:
     from .lfm2_moe import *
     from .lfm2_vl import *
     from .lfm3 import *
+    from .lfm3_vl import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
