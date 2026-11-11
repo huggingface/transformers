@@ -79,14 +79,16 @@ class NVFP4HfQuantizer(HfQuantizer):
         if major < 10:
             raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
 
-    def update_parallel_plan(self, model, plan):
+    def update_parallel_plan(self, model, parallel_plan):
         from ..distributed.parallel_utils import replace_layer_number_by_wildcard
         from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear
 
-        # Its swizzled scales have no sharding plan yet: its modules stay whole on every rank
+        # Its swizzled scales have no sharding parallel_plan yet: its modules stay whole on every rank
         nvfp4 = (NVFP4Linear, NVFP4Experts)
         modules = {replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, nvfp4)}
-        plan.update({key: "replicate" for key in plan if key in modules or key.rpartition(".")[0] in modules})
+        parallel_plan.update(
+            {key: "replicate" for key in parallel_plan if key in modules or key.rpartition(".")[0] in modules}
+        )
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
         from ..integrations.nvfp4 import NVFP4Linear

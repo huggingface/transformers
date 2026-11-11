@@ -504,19 +504,27 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model):
         """
-        The model's conversions, then the formats' own converters. A model converter's `weight` also takes the scales
-        named after it (`weight_scale_inv`, see `rename_layer`), into its target's (`gate_up_proj_scale_inv`).
+        The model's conversions, then the formats' own converters. A model converter's `.weight` also takes the scales
+        named after it (`weight_scale_inv`, see `rename_layer`), each into the target named like it. E.g. the experts'
+        converter merging `gate_proj` and `up_proj` into `gate_up_proj` (FP8):
+
+            mlp.experts.3.gate_proj.weight            -> mlp.experts.gate_up_proj            MergeModulelist, Concatenate,
+            mlp.experts.3.up_proj.weight              ->                                      then Fp8Deserialize
+            mlp.experts.3.gate_proj.weight_scale_inv  -> mlp.experts.gate_up_proj_scale_inv  same ops, its own target
+            mlp.experts.3.up_proj.weight_scale_inv    ->
+
+        Dequantized, the converter is widened to read the scales along (`*.gate_proj.weight_scale_inv`, ...), into the
+        one target `gate_up_proj`: `Fp8Dequantize` folds each scale into its weight before the merge.
         """
         from ..core_model_loading import WeightConverter
 
         if self.patterns is None:
             self.map_module_to_quantizer(model)
-        for quantizer in self.all_quantizers:
-            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
         # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
         # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
         names = []
         for quantizer in self.all_quantizers:
+            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
             if getattr(quantizer.quantization_config, "dequantize", False):
                 names += [*quantizer.serialized_names["weight"], *quantizer.renamed_names.values()]
         for i, converter in enumerate(weight_conversions):

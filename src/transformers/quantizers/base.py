@@ -173,7 +173,7 @@ class HfQuantizer(ABC):
         """
         return
 
-    def update_parallel_plan(self, model, plan: dict[str, str]):
+    def update_parallel_plan(self, model, parallel_plan: dict[str, str]):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
@@ -182,11 +182,11 @@ class HfQuantizer(ABC):
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
         names = {name for serialized in self.serialized_names.values() for name in serialized}
         # A param named after a planned one shards like it: `gate_up_proj_scale_inv`, `gate_up_proj_blocks`
-        for key, style in list(plan.items()):
+        for key, style in list(parallel_plan.items()):
             module, _, planned = key.rpartition(".")
             for name in names:
-                if name.startswith(planned) and f"{module}.{name}" in params - plan.keys():
-                    plan[f"{module}.{name}"] = style
+                if name.startswith(planned) and f"{module}.{name}" in params - parallel_plan.keys():
+                    parallel_plan[f"{module}.{name}"] = style
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
