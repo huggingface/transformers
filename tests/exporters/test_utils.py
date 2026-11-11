@@ -224,6 +224,32 @@ class ExportedModelTest(unittest.TestCase):
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
 
+    def test_from_pretrained_passes_trust_remote_code_to_the_config(self):
+        components = {"model": ExportedComponent("program", ExportMetadata())}
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend(_StubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportedModel(components, "stub", BertConfig(hidden_size=32)).save_pretrained(directory)
+                with mock.patch("transformers.exporters.base.AutoConfig.from_pretrained") as load_config:
+                    ExportedModel.from_pretrained(directory, trust_remote_code=True)
+        self.assertTrue(load_config.call_args.kwargs["trust_remote_code"])
+
+    def test_from_pretrained_loads_a_newer_manifest(self):
+        """An export from a newer transformers, with a field this version doesn't know, loads with a warning."""
+        components = {"model": ExportedComponent("program", ExportMetadata(input_names=["input_ids"]))}
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend(_StubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportedModel(components, "stub").save_pretrained(directory)
+                manifest = json.loads(Path(directory, "export.json").read_text(encoding="utf-8"))
+                manifest["schema_version"] += 1
+                manifest["components"]["model"]["metadata"]["added_later"] = True
+                Path(directory, "export.json").write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertLogs("transformers.exporters.base", level="WARNING") as logs:
+                    loaded = ExportedModel.from_pretrained(directory)
+        self.assertIn("newer format", logs.output[0])
+        self.assertEqual(loaded.components["model"].metadata.input_names, ["input_ids"])
+
     def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(OSError, "export.json"):

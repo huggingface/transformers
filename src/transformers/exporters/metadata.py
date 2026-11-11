@@ -82,6 +82,12 @@ class ExportMetadata:
     out_spec: str | None = None
     export_config: dict[str, Any] = field(default_factory=dict)
 
+    @classmethod
+    def from_dict(cls, values: Mapping[str, Any]) -> ExportMetadata:
+        """Build the metadata from its saved dict, skipping fields this class doesn't have (added by a newer version)."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{name: value for name, value in values.items() if name in known})
+
 
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()

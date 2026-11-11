@@ -186,10 +186,13 @@ class ExecutorchSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
             self.assertIsNotNone(entry["metadata"]["out_spec"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
-            with tempfile.TemporaryDirectory() as resaved:
-                loaded.save_pretrained(resaved)
-                self.assertEqual(Path(resaved, "model.pte").read_bytes(), Path(directory, "model.pte").read_bytes())
-                self.assertIn("forward", ExportedModel.from_pretrained(resaved).program.method_names)
+            saved = Path(directory, "model.pte").read_bytes()
+            with tempfile.TemporaryDirectory() as elsewhere:
+                loaded.save_pretrained(elsewhere)
+                self.assertEqual(Path(elsewhere, "model.pte").read_bytes(), saved)
+            loaded.save_pretrained(directory)
+            self.assertEqual(Path(directory, "model.pte").read_bytes(), saved)
+            self.assertIn("forward", ExportedModel.from_pretrained(directory).program.method_names)
 
 
 @slow
@@ -211,3 +214,17 @@ class OpenVINOSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
         self.assertIn("beam_idx", entry["metadata"]["input_names"])
+
+    def test_loaded_model_saves_in_place(self):
+        """A loaded model saves back into the directory it was read from, whose weights OpenVINO still maps."""
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            _, loaded = self._save_and_load_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
+            loaded.save_pretrained(directory)
+            reloaded = ExportedModel.from_pretrained(directory)
+            self.assertEqual(reloaded.components["model"].metadata, loaded.components["model"].metadata)
+            self.assertEqual(
+                [port.get_any_name() for port in reloaded.program.inputs],
+                [port.get_any_name() for port in loaded.program.inputs],
+            )

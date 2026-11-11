@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
+import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from dataclasses import dataclass
@@ -48,6 +50,7 @@ logger = logging.get_logger(__name__)
 # Backend, file and recorded metadata per component. Kept outside the programs because not every format
 # can carry the metadata (`torch.export` cannot).
 EXPORT_MANIFEST_FILE = "export.json"
+EXPORT_SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -171,12 +174,21 @@ class ExportedModel(PushToHubMixin):
             files_timestamps = self._get_files_timestamps(directory)
 
         components = {}
-        for name, component in self.components.items():
-            filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
-            exporter.save_program(component.program, directory / filename)
-            components[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
+        # Written aside, then moved over the old files: a program loaded from this directory may still read them
+        # (OpenVINO maps its weights), and a moved file leaves the one it replaces readable.
+        with tempfile.TemporaryDirectory(dir=directory) as staging:
+            for name, component in self.components.items():
+                filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
+                exporter.save_program(component.program, Path(staging) / filename)
+                components[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
+            for file in Path(staging).iterdir():
+                os.replace(file, directory / file.name)
 
-        manifest = {"schema_version": 1, "export_format": str(self.export_format), "components": components}
+        manifest = {
+            "schema_version": EXPORT_SCHEMA_VERSION,
+            "export_format": str(self.export_format),
+            "components": components,
+        }
         (directory / EXPORT_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         if self.config is not None:
             self.config.save_pretrained(directory)
@@ -189,7 +201,12 @@ class ExportedModel(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: str | Path, *, device=None, **kwargs: Unpack[DownloadKwargs]
+        cls,
+        pretrained_model_name_or_path: str | Path,
+        *,
+        device=None,
+        trust_remote_code: bool = False,
+        **kwargs: Unpack[DownloadKwargs],
     ) -> ExportedModel:
         """Load what [`~ExportedModel.save_pretrained`] wrote: each component through its backend's
         [`~HfExporter.load_program`], with its metadata, and the configs saved next to them. The programs are loaded
@@ -201,6 +218,9 @@ class ExportedModel(PushToHubMixin):
                 downloaded, so an export can sit next to the model's own weights.
             device (`str` or `torch.device`, *optional*):
                 Where to run it (the backend's default when `None`). Call [`~ExportedModel.to`] for runner options.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
+                Whether to load the config of a model whose code lives in its repo, as for
+                [`~AutoConfig.from_pretrained`].
             kwargs ([`~utils.hub.DownloadKwargs`], *optional*):
                 Download kwargs, as for [`~PreTrainedModel.from_pretrained`] (`subfolder`, `revision`, `token`, ...).
         """
@@ -208,6 +228,11 @@ class ExportedModel(PushToHubMixin):
 
         manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **kwargs)
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
+        if manifest.get("schema_version", 1) > EXPORT_SCHEMA_VERSION:
+            logger.warning(
+                f"This export was saved in a newer format (schema {manifest['schema_version']}) than this version of "
+                f"transformers reads ({EXPORT_SCHEMA_VERSION}): some fields might be ignored or misinterpreted."
+            )
         exporter = get_exporter_class(manifest["export_format"])
         program_files = [
             file for entry in manifest["components"].values() for file in exporter.program_files(entry["file"])
@@ -222,13 +247,17 @@ class ExportedModel(PushToHubMixin):
         directory = Path(manifest_file).parent
         components = {}
         for name, entry in manifest["components"].items():
-            metadata = ExportMetadata(**entry["metadata"])
+            metadata = ExportMetadata.from_dict(entry["metadata"])
             # A program whose inputs or outputs hold a cache can't be read back until the cache is a pytree node.
             for spec in (metadata.in_spec, metadata.out_spec):
                 if spec is not None:
                     register_treespec_types(spec)
             components[name] = ExportedComponent(exporter.load_program(directory / entry["file"]), metadata)
-        config = AutoConfig.from_pretrained(directory) if (directory / CONFIG_NAME).exists() else None
+        config = (
+            AutoConfig.from_pretrained(directory, trust_remote_code=trust_remote_code)
+            if (directory / CONFIG_NAME).exists()
+            else None
+        )
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
