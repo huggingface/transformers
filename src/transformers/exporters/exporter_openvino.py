@@ -357,11 +357,15 @@ def patch_16bit_model(model: PreTrainedModel, sample_inputs: MutableMapping[str,
                 set_aside.append((module, name, parameter))
     set_aside_ids = {id(parameter) for _, _, parameter in set_aside}
 
-    # The other 16-bit tensors (norms, ...) are small: upcast for the trace.
+    # The other 16-bit tensors (norms, ...) are small: upcast for the trace, each slot holding an f32 copy. Not through
+    # `.data`: a view keeps its 16-bit base, which `torch.export` replays when it fakifies the parameters (a loaded
+    # checkpoint's `layer_scalar` is one). A tensor shared between modules gets one copy.
     upcast = []
-    for tensor in [*model.parameters(), *model.buffers()]:
-        if tensor.dtype in half and id(tensor) not in set_aside_ids:
-            upcast.append((tensor, tensor.dtype))
+    for module in model.modules():
+        for slots in (module._parameters, module._buffers):
+            for name, tensor in slots.items():
+                if tensor is not None and tensor.dtype in half and id(tensor) not in set_aside_ids:
+                    upcast.append((slots, name, tensor))
 
     # The configs too: masks and caches the forward builds take their dtype from them.
     configs = []
@@ -378,9 +382,14 @@ def patch_16bit_model(model: PreTrainedModel, sample_inputs: MutableMapping[str,
         # An f32 placeholder broadcasting a single zero: code reading `weight.dtype` sees f32, at no memory cost.
         placeholder = torch.zeros((), device=parameter.device).expand(parameter.shape)
         setattr(module, name, torch.nn.Parameter(placeholder, requires_grad=False))
-    for tensor, _ in upcast:
-        # In place, so every module sharing the tensor sees it.
-        tensor.data = tensor.data.float()
+    copies = {}
+    for slots, name, tensor in upcast:
+        if id(tensor) not in copies:
+            upcast_tensor = tensor.detach().float()
+            if isinstance(tensor, torch.nn.Parameter):
+                upcast_tensor = torch.nn.Parameter(upcast_tensor, requires_grad=False)
+            copies[id(tensor)] = upcast_tensor
+        slots[name] = copies[id(tensor)]
     for config, _ in configs:
         config.dtype = torch.float32
 
@@ -391,8 +400,8 @@ def patch_16bit_model(model: PreTrainedModel, sample_inputs: MutableMapping[str,
         for module, name, parameter in set_aside:
             setattr(module, name, parameter)
             del module._parameters[f"_16bit_{name}"]
-        for tensor, dtype in upcast:
-            tensor.data = tensor.data.to(dtype)
+        for slots, name, tensor in upcast:
+            slots[name] = tensor
         for config, dtype in configs:
             config.dtype = dtype
 
