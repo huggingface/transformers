@@ -33,12 +33,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..llama.modeling_llama import LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRMSNorm,
-    MixtralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
     load_balancing_loss_func,
@@ -53,7 +52,7 @@ class JetMoeRMSNorm(MixtralRMSNorm):
     pass
 
 
-class JetMoeRotaryEmbedding(MixtralRotaryEmbedding):
+class JetMoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

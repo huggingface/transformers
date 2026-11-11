@@ -150,7 +150,7 @@ def augment_patches_center_coordinates(
     return coords
 
 
-class DINOv3ViTRopePositionEmbedding(nn.Module):
+class DINOv3ViTRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
     def __init__(self, config: DINOv3ViTConfig):
@@ -486,7 +486,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
             init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
-        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
+        elif isinstance(module, DINOv3ViTRotaryEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
 
@@ -516,7 +516,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
         self.embeddings = DINOv3ViTEmbeddings(config)
-        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
+        self.rotary_emb = DINOv3ViTRotaryEmbedding(config)
         self.model = DINOv3ViTEncoder(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # Initialize weights and apply final processing
@@ -540,7 +540,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        position_embeddings = self.rope_embeddings(pixel_values)
+        position_embeddings = self.rotary_emb(pixel_values)
 
         encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
         sequence_output = self.norm(encoder_outputs.last_hidden_state)
@@ -558,7 +558,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
         self.embeddings = DINOv3ViTEmbeddings(config)
-        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
+        self.rotary_emb = DINOv3ViTRotaryEmbedding(config)
         self.model = DINOv3ViTEncoder(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -577,7 +577,7 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     ) -> DINOv3ViTBackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_state = self.embeddings(pixel_values)
-        position_embeddings = self.rope_embeddings(pixel_values)
+        position_embeddings = self.rotary_emb(pixel_values)
 
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)

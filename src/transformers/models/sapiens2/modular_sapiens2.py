@@ -53,7 +53,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTLayerScale,
     DINOv3ViTModel,
     DINOv3ViTPreTrainedModel,
-    DINOv3ViTRopePositionEmbedding,
+    DINOv3ViTRotaryEmbedding,
     apply_rotary_pos_emb,
 )
 from ..gemma2.modeling_gemma2 import eager_attention_forward
@@ -1362,7 +1362,7 @@ class Sapiens2Embeddings(DINOv3ViTEmbeddings):
         return super().forward(pixel_values, bool_masked_pos)
 
 
-class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
+class Sapiens2RotaryEmbedding(DINOv3ViTRotaryEmbedding):
     pass
 
 
@@ -1610,7 +1610,7 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
                 init.zeros_(module.mask_token)
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
-        elif isinstance(module, Sapiens2RopePositionEmbedding):
+        elif isinstance(module, Sapiens2RotaryEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, (Sapiens2Head, Sapiens2PointmapScaleHead)):
@@ -1702,7 +1702,7 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values)
-        position_embeddings = self.rope_embeddings(pixel_values)
+        position_embeddings = self.rotary_emb(pixel_values)
 
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         output: BaseModelOutput = self.model(hidden_states, position_embeddings, **kwargs)

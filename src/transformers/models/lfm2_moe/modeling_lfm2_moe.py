@@ -558,8 +558,8 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
         self.layers = nn.ModuleList(
             [Lfm2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.rotary_emb = Lfm2MoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.pos_emb = Lfm2MoeRotaryEmbedding(config)
         self.embedding_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
 
         # Initialize weights and apply final processing
@@ -606,7 +606,7 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

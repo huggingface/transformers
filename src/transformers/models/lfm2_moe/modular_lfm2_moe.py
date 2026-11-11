@@ -29,10 +29,9 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
     Lfm2MLP,
-    Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
-from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
@@ -46,7 +45,7 @@ class Lfm2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
+class Lfm2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
@@ -145,10 +144,8 @@ class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
 class Lfm2MoeModel(MixtralModel):
     def __init__(self, config: Lfm2MoeConfig):
         super().__init__(config)
-        self.pos_emb = Lfm2MoeRotaryEmbedding(config)
         self.embedding_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
-        del self.rotary_emb
 
     def forward(
         self,
@@ -188,7 +185,7 @@ class Lfm2MoeModel(MixtralModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

@@ -1349,13 +1349,11 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig):
+        super().__init__(config)
 
-    def compute_axial_rope_parameters(
-        config: Qwen2_5OmniVisionEncoderConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        return super().compute_axial_rope_parameters(config, device=device, *kwargs)
+    def compute_axial_rope_parameters(config: Qwen2_5OmniVisionEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_axial_rope_parameters(config, **kwargs)
 
 
 class Qwen2_5OmniVisionAttention(nn.Module):
@@ -1520,7 +1518,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         seq_len, _ = hidden_states.size()
         hidden_states = self.permute_input_for_window_attn(hidden_states, window_index, seq_len=seq_len)
 
-        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         position_embeddings = tuple(
             self.permute_input_for_window_attn(freq, window_index, seq_len=seq_len) for freq in position_embeddings
         )
@@ -3328,7 +3326,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
         self.input_embed = DiTInputEmbedding(config)
 
-        self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config=config)
+        self.rotary_emb = Qwen2_5OmniDiTRotaryEmbedding(config=config)
 
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
@@ -3396,7 +3394,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         # Compute positional encodings
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         position_ids = position_ids[None, :].repeat(hidden_states.shape[0], 1)
-        position_embeddings = self.rotary_embed(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
         # Transformer blocks

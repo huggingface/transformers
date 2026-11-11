@@ -469,8 +469,8 @@ class EsmModelIntegrationTest(TestCasePlus):
         config = EsmConfig.from_pretrained("facebook/esm2_t6_8M_UR50D")
         model_fresh = EsmModel(config)
 
-        inv_freq_ckpt = model_from_ckpt.rotary_embeddings.inv_freq
-        inv_freq_fresh = model_fresh.rotary_embeddings.inv_freq
+        inv_freq_ckpt = model_from_ckpt.rotary_emb.inv_freq
+        inv_freq_fresh = model_fresh.rotary_emb.inv_freq
 
         self.assertFalse(torch.equal(inv_freq_ckpt, inv_freq_fresh))
         self.assertTrue(torch.equal(inv_freq_ckpt, inv_freq_fresh.to(torch.float16).float()))

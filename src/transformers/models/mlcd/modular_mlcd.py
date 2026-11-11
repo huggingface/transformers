@@ -306,7 +306,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
 class MLCDVisionModel(CLIPVisionModel):
     def __init__(self, config: MLCDVisionConfig):
         super().__init__(config)
-        self.vision_rotary_embedding = MLCDRotaryEmbedding(config)
+        self.rotary_emb = MLCDRotaryEmbedding(config)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
     def forward(
@@ -353,7 +353,7 @@ class MLCDVisionModel(CLIPVisionModel):
             torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
         )
         pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-        position_embeddings = self.vision_rotary_embedding(hidden_states, pos_ids)
+        position_embeddings = self.rotary_emb(hidden_states, pos_ids)
         class_pos_emb = torch.cat([self.class_pos_emb, self.class_pos_emb], dim=-1)
         position_embeddings = [
             torch.cat([class_pos_emb.cos(), position_embeddings[0]], dim=0),

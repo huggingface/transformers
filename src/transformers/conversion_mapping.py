@@ -1131,7 +1131,9 @@ def _build_checkpoint_conversion_mapping():
                 "encoder.layer.*.attention.self.rotary_embeddings.inv_freq",
                 "rotary_embeddings.inv_freq",
             ),
+            WeightRenaming("rotary_embeddings.inv_freq", "rotary_emb.inv_freq"),
         ],
+        "evolla": [WeightRenaming("rotary_embeddings.inv_freq", "rotary_emb.inv_freq")],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "yolos": [

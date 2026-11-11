@@ -1197,7 +1197,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.embeddings.register_parameter("mask_token", None)
 
-        self.rope_embeddings = EomtDinov3RotaryEmbedding(config)
+        self.rotary_emb = EomtDinov3RotaryEmbedding(config)
 
         self.post_init()
 
@@ -1251,7 +1251,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
 
         hidden_states = self.dropout(self.embeddings(pixel_values))
-        position_embeddings = self.rope_embeddings(pixel_values.to(hidden_states.dtype))
+        position_embeddings = self.rotary_emb(pixel_values.to(hidden_states.dtype))
         attention_mask = None
 
         for idx, layer_module in enumerate(self.layers):

@@ -112,11 +112,10 @@ class EsmRotaryEmbedding(nn.Module):
         super().__init__()
 
         self.config = config
-        self.rope_type = {}
+        self.rope_type = "default"
 
-        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config)
-        self.inv_freq = nn.Buffer(curr_inv_freq)
-        setattr(self, "attention_scaling", curr_attention_scaling)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(self.config)
+        self.inv_freq = nn.Buffer(inv_freq)
 
     @staticmethod
     def compute_default_rope_parameters(config: EsmConfig, **kwargs) -> tuple[torch.Tensor, float]:
@@ -140,14 +139,11 @@ class EsmRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
-        inv_freq = getattr(self, "inv_freq")
-        attention_scaling = getattr(self, "attention_scaling")
-
-        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+    def forward(self, x, position_ids):
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * attention_scaling
-        sin = emb.sin() * attention_scaling
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -593,8 +589,8 @@ class EsmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, EsmEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, EsmRotaryEmbedding):
-            curr_inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            init.copy_(getattr(module, "inv_freq"), curr_inv_freq)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, inv_freq)
 
     def get_output_embeddings(self):
         # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
@@ -626,10 +622,10 @@ class EsmModel(EsmPreTrainedModel):
 
         self.embeddings = EsmEmbeddings(config)
 
-        self.rotary_embeddings = None
+        self.rotary_emb = None
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "rotary":
-            self.rotary_embeddings = EsmRotaryEmbedding(config=config)
+            self.rotary_emb = EsmRotaryEmbedding(config=config)
 
         self.encoder = EsmEncoder(config)
 
@@ -649,11 +645,15 @@ class EsmModel(EsmPreTrainedModel):
         Old checkpoints stored inv_freq per attention layer at:
             {prefix}encoder.layer.{i}.attention.self.rotary_embeddings.inv_freq
         New code stores a single shared inv_freq at:
-            {prefix}rotary_embeddings.inv_freq
+            {prefix}rotary_emb.inv_freq
+        (previously saved at {prefix}rotary_embeddings.inv_freq)
         The old checkpoint values must be preserved (not recomputed) because they may
         have been saved in float16, matching the precision used during training.
         """
-        new_key = f"{prefix}rotary_embeddings.inv_freq"
+        new_key = f"{prefix}rotary_emb.inv_freq"
+        legacy_key = f"{prefix}rotary_embeddings.inv_freq"
+        if new_key not in state_dict and legacy_key in state_dict:
+            state_dict[new_key] = state_dict.pop(legacy_key)
         if new_key not in state_dict:
             old_keys = sorted(
                 k
@@ -726,7 +726,7 @@ class EsmModel(EsmPreTrainedModel):
             if position_ids is None:
                 seq_len = inputs_embeds.shape[1]
                 position_ids = torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0)
-            position_embeddings = self.rotary_embeddings(inputs_embeds, position_ids)
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
         else:
             position_embeddings = None
 

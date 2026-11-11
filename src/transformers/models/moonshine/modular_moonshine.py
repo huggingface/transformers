@@ -39,7 +39,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
+from ..glm.modeling_glm import GlmAttention, apply_rotary_pos_emb
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 
@@ -185,7 +186,7 @@ class MoonshineDecoderMLP(nn.Module):
         return hidden_states
 
 
-class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+class MoonshineRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

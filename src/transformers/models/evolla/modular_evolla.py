@@ -107,10 +107,10 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
-    def __init__(self, config: SaProtConfig, device=None):
+    def __init__(self, config: SaProtConfig):
         super().__init__(config)
 
-    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: SaProtConfig, **kwargs) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config)
 
 
@@ -167,15 +167,15 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EvollaSaProtRotaryEmbedding):
-            curr_inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            init.copy_(getattr(module, "inv_freq"), curr_inv_freq)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
-        self.rotary_embeddings = EvollaSaProtRotaryEmbedding(config=config)
+        self.rotary_emb = EvollaSaProtRotaryEmbedding(config=config)
         self.encoder = EvollaSaProtEncoder(config)
         self.post_init()
 
@@ -208,7 +208,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         )
 
         position_ids = torch.arange(seq_length, device=device).unsqueeze(0)
-        position_embeddings = self.rotary_embeddings(inputs_embeds, position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         encoder_outputs = self.encoder(
             inputs_embeds, attention_mask=attention_mask, position_embeddings=position_embeddings, **kwargs

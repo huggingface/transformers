@@ -32,7 +32,7 @@ from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerForCTC,
     Wav2Vec2ConformerForXVector,
     Wav2Vec2ConformerRelPositionalEmbedding,
-    Wav2Vec2ConformerRotaryPositionalEmbedding,
+    Wav2Vec2ConformerRotaryEmbedding,
     Wav2Vec2ConformerSelfAttention,
     _apply_relative_position_encoding,
     eager_attention_forward,
@@ -72,7 +72,7 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     return mask
 
 
-class Wav2Vec2BertRotaryPositionalEmbedding(Wav2Vec2ConformerRotaryPositionalEmbedding):
+class Wav2Vec2BertRotaryEmbedding(Wav2Vec2ConformerRotaryEmbedding):
     def __init__(self, config):
         nn.Module.__init__(self)
         dim = config.hidden_size // config.num_attention_heads
@@ -375,7 +375,7 @@ class Wav2Vec2BertEncoder(nn.Module):
         if config.position_embeddings_type == "relative":
             self.embed_positions = Wav2Vec2BertRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
-            self.embed_positions = Wav2Vec2BertRotaryPositionalEmbedding(config)
+            self.embed_positions = Wav2Vec2BertRotaryEmbedding(config)
         else:
             self.embed_positions = None
 
@@ -611,7 +611,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
         elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
             init.normal_(module.weight)
-        elif isinstance(module, Wav2Vec2BertRotaryPositionalEmbedding):
+        elif isinstance(module, Wav2Vec2BertRotaryEmbedding):
             dim = self.config.hidden_size // self.config.num_attention_heads
             base = self.config.rotary_embedding_base
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))

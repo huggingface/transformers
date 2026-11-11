@@ -96,7 +96,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
 
     def test_rotary_window_axis_resets_per_audio(self):
         config = self.model_tester.get_config()
-        pos_emb = MusicFlamingoForConditionalGeneration(config).model.pos_emb.to(torch_device)
+        pos_emb = MusicFlamingoForConditionalGeneration(config).model.rotary_emb.to(torch_device)
 
         timestamps = torch.tensor(
             [
