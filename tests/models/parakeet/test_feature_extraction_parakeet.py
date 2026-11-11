@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers import CohereAsrFeatureExtractor, NemotronAsrStreamingFeatureExtractor, ParakeetFeatureExtractor
-from transformers.testing_utils import require_librosa, require_torch
+from transformers import ParakeetFeatureExtractor
+from transformers.testing_utils import require_torch
 from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_processing_common import floats_list
@@ -179,31 +179,3 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         self.assertEqual(inputs.attention_mask.shape, (5, 2941))
         self.assertTrue(inputs.attention_mask.sum(dim=-1).tolist(), [585, 481, 1248, 990, 2940])
-
-
-@require_torch
-@require_librosa
-class SlaneyMelFiltersTest(unittest.TestCase):
-    """The parakeet-family feature extractors' mel filters must stay bit-exact with librosa's (see
-    `test_mel_filter_bank_slaney_float32_matches_librosa` for the shared function over many configs)."""
-
-    def test_mel_filters_match_librosa(self):
-        import librosa
-
-        for feature_extractor_class in [
-            ParakeetFeatureExtractor,
-            NemotronAsrStreamingFeatureExtractor,
-            CohereAsrFeatureExtractor,
-        ]:
-            with self.subTest(feature_extractor_class.__name__):
-                feature_extractor = feature_extractor_class()
-                expected = librosa.filters.mel(
-                    sr=feature_extractor.sampling_rate,
-                    n_fft=feature_extractor.n_fft,
-                    n_mels=feature_extractor.feature_size,
-                    fmin=0.0,
-                    fmax=feature_extractor.sampling_rate / 2,
-                    norm="slaney",
-                )
-                self.assertEqual(feature_extractor.mel_filters.dtype, torch.float32)
-                np.testing.assert_array_equal(feature_extractor.mel_filters.numpy(), expected)
