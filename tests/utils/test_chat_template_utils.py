@@ -595,7 +595,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_multiline_docstring_with_colons(self):
-        def fn(location: str, unit: str = "celsius"):
+        def fn(location: str, unit: str = "celsius", source: str = ""):
             """
             Test function
 
@@ -604,6 +604,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     Example: "Paris, France"
                 unit: The unit to return the temperature in.
                     Default: "celsius" (choices: ["celsius", "fahrenheit"])
+                source: The weather service to query, for example
+                    https://api.example.com/v1
             """
             pass
 
@@ -624,12 +626,33 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                         "enum": ["celsius", "fahrenheit"],
                         "description": 'The unit to return the temperature in. Default: "celsius"',
                     },
+                    "source": {
+                        "type": "string",
+                        "description": "The weather service to query, for example https://api.example.com/v1",
+                    },
                 },
                 "required": ["location"],
             },
         }
 
         self.assertEqual(schema["function"], expected_schema)
+
+    def test_docstring_with_section_after_args(self):
+        def fn(x: int):
+            """
+            Test function
+
+            Args:
+                x: The input
+
+            Example:
+                fn(1)
+            """
+            pass
+
+        # A "name:" line indented less than the arguments is not a continuation of the last description
+        schema = get_json_schema(fn)
+        self.assertEqual(schema["function"]["parameters"]["properties"]["x"]["description"], "The input")
 
     def test_return_none(self):
         def fn(x: int) -> None:
