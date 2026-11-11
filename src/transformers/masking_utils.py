@@ -20,6 +20,7 @@ from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
+from .generation.continuous_batching.cache import PagedAttentionCache
 from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
@@ -833,6 +834,10 @@ def _preprocess_mask_arguments(
     # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom)
     if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
         return True, attention_mask, None, None, None, None, None
+
+    # If the cache is from CB, immediate exit as well, we don't need any mask
+    if isinstance(cache, PagedAttentionCache):
+        return True, None, None, None, None, None, None
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     # Note: it's not ideal to check the `_global_mapping` attribute instead of the object itself, however otherwise
