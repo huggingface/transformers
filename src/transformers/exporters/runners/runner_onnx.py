@@ -67,8 +67,8 @@ class OnnxModelRunner(ModelRunner):
             or options.get("TensorrtExecutionProvider", {}).get("trt_cuda_graph_enable") == "1"
         )
 
-        # One CUDA graph per input-shape signature (a prefill's, a decode step's): its id, binding and input buffers.
-        self.cuda_graphs: dict[tuple, tuple[int, ort.IOBinding, dict[str, torch.Tensor]]] = {}
+        # The CUDA graph's binding and input buffers, made on the first call.
+        self.cuda_graph: tuple[ort.IOBinding, dict[str, torch.Tensor]] | None = None
 
     @property
     def device(self) -> torch.device:
@@ -149,33 +149,30 @@ class OnnxModelRunner(ModelRunner):
         return self.unflatten(outputs)
 
     def _replay_cuda_graph(self, leaves: dict[str, torch.Tensor], share_outputs: bool) -> Any:
-        """Run a session that replays CUDA graphs (`enable_cuda_graph`, `trt_cuda_graph_enable`), one per input-shape
-        signature, selected by `gpu_graph_id`: a prefill and a decode step each replay their own. A graph reads and
-        writes the device memory it was captured with, so each keeps its input buffers (integers on the device too)
-        and the outputs ONNX Runtime allocated on its first run: the inputs are copied in, and the outputs copied out
-        unless `share_outputs`. Capture needs a static export: a dynamic one computes its shapes in the graph."""
+        """Run a session that replays a CUDA graph (`enable_cuda_graph`, `trt_cuda_graph_enable`). The graph reads and
+        writes the device memory it was captured with, so its input buffers (integers on the device too) and the
+        outputs ONNX Runtime allocated on its first run are kept: the inputs are copied in, and the outputs copied out
+        unless `share_outputs`. Capture needs a static export, whose inputs keep one shape: a dynamic one computes its
+        shapes in the graph."""
         device = self.device
-        specs = self.session.get_inputs()
-        signature = tuple(tuple(leaves[spec.name.removeprefix("input.")].shape) for spec in specs)
-        first_run = signature not in self.cuda_graphs
+        first_run = self.cuda_graph is None
         if first_run:
             binding = self.session.io_binding()
             inputs = {
-                spec.name: leaves[spec.name.removeprefix("input.")].to(device).contiguous().clone() for spec in specs
+                spec.name: leaves[spec.name.removeprefix("input.")].to(device).contiguous().clone()
+                for spec in self.session.get_inputs()
             }
             for name, buffer in inputs.items():
                 _bind_input(binding, name, buffer, buffer.data_ptr())
             for spec in self.session.get_outputs():
                 binding.bind_output(spec.name, "cuda", device.index)
-            self.cuda_graphs[signature] = (len(self.cuda_graphs), binding, inputs)
-        graph_id, binding, inputs = self.cuda_graphs[signature]
+            self.cuda_graph = (binding, inputs)
+        binding, inputs = self.cuda_graph
         for name, buffer in inputs.items():
             buffer.copy_(leaves[name.removeprefix("input.")])
-        run_options = ort.RunOptions()
-        run_options.add_run_config_entry("gpu_graph_id", str(graph_id))
         # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
         torch.cuda.current_stream(device).synchronize()
-        self.session.run_with_iobinding(binding, run_options)
+        self.session.run_with_iobinding(binding)
         binding.synchronize_outputs()
         if first_run:
             # The graph writes where this run's outputs were allocated: they stay bound for every replay.

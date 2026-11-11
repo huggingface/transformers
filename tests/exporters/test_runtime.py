@@ -376,7 +376,7 @@ class ExportedModelTest(unittest.TestCase):
             outputs = [exported(**inputs).logits for inputs in calls]
             for output, inputs in zip(outputs, calls):
                 torch.testing.assert_close(output, model(**inputs).logits, atol=1e-3, rtol=1e-3)
-        self.assertEqual(len(runner.cuda_graphs), 1)
+        self.assertIsNotNone(runner.cuda_graph)
 
     @require_openvino
     @pytest.mark.openvino_export_test
