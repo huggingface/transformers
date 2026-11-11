@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from .image_processing_inkling2 import *
     from .modeling_inkling2 import *
     from .processing_inkling2 import *
-    from .tokenization_inkling2 import *
 else:
     import sys
 

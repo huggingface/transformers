@@ -110,10 +110,6 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=True))
 [[autodoc]] Inkling2ForConditionalGeneration
     - forward
 
-## Inkling2Tokenizer
-
-[[autodoc]] Inkling2Tokenizer
-
 ## Inkling2ImageProcessor
 
 [[autodoc]] Inkling2ImageProcessor
