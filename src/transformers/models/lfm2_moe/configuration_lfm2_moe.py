@@ -48,6 +48,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_tp_plan = {
         "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
         "layers.*.feed_forward.experts.down_proj": "rowwise",

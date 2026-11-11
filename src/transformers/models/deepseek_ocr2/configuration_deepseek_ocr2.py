@@ -230,6 +230,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
     }
     n_group: int | None = None
     n_routed_experts: int = 64

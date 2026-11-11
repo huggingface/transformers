@@ -45,6 +45,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
     MixtralModel,
+    MixtralTopKRouter,
 )
 from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
@@ -111,24 +112,20 @@ class GptOssExperts(nn.Module):
         return next_states
 
 
-class GptOssTopKRouter(nn.Module):
+class GptOssTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        super().__init__(config)
         self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         router_logits = F.linear(hidden_states, self.weight, self.bias)  # (num_tokens, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
-        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        return router_logits, router_scores, router_indices
+        top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.nn.functional.softmax(top_k_logits, dim=1, dtype=top_k_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
-class GptOssMLP(nn.Module):
+class GptOssSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = GptOssTopKRouter(config)
@@ -137,10 +134,10 @@ class GptOssMLP(nn.Module):
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, router_scores, router_indices = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, router_indices, router_scores)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_scores
+        return hidden_states, top_k_weights
 
 
 class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
@@ -271,7 +268,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = GptOssAttention(config=config, layer_idx=layer_idx)
-        self.mlp = GptOssMLP(config)
+        self.mlp = GptOssSparseMoeBlock(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

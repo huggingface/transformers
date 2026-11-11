@@ -16,6 +16,7 @@
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -29,6 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -37,6 +39,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_afmoe import AfmoeConfig
 
@@ -56,7 +59,7 @@ class AfmoeMLP(Qwen2MoeMLP):
     pass
 
 
-class AfmoeTokenChoiceRouter(nn.Module):
+class AfmoeTopKRouter(MixtralTopKRouter):
     """
     Token-choice top-K router for MoE routing.
 
@@ -64,33 +67,31 @@ class AfmoeTokenChoiceRouter(nn.Module):
     """
 
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.route_scale = config.route_scale
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        super().__init__(config)
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.e_score_correction_bias = nn.Parameter(torch.zeros(self.num_experts), requires_grad=False)
 
-    def forward(self, hidden_states: torch.Tensor, expert_bias: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         _, _, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        router_logits = self.gate(hidden_states).to(torch.float32)
-        scores = torch.sigmoid(router_logits)
+        router_logits = F.linear(hidden_states, self.weight).to(torch.float32)
+        router_probs = torch.sigmoid(router_logits)
 
-        _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
-        top_scores = scores.gather(dim=1, index=selected_experts)
-        denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
-        top_scores = top_scores / denominator
-        top_scores = top_scores * self.route_scale
-        return router_logits, top_scores, selected_experts
+        # Get routing decisions (returns flattened top-k)
+        _, top_k_index = torch.topk(router_probs + self.e_score_correction_bias, k=self.top_k, dim=1)
+        top_k_weights = router_probs.gather(dim=1, index=top_k_index)
+        denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+        top_k_weights = top_k_weights / denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 class AfmoeExperts(Qwen2MoeExperts):
     pass
 
 
-class AfmoeSparseMoeBlock(nn.Module):
+class AfmoeSparseMoeBlock(DeepseekV2SparseMoeBlock):
     """
     Mixture of Experts (MoE) module for AFMoE.
 
@@ -98,27 +99,7 @@ class AfmoeSparseMoeBlock(nn.Module):
     routed experts (activated based on token-choice routing).
     """
 
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.router = AfmoeTokenChoiceRouter(config)
-        self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
-        self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
-
-    def forward(self, hidden_states):
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        hidden_states_flat = hidden_states.view(-1, hidden_dim)
-
-        # Get routing decisions (returns flattened top-k)
-        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
-
-        # Process through shared experts
-        shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
-        routed_output = self.experts(hidden_states_flat, selected_experts, top_scores).view(
-            batch_size, seq_len, hidden_dim
-        )
-        return shared_output + routed_output
+    # Process through shared experts
 
 
 class AfmoeAttention(LlamaAttention):
@@ -267,7 +248,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AfmoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
+        "router_logits": OutputRecorder(AfmoeTopKRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
         "attentions": AfmoeAttention,
     }
@@ -279,7 +260,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
-        "expert_bias",
+        "e_score_correction_bias",
     ]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -295,10 +276,9 @@ class AfmoePreTrainedModel(PreTrainedModel):
         if isinstance(module, AfmoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, AfmoeTokenChoiceRouter):
-            init.zeros_(module.gate.weight)
-        elif isinstance(module, AfmoeSparseMoeBlock):
-            init.zeros_(module.expert_bias)
+        elif isinstance(module, AfmoeTopKRouter):
+            init.zeros_(module.weight)
+            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

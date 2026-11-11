@@ -49,6 +49,7 @@ class HYV3Config(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "num_experts",
+        "n_shared_experts": "num_shared_experts",
     }
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

@@ -16,8 +16,8 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
     DeepseekV2ForCausalLM,
     DeepseekV2Model,
-    DeepseekV2Moe,
-    DeepseekV2TopkRouter,
+    DeepseekV2SparseMoeBlock,
+    DeepseekV2TopKRouter,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -85,19 +85,18 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
+class DeepseekV3TopKRouter(DeepseekV2TopKRouter):
     def __init__(self, config: DeepseekV3Config):
         super().__init__(config)
         del self.topk_method
-        self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -112,22 +111,20 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 class DeepseekV3Experts(Qwen2MoeExperts):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.num_local_experts
+    pass
 
 
-class DeepseekV3MoE(DeepseekV2Moe):
+class DeepseekV3SparseMoeBlock(DeepseekV2SparseMoeBlock):
     """
     A mixed expert module containing shared experts.
     """
@@ -203,7 +200,7 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
         self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)
 
         if layer_idx >= config.first_k_dense_replace:
-            self.mlp = DeepseekV3MoE(config)
+            self.mlp = DeepseekV3SparseMoeBlock(config)
         else:
             self.mlp = DeepseekV3MLP(config)
 
@@ -215,7 +212,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekV3DecoderLayer,
         "attentions": DeepseekV3Attention,
-        "router_logits": OutputRecorder(DeepseekV3TopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV3TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
@@ -223,7 +220,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, DeepseekV3TopkRouter):
+        if isinstance(module, DeepseekV3TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, DeepseekV3Experts):

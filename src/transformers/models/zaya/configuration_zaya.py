@@ -52,6 +52,11 @@ class ZayaConfig(PreTrainedConfig):
 
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
+
+    # Fields declared by LagunaConfig but not used by ZAYA.
+    # NOTE: TP is intentionally disabled for now because the useful degree is limited by ZAYA's 2 KV heads; see
+    # https://github.com/huggingface/transformers/pull/45862#discussion_r3266709862. PP needs coverage for the cross-layer router state.
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

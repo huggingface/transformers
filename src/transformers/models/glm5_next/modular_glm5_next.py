@@ -63,8 +63,11 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3TopKRouter,
+)
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm46v.processing_glm46v import Glm46VProcessor
@@ -82,7 +85,6 @@ from ..glmga.image_processing_pil_glmga import GlmgaImageProcessorPil
 from ..glmga.video_processing_glmga import GlmgaVideoProcessor, GlmgaVideoProcessorInitKwargs
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
-from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
@@ -330,33 +332,19 @@ class Glm5NextTextMLP(Qwen2MoeMLP):
         return down_proj
 
 
-class Glm5NextTextExperts(MiniMaxM3VLExperts):
+class Glm5NextTextExperts(DeepseekV4Experts):
     def __init__(self, config):
         super().__init__(config)
-        del self.limit
-        del self.swiglu_alpha
         self.intermediate_dim = config.moe_intermediate_size
-
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        # Simple swiglu instead of alpha
-        return F.silu(gate) * up
+        self.act_fn = F.silu  # Simple swiglu instead of alpha
 
 
-class Glm5NextTextTopkRouter(DeepseekV3TopkRouter):
+class Glm5NextTextTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class Glm5NextTextMoE(DeepseekV3MoE):
-    def __init__(self, config: Glm5NextConfig):
-        super().__init__(config)
-        self.experts = Glm5NextTextExperts(config)
-        self.gate = Glm5NextTextTopkRouter(config)
-        self.shared_experts = Glm5NextTextMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
+class Glm5NextTextSparseMoeBlock(DeepseekV2SparseMoeBlock):
+    pass
 
 
 class Glm5NextTextHyperConnection(DeepseekV4HyperConnection):
@@ -1227,7 +1215,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "attentions": Glm5NextTextAttention,
         "hidden_states": Glm5NextTextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm5NextTextTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -1276,7 +1264,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Glm5NextTextTopkRouter):
+        elif isinstance(module, Glm5NextTextTopKRouter):
             init.zeros_(module.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Glm5NextTextIndexer):

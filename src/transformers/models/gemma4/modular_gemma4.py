@@ -71,8 +71,8 @@ from ..gemma3n.modeling_gemma3n import (
 )
 from ..llama.modeling_llama import LlamaMLP
 from ..mistral.modeling_mistral import MistralMLP
-from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
@@ -1118,15 +1118,11 @@ class Gemma4TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma4TextExperts(MixtralExperts):
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.intermediate_dim = config.moe_intermediate_size
-        self.act_fn = ACT2FN[config.hidden_act]
+class Gemma4TextExperts(Qwen2MoeExperts):
+    pass
 
 
-class Gemma4TextRouter(nn.Module):
+class Gemma4TextTopKRouter(nn.Module):
     def __init__(self, config: Gemma4TextConfig):
         super().__init__()
         self.config = config
@@ -1143,13 +1139,13 @@ class Gemma4TextRouter(nn.Module):
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
-        expert_scores = self.proj(hidden_states)  # [B*S, E]
+        router_logits = self.proj(hidden_states)  # [B*S, E]
         # fp32 for numerical stability
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
+        router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(
-            router_probabilities,
+            router_probs,
             k=self.config.top_k_experts,
             dim=-1,
         )  # both [B*S, K]
@@ -1160,7 +1156,7 @@ class Gemma4TextRouter(nn.Module):
         # Apply per-expert scale directly to the weights
         top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
 
-        return router_probabilities, top_k_weights, top_k_index
+        return router_probs, top_k_weights, top_k_index
 
 
 class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
@@ -1179,7 +1175,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
 
         self.enable_moe_block = config.enable_moe_block
         if self.enable_moe_block:
-            self.router = Gemma4TextRouter(config)
+            self.router = Gemma4TextTopKRouter(config)
             self.experts = Gemma4TextExperts(config)
             self.post_feedforward_layernorm_1 = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
             self.post_feedforward_layernorm_2 = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1286,7 +1282,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
         elif isinstance(module, Gemma4TextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
-        elif isinstance(module, Gemma4TextRouter):
+        elif isinstance(module, Gemma4TextTopKRouter):
             init.ones_(module.scale)
             init.ones_(module.per_expert_scale)
         elif isinstance(module, Gemma4TextExperts):
@@ -1309,7 +1305,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
 class Gemma4TextModel(Gemma3TextModel):
     config: Gemma4TextConfig
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Gemma4TextRouter, index=0),
+        "router_logits": OutputRecorder(Gemma4TextTopKRouter, index=0),
         "hidden_states": Gemma4TextDecoderLayer,
         "attentions": Gemma4TextAttention,
     }

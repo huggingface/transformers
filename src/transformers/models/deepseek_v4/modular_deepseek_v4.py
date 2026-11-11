@@ -956,23 +956,6 @@ class DeepseekV4Experts(MixtralExperts):
         up = up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
-
 
 class DeepseekV4TopKRouter(MixtralTopKRouter):
     def __init__(self, config: DeepseekV4Config):
@@ -982,13 +965,13 @@ class DeepseekV4TopKRouter(MixtralTopKRouter):
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat, self.weight)
-        scores = self.score_fn(logits)
-        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
-        weights = scores.gather(1, indices)
-        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return logits, weights * self.routed_scaling_factor, indices
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
+        router_probs = self.score_fn(router_logits)
+        top_k_index = torch.topk(router_probs + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return router_logits, top_k_weights * self.routed_scaling_factor, top_k_index
 
 
 class DeepseekV4HashRouter(MixtralTopKRouter):
@@ -1009,13 +992,13 @@ class DeepseekV4HashRouter(MixtralTopKRouter):
     def forward(
         self, hidden_states: torch.Tensor, input_ids: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat, self.weight)
-        scores = self.score_fn(logits)
-        indices = self.tid2eid[input_ids.reshape(-1)].long()
-        weights = scores.gather(1, indices)
-        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return logits, weights * self.routed_scaling_factor, indices
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
+        router_probs = self.score_fn(router_logits)
+        top_k_index = self.tid2eid[input_ids.reshape(-1)].long()
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return router_logits, top_k_weights * self.routed_scaling_factor, top_k_index
 
 
 class DeepseekV4SparseMoeBlock(nn.Module):
@@ -1031,10 +1014,10 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         residual = hidden_states
         flat = hidden_states.view(-1, hidden_dim)
         if self.is_hash:
-            _, weights, indices = self.gate(hidden_states, input_ids)
+            _, top_k_weights, top_k_index = self.gate(hidden_states, input_ids)
         else:
-            _, weights, indices = self.gate(hidden_states)
-        routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
+            _, top_k_weights, top_k_index = self.gate(hidden_states)
+        routed = self.experts(flat, top_k_index, top_k_weights).view(batch, seq_len, hidden_dim)
         return routed + self.shared_experts(residual)
 
 

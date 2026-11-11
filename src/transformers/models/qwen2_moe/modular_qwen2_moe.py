@@ -43,6 +43,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
+    MixtralTopKRouter,
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
@@ -76,29 +77,23 @@ class Qwen2MoeAttention(LlamaAttention):
 class Qwen2MoeExperts(MixtralExperts):
     def __init__(self, config):
         super().__init__(config)
-        self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
 
 
-class Qwen2MoeTopKRouter(nn.Module):
+class Qwen2MoeTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        super().__init__(config)
         self.norm_topk_prob = config.norm_topk_prob
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
-            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(router_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
@@ -110,17 +105,14 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-
-        shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
-
-        expert_output = expert_output + shared_expert_output
-        expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
-        return expert_output
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        shared_expert_output = F.sigmoid(self.shared_expert_gate(residuals)) * self.shared_expert(residuals)
+        hidden_states = hidden_states + shared_expert_output
+        return hidden_states
 
 
 class Qwen2MoeDecoderLayer(LlamaDecoderLayer):

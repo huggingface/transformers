@@ -127,7 +127,7 @@ class LongcatFlashMLP(nn.Module):
         return down_proj
 
 
-class LongcatFlashTopkRouter(nn.Module):
+class LongcatFlashTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -142,23 +142,23 @@ class LongcatFlashTopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
-        scores = router_logits.softmax(dim=-1)
-        topk_indices = self.get_topk_indices(scores)
-        topk_weights = scores.gather(1, topk_indices)
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights.to(router_logits.dtype), topk_indices
+        router_probs = router_logits.softmax(dim=-1)
+        top_k_index = self.get_topk_indices(router_probs)
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights.to(router_logits.dtype), top_k_index
 
     @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
+    def get_topk_indices(self, router_probs):
+        scores_for_choice = router_probs.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return top_k_index
 
 
 class LongcatFlashExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
+        self.intermediate_size = config.moe_intermediate_size
         self.hidden_size = config.hidden_size
         self.num_routed_experts = config.n_routed_experts
         self.zero_expert_num = config.zero_expert_num or 0
@@ -204,25 +204,21 @@ class LongcatFlashExperts(nn.Module):
         return final_hidden_states
 
 
-# remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(nn.Module):
+class LongcatFlashSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing zero compute (identity) experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.config = config
         self.experts = LongcatFlashExperts(config)
+        self.gate = LongcatFlashTopKRouter(config)
 
-        self.router = LongcatFlashTopkRouter(config)
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         return hidden_states
 
 
@@ -456,7 +452,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
 
-        self.mlp = LongcatFlashMoE(config)
+        self.mlp = LongcatFlashSparseMoeBlock(config)
 
         self.self_attn = nn.ModuleList([LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i) for i in [0, 1]])
         self.mlps = nn.ModuleList([LongcatFlashMLP(config) for _ in [0, 1]])
@@ -538,7 +534,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         # Each decoder layer holds two attention sublayers, so `num_hidden_layers` is `2 * num_layers`
         "hidden_states": OutputRecorder(LongcatFlashDecoderLayer, num_hidden_layers_key="num_layers"),
         "attentions": LongcatFlashMLA,
-        "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
+        "router_logits": OutputRecorder(LongcatFlashTopKRouter, index=0),
     }
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
@@ -548,7 +544,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, LongcatFlashTopkRouter):
+        if isinstance(module, LongcatFlashTopKRouter):
             init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         if isinstance(module, LongcatFlashExperts):

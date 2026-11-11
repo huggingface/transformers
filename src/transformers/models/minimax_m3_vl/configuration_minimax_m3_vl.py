@@ -73,9 +73,9 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
     }
-
     attribute_map = {
         "num_experts": "num_local_experts",
+        "shared_expert_intermediate_size": "shared_intermediate_size",
     }
     default_theta = 5000000.0
     vocab_size: int = 200064
@@ -104,6 +104,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
     dense_intermediate_size: int = 12288
+
     shared_intermediate_size: int = 3072
     routed_scaling_factor: float = 2.0
     rotary_dim: int = 64

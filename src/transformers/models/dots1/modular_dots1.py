@@ -21,12 +21,12 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
 )
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3.modeling_qwen3 import (
@@ -160,11 +160,11 @@ class Dots1MLP(Qwen2MoeMLP):
     pass
 
 
-class Dots1TopkRouter(DeepseekV3TopkRouter):
+class Dots1TopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class Dots1MoE(DeepseekV3MoE):
+class Dots1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

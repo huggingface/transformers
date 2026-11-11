@@ -49,18 +49,18 @@ class MiniMaxM2TopKRouter(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
-    def forward(self, hidden_states, e_score_correction_bias):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
         # Main difference to other Moe, using Sigmoid activation instead of Softmax
-        routing_weights = nn.functional.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + e_score_correction_bias
+        router_probs = F.sigmoid(router_logits.float())
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        router_scores = top_k_weights
-        return router_logits, router_scores, top_k_index
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -75,6 +75,10 @@ class MiniMaxM2Experts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -94,8 +98,9 @@ class MiniMaxM2Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -106,20 +111,17 @@ class MiniMaxM2Experts(nn.Module):
 class MiniMaxM2SparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
         self.gate = MiniMaxM2TopKRouter(config)
         self.experts = MiniMaxM2Experts(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        _, top_k_weights, top_k_index = self.gate(hidden_states, self.e_score_correction_bias)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         return hidden_states
 
 
@@ -403,7 +405,6 @@ class MiniMaxM2PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MiniMaxM2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, MiniMaxM2SparseMoeBlock):
             init.zeros_(module.e_score_correction_bias)
 
 

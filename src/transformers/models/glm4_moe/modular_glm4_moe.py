@@ -27,10 +27,12 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
 )
 from ..glm.modeling_glm import GlmRotaryEmbedding
-from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
+from ..gpt_neox.modeling_gpt_neox import (
+    apply_rotary_pos_emb,  # noqa
+)
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -173,17 +175,9 @@ class Glm4MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
+class Glm4MoeTopKRouter(DeepseekV3TopKRouter):
     def __init__(self, config: Glm4MoeConfig):
-        nn.Module.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.num_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
+        super().__init__(config)
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
 

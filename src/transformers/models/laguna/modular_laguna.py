@@ -37,9 +37,15 @@ from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaModel, eager_attention_forward
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel, Qwen2MoeRMSNorm
+from ..qwen2_moe.modeling_qwen2_moe import (
+    Qwen2MoeExperts,
+    Qwen2MoeForCausalLM,
+    Qwen2MoeMLP,
+    Qwen2MoePreTrainedModel,
+    Qwen2MoeRMSNorm,
+)
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTopKRouter, apply_rotary_pos_emb
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts, Qwen3MoeSparseMoeBlock
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 logger = logging.get_logger(__name__)
@@ -78,6 +84,7 @@ class LagunaConfig(Qwen2MoeConfig):
     """
 
     model_type = "laguna"
+    attribute_map = {"num_local_experts": "num_experts", "routed_scaling_factor": "moe_routed_scaling_factor"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -222,6 +229,7 @@ class LagunaMLP(Qwen2MoeMLP):
 class LagunaTopKRouter(Qwen3_5MoeTopKRouter):
     def __init__(self, config):
         super().__init__()
+        del self.norm_topk_prob
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
         self.router_logit_softcapping = config.moe_router_logit_softcapping
 
@@ -235,18 +243,18 @@ class LagunaTopKRouter(Qwen3_5MoeTopKRouter):
         if self.router_logit_softcapping > 0.0:
             router_logits = torch.tanh(router_logits / self.router_logit_softcapping) * self.router_logit_softcapping
         # Sigmoid instead of softmax normalization
-        routing_scores = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        scores_for_selection = routing_scores + self.e_score_correction_bias.to(routing_scores.dtype)
-        _, selected_experts = torch.topk(scores_for_selection, self.top_k, dim=-1)
-        routing_weights = routing_scores.gather(-1, selected_experts)
-        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        scores_for_choice = router_probs + self.e_score_correction_bias.to(router_probs.dtype)
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1)
+        top_k_weights = router_probs.gather(-1, top_k_index)
+        top_k_weights = top_k_weights / top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, routing_weights, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
-class LagunaExperts(Qwen3MoeExperts):
+class LagunaExperts(Qwen2MoeExperts):
     pass
 
 
@@ -254,20 +262,17 @@ class LagunaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config: LagunaConfig):
         super().__init__(config)
         self.shared_experts = LagunaMLP(config, intermediate_size=config.shared_expert_intermediate_size)
-        self.routed_scaling_factor = config.moe_routed_scaling_factor
+        self.routed_scaling_factor = config.routed_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        shared_output = self.shared_experts(hidden_states)
-
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
-        hidden_states = hidden_states + shared_output
-
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 

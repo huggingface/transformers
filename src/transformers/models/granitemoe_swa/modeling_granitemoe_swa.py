@@ -50,15 +50,20 @@ class GraniteMoeSWATopKRouter(nn.Module):
     here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
     experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
     paths can compile cleanly.
+
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
     """
 
-    def __init__(self, config: GraniteMoeSWAConfig):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
         top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
@@ -78,6 +83,10 @@ class GraniteMoeSWAExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -96,8 +105,9 @@ class GraniteMoeSWAExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -105,21 +115,20 @@ class GraniteMoeSWAExperts(nn.Module):
         return final_hidden_states
 
 
-class GraniteMoeSWAMoE(nn.Module):
+class GraniteMoeSWASparseMoeBlock(nn.Module):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
 
     def __init__(self, config: GraniteMoeSWAConfig):
         super().__init__()
-        self.input_size = config.hidden_size
-        self.router = GraniteMoeSWATopKRouter(config)
         self.experts = GraniteMoeSWAExperts(config)
+        self.gate = GraniteMoeSWATopKRouter(config)
 
-    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
-        bsz, length, emb_size = layer_input.size()
-        hidden_states = layer_input.reshape(-1, emb_size)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
-        return layer_output.view(bsz, length, self.input_size)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        return hidden_states
 
 
 def rotate_half(x):
@@ -312,8 +321,8 @@ class GraniteMoeSWAMLP(nn.Module):
         super().__init__()
 
         self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_expert_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.shared_expert_intermediate_size, config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -351,11 +360,11 @@ class GraniteMoeSWADecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GraniteMoeSWAAttention(config=config, layer_idx=layer_idx)
+        self.mlp = GraniteMoeSWASparseMoeBlock(config)
         self.input_layernorm = GraniteMoeSWARMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeSWARMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.block_sparse_moe = GraniteMoeSWAMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSWAMLP(config)
+        self.shared_mlp = None if config.shared_expert_intermediate_size == 0 else GraniteMoeSWAMLP(config)
 
     def forward(
         self,
@@ -387,7 +396,7 @@ class GraniteMoeSWADecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states = self.block_sparse_moe(hidden_states)
+        moe_hidden_states = self.mlp(hidden_states)
 
         if self.shared_mlp is None:
             hidden_states = moe_hidden_states

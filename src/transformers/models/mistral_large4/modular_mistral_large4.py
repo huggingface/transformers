@@ -48,7 +48,7 @@ from ..mistral3.modeling_mistral3 import (
     Mistral3Model,
     Mistral3ModelOutputWithPast,
 )
-from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4TopkRouter
+from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4SparseMoeBlock, Mistral4TopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -517,8 +517,8 @@ class MistralLarge4TextMLP(Qwen2MoeMLP):
     pass
 
 
-class MistralLarge4TextTopkRouter(Mistral4TopkRouter):
-    """Same as Mistral4TopkRouter, with fp32 precision for routing logits and norming of topk weights is always on."""
+class MistralLarge4TextTopKRouter(Mistral4TopKRouter):
+    """Same as Mistral4TopKRouter, with fp32 precision for routing logits and norming of topk weights is always on."""
 
     def __init__(self, config):
         super().__init__(config)
@@ -529,9 +529,9 @@ class MistralLarge4TextTopkRouter(Mistral4TopkRouter):
         # weight.float() should be a no-op because the weight is in _keep_in_fp32_modules_strict, but if a user changed
         # the dtype of the model after loading, it will prevent an error
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = router_logits.softmax(-1)
+        router_probs = router_logits.softmax(-1)
         group_scores = (
-            scores.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
+            router_probs.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
@@ -541,20 +541,20 @@ class MistralLarge4TextTopkRouter(Mistral4TopkRouter):
             .expand(-1, self.num_group, self.num_experts // self.num_group)
             .reshape(-1, self.num_experts)
         )
-        scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
-        denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-        topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+        scores_for_choice = router_probs.masked_fill(~score_mask.bool(), 0.0)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
+        denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+        top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 class MistralLarge4TextExperts(Mistral4Experts):
     pass
 
 
-class MistralLarge4TextMoE(Mistral4MoE):
+class MistralLarge4TextSparseMoeBlock(Mistral4SparseMoeBlock):
     pass
 
 
@@ -611,7 +611,7 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, MistralLarge4TextTopkRouter):
+        if isinstance(module, MistralLarge4TextTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, MistralLarge4TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

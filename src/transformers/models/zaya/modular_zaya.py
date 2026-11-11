@@ -40,11 +40,12 @@ from ..laguna.configuration_laguna import LagunaConfig
 from ..laguna.modeling_laguna import LagunaModel, LagunaRotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaPreTrainedModel, repeat_kv
 from ..phi3.modeling_phi3 import Phi3Attention
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts, Qwen3MoeRMSNorm
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeRMSNorm
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
@@ -99,6 +100,7 @@ class ZayaConfig(LagunaConfig):
     # Fields declared by LagunaConfig but not used by ZAYA.
     # NOTE: TP is intentionally disabled for now because the useful degree is limited by ZAYA's 2 KV heads; see
     # https://github.com/huggingface/transformers/pull/45862#discussion_r3266709862. PP needs coverage for the cross-layer router state.
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_tp_plan = AttributeError()
     base_model_pp_plan = AttributeError()
     intermediate_size = AttributeError()
@@ -497,7 +499,7 @@ class ZayaRouter(nn.Module):
         )
 
 
-class ZayaExperts(Qwen3MoeExperts):
+class ZayaExperts(Qwen2MoeExperts):
     pass
 
 

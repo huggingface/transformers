@@ -304,7 +304,7 @@ class OpenAIPrivacyFilterTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
@@ -312,14 +312,14 @@ class OpenAIPrivacyFilterTopKRouter(nn.Module):
         router_logits = F.linear(
             hidden_states.float(), self.weight.float(), self.bias.float()
         )  # (num_tokens, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
-        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.nn.functional.softmax(top_k_logits, dim=1, dtype=top_k_logits.dtype)
         # Additional scaling
-        router_scores = router_scores / self.top_k
-        return router_logits, router_scores, router_indices
+        top_k_weights = top_k_weights / self.top_k
+        return router_logits, top_k_weights, top_k_index
 
 
-class OpenAIPrivacyFilterMLP(nn.Module):
+class OpenAIPrivacyFilterSparseMoeBlock(nn.Module):
     """Similar to GPT Oss but with FP32 focus + added experts scaling"""
 
     def __init__(self, config):
@@ -331,12 +331,12 @@ class OpenAIPrivacyFilterMLP(nn.Module):
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, router_scores, router_indices = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, router_indices, router_scores)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         # Additional scaling
         hidden_states = hidden_states * self.num_experts
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_scores
+        return hidden_states, top_k_weights
 
 
 class OpenAIPrivacyFilterEncoderLayer(GradientCheckpointingLayer):
@@ -344,7 +344,7 @@ class OpenAIPrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = OpenAIPrivacyFilterAttention(config)
-        self.mlp = OpenAIPrivacyFilterMLP(config)
+        self.mlp = OpenAIPrivacyFilterSparseMoeBlock(config)
         self.input_layernorm = OpenAIPrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenAIPrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
