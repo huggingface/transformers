@@ -479,7 +479,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             }
             self.set_quantizers(renamed)
             self.checkpoint_names = False
-            model.config.quantization_config = self.quantization_config
+            model.config.quantization_config
+
         # Exact names first (the checkpoint's too, for `rename_layer` on its keys), then globs, `"*"` last. `P` (or
         # `P.*`) names the module `P` under any prefix, and everything under it
         patterns = self.quantizers | checkpoint
@@ -489,6 +490,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.matcher = re.compile(
             "|".join(f"(?P<p{i}>{translate(glob)})" for i, (glob, _) in enumerate(self.patterns))
         )
+
         # Each format's `renamed_names` as one regex too, with our names in order, for `rename_layer`
         self.renamers = {}
         for quantizer in self.all_quantizers:
@@ -520,6 +522,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
         if self.patterns is None:
             self.map_module_to_quantizer(model)
+
         # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
         # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
         names = []
@@ -527,6 +530,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
             if getattr(quantizer.quantization_config, "dequantize", False):
                 names += [*quantizer.serialized_names["weight"], *quantizer.renamed_names.values()]
+
         for i, converter in enumerate(weight_conversions):
             sources = converter._original_source_patterns
             if names and isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
