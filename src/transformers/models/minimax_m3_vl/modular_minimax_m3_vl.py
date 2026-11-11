@@ -29,13 +29,14 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
-from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
@@ -57,9 +58,10 @@ from ..minimax_m2.modeling_minimax_m2 import (
     apply_rotary_pos_emb,
 )
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
+from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -790,7 +792,7 @@ def apply_rotary_pos_emb_vision(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     # Only the first `rot_dim` head dims carry 3D RoPE; the tail passes through untouched.
     rot_dim = cos.shape[-1]
-    cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+    cos, sin = cos[:, None, :], sin[:, None, :]
     q_rot, q_pass = q[..., :rot_dim], q[..., rot_dim:]
     k_rot, k_pass = k[..., :rot_dim], k[..., rot_dim:]
     q_rot = q_rot * cos + rotate_half(q_rot) * sin
@@ -798,62 +800,29 @@ def apply_rotary_pos_emb_vision(
     return torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
 
 
-class MiniMaxM3VLVisionAttention(CLIPAttention):
-    """CLIP-style vision attention; the only difference from [`CLIPAttention`] is
-    that queries and keys are rotated by the tower's 3D RoPE before the
-    (interface-dispatched) scaled dot-product attention."""
-
+class MiniMaxM3VLVisionAttention(PaddleOCRVisionAttention):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
-        # The vision tower has no grouped-query attention; the shared eager kernel
-        # still expects this attribute to drive its (no-op) `repeat_kv`.
-        self.num_key_value_groups = 1
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        queries = self.q_proj(hidden_states).view(hidden_shape)
-        keys = self.k_proj(hidden_states).view(hidden_shape)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
-        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
 
 
 class MiniMaxM3VLVisionMLP(CLIPMLP):
     pass
 
 
-# 3D-RoPE `position_embeddings` pass via `**kwargs` for simplicity
 class MiniMaxM3VLVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
         self.self_attn = MiniMaxM3VLVisionAttention(config)
         self.mlp = MiniMaxM3VLVisionMLP(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        super().forward(hidden_states, attention_mask, **kwargs)
+        hidden_states, _ = self.self_attn(hidden_states.squeeze(0), **kwargs)
 
 
 @auto_docstring
@@ -862,6 +831,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
     config: MiniMaxM3VLVisionConfig
     main_input_name = "pixel_values"
+    _supports_flash_attn = True
+    _compatible_flash_implementations = None
     _can_record_outputs = {
         "hidden_states": MiniMaxM3VLVisionEncoderLayer,
         "attentions": MiniMaxM3VLVisionAttention,
@@ -869,6 +840,9 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.merge_temporal = True
+        self.include_temporal = True
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -886,14 +860,21 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(
+            grid_thw, self.config, merge_temporal=self.merge_temporal, kwargs=kwargs
+        )
         position_ids = get_vision_position_ids(
-            grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
+            grid_thw, self.spatial_merge_size, include_temporal=self.include_temporal, kwargs=kwargs
         )
         position_embeddings = self.rotary_emb(embeds, position_ids)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         for layer in self.layers:
             hidden_states = layer(
-                hidden_states, attention_mask=None, position_embeddings=position_embeddings, **kwargs
+                hidden_states,
+                position_embeddings=position_embeddings,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
 
@@ -1237,12 +1218,6 @@ class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
         TorchvisionBackend.__init__(size=size, **kwargs)
 
 
-class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = {
-        "videos_kwargs": {"do_resize": False, "return_metadata": True},
-    }
-
-
 class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     """Combines tokenizer + image_processor + video_processor for MiniMax M3 VL.
 
@@ -1252,7 +1227,11 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     `]<]{seconds} seconds[>[` timestamp marker per frame when metadata is available.
     """
 
-    valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
+    videos_kwargs = {
+        "do_resize": False,
+        "return_metadata": True,
+    }
+    return_mm_token_type_ids = AttributeError()
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["
@@ -1268,6 +1247,10 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
         self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
         self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
 
+    @property
+    def unused_input_names(self):
+        return ["num_chunks_per_video"]
+
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = int(image_inputs["image_grid_thw"][image_idx].prod() // merge_length)
@@ -1275,9 +1258,11 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
-        grid_thw = video_inputs["video_grid_thw"][video_idx]
-        grid_t = int(grid_thw[0])
-        frame_seqlen = int(grid_thw[1:].prod() // merge_length)
+        num_chunks = video_inputs["num_chunks_per_video"]
+        start = sum(num_chunks[:video_idx])
+        grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks[video_idx]]
+        grid_t = int(grid_thw[:, 0].sum())
+        frame_seqlen = int(grid_thw[0, 1:].prod() // merge_length)
         metadata = video_inputs.get("video_metadata", [None] * (video_idx + 1))[video_idx]
         temporal_patch_size = self.video_processor.temporal_patch_size
         chunk = ""
@@ -1295,6 +1280,8 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
             chunk += self.VISION_START_TOKEN + self.VIDEO_TOKEN * frame_seqlen + self.VISION_END_TOKEN
         return chunk
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MiniMaxM3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "MiniMaxM3VLConfig",

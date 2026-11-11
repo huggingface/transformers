@@ -74,6 +74,10 @@ from transformers.utils import is_executorch_available
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
+        "HunYuanVLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HunYuanVLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -230,11 +234,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "onnx.exactness": {
         "Wav2Vec2ForPreTraining": (
-            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
-            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
-            "with itself either."
+            "The quantizer picks codes with `argmax`; on near-tied logits ORT's rounding can pick another "
+            "code, and `codevector_perplexity` jumps far over the tolerance. See PR #50575."
         ),
-        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechSatForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "Wav2Vec2ConformerForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
         "PatchTSTForPretraining": (
             "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
             "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "

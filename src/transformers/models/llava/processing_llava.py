@@ -22,21 +22,14 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class LlavaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False, "return_text_replacement_offsets": False},
-    }
-
-
 @auto_docstring
 class LlavaProcessor(ProcessorMixin):
-    valid_processor_kwargs = LlavaProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -90,8 +83,7 @@ class LlavaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LlavaProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             crop_size = images_kwargs.get("crop_size", None) or self.image_processor.crop_size
             resized_height, resized_width = crop_size["height"], crop_size["width"]
 
@@ -106,5 +98,7 @@ class LlavaProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LlavaProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LlavaProcessor"]

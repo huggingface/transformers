@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ..auto import AutoConfig, AutoModel
 from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
@@ -413,21 +414,16 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
-class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Exaone4_5_Processor(Qwen2VLProcessor):
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     @property
     def model_input_names(self):
         return super().model_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Exaone4_5_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Exaone4_5_Config",
