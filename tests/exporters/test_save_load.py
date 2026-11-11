@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_onnxscript,
     require_openvino,
     require_torch,
+    require_torch_gpu,
     slow,
 )
 from transformers.utils import is_torch_available
@@ -125,8 +126,10 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
             resaved = ExportedModel.from_pretrained(Path(directory, "resaved"))
             torch.testing.assert_close(get_leaf_tensors(resaved(**inputs)), expected)
 
+    @require_torch_gpu
     def test_bfloat16_saves_and_loads(self):
-        """A bfloat16 export runs in bfloat16, close to eager, and its saved graph runs like the exported one."""
+        """A bfloat16 export runs in bfloat16, close to eager, and its saved graph runs like the exported one. On CUDA:
+        ONNX Runtime's CPU provider has no bfloat16 kernels."""
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         model = _tiny_model().to(torch.bfloat16)
@@ -136,7 +139,7 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig())
         outputs = get_leaf_tensors(exported(**inputs))
         self.assertEqual(outputs["logits"].dtype, torch.bfloat16)
-        torch.testing.assert_close(outputs["logits"].cpu(), expected, atol=1.6e-2, rtol=1.6e-2)
+        torch.testing.assert_close(outputs["logits"].cpu(), expected, atol=1e-2, rtol=1e-2)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             loaded = ExportedModel.from_pretrained(directory)

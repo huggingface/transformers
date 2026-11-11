@@ -405,7 +405,7 @@ class ExportedModelTest(unittest.TestCase):
         for option in ("INFERENCE_PRECISION_HINT", "KV_CACHE_PRECISION"):
             self.assertEqual(exported.program.get_rt_info(["runtime_options", option]).astype(str), "bf16")
         # OpenVINO hands a bf16 model's outputs back in fp32.
-        torch.testing.assert_close(exported.to("cpu")(**inputs).logits, expected.float(), atol=2e-2, rtol=2e-2)
+        torch.testing.assert_close(exported.to("cpu")(**inputs).logits, expected.float(), atol=1e-2, rtol=1e-2)
 
     @require_executorch
     @pytest.mark.executorch_export_test
