@@ -134,9 +134,6 @@ class OpenVINOExporter(DynamoExporter):
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
 
-        # The trace ran on the float32 upcast (`patch_16bit_model`): record the model's own precision, which the runner
-        # compiles the graph for (EmbeddingGemma2 on 53 Xeon cores, bf16: 47 ms, against 99 ms run as float32).
-        metadata.dtype = module_dtype(model)
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
@@ -151,6 +148,13 @@ class OpenVINOExporter(DynamoExporter):
 
         if config.compress_to_fp16:
             compress_model_transformation(ov_model)
+
+        # The graph runs in the model's own precision, not the float32 the trace ran in (`patch_16bit_model`): recorded
+        # on the model as the options it compiles with, which OpenVINO otherwise picks itself (a cache in uint8, and
+        # fp32 run in bf16 on CPUs that have it).
+        precision = {"float16": "f16", "bfloat16": "bf16"}.get(module_dtype(model), "f32")
+        for option in ("INFERENCE_PRECISION_HINT", "KV_CACHE_PRECISION"):
+            ov_model.set_rt_info(precision, ["runtime_options", option])
 
         _update_openvino_metadata(metadata, ov_model, out_specs[-1])
         return ov_model, metadata
