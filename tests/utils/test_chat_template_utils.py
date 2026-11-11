@@ -971,7 +971,7 @@ class TemplateTextTest(unittest.TestCase):
         self.assertEqual(rendered, normal[0])
 
     def test_render_escapes_control_tokens_from_inputs(self):
-        from transformers.utils.chat_template_utils import _ESCAPE_END, _ESCAPE_START, _parse_escaped_control_tokens
+        from transformers.utils.chat_template_utils import _ESCAPE_START, _parse_escaped_control_tokens
 
         chat = [{"role": "user", "content": "Hi <a> there"}]
         template = "{{ bos_token }}<a>{{ messages[0].content }}{{ suffix }}"
@@ -985,11 +985,6 @@ class TemplateTextTest(unittest.TestCase):
         self.assertEqual(rendered.count(_ESCAPE_START), 1)
         self.assertEqual(_parse_escaped_control_tokens(rendered), ("<s><a>Hi <a> there", [(9, 12)]))
 
-        # Escape markers in the inputs are dropped, so inputs can't pass for escaped tokens
-        (rendered,), _ = render_jinja_template(
-            [chat], chat_template=template, control_tokens=("<a>",), suffix=f"{_ESCAPE_START}x{_ESCAPE_END}"
-        )
-        self.assertTrue(rendered.endswith(" therex"))
         # Without `control_tokens`, the render is a plain string with nothing escaped
         (rendered,), _ = render_jinja_template([chat], chat_template=template, special_tokens_map={"bos_token": "<s>"})
         self.assertEqual(rendered, "<s><a>Hi <a> there")

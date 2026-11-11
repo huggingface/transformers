@@ -677,18 +677,6 @@ def _compile_traced_jinja_template(chat_template):
     return jinja2.Template.from_code(jinja_env, jinja_env.compile(template_ast), jinja_env.make_globals(None))
 
 
-def _drop_escape_markers(value: Any) -> Any:
-    # Inputs that contain our escape markers could pass for escaped tokens, so we drop the markers. Dict keys are
-    # inputs too
-    if isinstance(value, str):
-        return value.replace(_ESCAPE_START, "").replace(_ESCAPE_END, "")
-    elif isinstance(value, dict):
-        return {_drop_escape_markers(key): _drop_escape_markers(item) for key, item in value.items()}
-    elif isinstance(value, (list, tuple)):
-        return type(value)(_drop_escape_markers(item) for item in value)
-    return value
-
-
 def _escape_input_control_tokens(rendered_chat: _TemplateText, control_tokens_re: re.Pattern) -> str:
     # Escape the control tokens in a rendered chat that the template didn't write itself. A token counts as the
     # template's only when the template wrote all of it, so tokens that the inputs complete are escaped as well, and
@@ -1235,9 +1223,6 @@ def render_jinja_template(
     kwargs = _plain_template_data(kwargs)
     special_tokens_map = _plain_template_data(special_tokens_map or {})
     if control_tokens is not None:
-        tool_schemas = _drop_escape_markers(tool_schemas)
-        documents = _drop_escape_markers(documents)
-        kwargs = _drop_escape_markers(kwargs)
         # The special tokens are the tokenizer's own, so they are as good as written into the template
         special_tokens_map = {
             name: _TemplateText(token, ()) if isinstance(token, str) else token
@@ -1259,7 +1244,6 @@ def render_jinja_template(
                 raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
         chat = _alias_reasoning_fields(chat)
         if control_tokens is not None:
-            chat = _drop_escape_markers(chat)
             for message in chat:
                 # Some templates build control tokens out of roles, like `'<|' + message['role'] + '|>'`, so a role
                 # counts as the template's text, as long as it is a single word like the roles that templates expect
