@@ -48,7 +48,6 @@ import re
 from collections.abc import Mapping, MutableMapping
 from typing import Any
 
-from ..integrations.sdpa_attention import repeat_kv
 from ..utils import logging
 from ..utils.import_utils import is_openvino_available, is_openvino_greater_or_equal, is_torch_available
 from .configs import ExportFormat, OpenVINOConfig
@@ -74,6 +73,7 @@ if is_torch_available():
     from torch.export.decomp_utils import CustomDecompTable
 
     from ..integrations.moe import _default_apply_gate
+    from ..integrations.sdpa_attention import repeat_kv
     from ..modeling_utils import PreTrainedModel
 
 
