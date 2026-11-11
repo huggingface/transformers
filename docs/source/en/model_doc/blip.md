@@ -27,7 +27,7 @@ You can find all the original BLIP checkpoints under the [BLIP](https://huggingf
 >
 > Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
-The example below demonstrates how to do visual question answering with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to caption an image with [`Pipeline`] or answer a question about it with the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -37,12 +37,12 @@ from transformers import pipeline
 
 
 pipeline = pipeline(
-    task="visual-question-answering",
-    model="Salesforce/blip-vqa-base",
+    task="image-text-to-text",
+    model="Salesforce/blip-image-captioning-base",
     device=0
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-pipeline(question="What is the weather in this image?", image=url)
+pipeline(images=url, text="A photo of")
 ```
 
 </hfoption>

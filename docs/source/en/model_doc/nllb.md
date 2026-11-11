@@ -34,20 +34,9 @@ You can find all the original NLLB checkpoints under the [AI at Meta](https://hu
 > This model was contributed by [Lysandre](https://huggingface.co/lysandre).
 > Click on the NLLB models in the right sidebar for more examples of how to apply NLLB to different translation tasks.
 
-The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to translate text with the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-
-pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", device=0)
-pipeline("UN Chief says there is no military solution in Syria")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python

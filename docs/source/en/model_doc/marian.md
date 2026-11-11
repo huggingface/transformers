@@ -35,21 +35,9 @@ You can find all the original MarianMT checkpoints under the [Language Technolog
 >
 > Click on the MarianMT models in the right sidebar for more examples of how to apply MarianMT to translation tasks.
 
-The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to translate text with the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-
-pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", device=0)
-pipeline("Hello, how are you?")
-```
-
-</hfoption>
-
 <hfoption id="AutoModel">
 
 ```python
