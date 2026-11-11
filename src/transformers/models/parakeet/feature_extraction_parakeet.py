@@ -79,7 +79,6 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.win_length = win_length
         self.preemphasis = preemphasis
-        # float32 rounding before the slaney normalization: bit-exact with `librosa.filters.mel(..., norm="slaney")`
         mel_filters = mel_filter_bank(
             num_frequency_bins=n_fft // 2 + 1,
             num_mel_filters=feature_size,

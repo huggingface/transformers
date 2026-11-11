@@ -99,7 +99,6 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
         self.max_audio_clip_s = max_audio_clip_s
         self.overlap_chunk_second = overlap_chunk_second
         self.min_energy_window_samples = min_energy_window_samples
-        # float32 rounding before the slaney normalization: bit-exact with `librosa.filters.mel(..., norm="slaney")`
         mel_filters = mel_filter_bank(
             num_frequency_bins=n_fft // 2 + 1,
             num_mel_filters=feature_size,
