@@ -211,6 +211,7 @@ if TYPE_CHECKING:
     from .granite_speech5 import *
     from .granite_speech_plus import *
     from .granite_swa import *
+    from .granite_switch import *
     from .granitemoe import *
     from .granitemoe_swa import *
     from .granitemoehybrid import *
