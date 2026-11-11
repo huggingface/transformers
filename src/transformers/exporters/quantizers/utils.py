@@ -75,7 +75,7 @@ def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
     return {name: leaves[path] for name, path in paths.items() if path in leaves}
 
 
-def openvino_tensor(tensor: torch.Tensor) -> Any:
+def openvino_input_value(tensor: torch.Tensor) -> Any:
     """`tensor` as an OpenVINO input value. NumPy has no bf16, so a bf16 tensor travels as an `openvino.Tensor` of its
     raw bits."""
     tensor = tensor.detach().cpu()
@@ -92,7 +92,7 @@ def openvino_tensor(tensor: torch.Tensor) -> Any:
 def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
-    leaves = {path: openvino_tensor(tensor) for path, tensor in get_leaf_tensors(sample).items()}
+    leaves = {path: openvino_input_value(tensor) for path, tensor in get_leaf_tensors(sample).items()}
     batch = next(iter(leaves.values())).shape[0] if leaves else 1
 
     def port_value(name: str) -> Any:

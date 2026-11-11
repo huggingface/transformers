@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -73,6 +74,16 @@ class ExportConfigMixin:
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return copy.deepcopy(self.__dict__)
+
+    def to_json_string(self) -> str:
+        """Serializes this instance to a JSON string, without its quantizer (the export records what it did). Values
+        JSON can't hold (`Dim`s) are written as their `repr`.
+
+        Returns:
+            `str`: String containing all the attributes that make up this configuration instance in JSON format.
+        """
+        values = {name: value for name, value in self.__dict__.items() if name != "quantizer"}
+        return json.dumps(values, indent=2, sort_keys=True, default=repr) + "\n"
 
     def __iter__(self):
         yield from self.__dict__.items()

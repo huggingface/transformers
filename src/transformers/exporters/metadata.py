@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import importlib
-import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
@@ -31,7 +30,7 @@ if is_torch_available():
     import torch
 
 
-def _traced_kwarg(value: Any) -> dict[str, Any]:
+def _describe_traced_kwarg(value: Any) -> dict[str, Any]:
     """How one traced kwarg was shaped, as JSON: rank/shape/dtype for a tensor, per leaf for a mapping, and the
     kind for anything else."""
     if isinstance(value, torch.Tensor):
@@ -41,7 +40,7 @@ def _traced_kwarg(value: Any) -> dict[str, Any]:
             "dtype": str(value.dtype).removeprefix("torch."),
         }
     if isinstance(value, Mapping):
-        return {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+        return {"leaves": {str(key): _describe_traced_kwarg(leaf) for key, leaf in value.items()}}
     # A scalar (or `None`) is a constant of the program: its value, which a torch program still takes.
     if value is None or isinstance(value, (bool, int, float, str)):
         return {"value": value}
@@ -102,7 +101,7 @@ def build_export_metadata(
             next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
         ).removeprefix("torch."),
         device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
-        kwargs={name: _traced_kwarg(value) for name, value in inputs.items()},
+        kwargs={name: _describe_traced_kwarg(value) for name, value in inputs.items()},
         input_names=[spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"],
         output_names=traced_output_names(exported_program),
         in_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec),
@@ -125,9 +124,3 @@ def load_treespec(dumped: str):
     """A spec written by `treespec_dumps`."""
     register_treespec_types(dumped)
     return torch.utils._pytree.treespec_loads(dumped)
-
-
-def export_config_metadata(config) -> dict[str, Any]:
-    """`config` as JSON, without its quantizer. Values JSON can't hold (`Dim`s) are written as their `repr`."""
-    values = {f.name: getattr(config, f.name) for f in fields(config) if f.name != "quantizer"}
-    return json.loads(json.dumps(values, default=repr))
