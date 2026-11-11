@@ -42,10 +42,10 @@ _SERIALIZED_WEIGHTS_LIMIT = int(1.5 * 2**30)
 
 
 def _execution_providers(device=None) -> list:
-    """The ONNX Runtime providers for `device`: CUDA when asked for, or by default when this build has it."""
+    """The ONNX Runtime providers for `device`: CUDA when asked for, or by default when this build and a GPU have it."""
     available = ort.get_available_providers()
     if device is None:
-        return [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+        device = "cuda" if torch.cuda.is_available() and "CUDAExecutionProvider" in available else "cpu"
     device = torch.device(device)
     if device.type == "cpu":
         return ["CPUExecutionProvider"]
