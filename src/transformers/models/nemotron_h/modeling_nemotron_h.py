@@ -612,7 +612,6 @@ class NemotronHMamba2Mixer(nn.Module):
         return contextualized_states
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class NemotronHRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """

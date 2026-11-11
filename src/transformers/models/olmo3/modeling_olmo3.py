@@ -41,7 +41,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_olmo3 import Olmo3Config
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class Olmo3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """

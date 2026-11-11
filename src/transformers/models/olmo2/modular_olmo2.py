@@ -30,6 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
@@ -88,6 +89,9 @@ class Olmo2Config(OlmoConfig):
 
 # OLMo2 RMS norm is identical to Llama RMS norm except:
 # - Weight and hidden states are multiplied before converting back to the input dtype, rather than after.
+# - Not decorated with Llama's `RMSNorm` hub kernel: that kernel casts back to the input dtype before the weight
+#   multiply (Llama's order), so it would change the numerics of this norm and of every norm built on it.
+@no_inherit_decorator
 class Olmo2RMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
