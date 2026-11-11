@@ -14,24 +14,14 @@
 
 import unittest
 
-from transformers import Inkling2Processor, LlamaTokenizer
-from transformers.testing_utils import get_tests_dir, require_torch, require_vision
+from transformers import Inkling2Processor
+from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_torch
 @require_vision
 class Inkling2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Inkling2Processor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer = LlamaTokenizer.from_pretrained(SAMPLE_VOCAB)
-        tokenizer.add_special_tokens(
-            {"pad_token": "<pad>", "additional_special_tokens": ["<|unused_200054|>", "<|special_end|>"]}
-        )
-        return tokenizer
+    model_id = "hf-internal-testing/tiny-inkling2"
