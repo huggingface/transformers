@@ -142,6 +142,19 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
             loaded = ExportedModel.from_pretrained(directory)
             torch.testing.assert_close(get_leaf_tensors(loaded(**inputs)), outputs)
 
+    def test_quantized_saves_and_loads(self):
+        """A graph ONNX Runtime's quantizer rewrote saves and loads: its large `Constant` values (a static mask's
+        indices, 8 x 32 int64) come back in memory, not pointing at the quantizer's deleted temporary file."""
+        from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeDynamicConfig, OnnxRuntimeQuantizer
+
+        inputs = {"input_ids": torch.randint(0, 64, (8, 32)), "attention_mask": torch.ones(8, 32, dtype=torch.long)}
+        quantizer = OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
+        exported = OnnxExporter().export(_tiny_model(), copy.deepcopy(inputs), OnnxConfig(quantizer=quantizer))
+        expected = get_leaf_tensors(exported(**inputs))
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            torch.testing.assert_close(get_leaf_tensors(ExportedModel.from_pretrained(directory)(**inputs)), expected)
+
     def test_past_2gb_saves_and_loads(self):
         """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, loads, and runs like the
         exported program. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""

@@ -143,11 +143,11 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
             # Load the weights into memory before the temporary directory goes away
             quantized = onnx_ir.load(quantized_path)
             onnx_ir.external_data.load_to_model(quantized)
-            _load_tensor_attributes(quantized)
+            _load_external_tensor_attributes(quantized)
             return quantized
 
 
-def _load_tensor_attributes(model: onnx_ir.Model) -> None:
+def _load_external_tensor_attributes(model: onnx_ir.Model) -> None:
     """Load the external tensors node attributes hold (the quantized graph's `Constant` values) into memory:
     `onnx_ir.external_data.load_to_model` loads only the initializers, and a saved model would keep pointing at the
     file it was loaded from."""

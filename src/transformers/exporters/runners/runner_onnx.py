@@ -136,14 +136,7 @@ class OnnxModelRunner(ModelRunner):
             # ORT refuses the null pointer of an empty tensor; a one-element stand-in serves.
             buffer = tensor if tensor.numel() else torch.empty(1, dtype=tensor.dtype, device=tensor.device)
             bound_buffers.append(buffer)
-            binding.bind_input(
-                spec.name,
-                "cpu" if on_host else "cuda",
-                0 if on_host else device.index,
-                int(onnx_ir.tensor_adapters.from_torch_dtype(tensor.dtype)),
-                list(tensor.shape),
-                buffer.data_ptr(),
-            )
+            _bind_input(binding, spec.name, tensor, buffer.data_ptr())
         for spec in self.session.get_outputs():
             binding.bind_output(spec.name, device.type, device.index or 0)
         # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
@@ -171,14 +164,7 @@ class OnnxModelRunner(ModelRunner):
                 spec.name: leaves[spec.name.removeprefix("input.")].to(device).contiguous().clone() for spec in specs
             }
             for name, buffer in inputs.items():
-                binding.bind_input(
-                    name,
-                    "cuda",
-                    device.index,
-                    int(onnx_ir.tensor_adapters.from_torch_dtype(buffer.dtype)),
-                    list(buffer.shape),
-                    buffer.data_ptr(),
-                )
+                _bind_input(binding, name, buffer, buffer.data_ptr())
             for spec in self.session.get_outputs():
                 binding.bind_output(spec.name, "cuda", device.index)
             self.cuda_graphs[signature] = (len(self.cuda_graphs), binding, inputs)
@@ -197,3 +183,15 @@ class OnnxModelRunner(ModelRunner):
                 binding.bind_ortvalue_output(spec.name, value)
         outputs = [torch.from_dlpack(value._ortvalue.to_dlpack()) for value in binding.get_outputs()]
         return self.unflatten(outputs if share_outputs else [output.clone() for output in outputs])
+
+
+def _bind_input(binding: ort.IOBinding, name: str, tensor: torch.Tensor, data_ptr: int) -> None:
+    """Bind input `name` to the memory at `data_ptr`, read as `tensor`'s dtype and shape on its device."""
+    binding.bind_input(
+        name,
+        tensor.device.type,
+        tensor.device.index or 0,
+        int(onnx_ir.tensor_adapters.from_torch_dtype(tensor.dtype)),
+        list(tensor.shape),
+        data_ptr,
+    )

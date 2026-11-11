@@ -385,6 +385,24 @@ class ExportedModelTest(unittest.TestCase):
 
         self._check_runs_like_eager(OpenVINOExporter(), OpenVINOConfig(dynamic=True), atol=1e-3, device="cpu")
 
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino_bfloat16_view_buffers(self):
+        """A bf16 model whose buffers are views exports and runs: a loaded checkpoint holds such views (EmbeddingGemma2's
+        0-d clipping bounds, each viewing a 1-element tensor), which the trace's f32 upcast must not replay."""
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        model = _tiny_model().to(torch.bfloat16)
+        base = torch.ones(1, dtype=torch.bfloat16)
+        model.model.norm.register_buffer("input_min", base.squeeze())
+        inputs = {"input_ids": torch.randint(0, 64, (1, 6)), "attention_mask": torch.ones(1, 6, dtype=torch.long)}
+        with torch.no_grad():
+            expected = model(**inputs).logits
+        exported = OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig())
+        self.assertIs(model.model.norm.input_min._base, base)
+        # OpenVINO runs a bf16 model in fp32 and returns fp32.
+        torch.testing.assert_close(exported.to("cpu")(**inputs).logits, expected.float(), atol=2e-2, rtol=2e-2)
+
     @require_executorch
     @pytest.mark.executorch_export_test
     def test_executorch(self):
