@@ -37,10 +37,6 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.auto.register_backend
 
-[[autodoc]] exporters.auto.get_exporter_class
-
-[[autodoc]] exporters.auto.get_export_config_class
-
 ## HfExporter
 
 [[autodoc]] exporters.base.HfExporter

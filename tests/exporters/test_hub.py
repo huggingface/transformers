@@ -23,7 +23,8 @@ from huggingface_hub import HfApi
 from tests.exporters.test_export import _run_onnx_program
 from tests.exporters.test_utils import _StubExporter
 from transformers import BertConfig, GenerationConfig
-from transformers.exporters import EXPORT_BACKENDS, ExportedComponent, ExportedModel, register_backend
+from transformers.exporters import ExportedComponent, ExportedModel, register_backend
+from transformers.exporters.auto import EXPORT_BACKENDS
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import (
     TOKEN,

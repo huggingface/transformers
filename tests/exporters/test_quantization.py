@@ -329,7 +329,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     def test_export_for_generation_fans_out_calibration(self):
         """`export_for_generation` hands each component's export a copy of the quantizer holding that component's
         captured calibration set in place of the generate-level `calibration_dataset`."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
+        from transformers.exporters import DynamoConfig, DynamoExporter, ExportMetadata
 
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
@@ -337,7 +337,12 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         ]
         config = DynamoConfig(quantizer=self._pt2e_quantizer("x86", calibration))
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
-        with patch.object(DynamoExporter, "export_program", autospec=True, return_value=(None, {})) as export:
+        with patch.object(
+            DynamoExporter,
+            "export_program",
+            autospec=True,
+            side_effect=lambda *args, **kwargs: (None, ExportMetadata()),
+        ) as export:
             DynamoExporter().export_for_generation(
                 self._dense_model(),
                 inputs,

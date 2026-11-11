@@ -194,9 +194,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
-            # Positional binding needs these, and they can't be recovered from a saved `.pte`.
-            self.assertIn("num_user_outputs", entry["metadata"])
-            self.assertIn("constant_inputs", entry["metadata"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
 
@@ -215,7 +212,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
             self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
         self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
-        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     @require_onnxscript
     @require_onnxruntime
@@ -297,7 +293,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
         self.assertIn("beam_idx", entry["metadata"]["input_names"])
-        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 

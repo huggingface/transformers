@@ -48,6 +48,7 @@ from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter
+from .metadata import ExportMetadata
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -132,11 +133,9 @@ class ExecutorchExporter(DynamoExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: ExecutorchConfig | dict[str, Any],
-    ) -> tuple[ExecutorchProgramManager, dict[str, Any]]:
+        config: ExecutorchConfig,
+    ) -> tuple[ExecutorchProgramManager, ExportMetadata]:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        config = self._as_config(config)
-
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")

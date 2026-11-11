@@ -33,22 +33,17 @@ DON'T touch:
 Everything below targets one of those gaps.
 """
 
-import dataclasses
 import json
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from unittest import mock
 
 from transformers import BertConfig, GenerationConfig
-from transformers.exporters import (
-    EXPORT_BACKENDS,
-    AutoExportConfig,
-    AutoHfExporter,
-    get_exporter_class,
-    register_backend,
-)
+from transformers.exporters import AutoExportConfig, AutoHfExporter, register_backend
 from transformers.exporters import utils as exporter_utils
+from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
 from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
 from transformers.exporters.metadata import ExportMetadata
@@ -137,7 +132,7 @@ class AutoHfExporterTest(unittest.TestCase):
             AutoHfExporter.from_config({})
 
 
-@dataclasses.dataclass
+@dataclass
 class _StubConfig(DynamoConfig):
     export_format: str = "stub"
 
@@ -150,7 +145,7 @@ class _StubExporter(HfExporter):
     program_suffix = ".txt"
 
     def export_program(self, model, sample_inputs, config):
-        return "program", {"input_names": list(sample_inputs)}
+        return "program", ExportMetadata(input_names=list(sample_inputs))
 
     @classmethod
     def save_program(cls, program, path):
@@ -262,7 +257,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "factory boom"):
             with patch_attributes(
                 [
-                    (a, "method", lambda original: (lambda: "a-patched")),
+                    (a, "method", lambda original: lambda: "a-patched"),
                     (b, "method", _bad_factory),
                 ]
             ):

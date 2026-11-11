@@ -18,15 +18,7 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
-    "auto": [
-        "EXPORT_BACKENDS",
-        "AutoExportConfig",
-        "AutoHfExporter",
-        "ExportBackend",
-        "get_export_config_class",
-        "get_exporter_class",
-        "register_backend",
-    ],
+    "auto": ["AutoExportConfig", "AutoHfExporter", "register_backend"],
     "base": ["ExportedComponent", "ExportedModel", "HfExporter"],
     "configs": [
         "DynamoConfig",
@@ -56,15 +48,7 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
-    from .auto import (
-        EXPORT_BACKENDS,
-        AutoExportConfig,
-        AutoHfExporter,
-        ExportBackend,
-        get_export_config_class,
-        get_exporter_class,
-        register_backend,
-    )
+    from .auto import AutoExportConfig, AutoHfExporter, register_backend
     from .base import ExportedComponent, ExportedModel, HfExporter
     from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
     from .exporter_dynamo import DynamoExporter

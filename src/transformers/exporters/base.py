@@ -218,7 +218,7 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin,
-    ) -> tuple[Any, dict[str, Any]]:
+    ) -> tuple[Any, ExportMetadata]:
         """
         Trace one graph. The backend extension point, paired with [`~HfExporter.save_program`].
 
@@ -235,7 +235,7 @@ class HfExporter(ABC):
                 Backend-specific configuration.
 
         Returns:
-            `tuple[Any, dict]`: The backend's program object (`ExportedProgram`, `ONNXProgram`,
+            `tuple[Any, ExportMetadata]`: The backend's program object (`ExportedProgram`, `ONNXProgram`,
             `ExecutorchProgramManager`, `openvino.Model`) and the metadata recorded while tracing it
             ([`~exporters.metadata.build_export_metadata`]), returned separately since only some formats can
             carry it.
@@ -262,7 +262,8 @@ class HfExporter(ABC):
     def _export_component(self, model, sample_inputs, config: ExportConfigMixin | dict[str, Any]) -> ExportedComponent:
         config = self._as_config(config)
         program, metadata = self.export_program(model, sample_inputs, config=config)
-        return ExportedComponent(program, ExportMetadata(**metadata, export_config=export_config_metadata(config)))
+        metadata.export_config = export_config_metadata(config)
+        return ExportedComponent(program, metadata)
 
     def export(
         self,

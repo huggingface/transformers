@@ -63,14 +63,11 @@ def register_backend(exporter: type[HfExporter]) -> None:
 
 
 def _registered_backend(export_format: ExportFormat | str | None) -> ExportBackend:
-    if export_format is None:
-        raise ValueError(f"No export format given — registered formats are {sorted(EXPORT_BACKENDS)}.")
-    backend = EXPORT_BACKENDS.get(export_format)
-    if backend is None:
+    if export_format not in EXPORT_BACKENDS:
         raise ValueError(
-            f"Unknown export format '{export_format}' — registered formats are {sorted(EXPORT_BACKENDS)}."
+            f"Unknown export format {export_format!r} — registered formats are {sorted(EXPORT_BACKENDS)}."
         )
-    return backend
+    return EXPORT_BACKENDS[export_format]
 
 
 def get_export_config_class(export_format: ExportFormat | str | None) -> type[ExportConfigMixin]:
@@ -108,35 +105,3 @@ class AutoHfExporter:
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
         export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
         return get_exporter_class(export_config_dict.get("export_format"))(**kwargs)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter | None:
-        """
-        Load an exporter instance from a pretrained model/checkpoint that ships an export config.
-
-        **Not implemented yet** — placeholder for a first-class "export recipe" workflow.
-
-        The idea: model owners publish an ``export_config.json`` (or an ``export_config`` field in
-        ``config.json``) alongside their weights on the Hub. That file captures the settings the
-        owner has already validated for their architecture — the target format (``dynamo`` /
-        ``onnx`` / ``executorch``), exact dynamic-shape specs (e.g. ``text_ids`` dynamic to 4096,
-        image tiles fixed at 448, ``batch=1`` for edge deployment), ``strict`` flag, ONNX opset,
-        prefill vs. decode layout, ExecuTorch backend choice, and any other knob that today lives
-        as tribal knowledge in a README or a private notebook.
-
-        Consumers then get the owner-validated export in one call::
-
-            exporter = AutoHfExporter.from_pretrained("org/model-name")
-            program = exporter.export(model, inputs)
-
-        Composes with the [`register_export_input_preparer`] registry: the owner supplies the
-        shape spec via ``export_config.json``, transformers supplies the data-dependent
-        precomputations (``cu_seqlens``, vision position ids, window indices, …) for that
-        architecture. Together they cover the two hard parts of exporting new models — knowing
-        the right shape contract and preparing the right inputs — so downstream users don't
-        re-derive either from scratch (and don't break in production when they get it wrong).
-        """
-        raise NotImplementedError(
-            "AutoHfExporter.from_pretrained is not implemented yet. "
-            "Load/export configs explicitly and call AutoHfExporter.from_config(...) instead."
-        )
