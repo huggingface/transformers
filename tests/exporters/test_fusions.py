@@ -84,7 +84,7 @@ def _decode(model, multi_token_decode=True, quantizer=None):
         generation_config=GenerationConfig(max_new_tokens=3),
         multi_token_decode=multi_token_decode,
     )
-    return exported["decode"].program
+    return exported.components["decode"].program
 
 
 def _compiled_ops(ov_model):

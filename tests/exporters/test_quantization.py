@@ -408,15 +408,19 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
             "lm_head": DynamoConfig(dynamic=True),
         }
-        components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
+        exported = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        self.assertTrue(_has_quantize_ops(components["language_model"].program), "language_model should be quantized")
-        self.assertTrue(_has_quantize_ops(components["decode"].program), "decode should be quantized")
-        self.assertFalse(_has_quantize_ops(components["lm_head"].program), "lm_head should stay fp32")
+        self.assertTrue(
+            _has_quantize_ops(exported.components["language_model"].program), "language_model should be quantized"
+        )
+        self.assertTrue(_has_quantize_ops(exported.components["decode"].program), "decode should be quantized")
+        self.assertFalse(_has_quantize_ops(exported.components["lm_head"].program), "lm_head should stay fp32")
         # the recipes really differ: decode is dynamically quantized, language_model statically
-        self.assertTrue(_has_dynamic_quant_ops(components["decode"].program), "decode should be dynamically quantized")
+        self.assertTrue(
+            _has_dynamic_quant_ops(exported.components["decode"].program), "decode should be dynamically quantized"
+        )
         self.assertFalse(
-            _has_dynamic_quant_ops(components["language_model"].program), "language_model should be static"
+            _has_dynamic_quant_ops(exported.components["language_model"].program), "language_model should be static"
         )
 
 

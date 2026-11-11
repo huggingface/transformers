@@ -23,7 +23,7 @@ from huggingface_hub import HfApi
 from tests.exporters.test_export import _run_onnx_program
 from tests.exporters.test_utils import _StubExporter
 from transformers import BertConfig, GenerationConfig
-from transformers.exporters import EXPORT_BACKENDS, ExportArtifacts, ExportedComponent, register_backend
+from transformers.exporters import EXPORT_BACKENDS, ExportedComponent, ExportedModel, register_backend
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import (
     TOKEN,
@@ -40,14 +40,14 @@ if is_torch_available():
     import torch
 
 
-class ExportArtifactsMockedHubTest(unittest.TestCase):
+class ExportedModelMockedHubTest(unittest.TestCase):
     def test_from_pretrained_downloads_only_the_export_from_the_hub(self):
         """From the Hub, the manifest is fetched first, then only the files it names (and the configs), so an
         export in a model repo's subfolder doesn't pull the model's own weights."""
         components = {"decode": ExportedComponent("decode program", ExportMetadata())}
         with mock.patch.dict(EXPORT_BACKENDS), tempfile.TemporaryDirectory() as repo:
             register_backend(_StubExporter)
-            ExportArtifacts(components, "stub").save_pretrained(Path(repo) / "stub")
+            ExportedModel(components, "stub").save_pretrained(Path(repo) / "stub")
 
             requested = []
 
@@ -64,13 +64,13 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
                 mock.patch("transformers.exporters.base.cached_file", cached_file),
                 mock.patch("transformers.exporters.base.cached_files", cached_files),
             ):
-                loaded = ExportArtifacts.from_pretrained("org/model", subfolder="stub")
+                loaded = ExportedModel.from_pretrained("org/model", subfolder="stub")
         self.assertEqual(sorted(requested), ["config.json", "decode.txt", "export.json", "generation_config.json"])
-        self.assertEqual(loaded["decode"].program, "decode program")
+        self.assertEqual(loaded.components["decode"].program, "decode program")
 
     def test_save_pretrained_pushes_to_hub(self):
         components = {"decode": ExportedComponent("decode program", ExportMetadata())}
-        artifacts = ExportArtifacts(components, "stub", generation_config=GenerationConfig(max_new_tokens=3))
+        exported = ExportedModel(components, "stub", generation_config=GenerationConfig(max_new_tokens=3))
         api = mock.Mock()
         api.create_repo.return_value.repo_id = "org/model"
         with (
@@ -80,7 +80,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
             tempfile.TemporaryDirectory() as directory,
         ):
             register_backend(_StubExporter)
-            artifacts.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
+            exported.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
         uploaded = {operation.path_in_repo for operation in api.create_commit.call_args.kwargs["operations"]}
         self.assertEqual(uploaded, {"decode.txt", "export.json", "generation_config.json"})
 
@@ -89,7 +89,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
 @require_torch
 @require_onnxscript
 @require_onnxruntime
-class ExportArtifactsPushToHubTester(unittest.TestCase):
+class ExportedModelPushToHubTester(unittest.TestCase):
     """A real ONNX export (its `model.onnx.data` included) through the staging Hub."""
 
     def _export(self):
@@ -103,7 +103,7 @@ class ExportArtifactsPushToHubTester(unittest.TestCase):
         return OnnxExporter().export(BertModel(config).eval(), inputs, OnnxConfig()), inputs
 
     def _assert_loads_same(self, loaded, exported, inputs):
-        self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
+        self.assertEqual(loaded.components["model"].metadata, exported.components["model"].metadata)
         self.assertEqual(loaded.config.hidden_size, exported.config.hidden_size)
         torch.testing.assert_close(
             _run_onnx_program(loaded.program, inputs), _run_onnx_program(exported.program, inputs)
@@ -113,14 +113,14 @@ class ExportArtifactsPushToHubTester(unittest.TestCase):
         exported, inputs = self._export()
         with TemporaryHubRepo(token=TOKEN) as repo:
             exported.push_to_hub(repo.repo_id, token=TOKEN)
-            loaded = ExportArtifacts.from_pretrained(repo.repo_id, token=TOKEN)
+            loaded = ExportedModel.from_pretrained(repo.repo_id, token=TOKEN)
             self._assert_loads_same(loaded, exported, inputs)
 
     def test_push_to_hub_via_save_pretrained(self):
         exported, inputs = self._export()
         with TemporaryHubRepo(token=TOKEN) as repo, tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory, push_to_hub=True, repo_id=repo.repo_id, token=TOKEN)
-            loaded = ExportArtifacts.from_pretrained(repo.repo_id, token=TOKEN)
+            loaded = ExportedModel.from_pretrained(repo.repo_id, token=TOKEN)
             self._assert_loads_same(loaded, exported, inputs)
 
     def test_from_pretrained_subfolder_downloads_only_the_export(self):
@@ -135,7 +135,7 @@ class ExportArtifactsPushToHubTester(unittest.TestCase):
             exported.save_pretrained(directory)
             api.upload_folder(repo_id=repo.repo_id, folder_path=directory, path_in_repo="onnx")
             api.upload_file(repo_id=repo.repo_id, path_or_fileobj=b"weights", path_in_repo="model.safetensors")
-            loaded = ExportArtifacts.from_pretrained(repo.repo_id, subfolder="onnx", token=TOKEN, cache_dir=cache_dir)
+            loaded = ExportedModel.from_pretrained(repo.repo_id, subfolder="onnx", token=TOKEN, cache_dir=cache_dir)
             downloaded = {path.name for path in Path(cache_dir).rglob("*") if path.is_file()}
             self._assert_loads_same(loaded, exported, inputs)
         self.assertIn("model.onnx.data", downloaded)

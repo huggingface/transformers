@@ -43,7 +43,7 @@ import pytest
 
 from tests.exporters.test_export import _run_onnx_program
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.exporters import ExportArtifacts
+from transformers.exporters import ExportedModel
 from transformers.exporters.utils import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
@@ -171,8 +171,8 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         written = {path.name for path in Path(directory).iterdir()} - {"export.json", "config.json"}
         self.assertIn(entry["file"], written)
         self.assertLessEqual(written, set(exporter.program_files(entry["file"])))
-        loaded = ExportArtifacts.from_pretrained(directory)
-        self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
+        loaded = ExportedModel.from_pretrained(directory)
+        self.assertEqual(loaded.components["model"].metadata, exported.components["model"].metadata)
         return entry, loaded
 
     @pytest.mark.torch_export_test
@@ -230,7 +230,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         expected = _run_onnx_program(exported.program, inputs)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
-            loaded = ExportArtifacts.from_pretrained(directory)
+            loaded = ExportedModel.from_pretrained(directory)
             torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
 
     @require_onnxscript
@@ -249,7 +249,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             snapshot.mkdir()
             for file in blobs.iterdir():
                 (snapshot / file.name).symlink_to(file)
-            loaded = ExportArtifacts.from_pretrained(snapshot)
+            loaded = ExportedModel.from_pretrained(snapshot)
             torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
 
     @require_onnxscript
@@ -278,7 +278,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             exported.save_pretrained(directory)
             self.assertLess((Path(directory) / "model.onnx").stat().st_size, 2**31)
             self.assertGreater((Path(directory) / "model.onnx.data").stat().st_size, 2**31)
-            outputs = _run_onnx_program(ExportArtifacts.from_pretrained(directory).program, inputs)
+            outputs = _run_onnx_program(ExportedModel.from_pretrained(directory).program, inputs)
         torch.testing.assert_close(outputs, expected, atol=0, rtol=0)
 
     @require_openvino

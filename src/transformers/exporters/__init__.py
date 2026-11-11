@@ -27,7 +27,7 @@ _import_structure = {
         "get_exporter_class",
         "register_backend",
     ],
-    "base": ["ExportArtifacts", "ExportedComponent", "HfExporter"],
+    "base": ["ExportedComponent", "ExportedModel", "HfExporter"],
     "configs": [
         "DynamoConfig",
         "ExecutorchConfig",
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
         get_exporter_class,
         register_backend,
     )
-    from .base import ExportArtifacts, ExportedComponent, HfExporter
+    from .base import ExportedComponent, ExportedModel, HfExporter
     from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
     from .exporter_dynamo import DynamoExporter
     from .exporter_executorch import ExecutorchExporter

@@ -45,9 +45,9 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.base.HfExporter
 
-## ExportArtifacts
+## ExportedModel
 
-[[autodoc]] exporters.base.ExportArtifacts
+[[autodoc]] exporters.base.ExportedModel
     - program
     - save_pretrained
     - from_pretrained

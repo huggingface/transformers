@@ -19,7 +19,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, MutableMapping
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Unpack
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# Backend, file and recorded metadata per component. Kept outside the artifacts because not every format
+# Backend, file and recorded metadata per component. Kept outside the programs because not every format
 # can carry the metadata (`torch.export` cannot).
 EXPORT_MANIFEST_FILE = "export.json"
 
@@ -57,8 +57,8 @@ class ExportedComponent:
     metadata: ExportMetadata
 
 
-class ExportArtifacts(Mapping, PushToHubMixin):
-    """What an export produced: a `Mapping` over `{name: ExportedComponent}`, plus the configs they were traced
+class ExportedModel(PushToHubMixin):
+    """An exported model: its graphs (`components`, `{name: ExportedComponent}`) and the configs they were traced
     against.
 
     [`~HfExporter.export`] produces a single `"model"` component, whose program is `.program`;
@@ -77,17 +77,8 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         self.config = config
         self.generation_config = generation_config
 
-    def __getitem__(self, name: str) -> ExportedComponent:
-        return self.components[name]
-
-    def __iter__(self):
-        return iter(self.components)
-
-    def __len__(self) -> int:
-        return len(self.components)
-
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self)})"
+        return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self.components)})"
 
     @property
     def program(self):
@@ -95,13 +86,13 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         if len(self.components) != 1:
             raise ValueError(
                 f"This export has {len(self.components)} components ({list(self.components)}), so there is "
-                "no single `.program`; index it by name and take that component's."
+                "no single `.program`; take one from `.components[name]`."
             )
         return next(iter(self.components.values())).program
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
-        metadata recorded when tracing it. [`~ExportArtifacts.from_pretrained`] loads them back.
+        metadata recorded when tracing it. [`~ExportedModel.from_pretrained`] loads them back.
 
         Args:
             save_directory (`str` or `Path`):
@@ -143,8 +134,8 @@ class ExportArtifacts(Mapping, PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: str | Path, **kwargs: Unpack[DownloadKwargs]
-    ) -> ExportArtifacts:
-        """Load what [`~ExportArtifacts.save_pretrained`] wrote: each component through its backend's
+    ) -> ExportedModel:
+        """Load what [`~ExportedModel.save_pretrained`] wrote: each component through its backend's
         [`~HfExporter.load_program`], with its metadata, and the configs saved next to them.
 
         Args:
@@ -189,7 +180,7 @@ class HfExporter(ABC):
 
     To add a backend, subclass and implement [`~HfExporter.export_program`] to trace one graph, and
     [`~HfExporter.save_program`] / [`~HfExporter.load_program`] to write one out and read it back. The public
-    [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build an [`ExportArtifacts`] on top of
+    [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build an [`ExportedModel`] on top of
     them.
     """
 
@@ -278,19 +269,19 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, Any],
-    ) -> ExportArtifacts:
+    ) -> ExportedModel:
         """
         Export the model as one graph.
 
         Takes the same **forward** kwargs as [`~HfExporter.export_program`].
 
         Returns:
-            [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.program`, and
+            [`ExportedModel`]: A single `"model"` component; the backend's program is `.program`, and
             `save_pretrained` writes it with its metadata and the model config.
         """
         component = self._export_component(model, sample_inputs, config)
         # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
-        return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
+        return ExportedModel({"model": component}, self.export_format, config=getattr(model, "config", None))
 
     def export_for_generation(
         self,
@@ -300,7 +291,7 @@ class HfExporter(ABC):
         *,
         generation_config: GenerationConfig | None = None,
         multi_token_decode: bool = False,
-    ) -> ExportArtifacts:
+    ) -> ExportedModel:
         """
         Decompose a generative model and export each component independently.
 
@@ -332,7 +323,7 @@ class HfExporter(ABC):
                 stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
         Returns:
-            [`ExportArtifacts`]: One [`ExportedComponent`] per stage, with the same keys as
+            [`ExportedModel`]: One [`ExportedComponent`] per stage, with the same keys as
             [`~exporters.utils.decompose_for_generation`].
         """
         components = decompose_for_generation(
@@ -376,6 +367,6 @@ class HfExporter(ABC):
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
 
-        return ExportArtifacts(
+        return ExportedModel(
             exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config
         )
