@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     slow,
     torch_device,
 )
@@ -87,6 +88,47 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         config = InklingTextConfig.from_dict({"intermediate_size": 3072, "dense_intermediate_size": 24576})
         self.assertEqual(config.intermediate_size, 24576)
         self.assertEqual(config.moe_intermediate_size, 3072)
+
+    @parameterized.expand([("bfloat16", False), ("bfloat16", True), ("float32", True)])
+    @require_torch_bf16
+    def test_router_precision(self, dtype, use_autocast):
+        dtype = getattr(torch, dtype)
+        config = self.model_tester.get_config()
+        config.num_experts_per_tok = 2
+        model = InklingForCausalLM(config)
+        gate = model.model.layers[1].mlp.gate
+        with torch.no_grad():
+            gate.weight.zero_()
+            gate.weight[:8, 0].copy_(torch.tensor([6.25, 6.5, 7, 7.5, 8, 8.5, 9, 10]))
+            gate.e_score_correction_bias.fill_(0.000123)
+            gate.global_scale.fill_(1.234567)
+        expected_bias = gate.e_score_correction_bias.clone()
+        expected_scale = gate.global_scale.detach().clone()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model = InklingForCausalLM.from_pretrained(tmp_dir, dtype=dtype).to(torch_device)
+
+        moe = model.model.layers[1].mlp
+        hidden_states = torch.zeros(1, 1, config.hidden_size, dtype=dtype, device=torch_device)
+        hidden_states[..., 0] = 1
+        with torch.autocast(device_type=hidden_states.device.type, dtype=torch.bfloat16, enabled=use_autocast):
+            logits, weights, indices, gammas = moe.gate(hidden_states)
+            output = moe(hidden_states)
+
+        # These exactly representable logits have distinct FP32 sigmoid scores, but all round to 1 in BF16.
+        self.assertEqual(indices.sort().values.tolist(), [[6, 7]])
+        self.assertEqual(logits.dtype, torch.float32)
+        self.assertEqual(weights.dtype, dtype)
+        self.assertEqual(gammas.dtype, dtype)
+        torch.testing.assert_close(moe.gate.e_score_correction_bias.cpu(), expected_bias, rtol=0, atol=0)
+        torch.testing.assert_close(moe.gate.global_scale.cpu(), expected_scale, rtol=0, atol=0)
+        self.assertEqual(model.model.layers[0].mlp.global_scale.dtype, dtype)
+        self.assertEqual(moe.gate.weight.dtype, dtype)
+        self.assertTrue(torch.isfinite(output).all())
+        output.float().square().sum().backward()
+        self.assertIsNotNone(moe.gate.weight.grad)
+        self.assertTrue(torch.isfinite(moe.gate.weight.grad).all())
 
 
 class InklingAudio2TextModelTester(ALMModelTester):
