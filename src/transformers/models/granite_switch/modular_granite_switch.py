@@ -20,16 +20,29 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...cache_utils import Cache
+from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granitemoehybrid.configuration_granitemoehybrid import GraniteMoeHybridConfig
 from ..granitemoehybrid.modeling_granitemoehybrid import (
+    GraniteMoeHybridExperts,
     GraniteMoeHybridMLP,
+    GraniteMoeHybridMoE,
+    GraniteMoeHybridRMSNorm,
+    GraniteMoeHybridRotaryEmbedding,
+    GraniteMoeHybridTopKRouter,
     apply_rotary_pos_emb,
     eager_attention_forward,
+    load_balancing_loss_func,
     rotate_half,
 )
 from .switch_codes import KerdockDGCodeGenerator, recover_count_from_signal
@@ -460,13 +473,10 @@ class MultiSwitch(nn.Module):
         self.counting_layer_idx = layer_idx
         self.memory_layer_idx = layer_idx + 1
 
-        # Two accepted `adapter_token_ids` layouts, distinguished by length alone:
-        #   * `num_adapters` entries -- entry i fires adapter i + 1, so the id is argmax + 1.
-        #   * `num_adapters + 1` entries -- entry 0 is a base-reset token that fires 0 and the
-        #     rest fire 1.., so the id is the argmax unshifted. This is what lets a request
-        #     transition back to base, which matters when one sequence holds several control
-        #     tokens: ordinary chat emits a control token for the current turn only, so earlier
-        #     turns carry none and already route to base.
+        # Two accepted `adapter_token_ids` layouts, distinguished by length alone. With
+        # `num_adapters` entries, entry i fires adapter i + 1 and the id is argmax + 1. With
+        # `num_adapters + 1`, entry 0 is a base-reset token firing 0 and the id is the argmax
+        # unshifted -- which is what lets a request transition back to base mid-sequence.
         # Derived from a length once here, rather than per step, so `forward` stays branch-free.
         if len(config.adapter_token_ids) == self.num_adapters + 1:
             self._expert_id_offset = 0
@@ -480,14 +490,11 @@ class MultiSwitch(nn.Module):
         self.memory_dim = self.code_gen.N
         self.memory_gain = config.ms_memory_gain
 
-        # Must be persistent. `from_pretrained` materializes modules on the meta device and then
-        # fills only the tensors the checkpoint carries, so a non-persistent buffer is absent from
-        # the state dict and comes back all zeros -- whatever `__init__` computed is discarded. A
-        # zeroed codebook makes every memory key and query zero, which collapses the retrieval
-        # logits to a uniform softmax: each position then averages the adapter ids in scope
-        # instead of selecting the most recent one, and routes to a blend with no error raised.
-        # Keeping it in the state dict also turns an incompatible checkpoint into a loud missing
-        # key. The cost is ~512 KB against a multi-GB checkpoint.
+        # Must be persistent. `from_pretrained` fills only the tensors the checkpoint carries, so a
+        # non-persistent buffer comes back all zeros and whatever `__init__` computed is discarded.
+        # A zeroed codebook zeroes every memory key and query, collapsing retrieval to a uniform
+        # softmax: each position averages the adapter ids in scope instead of taking the most
+        # recent, and routes to a blend silently. It also costs only ~512 KB.
         self.codebook = nn.Buffer(self.code_gen.precompute_codebook(dtype=torch.float32), persistent=True)
 
         # Counting carries its one-hot signal in component 0 and pads the rest, so its width is
@@ -561,7 +568,6 @@ class MultiSwitch(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Select an adapter per token, then rewrite the control tokens.
@@ -1113,4 +1119,532 @@ def apply_rotary_pos_emb_q_only(
     return (q * cos) + (rotate_half(q) * sin)
 
 
-__all__ = ["GraniteSwitchConfig"]
+# Inherited unchanged from the hybrid base model. Declared so that the generated single file owns
+# them under its own name rather than importing them, which is what the modular converter expects.
+class GraniteSwitchRMSNorm(GraniteMoeHybridRMSNorm):
+    pass
+
+
+class GraniteSwitchRotaryEmbedding(GraniteMoeHybridRotaryEmbedding):
+    pass
+
+
+class GraniteSwitchTopKRouter(GraniteMoeHybridTopKRouter):
+    pass
+
+
+class GraniteSwitchExperts(GraniteMoeHybridExperts):
+    pass
+
+
+class GraniteSwitchMoE(GraniteMoeHybridMoE):
+    pass
+
+
+class GraniteSwitchDecoderLayer(GradientCheckpointingLayer):
+    """
+    A single-stream decoder layer: attention carrying the embedded LoRA adapters, then whichever
+    MLP paths the base model has -- a frozen expert bank when `num_local_experts > 0`, a dense
+    `shared_mlp` when `shared_intermediate_size > 0`, or both for the Granite 4 hybrid.
+
+    This is the layer for plain LoRA and aLoRA checkpoints. A Shadow Residual checkpoint uses
+    [`GraniteSwitchShadowResidualDecoderLayer`], which subclasses this one and holds exactly the
+    same parameters plus a `cross_stream` injection site.
+    """
+
+    def __init__(self, config: GraniteSwitchConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.residual_multiplier = config.residual_multiplier
+        self.self_attn = GraniteSwitchAttention(config, layer_idx)
+
+        # The expert bank is frozen and carries no LoRA, so it is the upstream module unchanged.
+        # CODEPATH: present on the sparse and hybrid MoE bases, absent on a dense one.
+        self.has_experts = config.num_local_experts > 0
+        self.block_sparse_moe = GraniteSwitchMoE(config) if self.has_experts else None
+
+        # The dense shared MLP is absent entirely on a pure sparse-MoE base (`granitemoe`), which
+        # upstream encodes as `shared_intermediate_size == 0`. Construction has to be skipped, not
+        # merely made zero-width: `nn.Linear(hidden_size, 0)` still registers a `[0, hidden_size]`
+        # weight, which would then be demanded of the base checkpoint and added into the result.
+        # CODEPATH: present on the dense and hybrid bases, absent on a pure sparse one.
+        self.has_shared_mlp = config.shared_intermediate_size > 0
+        self.shared_mlp = GraniteSwitchMLP(config) if self.has_shared_mlp else None
+
+        if not self.has_experts and not self.has_shared_mlp:
+            raise ValueError(
+                "A decoder layer needs at least one MLP path, but this config has neither: "
+                "`num_local_experts=0` and `shared_intermediate_size=0`."
+            )
+
+        self.input_layernorm = GraniteSwitchRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GraniteSwitchRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def _route(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Run the frozen router alone, without touching the expert bank, so that Shadow Residual can
+        route once and apply the same partition to both of its streams.
+
+        Returns `(top_k_index, top_k_weights)`: the per-token top-k expert indices and their
+        softmaxed gate weights. The router's first return value is the raw logits, which the output
+        recorder already collects off the router module itself.
+        """
+        flat = hidden_states.reshape(-1, hidden_states.shape[-1])
+        _, top_k_weights, top_k_index = self.block_sparse_moe.router(flat)
+        return top_k_index, top_k_weights
+
+    def _apply_experts(self, hidden_states: torch.Tensor, routing: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """
+        The expert bank under a routing decision made elsewhere. This is the second half of
+        `GraniteSwitchMoE.forward`, duplicated because upstream exposes no seam between routing and
+        expert application.
+        """
+        top_k_index, top_k_weights = routing
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        flat = hidden_states.reshape(-1, hidden_size)
+        expert_output = self.block_sparse_moe.experts(flat, top_k_index, top_k_weights)
+        return expert_output.view(batch_size, seq_len, hidden_size)
+
+    def _mlp_block(
+        self,
+        hidden_states: torch.Tensor,
+        adapter_indices: torch.Tensor | None,
+        routing: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> torch.Tensor:
+        """
+        The expert bank (where there is one) plus the dense shared MLP (where there is one), for a
+        single stream.
+
+        `routing` reuses a partition produced by `_route` on *another* stream instead of routing
+        this one. Only the routing is shared: the shared MLP still runs under this stream's own
+        `adapter_indices`.
+        """
+        moe_output = None
+        if self.has_experts:
+            # CODEPATH: `routing is None` in the single-stream layer, which has only the one stream
+            # and lets the MoE module route it.
+            if routing is None:
+                moe_output = self.block_sparse_moe(hidden_states)
+            else:
+                moe_output = self._apply_experts(hidden_states, routing)
+        if not self.has_shared_mlp:
+            return moe_output
+
+        shared_output = self.shared_mlp(hidden_states, adapter_indices)
+        if moe_output is None:
+            return shared_output
+        return moe_output + shared_output
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        adapter_indices: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        r"""
+        adapter_indices (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Per-token adapter selection from the switch. `0` routes a token through the base model.
+        """
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            adapter_indices=adapter_indices,
+            past_key_values=past_key_values,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self._mlp_block(hidden_states, adapter_indices)
+        return residual + hidden_states * self.residual_multiplier
+
+
+class GraniteSwitchShadowResidualDecoderLayer(GraniteSwitchDecoderLayer):
+    """
+    A Shadow Residual decoder layer: a frozen base stream and a LoRA'd adapter stream, run through
+    one set of weights.
+
+    It holds exactly the parameters of its single-stream parent plus one `cross_stream` injection
+    site. Every module is shared between the two streams -- the base stream simply calls them with
+    `adapter_indices=None`, which makes each switched LoRA linear fall back to its base weight --
+    and K/V always come from the base stream, so the cache stays base-clean.
+
+    Subclassing rather than writing a parallel module is deliberate: there is no second `__init__`
+    that could forget a base-model submodule such as `block_sparse_moe`.
+    """
+
+    def __init__(self, config: GraniteSwitchConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        # The one place the base stream feeds the adapter stream. Its base weight is zeroed in
+        # `GraniteSwitchPreTrainedModel._init_weights`, so the site contributes only the selected
+        # adapter's LoRA delta and a freshly built layer injects exactly nothing.
+        self.cross_stream = GraniteSwitchLoRALinear(
+            config.hidden_size,
+            config.hidden_size,
+            config.num_adapters,
+            config.cross_stream_rank,
+            bias=False,
+        )
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        base_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        adapter_indices: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        r"""
+        hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The adapter stream, which is the one that reaches the LM head. It comes first, and is
+            returned first, so that the hidden-state recorder installed for the single-stream layer
+            collects the right stream here too.
+        base_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The frozen base stream. Positional, like `hidden_states`, so that gradients reach it
+            under gradient checkpointing.
+        adapter_indices (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Per-token adapter selection from the switch. `0` routes a token through the base model.
+        """
+        residual, base_residual = hidden_states, base_hidden_states
+        normed = self.input_layernorm(hidden_states)
+        base_normed = self.input_layernorm(base_hidden_states)
+
+        # The base stream owns the single cache write. Shadow Residual attends against the base
+        # stream by construction, so the keys and values that land in the cache are base-clean.
+        base_attn_output, _, base_kv = self.self_attn(
+            hidden_states=base_normed,
+            attention_mask=attention_mask,
+            adapter_indices=None,
+            past_key_values=past_key_values,
+            position_embeddings=position_embeddings,
+            return_kv=True,
+            **kwargs,
+        )
+        # The adapter stream projects its own Q, with LoRA, and reads the keys and values above.
+        attn_output = self.self_attn.forward_dual_stream(
+            hidden_states=normed,
+            base_kv=base_kv,
+            attention_mask=attention_mask,
+            adapter_indices=adapter_indices,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+
+        hidden_states = residual + attn_output * self.residual_multiplier
+        base_hidden_states = base_residual + base_attn_output * self.residual_multiplier
+
+        residual, base_residual = hidden_states, base_hidden_states
+        normed = self.post_attention_layernorm(hidden_states)
+        base_normed = self.post_attention_layernorm(base_hidden_states)
+
+        # The adapter stream inherits the base stream's expert assignment *and* its gate scalars.
+        # Routing on the base stream is what keeps the frozen stream bit-identical to stock.
+        # CODEPATH: `routing` stays `None` when there is no expert bank, in which case `_mlp_block`
+        # has nothing to route and only the shared MLP runs.
+        routing = self._route(base_normed) if self.has_experts else None
+        base_mlp_output = self._mlp_block(base_normed, None, routing)
+        mlp_output = self._mlp_block(normed, adapter_indices, routing)
+
+        hidden_states = residual + mlp_output * self.residual_multiplier
+        base_hidden_states = base_residual + base_mlp_output * self.residual_multiplier
+
+        hidden_states = hidden_states + self.cross_stream(base_hidden_states, adapter_indices)
+        return hidden_states, base_hidden_states
+
+
+@auto_docstring
+class GraniteSwitchPreTrainedModel(PreTrainedModel):
+    # Deliberately not a subclass of `GraniteMoeHybridPreTrainedModel`, even though every module
+    # below comes from that model: the converter inlines a parent's `_init_weights` into the
+    # generated file, and the hybrid's covers its Mamba layers, which would drag the whole Mamba
+    # mixer and its kernels into a model that is attention-only.
+    config: GraniteSwitchConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["GraniteSwitchDecoderLayer", "GraniteSwitchShadowResidualDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    # The switched LoRA linears narrow their work to the adapters a batch actually selects, which
+    # is a data-dependent shape, so the model cannot be captured as a single static graph.
+    _can_compile_fullgraph = False
+    _supports_attention_backend = True
+    _is_stateful = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteSwitchTopKRouter, index=0),
+        "hidden_states": GraniteSwitchDecoderLayer,
+        "attentions": GraniteSwitchAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, GraniteSwitchExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteSwitchTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteSwitchLoRALinear):
+            init.kaiming_uniform_(module.lora_A, a=5**0.5)
+            init.zeros_(module.lora_B)
+        elif isinstance(module, GraniteSwitchMergedLoRALinear):
+            for lora_A in module.lora_A_slices:
+                init.kaiming_uniform_(lora_A, a=5**0.5)
+            for lora_B in module.lora_B_slices:
+                init.zeros_(lora_B)
+        elif isinstance(module, GraniteSwitchShadowResidualDecoderLayer):
+            # Children are initialized before their parent, so this overwrites the plain
+            # `nn.Linear` init that the `cross_stream` base weight just received -- which is the
+            # point, since a non-zero base weight would give the site a non-LoRA contribution. On a
+            # checkpoint load the restored tensor is already flagged initialized and this no-ops.
+            init.zeros_(module.cross_stream.base_layer.weight)
+
+
+@auto_docstring
+class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
+    def __init__(self, config: GraniteSwitchConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embedding_multiplier = config.embedding_multiplier
+
+        # CODEPATH: a `num_adapters == 0` skin has no switch and is then plain Granite, which is
+        # what the composer builds to check its own weight transfer.
+        if config.num_adapters > 0:
+            self.switch = MultiSwitch(config)
+            layer_offset = self.switch.num_cache_layers
+        else:
+            self.switch = None
+            layer_offset = 0
+
+        # The switch's two attention heads hold the cache slots at the front of the model, and
+        # `num_hidden_layers` counts them, so the physical decoder layers are the remainder and
+        # their layer indices -- hence their cache slots -- start above the switch's.
+        num_decoder_layers = config.num_hidden_layers - layer_offset
+
+        # One kind of layer for the whole checkpoint: Shadow Residual adapters and plain LoRA or
+        # aLoRA adapters are never composed together.
+        # CODEPATH: the dual-stream class on a Shadow Residual checkpoint, the single-stream one
+        # otherwise.
+        layer_class = GraniteSwitchShadowResidualDecoderLayer if config.dual_stream else GraniteSwitchDecoderLayer
+        self.layers = nn.ModuleList(
+            [layer_class(config, layer_idx + layer_offset) for layer_idx in range(num_decoder_layers)]
+        )
+        self.norm = GraniteSwitchRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # CODEPATH: `None` on a base that opts out of rotary embeddings entirely with
+        # `position_embedding_type=None`.
+        if config.position_embedding_type == "rope":
+            self.rotary_emb = GraniteSwitchRotaryEmbedding(config=config)
+        else:
+            self.rotary_emb = None
+
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if input_ids is not None:
+            batch_size, seq_length = input_ids.shape
+            device = input_ids.device
+        else:
+            batch_size, seq_length = inputs_embeds.shape[:2]
+            device = inputs_embeds.device
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=device).unsqueeze(0)
+
+        # Masking before the switch is load-bearing: the key length comes from the first
+        # full-attention cache layer, which here is the switch's counting slot, so switching first
+        # would grow that slot and the mask would count the current query twice.
+        # Mask creation reads the embedding tensor only for batch size, query length and dtype, and
+        # nothing is embedded yet -- the switch may rewrite `input_ids` -- so a stub stands in.
+        mask_shape_proxy = (
+            inputs_embeds
+            if inputs_embeds is not None
+            else torch.empty(batch_size, seq_length, 1, device=device, dtype=self.dtype)
+        )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=mask_shape_proxy,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        # The switch returns the per-token adapter selection alongside `input_ids` with every
+        # control token rewritten to its substitute id, so the decoder embeds once and needs no
+        # token-exchange awareness of its own.
+        # CODEPATH: routing reads the ids, so a caller that supplies `inputs_embeds` leaves the
+        # switch nothing to read them off, and `None` means base for every token.
+        adapter_indices = None
+        if self.switch is not None and input_ids is not None:
+            adapter_indices, input_ids = self.switch(input_ids, past_key_values=past_key_values)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+        hidden_states = inputs_embeds * self.embedding_multiplier
+
+        position_embeddings = None
+        if self.rotary_emb is not None:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        # Shadow Residual runs two streams from the same embeddings; only the adapter stream
+        # reaches the LM head.
+        # CODEPATH: `None` outside a Shadow Residual checkpoint, which has the one stream.
+        base_hidden_states = hidden_states.clone() if self.config.dual_stream else None
+
+        for decoder_layer in self.layers:
+            if base_hidden_states is None:
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings,
+                    adapter_indices=adapter_indices,
+                    **kwargs,
+                )
+            else:
+                hidden_states, base_hidden_states = decoder_layer(
+                    hidden_states,
+                    base_hidden_states,
+                    attention_mask=causal_mask,
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings,
+                    adapter_indices=adapter_indices,
+                    **kwargs,
+                )
+
+        hidden_states = self.norm(hidden_states)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+
+@auto_docstring
+class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
+    def __init__(self, config: GraniteSwitchConfig):
+        super().__init__(config)
+        self.model = GraniteSwitchModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.logits_scaling = config.logits_scaling
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_router_logits: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | MoeCausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, GraniteSwitchForCausalLM
+
+        >>> model = GraniteSwitchForCausalLM.from_pretrained("ibm-granite/granite-switch-example")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-switch-example")
+
+        >>> # The adapter is selected by a control token in the prompt, so a plain prompt runs the
+        >>> # base model and the same prompt behind `<|adapter|>` runs that adapter.
+        >>> inputs = tokenizer("<|adapter|>Summarize the document.", return_tensors="pt")
+
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+
+        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
+        logits = self.lm_head(hidden_states) / self.config.logits_scaling
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                # Make sure to reside on the same device.
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
+
+__all__ = [
+    "GraniteSwitchConfig",
+    "GraniteSwitchForCausalLM",
+    "GraniteSwitchModel",
+    "GraniteSwitchPreTrainedModel",
+]
