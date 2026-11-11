@@ -401,7 +401,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
 
-    def test_packed_blockwise_overlay_preserves_isolation(self):
+    def _assert_packed_blockwise_overlay_preserves_isolation(self, mask_fn):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
         config.sliding_window = 4
@@ -422,22 +422,25 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         )
         # fmt: on
 
-        for mask_fn in (
-            create_causal_mask,
-            create_sliding_window_causal_mask,
-            create_chunked_causal_mask,
-        ):
-            with self.subTest(mask_fn=mask_fn.__name__):
-                mask = mask_fn(
-                    config=config,
-                    inputs_embeds=torch.zeros(1, 6, config.hidden_size),
-                    attention_mask=None,
-                    past_key_values=None,
-                    position_ids=position_ids,
-                    block_sequence_ids=block_ids,
-                    allow_is_causal_skip=False,
-                )
-                self.assertTrue(torch.equal(mask, EXPECTED))
+        mask = mask_fn(
+            config=config,
+            inputs_embeds=torch.zeros(1, 6, config.hidden_size),
+            attention_mask=None,
+            past_key_values=None,
+            position_ids=position_ids,
+            block_sequence_ids=block_ids,
+            allow_is_causal_skip=False,
+        )
+        self.assertTrue(torch.equal(mask, EXPECTED))
+
+    def test_packed_blockwise_overlay_causal(self):
+        self._assert_packed_blockwise_overlay_preserves_isolation(create_causal_mask)
+
+    def test_packed_blockwise_overlay_sliding_window(self):
+        self._assert_packed_blockwise_overlay_preserves_isolation(create_sliding_window_causal_mask)
+
+    def test_packed_blockwise_overlay_chunked(self):
+        self._assert_packed_blockwise_overlay_preserves_isolation(create_chunked_causal_mask)
 
     @staticmethod
     def _run_bidirectional_mask(mask_fn, attn_implementation):
