@@ -355,9 +355,7 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ).to(model.device)
 
         with torch.no_grad():
-            model.generate(
-                **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False
-            )
+            model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
 
         # FA2 introduces a graph break => dynamo recompilations are triggered => specializaton on each func kernel triggered
         model.set_attn_implementation("flash_attention_2")
@@ -369,9 +367,7 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
             with self.assertLogs("torch._dynamo.convert_frame", level="WARNING") as logs:
                 with torch.no_grad():
-                    model.generate(
-                        **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False
-                    )
+                    model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
         finally:
             torch_logging._set_log_state(previous_log_state)
             torch_logging._init_logs()
