@@ -750,6 +750,8 @@ def render_jinja_template(
                 raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
         chat = _alias_reasoning_fields(chat)
         if continue_final_message:
+            if not chat:
+                raise ValueError("continue_final_message is set but the conversation is empty!")
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
 
             if (final_message := chat[-1].get(continue_final_message)) is None:
