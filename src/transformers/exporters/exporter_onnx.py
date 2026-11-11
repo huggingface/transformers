@@ -46,12 +46,13 @@ import functools
 import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from ..utils import logging
-from ..utils.import_utils import is_onnxruntime_available, is_onnxscript_available, is_torch_available
+from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .metadata import ExportMetadata
@@ -68,27 +69,6 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.onnx import ONNXProgram
-
-    class SavedOnnxProgram(ONNXProgram):
-        """An `ONNXProgram` loaded from a saved `.onnx` file. The graph is read without its weights, which stay in
-        `model.onnx.data` until used, and a call runs the saved file itself, so ONNX Runtime reads the weights from
-        beside it instead of from a copy."""
-
-        def __init__(self, path):
-            super().__init__(onnx_ir.load(str(path)), None)
-            self.path = str(path)
-
-        def initialize_inference_session(self, initializer=None) -> None:
-            if initializer is not None:
-                self._inference_session = initializer(self.path)
-                return
-            available = ort.get_available_providers()
-            providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
-            self._inference_session = ort.InferenceSession(self.path, providers=providers)
-
-
-if is_onnxruntime_available():
-    import onnxruntime as ort
 
 
 if is_onnxscript_available():
@@ -127,7 +107,7 @@ logger = logging.get_logger(__file__)
 
 
 class OnnxExporter(DynamoExporter):
-    """Exporter that converts a [`PreTrainedModel`] to an ONNX `ONNXProgram`.
+    """Exporter that converts a [`PreTrainedModel`] to an ONNX graph (an `onnx_ir.Model`).
 
     Example:
 
@@ -136,7 +116,7 @@ class OnnxExporter(DynamoExporter):
 
     >>> exporter = OnnxExporter()
     >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
-    >>> outputs = exported.program(**inputs)  # run the `ONNXProgram` in memory
+    >>> onnx_model = exported.program  # an `onnx_ir.Model`
     >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```
     """
@@ -153,7 +133,7 @@ class OnnxExporter(DynamoExporter):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig,
-    ) -> tuple[ONNXProgram, ExportMetadata]:
+    ) -> tuple[onnx_ir.Model, ExportMetadata]:
         with patch_model_outputs(model) as (inputs_names, outputs_names, out_specs), apply_patches("onnx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             metadata.out_spec = torch.utils._pytree.treespec_dumps(out_specs[-1])
@@ -176,35 +156,52 @@ class OnnxExporter(DynamoExporter):
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
-        _update_onnx_metadata(metadata, onnx_program)
-        return onnx_program, metadata
+        _update_onnx_metadata(metadata, onnx_program.model)
+        return onnx_program.model, metadata
 
     @classmethod
-    def save_program(cls, program: ONNXProgram, path) -> None:
+    def save_program(cls, program: onnx_ir.Model, path) -> None:
         """Weights go to a `<name>.onnx.data` sidecar file, so models past the 2 GB protobuf limit save too."""
-        program.save(str(path), external_data=True)
+        onnx_ir.save(program, str(path), external_data=f"{Path(path).name}.data")
 
     @classmethod
     def program_files(cls, filename: str) -> list[str]:
         return [filename, f"{filename}.data"]
 
     @classmethod
-    def load_program(cls, path) -> SavedOnnxProgram:
-        """The saved graph, without reading its weights. Calling it runs the saved file in ONNX Runtime. Loaded
-        through symlinks (the Hub cache), its weights can't be read in Python, so it can't be saved again:
-        `onnx_ir` refuses symlinked external data."""
-        return SavedOnnxProgram(path)
+    def load_program(cls, path) -> onnx_ir.Model:
+        """The saved graph, its weights left in `model.onnx.data` until read. Its `meta["path"]` keeps the file, which
+        ONNX Runtime opens to read the weights itself."""
+        model = onnx_ir.load(str(path))
+        model.meta["path"] = str(path)
+        # The Hub cache links `model.onnx.data` to a blob outside the snapshot, which `onnx_ir` refuses to read: the
+        # weights are read from the blob instead. Only this file is redirected; any other location stays checked.
+        data = Path(path).with_name(f"{Path(path).name}.data")
+        if data.is_symlink():
+            for graph in model.graphs():
+                for value in graph.initializers.values():
+                    tensor = value.const_value
+                    if isinstance(tensor, onnx_ir.ExternalTensor) and Path(tensor.path) == data:
+                        value.const_value = onnx_ir.ExternalTensor(
+                            data.resolve(),
+                            tensor.offset,
+                            tensor.length,
+                            tensor.dtype,
+                            shape=tensor.shape,
+                            name=tensor.name,
+                        )
+        return model
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
 # Model forward wrapper and I/O naming used by OnnxExporter.export.
 
 
-def _update_onnx_metadata(metadata: ExportMetadata, onnx_program: ONNXProgram) -> None:
+def _update_onnx_metadata(metadata: ExportMetadata, onnx_model: onnx_ir.Model) -> None:
     """Record the graph's own input and output names: dotted leaf paths, with `input.` / `output.` prefixes on mutated
     inputs."""
-    metadata.input_names = [value.name for value in onnx_program.model.graph.inputs]
-    metadata.output_names = [value.name for value in onnx_program.model.graph.outputs]
+    metadata.input_names = [value.name for value in onnx_model.graph.inputs]
+    metadata.output_names = [value.name for value in onnx_model.graph.outputs]
 
 
 @contextmanager
@@ -222,11 +219,12 @@ def patch_model_outputs(model):
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
+        # Before the forward: a lazily initialized cache grows its tensors during it, which aren't graph inputs.
+        inputs_names.extend(get_leaf_tensors(kwargs).keys())
         original_outputs = original_forward(*args, **kwargs)
         concrete = torch.utils._pytree.tree_map_only(torch.SymInt, lambda value: value.node.hint, original_outputs)
         out_specs.append(torch.utils._pytree.tree_structure(concrete))
         outputs = get_leaf_tensors(duplicate_leaf_tensors(original_outputs))
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
         outputs_names.extend(outputs.keys())
         return outputs
 

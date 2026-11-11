@@ -692,19 +692,6 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
-
-    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
-    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
-    """
-    set_seed(1234)
-    onnx_inputs = get_leaf_tensors(inputs)
-    onnx_outputs = onnx_program(**onnx_inputs)
-    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
-    return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
-
-
 def _run_openvino_model(ov_model, inputs) -> dict:
     """Compile an OpenVINO model and run it, returning outputs as a `{name: torch.Tensor}` dict.
 
@@ -1263,9 +1250,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config).program
+                    exported = exporter.export(model, inputs, config=config)
                     set_seed(1234)
-                    onnx_outputs = _run_onnx_program(onnx_program, inputs)
+                    onnx_outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
 

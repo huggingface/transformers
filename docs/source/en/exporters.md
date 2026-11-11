@@ -34,7 +34,7 @@ in the modeling code.
 | Exporter               | Program (`.program`)       | Saved as                      | Runtime                                    |
 | ---------------------- | -------------------------- | ----------------------------- | ------------------------------------------ |
 | [`DynamoExporter`]     | `ExportedProgram`          | `model.pt2`                   | Any PyTorch runtime, AOT compilation       |
-| [`OnnxExporter`]       | `ONNXProgram`              | `model.onnx`                  | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
+| [`OnnxExporter`]       | `onnx_ir.Model`            | `model.onnx`                  | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | `model.pte`                   | Mobile and edge devices (ExecuTorch)       |
 | [`OpenVINOExporter`]   | `openvino.Model`           | `openvino_model.xml` + `.bin` | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 
@@ -47,8 +47,8 @@ file per component, an `export.json` manifest with each component's file and met
 [`~ExportedModel.from_pretrained`] loads it back, from a local directory or a Hub repo, with the same download kwargs
 as [`~PreTrainedModel.from_pretrained`]. Pass `subfolder` for an export kept next to the model's weights; only the
 export's own files are downloaded. Dynamo, ONNX, and OpenVINO
-programs load as the type the export returned. A loaded ONNX program reads its graph without the weights, and calling
-it runs the saved file in ONNX Runtime, which reads `model.onnx.data` from beside it. An ExecuTorch `.pte` loads as an
+programs load as the type the export returned. A loaded ONNX graph leaves its weights in `model.onnx.data` until they
+are read. An ExecuTorch `.pte` loads as an
 `executorch.runtime.Program`, since the `ExecutorchProgramManager` can't be rebuilt from the file.
 
 ```python
@@ -443,7 +443,7 @@ exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 exported = exporter.export_for_generation(model, inputs, config=config)
 # exported: ExportedModel with "image_encoder", "language_model", "lm_head" and "decode",
-# each an ExportedComponent whose `.program` is an ONNXProgram
+# each an ExportedComponent whose `.program` is an onnx_ir.Model
 ```
 
 </hfoption>

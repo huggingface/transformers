@@ -15,9 +15,11 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from typing import Any
 
-from ...utils.import_utils import is_onnxruntime_available, is_torch_available
+from ...utils.import_utils import is_onnxruntime_available, is_onnxscript_available, is_torch_available
 from ..metadata import ExportMetadata
 from ..utils import get_leaf_tensors
 from .base import ModelRunner
@@ -25,10 +27,17 @@ from .base import ModelRunner
 
 if is_torch_available():
     import torch
-    from torch.onnx import ONNXProgram
 
 if is_onnxruntime_available():
     import onnxruntime as ort
+
+if is_onnxscript_available():
+    import onnx_ir
+
+
+# Past this much weight a graph opens from a file rather than serialized: protobuf caps a model at 2GB (torch's own
+# threshold, leaving room for the graph itself).
+_SERIALIZE_LIMIT = int(1.5 * 2**30)
 
 
 def _providers(device=None) -> list:
@@ -45,13 +54,20 @@ def _providers(device=None) -> list:
 
 
 class OnnxModelRunner(ModelRunner):
-    """Runs an `ONNXProgram` in an ONNX Runtime session opened for the device, its inputs and outputs bound in place.
-    A loaded program's session opens the saved file; a fresh one opens the in-memory graph."""
+    """Runs an ONNX graph in an ONNX Runtime session opened for the device, its inputs and outputs bound in place."""
 
-    def __init__(self, program: ONNXProgram, metadata: ExportMetadata, session: ort.InferenceSession):
+    def __init__(
+        self,
+        program: onnx_ir.Model,
+        metadata: ExportMetadata,
+        session: ort.InferenceSession,
+        directory: tempfile.TemporaryDirectory | None = None,
+    ):
         super().__init__(metadata)
         self.program = program
         self.session = session
+        # The temporary file a large graph was opened from, kept as long as the session.
+        self.directory = directory
 
     @property
     def device(self) -> torch.device:
@@ -63,23 +79,30 @@ class OnnxModelRunner(ModelRunner):
     @classmethod
     def from_program(
         cls,
-        program: ONNXProgram,
+        program: onnx_ir.Model,
         metadata: ExportMetadata,
         device=None,
         providers: list | None = None,
         session_options: ort.SessionOptions | None = None,
     ) -> OnnxModelRunner:
-        """`providers`, ONNX Runtime's own list (TensorRT with its options, say), replaces the ones picked for
-        `device`; `session_options` open the session (`intra_op_num_threads`: ONNX Runtime sizes its thread pool from
-        every core of the machine, not the ones the process may run on)."""
-        sessions = []
-
-        def open_session(model):
-            sessions.append(ort.InferenceSession(model, session_options, providers=providers or _providers(device)))
-            return sessions[-1]
-
-        program.initialize_inference_session(open_session)
-        return cls(program, metadata, sessions[0])
+        """A loaded graph opens its saved file (`meta["path"]`), ONNX Runtime reading the weights from beside it; a
+        fresh one opens serialized, or from a temporary file past protobuf's size limit. `providers`, ONNX Runtime's
+        own list (TensorRT with its options, say), replaces the ones picked for `device`; `session_options` open the
+        session (`intra_op_num_threads`: ONNX Runtime sizes its thread pool from every core of the machine, not the
+        ones the process may run on)."""
+        source, directory = program.meta.get("path"), None
+        if source is None:
+            weights = sum(
+                value.const_value.nbytes for value in program.graph.initializers.values() if value.const_value
+            )
+            if weights < _SERIALIZE_LIMIT:
+                source = onnx_ir.to_proto(program).SerializeToString()
+            else:
+                directory = tempfile.TemporaryDirectory()
+                source = os.path.join(directory.name, "model.onnx")
+                onnx_ir.save(program, source, external_data="model.onnx.data")
+        session = ort.InferenceSession(source, session_options, providers=providers or _providers(device))
+        return cls(program, metadata, session, directory)
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
