@@ -20,7 +20,7 @@ DON'T touch:
 
 - The **auto factory** (``AutoExportConfig`` / ``AutoHfExporter``) — models bypass it and
   instantiate concrete exporters directly.
-- **Config dict round-trips** — configs are built via constructor calls, never serialised.
+- **Config dict round-trips** — configs are built via constructor calls, never read back from a dict.
 - **Registration edge cases** — type-check rejections in ``register_backend``.
 - **``ExportedModel`` saving** — the manifest ``save_pretrained`` writes next to the components.
 - **`patch_attributes` restore-on-exception** — the happy path is exercised but the exception
