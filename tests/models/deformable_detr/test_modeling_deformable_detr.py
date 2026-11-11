@@ -39,6 +39,11 @@ if is_torch_available():
     import torch
 
     from transformers import DeformableDetrForObjectDetection, DeformableDetrModel
+    from transformers.models.deformable_detr.modeling_deformable_detr import (
+        DeformableDetrForObjectDetectionCriterion,
+        DeformableDetrHungarianMatcher,
+        DeformableDetrLoss,
+    )
 
 
 if is_vision_available():
@@ -232,6 +237,36 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             has_text_modality=False,
             common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
         )
+
+    def test_deformable_detr_loss_fixed_numeric_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.num_feature_levels = 3
+        config.encoder_n_points = 1
+        config.decoder_n_points = 1
+        logits = torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]])
+        pred_boxes = torch.tensor([[[0.25, 0.25, 0.20, 0.20], [0.75, 0.75, 0.10, 0.10]]])
+        labels = [{"class_labels": torch.tensor([0]), "boxes": torch.tensor([[0.25, 0.25, 0.20, 0.20]])}]
+        expected = {
+            "cardinality_error": 1.0,
+            "loss_bbox": 0.0,
+            "loss_ce": 4.940085411071777,
+            "loss_giou": 0.0,
+        }
+
+        matcher = DeformableDetrHungarianMatcher(config)
+        loss = DeformableDetrLoss(config, ["labels", "boxes", "cardinality"], matcher)
+        direct = loss({"logits": logits, "pred_boxes": pred_boxes}, labels)
+        total, criterion_losses, _ = DeformableDetrForObjectDetectionCriterion(config)(logits, labels, pred_boxes)
+
+        self.assertEqual(set(direct), set(expected))
+        self.assertEqual(set(criterion_losses), set(expected))
+        for loss_dict in (direct, criterion_losses):
+            for key, value in expected.items():
+                torch.testing.assert_close(loss_dict[key], torch.tensor(value), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(total, torch.tensor(4.940085411071777), rtol=1e-5, atol=1e-6)
 
     def test_config(self):
         self.config_tester.run_common_tests()

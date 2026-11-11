@@ -261,6 +261,88 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["d_model", "decoder_self_attention_heads"],
         )
 
+    def test_model_and_criterion_numeric_regressions(self):
+        torch.set_num_threads(1)
+        torch.manual_seed(1729)
+        backbone_config = RfDetrDinov2Config(
+            attention_probs_dropout_prob=0.0,
+            drop_path_rate=0.0,
+            hidden_dropout_prob=0.0,
+            num_attention_heads=2,
+            num_hidden_layers=4,
+            hidden_size=32,
+            patch_size=16,
+            num_windows=2,
+            image_size=64,
+            out_features=["stage2", "stage3"],
+        )
+        config = RfDetrConfig(
+            backbone_config=backbone_config,
+            num_labels=2,
+            num_queries=2,
+            group_detr=1,
+            d_model=32,
+            decoder_ffn_dim=32,
+            decoder_layers=1,
+            decoder_self_attention_heads=2,
+            decoder_cross_attention_heads=2,
+            auxiliary_loss=False,
+            attn_implementation="eager",
+            _attn_implementation="eager",
+        )
+        pixel_values = torch.randn(1, 3, 64, 64)
+        labels = [
+            {
+                "class_labels": torch.tensor([0]),
+                "boxes": torch.tensor([[0.25, 0.25, 0.2, 0.2]]),
+                "masks": torch.zeros(1, 64, 64),
+            }
+        ]
+
+        expected_outputs = (
+            (
+                RfDetrForObjectDetection,
+                16.082447052001953,
+                {
+                    "loss_ce": 0.05608193203806877,
+                    "loss_bbox": 0.8007550239562988,
+                    "loss_giou": 1.6613380908966064,
+                    "cardinality_error": 1.0,
+                    "loss_ce_enc": 1.379654049873352,
+                    "loss_bbox_enc": 0.8000447750091553,
+                    "loss_giou_enc": 1.6600183248519897,
+                    "cardinality_error_enc": 1.0,
+                },
+            ),
+            (
+                RfDetrForInstanceSegmentation,
+                15.2952241897583,
+                {
+                    "loss_ce": 0.05608193203806877,
+                    "loss_bbox": 0.8007550239562988,
+                    "loss_giou": 1.6613380908966064,
+                    "cardinality_error": 1.0,
+                    "loss_mask_ce": 0.6936160326004028,
+                    "loss_mask_dice": 0.8889223337173462,
+                    "loss_ce_enc": 1.379654049873352,
+                    "loss_bbox_enc": 0.8000447750091553,
+                    "loss_giou_enc": 1.6600183248519897,
+                    "cardinality_error_enc": 1.0,
+                    "loss_mask_ce_enc": 0.695530116558075,
+                    "loss_mask_dice_enc": 0.8888877630233765,
+                },
+            ),
+        )
+        for model_class, expected_loss, expected_loss_dict in expected_outputs:
+            torch.manual_seed(1729)
+            model = model_class(config).eval()
+            outputs = model(pixel_values=pixel_values, labels=labels)
+
+            torch.testing.assert_close(outputs.loss, torch.tensor(expected_loss), atol=1e-6, rtol=1e-5)
+            self.assertEqual(set(outputs.loss_dict), set(expected_loss_dict))
+            for key, expected_value in expected_loss_dict.items():
+                torch.testing.assert_close(outputs.loss_dict[key], torch.tensor(expected_value), atol=1e-6, rtol=1e-5)
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

@@ -22,11 +22,13 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...image_transforms import corners_to_center_format
+from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...vision_utils import box_iou
 from ..auto import AutoConfig
+from ..detr.modeling_detr import _set_aux_loss, get_weighted_loss
 from ..rt_detr.modeling_rt_detr import (
     RTDetrAIFILayer,
     RTDetrConvNormLayer,
@@ -36,7 +38,9 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrEncoderLayer,
     RTDetrForObjectDetection,
     RTDetrFrozenBatchNorm2d,
+    RTDetrHungarianMatcher,
     RTDetrHybridEncoder,
+    RTDetrLoss,
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrPreTrainedModel,
@@ -285,6 +289,7 @@ def weighting_function(max_num_bins: int, up: torch.Tensor, reg_scale: int) -> t
     left_values = [-((step) ** i) + 1 for i in range(max_num_bins // 2 - 1, 0, -1)]
     right_values = [(step) ** i - 1 for i in range(1, max_num_bins // 2)]
     values = [-upper_bound2] + left_values + [torch.zeros_like(up[0][None])] + right_values + [upper_bound2]
+    values = [value if value.dim() > 0 else value.unsqueeze(0) for value in values]
     values = torch.cat(values, 0)
     return values
 
@@ -674,6 +679,8 @@ class DFineMLPPredictionHead(RTDetrMLPPredictionHead):
 
 
 class DFinePreTrainedModel(RTDetrPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"criterion\."]
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -697,7 +704,13 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             if hasattr(module, "up"):
                 init.constant_(module.up, self.config.up)
 
-        if isinstance(module, DFineMultiscaleDeformableAttention):
+        elif isinstance(module, DFineLoss):
+            empty_weight = torch.ones(module.num_classes + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
+            init.constant_(module.up, self.config.up)
+
+        elif isinstance(module, DFineMultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -920,6 +933,289 @@ class DFineModel(RTDetrModel):
         self.decoder = DFineDecoder(config)
 
 
+def _set_aux_loss_with_corners(
+    outputs_class, outputs_coord, outputs_corners, outputs_ref, teacher_corners=None, teacher_logits=None
+):
+    return [
+        {
+            "logits": logits,
+            "pred_boxes": boxes,
+            "pred_corners": corners,
+            "ref_points": refs,
+            "teacher_corners": teacher_corners,
+            "teacher_logits": teacher_logits,
+        }
+        for logits, boxes, corners, refs in zip(outputs_class, outputs_coord, outputs_corners, outputs_ref)
+    ]
+
+
+def translate_gt(gt: torch.Tensor, max_num_bins: int, reg_scale: int, up: torch.Tensor):
+    """
+    Decodes bounding box ground truth (GT) values into distribution-based GT representations.
+
+    This function maps continuous GT values into discrete distribution bins, which can be used
+    for regression tasks in object detection models. It calculates the indices of the closest
+    bins to each GT value and assigns interpolation weights to these bins based on their proximity
+    to the GT value.
+
+    Args:
+        gt (Tensor): Ground truth bounding box values, shape (N, ).
+        max_num_bins (int): Maximum number of discrete bins for the distribution.
+        reg_scale (float): Controls the curvature of the Weighting Function.
+        up (Tensor): Controls the upper bounds of the Weighting Function.
+
+    Returns:
+        tuple[Tensor, Tensor, Tensor]:
+            - indices (Tensor): Index of the left bin closest to each GT value, shape (N, ).
+            - weight_right (Tensor): Weight assigned to the right bin, shape (N, ).
+            - weight_left (Tensor): Weight assigned to the left bin, shape (N, ).
+    """
+    gt = gt.reshape(-1)
+    function_values = weighting_function(max_num_bins, up, reg_scale)
+
+    # Find the closest left-side indices for each value
+    diffs = function_values.unsqueeze(0) - gt.unsqueeze(1)
+    mask = diffs <= 0
+    closest_left_indices = torch.sum(mask, dim=1) - 1
+
+    # Calculate the weights for the interpolation
+    indices = closest_left_indices.float()
+
+    weight_right = torch.zeros_like(indices)
+    weight_left = torch.zeros_like(indices)
+
+    valid_idx_mask = (indices >= 0) & (indices < max_num_bins)
+    valid_indices = indices[valid_idx_mask].long()
+
+    # Obtain distances
+    left_values = function_values[valid_indices]
+    right_values = function_values[valid_indices + 1]
+
+    left_diffs = torch.abs(gt[valid_idx_mask] - left_values)
+    right_diffs = torch.abs(right_values - gt[valid_idx_mask])
+
+    # Valid weights
+    weight_right[valid_idx_mask] = left_diffs / (left_diffs + right_diffs)
+    weight_left[valid_idx_mask] = 1.0 - weight_right[valid_idx_mask]
+
+    # Invalid weights (out of range)
+    invalid_idx_mask_neg = indices < 0
+    weight_right[invalid_idx_mask_neg] = 0.0
+    weight_left[invalid_idx_mask_neg] = 1.0
+    indices[invalid_idx_mask_neg] = 0.0
+
+    invalid_idx_mask_pos = indices >= max_num_bins
+    weight_right[invalid_idx_mask_pos] = 1.0
+    weight_left[invalid_idx_mask_pos] = 0.0
+    indices[invalid_idx_mask_pos] = max_num_bins - 0.1
+
+    return indices, weight_right, weight_left
+
+
+def bbox2distance(points, bbox, max_num_bins, reg_scale, up, eps=0.1):
+    """
+    Converts bounding box coordinates to distances from a reference point.
+
+    Args:
+        points (Tensor): (n, 4) [x, y, w, h], where (x, y) is the center.
+        bbox (Tensor): (n, 4) bounding boxes in "xyxy" format.
+        max_num_bins (float): Maximum bin value.
+        reg_scale (float): Controlling curvature of W(n).
+        up (Tensor): Controlling upper bounds of W(n).
+        eps (float): Small value to ensure target < max_num_bins.
+
+    Returns:
+        Tensor: Decoded distances.
+    """
+
+    reg_scale = abs(reg_scale)
+    left = (points[:, 0] - bbox[:, 0]) / (points[..., 2] / reg_scale + 1e-16) - 0.5 * reg_scale
+    top = (points[:, 1] - bbox[:, 1]) / (points[..., 3] / reg_scale + 1e-16) - 0.5 * reg_scale
+    right = (bbox[:, 2] - points[:, 0]) / (points[..., 2] / reg_scale + 1e-16) - 0.5 * reg_scale
+    bottom = (bbox[:, 3] - points[:, 1]) / (points[..., 3] / reg_scale + 1e-16) - 0.5 * reg_scale
+    four_lens = torch.stack([left, top, right, bottom], -1)
+    four_lens, weight_right, weight_left = translate_gt(four_lens, max_num_bins, reg_scale, up)
+    if max_num_bins is not None:
+        four_lens = four_lens.clamp(min=0, max=max_num_bins - eps)
+    return four_lens.reshape(-1).detach(), weight_right.detach(), weight_left.detach()
+
+
+class DFineHungarianMatcher(RTDetrHungarianMatcher):
+    pass
+
+
+class DFineLoss(RTDetrLoss):
+    def __init__(self, config, losses, matcher):
+        super().__init__(config, losses, matcher)
+        self.max_num_bins = config.max_num_bins
+        self.reg_scale = config.reg_scale
+        self.up = nn.Parameter(torch.tensor([config.up]), requires_grad=False)
+
+    def unimodal_distribution_focal_loss(
+        self, pred, label, weight_right, weight_left, weight=None, reduction="sum", avg_factor=None
+    ):
+        left = label.long()
+        loss = F.cross_entropy(pred, left, reduction="none") * weight_left.reshape(-1)
+        loss = loss + F.cross_entropy(pred, left + 1, reduction="none") * weight_right.reshape(-1)
+        if weight is not None:
+            loss = loss * weight.float()
+        if avg_factor is not None:
+            return loss.sum() / avg_factor
+        return loss.mean() if reduction == "mean" else loss.sum()
+
+    def loss_local(self, outputs, targets, indices, num_boxes, T=5):
+        if "pred_corners" not in outputs:
+            return {}
+        matched = self._get_source_permutation_idx(indices)
+        target_boxes = torch.cat(
+            [target["boxes"][indices_for_image] for target, (_, indices_for_image) in zip(targets, indices)], dim=0
+        )
+        pred_corners = outputs["pred_corners"][matched].reshape(-1, self.max_num_bins + 1)
+        ref_points = outputs["ref_points"][matched].detach()
+        with torch.no_grad():
+            target_corners, weight_right, weight_left = bbox2distance(
+                ref_points, center_to_corners_format(target_boxes), self.max_num_bins, self.reg_scale, self.up
+            )
+        ious = torch.diag(
+            box_iou(center_to_corners_format(outputs["pred_boxes"][matched]), center_to_corners_format(target_boxes))[
+                0
+            ]
+        )
+        losses = {
+            "loss_fgl": self.unimodal_distribution_focal_loss(
+                pred_corners,
+                target_corners,
+                weight_right,
+                weight_left,
+                ious.unsqueeze(-1).repeat(1, 4).reshape(-1),
+                avg_factor=num_boxes,
+            )
+        }
+        student = outputs["pred_corners"].reshape(-1, self.max_num_bins + 1)
+        teacher = outputs["teacher_corners"].reshape(-1, self.max_num_bins + 1)
+        if torch.equal(student, teacher):
+            losses["loss_ddf"] = student.sum() * 0
+        else:
+            teacher_weights = outputs["teacher_logits"].sigmoid().max(dim=-1)[0]
+            positive_mask = torch.zeros_like(teacher_weights, dtype=torch.bool)
+            positive_mask[matched] = True
+            teacher_weights[matched] = ious.reshape_as(teacher_weights[matched])
+            teacher_weights = teacher_weights.unsqueeze(-1).repeat(1, 1, 4).reshape(-1).detach()
+            local_loss = (
+                teacher_weights
+                * T**2
+                * nn.KLDivLoss(reduction="none")(
+                    F.log_softmax(student / T, dim=1), F.softmax(teacher.detach() / T, dim=1)
+                ).sum(-1)
+            )
+            positive_loss = local_loss[positive_mask.unsqueeze(-1).repeat(1, 1, 4).reshape(-1)]
+            negative_loss = local_loss[~positive_mask.unsqueeze(-1).repeat(1, 1, 4).reshape(-1)]
+            positive_scale = positive_loss.numel() ** 0.5
+            negative_scale = negative_loss.numel() ** 0.5
+            losses["loss_ddf"] = (positive_loss.mean() * positive_scale + negative_loss.mean() * negative_scale) / (
+                positive_scale + negative_scale
+            )
+        return losses
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "local": self.loss_local,
+            "boxes": self.loss_boxes,
+            "vfl": self.loss_labels_vfl,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+
+class DFineForObjectDetectionCriterion(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.weight_dict = {
+            "loss_vfl": config.weight_loss_vfl,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+            "loss_fgl": config.weight_loss_fgl,
+            "loss_ddf": config.weight_loss_ddf,
+        }
+        self.auxiliary_loss = config.auxiliary_loss
+        if self.auxiliary_loss:
+            auxiliary_weights = {}
+            for index in range(config.decoder_layers):
+                auxiliary_weights.update({f"{key}_aux_{index}": value for key, value in self.weight_dict.items()})
+                auxiliary_weights.update({f"{key}_dn_{index}": value for key, value in self.weight_dict.items()})
+            self.weight_dict.update(auxiliary_weights)
+        losses = ["vfl", "boxes", "local"]
+        matcher = DFineHungarianMatcher(config)
+        self.loss_module = DFineLoss(config, losses, matcher)
+
+    def forward(
+        self,
+        logits,
+        labels,
+        pred_boxes,
+        outputs_class=None,
+        outputs_coord=None,
+        enc_topk_logits=None,
+        enc_topk_bboxes=None,
+        denoising_meta_values=None,
+        predicted_corners=None,
+        initial_reference_points=None,
+        **kwargs,
+    ):
+        if denoising_meta_values is not None:
+            _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+            _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
+
+        outputs_loss = {"logits": logits, "pred_boxes": pred_boxes.clamp(min=0, max=1)}
+        auxiliary_outputs = None
+        if self.auxiliary_loss:
+            if denoising_meta_values is not None:
+                dn_out_coord, outputs_coord = torch.split(
+                    outputs_coord.clamp(min=0, max=1), denoising_meta_values["dn_num_split"], dim=2
+                )
+                dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
+                dn_out_corners, out_corners = torch.split(
+                    predicted_corners, denoising_meta_values["dn_num_split"], dim=2
+                )
+                dn_out_refs, out_refs = torch.split(
+                    initial_reference_points, denoising_meta_values["dn_num_split"], dim=2
+                )
+            else:
+                outputs_coord = outputs_coord.clamp(min=0, max=1)
+                out_corners = predicted_corners
+                out_refs = initial_reference_points
+
+            auxiliary_outputs = _set_aux_loss_with_corners(
+                outputs_class[:, :-1].transpose(0, 1),
+                outputs_coord[:, :-1].transpose(0, 1),
+                out_corners[:, :-1].transpose(0, 1),
+                out_refs[:, :-1].transpose(0, 1),
+                out_corners[:, -1],
+                outputs_class[:, -1],
+            )
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+            outputs_loss["auxiliary_outputs"].extend(
+                _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
+            )
+
+            if denoising_meta_values is not None:
+                outputs_loss["dn_auxiliary_outputs"] = _set_aux_loss_with_corners(
+                    dn_out_class.transpose(0, 1),
+                    dn_out_coord.transpose(0, 1),
+                    dn_out_corners.transpose(0, 1),
+                    dn_out_refs.transpose(0, 1),
+                    dn_out_corners[:, -1],
+                    dn_out_class[:, -1],
+                )
+                outputs_loss["denoising_meta_values"] = denoising_meta_values
+
+        loss_dict = self.loss_module(outputs_loss, labels)
+
+        loss = get_weighted_loss(loss_dict, self.weight_dict)
+        return loss, loss_dict, auxiliary_outputs
+
+
 class DFineForObjectDetection(RTDetrForObjectDetection):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
@@ -953,6 +1249,7 @@ class DFineForObjectDetection(RTDetrForObjectDetection):
 
         self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
         self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
+        self.criterion = DFineForObjectDetectionCriterion(config)
         # Initialize weights and apply final processing
         self.post_init()
 

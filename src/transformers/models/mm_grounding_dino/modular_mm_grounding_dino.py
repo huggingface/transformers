@@ -31,6 +31,9 @@ from ..grounding_dino.modeling_grounding_dino import (
     GroundingDinoDecoder,
     GroundingDinoEncoder,
     GroundingDinoForObjectDetection,
+    GroundingDinoForObjectDetectionCriterion,
+    GroundingDinoHungarianMatcher,
+    GroundingDinoLoss,
     GroundingDinoMLPPredictionHead,
     GroundingDinoModel,
     GroundingDinoPreTrainedModel,
@@ -259,6 +262,18 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
     pass
 
 
+class MMGroundingDinoLoss(GroundingDinoLoss):
+    pass
+
+
+class MMGroundingDinoHungarianMatcher(GroundingDinoHungarianMatcher):
+    pass
+
+
+class MMGroundingDinoForObjectDetectionCriterion(GroundingDinoForObjectDetectionCriterion):
+    pass
+
+
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
@@ -290,6 +305,7 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
                 for _ in range(config.decoder_layers)
             ]
         )
+        self.criterion = MMGroundingDinoForObjectDetectionCriterion(config)
         # Initialize weights and apply final processing
         self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
         self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
