@@ -19,6 +19,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoConfig,
+    BitsAndBytesConfig,
     DeepseekV4Config,
     DeepseekV4ForCausalLM,
     FineGrainedFP8Config,
@@ -114,6 +115,14 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertFalse(hasattr(reloaded.config, "quantization_config"))
         for name, weight in model.state_dict().items():
             torch.testing.assert_close(reloaded.state_dict()[name], weight, msg=name)
+
+    def test_rejects_mixing_formats_swapping_their_modules_themselves(self):
+        # bitsandbytes swaps every linear itself: mixed in a plan, it would take the other format's layers
+        bnb = AutoHfQuantizer.from_config(BitsAndBytesConfig(load_in_8bit=True))
+        fp8 = AutoHfQuantizer.from_config(FineGrainedFP8Config(), pre_quantized=True)
+        with self.assertRaisesRegex(ValueError, "can't be mixed"):
+            QuantizationPlanHfQuantizer({"*.mlp.*": bnb, "*": fp8})
+        QuantizationPlanHfQuantizer({"*": bnb})  # alone, it swaps its own modules as before
 
     def test_postprocess_drops_dequantized_patterns(self):
         plan = QuantizationPlanHfQuantizer(

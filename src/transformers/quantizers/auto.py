@@ -406,6 +406,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.patterns = None
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
+        # Mixed, each format swaps the modules the plan gives it (`quantized_module`): one swapping all of a model's
+        # linears itself would take the others' too
+        own_swaps = [type(q).__name__ for q in self.all_quantizers if not q.replaces_modules]
+        if len(self.all_quantizers) > 1 and own_swaps:
+            raise ValueError(f"{', '.join(own_swaps)} can't be mixed with other formats in a quantization plan yet")
 
     @property
     def all_quantizers(self):
@@ -592,10 +597,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.match_modules(model)
         for quantizer in self.all_quantizers:
             quantizer.modules_named = [pattern for pattern in self.quantizers if "*" not in pattern]
-            if not quantizer.replaces_modules:  # it swaps its modules itself: the others' are not its own
-                quantizer.modules_not_owned = [
-                    n for n, _ in model.named_modules() if self.get_quantizer(n) is not quantizer
-                ]
         super().preprocess_model(model, **kwargs)
 
     def postprocess_model(self, model, **kwargs):

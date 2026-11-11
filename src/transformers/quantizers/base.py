@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
@@ -86,7 +85,6 @@ class HfQuantizer(ABC):
 
     requires_calibration = False
     # Set by a quantization plan: the modules of the other quantizers (skipped), the ones it names (never skipped)
-    modules_not_owned: list[str] = []
     modules_named: list[str] = []
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -334,8 +332,7 @@ class HfQuantizer(ABC):
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        modules_to_not_convert = [name for name in set(modules_to_not_convert) if name not in self.modules_named]
-        return modules_to_not_convert + [rf"{re.escape(name)}$" for name in self.modules_not_owned]
+        return [name for name in set(modules_to_not_convert) if name not in self.modules_named]
 
     @property
     def is_qat_trainable(self) -> bool:

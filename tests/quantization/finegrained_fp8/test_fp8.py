@@ -576,6 +576,18 @@ class FP8DeepGEMMDeviceTest(unittest.TestCase):
             self.assertFalse(deepgemm.deepgemm_allowed(torch.device("cuda:1")))
 
 
+class FP8DequantizeTest(unittest.TestCase):
+    def test_unquantized_weight_takes_its_param_dtype(self):
+        # e.g. Qwen3-30B-A3B-FP8's norms, saved in float32 next to its FP8 linears: not cast when read, as their
+        # converter has the dequantization
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        model = nn.Module()
+        model.norm = nn.LayerNorm(4, dtype=torch.bfloat16)
+        output = Fp8Dequantize(None).convert({"weight": torch.ones(4)}, full_layer_name="norm.weight", model=model)
+        self.assertEqual(output["norm.weight"].dtype, torch.bfloat16)
+
+
 class FP8Ue8m0LoadingTest(unittest.TestCase):
     @unittest.skipUnless(hasattr(torch, "float8_e8m0fnu"), "needs torch.float8_e8m0fnu")
     @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
