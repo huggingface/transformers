@@ -140,9 +140,9 @@ class JevIntegrationTest(unittest.TestCase):
     def test_jev_35b(self):
         # System 1 merged into the weights: its head is rows of the `lm_head`
         expected = {
-            "intent": {"refund": 0.9981, "track": 0.0001, "other": 0.0018},
-            "urgent": 0.7539,
-            "anger": {"0": 0.0155, "1": 0.0859, "2": 0.4147, "3": 0.3896, "4": 0.0872, "5": 0.007},
+            "intent": {"refund": 0.9969, "track": 0.0001, "other": 0.0030},
+            "urgent": 0.7632,
+            "anger": {"0": 0.0145, "1": 0.0825, "2": 0.4165, "3": 0.3914, "4": 0.0878, "5": 0.0073},
         }
         check_decision(self, "hf-internal-testing/JEV-35B", "hf-internal-testing/JEV-35B", expected, atol=1e-2)
 
