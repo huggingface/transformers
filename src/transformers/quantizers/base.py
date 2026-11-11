@@ -161,8 +161,8 @@ class HfQuantizer(ABC):
         "The quantizers loading the model: this one, or the ones of a quantization plan"
         return [self]
 
-    def get_quantizer(self, name: str) -> "HfQuantizer | None":
-        "The quantizer of the module or param `name`: this one, or in a quantization plan the one of its pattern"
+    def get_quantizer(self, *names: str) -> "HfQuantizer | None":
+        "The quantizer of a module or param, by any of its `names`: this one, or in a quantization plan its pattern's"
         return self
 
     def validate_environment(self, *args, **kwargs):

@@ -38,15 +38,19 @@ if is_torch_available():
 
 class BitNetPackedWeightsTest(unittest.TestCase):
     def test_offline_autobitlinear_weight_conversion(self):
-        """get_weight_conversions() must return a WeightConverter for autobitlinear+offline"""
+        """The load plan must deserialize an autobitlinear+offline checkpoint's weights"""
+        from transformers.core_model_loading import build_load_plan
+        from transformers.integrations.bitnet import BitNetDeserialize
         from transformers.quantizers.quantizer_bitnet import BitNetHfQuantizer
 
         config = BitNetQuantConfig(linear_class="autobitlinear", quantization_mode="offline")
-        quantizer = BitNetHfQuantizer(config)
-        conversions = quantizer.get_weight_conversions()
-        self.assertEqual(len(conversions), 1)
-        self.assertEqual(conversions[0].source_patterns, ["weight"])
-        self.assertEqual(conversions[0].target_patterns, ["weight"])
+        quantizer = BitNetHfQuantizer(config, pre_quantized=True)
+        model = torch.nn.Module()
+        model.base_model_prefix = ""
+        model.linear = torch.nn.Linear(4, 16, bias=False)
+        plan, unexpected = build_load_plan({"linear.weight": torch.empty(4, 4)}, model, [], quantizer)
+        self.assertEqual(unexpected, set())
+        self.assertEqual([type(op) for op in plan["linear.weight"].operations], [BitNetDeserialize])
 
     def test_unpack_packed_weights(self):
         """BitNetDeserialize.convert() must unpack packed weights to the original ternary values"""
