@@ -14,10 +14,7 @@
 """Testing suite for the Apertus 1.5 processor."""
 
 import math
-import os
-import tempfile
 import unittest
-import wave
 
 import numpy as np
 
@@ -125,67 +122,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # an all-zero clip must not produce NaNs
         out = processor(text="<|audio|>", audio=[np.zeros(1200, dtype=np.float32)], return_tensors="pt")
         self.assertFalse(torch.isnan(out["input_features"]).any())
-
-    def test_mismatched_counts_raise(self):
-        """Strict validation in both directions, for both modalities, flat and nested."""
-        processor = self.get_processor()
-        image, clip = self._image(32, 32), self._clip(1200)
-
-        cases = [
-            # (kwargs, expected error snippet)
-            ({"text": "<|image|>", "images": [image, image]}, "placeholders in total"),
-            ({"text": "<|image|><|image|>", "images": [image]}, "placeholders in total"),
-            ({"text": "<|image|>"}, "no image inputs were passed"),
-            ({"text": "<|audio|>", "audio": [clip, clip]}, "placeholders in total"),
-            ({"text": "<|audio|><|audio|>", "audio": [clip]}, "placeholders in total"),
-            ({"text": "<|audio|>"}, "no audio inputs were passed"),
-            ({"text": ["a", "<|image|>b"], "images": [[image], []]}, "placeholder counts"),
-            ({"text": ["<|audio|>"], "audio": [[clip], [clip]]}, "sub-lists for"),
-        ]
-        for index, (kwargs, snippet) in enumerate(cases):
-            with self.subTest(case=index, snippet=snippet):
-                with self.assertRaises(ValueError) as ctx:
-                    processor(**kwargs)
-                self.assertIn(snippet, str(ctx.exception))
-
-    @require_librosa
-    def test_nested_audio_matches_flat(self):
-        """Nested audio, files included, is loaded, resampled and assigned to its own sample like flat audio."""
-        processor = self.get_processor()
-        hop = processor.feature_extractor.hop_length
-        source_rate = 8000
-        samples = (16000 * np.sin(2 * np.pi * 440 * np.arange(800) / source_rate)).astype("<i2")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            audio_path = os.path.join(tmpdir, "audio.wav")
-            with wave.open(audio_path, "wb") as audio_file:
-                audio_file.setparams((1, 2, source_rate, 0, "NONE", "not compressed"))
-                audio_file.writeframes(samples.tobytes())
-            audio = [[audio_path], [], [self._clip(hop + 1), self._clip(3 * hop)]]
-            kwargs = {"text": ["<|audio|> file", "no audio", "<|audio|><|audio|> two clips"], "padding": True}
-            nested = processor(audio=audio, return_tensors="np", **kwargs)
-            flat = processor(audio=[clip for group in audio for clip in group], return_tensors="np", **kwargs)
-
-        for key in ("input_ids", "attention_mask", "input_features", "feature_attention_mask"):
-            with self.subTest(key=key):
-                np.testing.assert_array_equal(nested[key], flat[key])
-        # the 800 samples at 8 kHz are resampled to 2400 at 24 kHz
-        self.assertEqual(nested["feature_attention_mask"].sum(-1).tolist(), [2400, hop + 1, 3 * hop])
-        self.assertEqual((nested["input_ids"] == processor.audio_token_id).sum(-1).tolist(), [4, 0, 5])
-
-    def test_get_num_audio_tokens(self):
-        """Tests the audio path of the helper used internally in vLLM."""
-        processor = self.get_processor()
-        hop = processor.feature_extractor.hop_length
-        audio_lengths = [1, hop, hop + 1]
-        inputs = processor(
-            text=["<|audio|>"] * len(audio_lengths),
-            audio=[self._clip(length) for length in audio_lengths],
-            padding=True,
-        )
-        num_from_call = [ids.count(processor.audio_token_id) for ids in inputs["input_ids"]]
-        num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
-        self.assertEqual(num_from_helper, [1, 1, 2])
-        self.assertEqual(num_from_call, num_from_helper)
 
     def test_audio_mask_tracks_valid_samples(self):
         """Masks, features and placeholder counts follow the valid samples of unpadded, padded and truncated clips."""

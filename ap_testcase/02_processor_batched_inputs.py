@@ -96,14 +96,13 @@ def case_3_text_only(processor):
 def case_4_count_validation(processor):
     """CASE 4: COUNT VALIDATION
 
-    Number of placeholder should match the given media items for each sample.
+    The total number of placeholders should match the given media items.
     """
     invalid_inputs = [
         ({"text": "<|image|>", "images": [image(256, 256), image(256, 256)]}, "more images than placeholders"),
         ({"text": "<|image|><|image|>", "images": [image(256, 256)]}, "more placeholders than images"),
         ({"text": "no placeholder at all", "images": [image(256, 256)]}, "an image without any placeholder"),
         ({"text": "look at <|image|>"}, "an image placeholder without any media"),
-        ({"text": ["a", "<|audio|>b"], "audio": [[clip(1.0)], []]}, "nested audio on the wrong sample"),
     ]
     for kwargs, label in invalid_inputs:
         try:

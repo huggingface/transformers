@@ -15,37 +15,17 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
-from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...audio_utils import AudioInput
+from ...image_utils import ImageInput
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
-from .image_processing_apertus1p5 import Apertus1p5ImageProcessorKwargs
-
-
-class Apertus1p5ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Apertus1p5ImageProcessorKwargs
-    # TypedDict subclasses do not inherit class attributes; `_merge_kwargs` requires this to exist
-    _defaults = {}
-
-
-def _is_nested_media(media) -> bool:
-    # one sub-list per text sample; a bare list of numbers is a single audio clip, not a nesting
-    return (
-        isinstance(media, (list, tuple))
-        and len(media) > 0
-        and all(
-            isinstance(el, (list, tuple)) and (len(el) == 0 or not isinstance(el[0], (int, float))) for el in media
-        )
-    )
 
 
 @auto_docstring(custom_intro="Constructs an Apertus 1.5 processor for text, images, and audio.")
 @requires(backends=("vision", "torch", "torchvision"))
 class Apertus1p5Processor(ProcessorMixin):
-    valid_processor_kwargs = Apertus1p5ProcessorKwargs
-
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
         self.audio_token = tokenizer.audio_token
@@ -57,38 +37,7 @@ class Apertus1p5Processor(ProcessorMixin):
         self.eoa_token = tokenizer.eoa_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
-        unk_token_id = getattr(tokenizer, "unk_token_id", None)
-        for token, token_id in ((self.image_token, self.image_token_id), (self.audio_token, self.audio_token_id)):
-            if token_id is None or (unk_token_id is not None and token_id == unk_token_id):
-                raise ValueError(
-                    f"The tokenizer does not contain the media placeholder token '{token}'. Apertus 1.5 requires "
-                    "a tokenizer with the media special tokens (see the model's `extra_special_tokens`)."
-                )
         super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
-
-    def prepare_inputs_layout(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        videos=None,
-        audio: AudioInput | None = None,
-        **kwargs,
-    ):
-        """Normalize inputs, supporting nested audio with one sub-list per text sample (empty if unused)."""
-        # Preserve sample ownership for validation; `_process_audio` flattens the clips afterward.
-        if audio is not None and _is_nested_media(audio):
-            sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
-            audio = [
-                make_list_of_audio(self.feature_extractor.fetch_audio(sublist, sampling_rate=sampling_rate))
-                if len(sublist) > 0
-                else []
-                for sublist in audio
-            ]
-            images, text, videos, _ = super().prepare_inputs_layout(
-                images=images, text=text, videos=videos, audio=None, **kwargs
-            )
-            return images, text, videos, audio
-        return super().prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
     def validate_inputs(
         self,
@@ -98,45 +47,10 @@ class Apertus1p5Processor(ProcessorMixin):
         audio: AudioInput | None = None,
         **kwargs,
     ):
-        """Run the base validation, then match placeholder and media counts for images and audio."""
+        """Run the base validation and require the text that holds the media placeholders."""
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-        if text is None:
-            if images is not None or audio is not None:
-                raise ValueError("`text` with media placeholder tokens must be provided when passing images or audio.")
-            return
-
-        self._validate_media_counts(text, images, _is_nested_media(images), self.image_token, "image")
-        self._validate_media_counts(text, audio, _is_nested_media(audio), self.audio_token, "audio")
-
-    def _validate_media_counts(self, text, media, is_nested, token, modality):
-        """Strict in both directions: every placeholder needs a media item and vice versa."""
-        placeholder_counts = [sample.count(token) for sample in text]
-        if media is None:
-            if any(placeholder_counts):
-                raise ValueError(
-                    f"Found {sum(placeholder_counts)} '{token}' placeholders in the text but no {modality} "
-                    "inputs were passed."
-                )
-            return
-        if is_nested:
-            if len(media) != len(text):
-                raise ValueError(
-                    f"Received {len(media)} {modality} sub-lists for {len(text)} text samples; nested "
-                    f"{modality} inputs must provide one sub-list per sample."
-                )
-            media_counts = [len(sublist) for sublist in media]
-            if media_counts != placeholder_counts:
-                raise ValueError(
-                    f"Per-sample '{token}' placeholder counts {placeholder_counts} do not match the numbers "
-                    f"of {modality} inputs {media_counts}."
-                )
-        else:
-            num_media = len(make_flat_list_of_images(media)) if modality == "image" else len(media)
-            if sum(placeholder_counts) != num_media:
-                raise ValueError(
-                    f"The text contains {sum(placeholder_counts)} '{token}' placeholders in total but "
-                    f"{num_media} {modality} inputs were passed."
-                )
+        if text is None and (images is not None or audio is not None):
+            raise ValueError("`text` with media placeholder tokens must be provided when passing images or audio.")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         spatial_factor = kwargs.get("spatial_factor", self.image_processor.spatial_factor)
@@ -150,8 +64,6 @@ class Apertus1p5Processor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         """Peak-normalize the clips, extract features under the model's input names, and build the replacements."""
-        if _is_nested_media(audio):
-            audio = [clip for sublist in audio for clip in sublist]
         # peak-normalize each clip to -3 dBFS in float32, as in the reference Apertus 1.5 pipeline
         # (the codec feature extractor itself deliberately performs no normalization)
         target_peak = 10.0 ** (-3.0 / 20.0)
@@ -204,7 +116,7 @@ class Apertus1p5Processor(ProcessorMixin):
         """
         data = {}
         if image_sizes is not None:
-            images_kwargs = dict(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             data["num_image_tokens"] = [
                 self.image_processor.get_number_of_image_patches(int(height), int(width), images_kwargs)
                 for height, width in image_sizes
