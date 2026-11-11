@@ -1599,10 +1599,7 @@ class _Templates(set):
 
 def _rename(key, layered, renamings, converters, prefix, model_keys):
     "A checkpoint key renamed: its quantizer's names (`layered`), then the model's transforms and prefix"
-    renamed, pattern = rename_source_key(layered, renamings, converters, prefix, model_keys)
-    if renamed not in model_keys and key in model_keys:  # keep a key the model already has
-        renamed, pattern = rename_source_key(key, [], [], base_model_prefix=prefix, meta_state_dict=model_keys)
-    return renamed, pattern
+    return rename_source_key(layered, renamings, converters, prefix, model_keys)
 
 
 def rename_keys(keys, renamings, converters, hf_quantizer, prefix, model_keys):
@@ -1633,33 +1630,54 @@ def rename_keys(keys, renamings, converters, hf_quantizer, prefix, model_keys):
     return renamed
 
 
-def build_load_plan(keys, model, weight_mapping, hf_quantizer=None):
+def _meta(tensor):
+    "A meta tensor of a checkpoint tensor's shape: a tensor, or a safetensors slice"
+    # TODO: the checkpoint's dtype too, once the plan is compiled
+    shape = tensor.shape if isinstance(tensor, torch.Tensor) else tensor.get_shape()
+    return torch.empty(shape, device="meta")
+
+
+def _outputs(transform, target, state_dict, model):
+    "The keys `transform` produces, run on meta tensors of the checkpoint's: `{target}` if its ops need real data"
+    transform = deepcopy(transform)
+    transform.collected_tensors = {
+        p: [_meta(state_dict[k]) for k in ks] for p, ks in transform.collected_tensors.items()
+    }
+    try:
+        return set(transform.convert(target, model=model, config=model.config))
+    except Exception:  # e.g. a format's load op reading a lookup table
+        return {target}
+
+
+def build_load_plan(state_dict, model, weight_mapping, hf_quantizer=None):
     """
-    `(plan, unexpected_keys)`, from the checkpoint's key names only. `plan` maps each param to load to its transform,
-    with its quantizer's ops, whose `collected_tensors` hold the checkpoint keys it reads, in order.
+    `(plan, unexpected_keys)`, from the checkpoint's key names and shapes: every transform runs on meta tensors, so
+    its exact outputs are known before reading a tensor. `plan` maps a param of each transform loading into the model
+    to it, with its quantizer's ops, whose `collected_tensors` hold the checkpoint keys it reads, in order.
     """
     model_keys = model.state_dict()
     renamings = [t for t in weight_mapping if isinstance(t, WeightRenaming)]
     converters = [t for t in weight_mapping if isinstance(t, WeightConverter)]
     pattern_to_converter = {p: converter for converter in converters for p in converter.source_patterns}
-    keys = sorted(keys, key=dot_natural_key)
+    keys = sorted(state_dict, key=dot_natural_key)
     renamed = rename_keys(keys, renamings, converters, hf_quantizer, model.base_model_prefix, model_keys)
 
-    plan, unexpected = {}, set()
+    transforms = {}
     for key in keys:
         target, pattern = renamed[key]
-        if target in model_keys:
-            if target not in plan:
-                transform = deepcopy(pattern_to_converter[pattern]) if pattern else WeightRenaming(key, target)
-                if hf_quantizer is not None:
-                    transform = hf_quantizer.update_weight_transform(transform, model, target)
-                plan[target] = transform
-            plan[target].add_tensor(target, key, pattern or key, key)
-        elif pattern is not None:  # each target of the converter
-            targets = pattern_to_converter[pattern].target_patterns
-            unexpected |= {target.replace(targets[0], t) for t in targets}
-        else:
-            unexpected.add(target)
+        if target not in transforms:
+            transform = deepcopy(pattern_to_converter[pattern]) if pattern else WeightRenaming(key, target)
+            if hf_quantizer is not None:
+                transform = hf_quantizer.update_weight_transform(transform, model, target)
+            transforms[target] = transform
+        transforms[target].add_tensor(target, key, pattern or key, key)
+
+    plan, unexpected = {}, set()
+    for target, transform in transforms.items():
+        outputs = _outputs(transform, target, state_dict, model)
+        unexpected |= outputs - model_keys.keys()
+        if loaded := sorted(outputs & model_keys.keys()):
+            plan[target if target in model_keys else loaded[0]] = transform
     return plan, unexpected
 
 

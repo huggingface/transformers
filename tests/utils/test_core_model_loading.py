@@ -524,7 +524,8 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         each_key = {key: rename_source_key(key, renamings, converters, "model", model_keys) for key in keys}
         self.assertEqual(renamed, each_key)
 
-        plan, unexpected = build_load_plan(keys, model, weight_mapping)
+        state_dict = {key: torch.empty(3 if key.endswith("qkv_proj.weight") else 2, 2) for key in keys}
+        plan, unexpected = build_load_plan(state_dict, model, weight_mapping)
         self.assertEqual(unexpected, {"model.layers.1.self_attn.qkv_proj.weight"})
         self.assertEqual(
             dict(plan["model.layers.1.experts.gate_up_proj.weight"].collected_tensors),

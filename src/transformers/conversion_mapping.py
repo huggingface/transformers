@@ -575,7 +575,7 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
             ),
             WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
-            WeightRenaming(source_patterns=r"\.norm\.", target_patterns=r"\.kv_norm\."),
+            WeightRenaming(source_patterns=r"\.compressor\.norm\.", target_patterns=r"\.compressor\.kv_norm\."),
             WeightRenaming(source_patterns=r"\.ape", target_patterns=r"\.position_bias"),
             WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
             WeightRenaming(source_patterns=r"\.self_attn\.wq_b\.", target_patterns=r"\.self_attn\.q_b_proj\."),

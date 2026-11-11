@@ -359,79 +359,24 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 "in your DeepSpeed config or convert your checkpoint to the expected format first."
             )
 
-    from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
+    from ..core_model_loading import WeightRenaming, build_load_plan
 
     # Preserve metadata from the original state dict
     metadata = getattr(state_dict, "_metadata", None)
 
-    base_model_prefix = model.base_model_prefix
-
-    # Build a meta state dict for matching - only keys/shapes, no actual tensor data
-    # This minimizes memory since we don't duplicate the model's parameters
-    model_state_dict = {}
-    for key, param in model.state_dict().items():
-        model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
-
-    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
-
-    # Fast path: if we only have simple renamings and no converters, we can skip the expensive collection logic
-    if len(converters) == 0:
-        new_state_dict = {}
-        for original_key, tensor in state_dict.items():
-            renamed_key, _ = rename_source_key(
-                original_key, renamings, [], base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
-            )
-            if renamed_key in model_state_dict:
-                new_state_dict[renamed_key] = tensor
-        # Attach metadata to the new state dict
-        if metadata is not None:
-            new_state_dict._metadata = metadata
-        yield new_state_dict
-        return
-
-    # Full path: we have WeightConverter operations that require tensor fusion/splitting
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-
-    # Build a mapping of what needs to be converted
-    # Sort keys to ensure consistent ordering (important for MoE conversions)
-    # Iterate over sorted keys and pop from state_dict to free memory immediately
-    conversion_mapping = {}
+    plan, _ = build_load_plan(state_dict, model, weight_mapping)
     new_state_dict = {}
-    sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
-    for original_key in sorted_keys:
-        tensor = state_dict.pop(original_key)
-        renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, base_model_prefix=base_model_prefix, meta_state_dict=model_state_dict
-        )
-
-        # Only process if the renamed key is in the model's state dict
-        if renamed_key in model_state_dict:
-            # If source_pattern is not None, this key needs WeightConverter (e.g., MoE fusion)
-            if source_pattern is not None:
-                # Create a fresh converter for this layer to hold its tensors
-                # Share operations list (lightweight, no large data) but get new collected_tensors
-                converter = pattern_to_converter[source_pattern]
-                new_converter = WeightConverter(
-                    source_patterns=converter.source_patterns,
-                    target_patterns=converter.target_patterns,
-                    operations=converter.operations,
-                )
-                mapping = conversion_mapping.setdefault(renamed_key, new_converter)
-                mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
-            else:
-                # No conversion needed - add tensor directly to new_state_dict
-                # (this handles keys like embed_tokens, lm_head, layernorm, attention)
-                new_state_dict[renamed_key] = tensor
-
-    # Apply the conversions one at a time
-    for renamed_key, mapping in conversion_mapping.items():
+    for renamed_key, mapping in plan.items():
+        # Pop from `state_dict` to free memory as we go
+        tensors = {
+            pattern: [state_dict.pop(key) for key in keys] for pattern, keys in mapping.collected_tensors.items()
+        }
+        if isinstance(mapping, WeightRenaming):
+            new_state_dict[renamed_key] = next(iter(tensors.values()))[0]
+            continue
+        mapping.collected_tensors = tensors
         try:
-            realized_value = mapping.convert(
-                renamed_key,
-                model=model,
-                config=model.config,
-            )
+            realized_value = mapping.convert(renamed_key, model=model, config=model.config)
         except Exception as e:
             raise RuntimeError(
                 f"Failed to apply weight conversion for '{renamed_key}'. "
