@@ -129,7 +129,6 @@ class OpenVINOExporter(DynamoExporter):
             patch_model_outputs(model) as (inputs_names, outputs_names, out_specs),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
-            metadata.out_spec = torch.utils._pytree.treespec_dumps(out_specs[-1])
             # Converted before the model gets its dtypes back: the program's constants are its own tensors.
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
@@ -149,7 +148,7 @@ class OpenVINOExporter(DynamoExporter):
         if config.compress_to_fp16:
             compress_model_transformation(ov_model)
 
-        _update_openvino_metadata(metadata, ov_model)
+        _update_openvino_metadata(metadata, ov_model, out_specs[-1])
         return ov_model, metadata
 
     @classmethod
@@ -173,11 +172,14 @@ class OpenVINOExporter(DynamoExporter):
 # of the conversion has a single responsibility.
 
 
-def _update_openvino_metadata(metadata: ExportMetadata, ov_model: openvino.Model) -> None:
-    """Record the model's own port names: dotted leaf paths and, once stateful, no cache ports but a `beam_idx`
-    input."""
+def _update_openvino_metadata(
+    metadata: ExportMetadata, ov_model: openvino.Model, out_spec: torch.utils._pytree.TreeSpec
+) -> None:
+    """Record the model's own port names (dotted leaf paths and, once stateful, no cache ports but a `beam_idx`
+    input), and the spec of what the model returned."""
     metadata.input_names = [port.get_any_name() for port in ov_model.inputs]
     metadata.output_names = [port.get_any_name() for port in ov_model.outputs]
+    metadata.out_spec = torch.utils._pytree.treespec_dumps(out_spec)
 
 
 def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:

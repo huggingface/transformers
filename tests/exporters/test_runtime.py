@@ -308,7 +308,6 @@ class ExportedModelTest(unittest.TestCase):
                     torch.testing.assert_close(
                         shared["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
                     )
-                    # A loaded runtime saves back what it runs.
                     with tempfile.TemporaryDirectory() as resaved:
                         runtime.save_pretrained(resaved)
                         self.assertEqual(sorted(os.listdir(resaved)), sorted(os.listdir(directory)))

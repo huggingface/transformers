@@ -84,7 +84,6 @@ class ExportedModel(PushToHubMixin):
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
-        # The backend runtime's runners, one per component: built on first use, by `to`, or when loaded.
         self._runners: dict[str, ModelRunner] | None = None
 
     def __repr__(self) -> str:
@@ -234,7 +233,6 @@ class ExportedModel(PushToHubMixin):
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
         model = cls(components, exporter.export_format, config=config, generation_config=generation_config)
-        # A format registered without a runner only saves and loads.
         if EXPORT_BACKENDS[exporter.export_format].runner is not None:
             model.to(device)
         return model

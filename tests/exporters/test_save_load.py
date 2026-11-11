@@ -182,11 +182,14 @@ class ExecutorchSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
-            # Binding inputs and rebuilding outputs need these, and they can't be recovered from a saved `.pte`.
             self.assertIsNotNone(entry["metadata"]["in_spec"])
             self.assertIsNotNone(entry["metadata"]["out_spec"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
+            with tempfile.TemporaryDirectory() as resaved:
+                loaded.save_pretrained(resaved)
+                self.assertEqual(Path(resaved, "model.pte").read_bytes(), Path(directory, "model.pte").read_bytes())
+                self.assertIn("forward", ExportedModel.from_pretrained(resaved).program.method_names)
 
 
 @slow

@@ -136,7 +136,6 @@ class OnnxExporter(DynamoExporter):
     ) -> tuple[onnx_ir.Model, ExportMetadata]:
         with patch_model_outputs(model) as (inputs_names, outputs_names, out_specs), apply_patches("onnx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
-            metadata.out_spec = torch.utils._pytree.treespec_dumps(out_specs[-1])
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -156,7 +155,7 @@ class OnnxExporter(DynamoExporter):
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
-        _update_onnx_metadata(metadata, onnx_program.model)
+        _update_onnx_metadata(metadata, onnx_program.model, out_specs[-1])
         return onnx_program.model, metadata
 
     @classmethod
@@ -197,11 +196,14 @@ class OnnxExporter(DynamoExporter):
 # Model forward wrapper and I/O naming used by OnnxExporter.export.
 
 
-def _update_onnx_metadata(metadata: ExportMetadata, onnx_model: onnx_ir.Model) -> None:
-    """Record the graph's own input and output names: dotted leaf paths, with `input.` / `output.` prefixes on mutated
-    inputs."""
+def _update_onnx_metadata(
+    metadata: ExportMetadata, onnx_model: onnx_ir.Model, out_spec: torch.utils._pytree.TreeSpec
+) -> None:
+    """Record the graph's own input and output names (dotted leaf paths, with `input.` / `output.` prefixes on mutated
+    inputs), and the spec of what the model returned."""
     metadata.input_names = [value.name for value in onnx_model.graph.inputs]
     metadata.output_names = [value.name for value in onnx_model.graph.outputs]
+    metadata.out_spec = torch.utils._pytree.treespec_dumps(out_spec)
 
 
 @contextmanager
