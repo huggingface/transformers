@@ -83,7 +83,7 @@ class ExportConfigMixin:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         values = {name: value for name, value in self.__dict__.items() if name != "quantizer"}
-        return json.dumps(values, indent=2, sort_keys=True, default=repr) + "\n"
+        return json.dumps(values, indent=2, sort_keys=True, default=repr)
 
     def __iter__(self):
         yield from self.__dict__.items()
