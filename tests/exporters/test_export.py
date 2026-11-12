@@ -1089,7 +1089,9 @@ class ExportTesterMixin:
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
+            ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
             components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
@@ -1309,7 +1311,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
+            ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic

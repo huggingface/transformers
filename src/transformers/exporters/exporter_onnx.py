@@ -68,6 +68,7 @@ from .utils import (
 
 if is_torch_available():
     import torch
+    from torch.fx.experimental.symbolic_shapes import guard_or_false
     from torch.onnx import ONNXProgram
 
 
@@ -75,6 +76,8 @@ if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
+
+    from .onnxruntime_fusions import fuse_for_onnxruntime
 
     # torch.dtype -> onnx_ir.DataType, mirroring torch.onnx's private _TORCH_DTYPE_TO_ONNX so we
     # don't depend on that path. Only the dtypes a `Cast` target can realistically be; exotic
@@ -134,7 +137,17 @@ class OnnxExporter(DynamoExporter):
         sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig,
     ) -> tuple[onnx_ir.Model, ExportMetadata]:
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
+        quantizer = config.quantizer
+        # A model quantized before export has no ops the fusions match.
+        ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
+        # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
+        experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
+
+        with (
+            apply_patches("onnx"),
+            use_experts_implementation(model, experts_implementation),
+            patch_model_outputs(model) as (inputs_names, outputs_names),
+        ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
@@ -151,7 +164,9 @@ class OnnxExporter(DynamoExporter):
 
         apply_onnx_ir_fixes(onnx_program)
 
-        quantizer = config.quantizer
+        if ort_fusions:
+            fuse_for_onnxruntime(onnx_program.model, ort_fusions)
+
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
@@ -201,6 +216,20 @@ def _update_onnx_metadata(metadata: ExportMetadata, onnx_model: onnx_ir.Model) -
     inputs."""
     metadata.input_names = [value.name for value in onnx_model.graph.inputs]
     metadata.output_names = [value.name for value in onnx_model.graph.outputs]
+
+
+@contextmanager
+def use_experts_implementation(model, experts_implementation: str | None):
+    """Run the model's experts with `experts_implementation` inside the block, then restore its own."""
+    if experts_implementation is None or not getattr(model, "_can_set_experts_implementation", lambda: False)():
+        yield
+        return
+    original = model.get_experts_implementation()
+    model.set_experts_implementation(experts_implementation)
+    try:
+        yield
+    finally:
+        model.set_experts_implementation(original)
 
 
 @contextmanager
@@ -290,16 +319,28 @@ def _patch_sdpa(original):
     zeros; ONNX Runtime evaluates the softmax literally and, when the mask is `-inf` (parakeet's
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
+
+    A boolean mask goes in as an additive one (torchlib's boolean softmax adds a redundant `IsNaN`/`Where`), and
+    unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
+    microsoft/onnxruntime#33876). The key, value and mask lengths are checked equal, so a dynamic export gives them
+    one symbol, which onnxscript's attention fusion needs.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
-        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
+        torch._check(key.shape[-2] == value.shape[-2])
         if attn_mask is None:
-            return attn_output
+            return original(query, key, value, attn_mask, *args, **kwargs)
+        # A mask width that's data-dependent (SAM 3's) can't be compared to 1: left unchecked.
+        if guard_or_false(attn_mask.shape[-1] != 1):
+            torch._check(attn_mask.shape[-1] == key.shape[-2])
+        # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
-            unattended = ~attn_mask.any(dim=-1, keepdim=True)
+            attended = attn_mask.to(query.dtype)
+            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
-            unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
+            attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
+        unattended = attended.sum(dim=-1, keepdim=True) < 1
+        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
 
@@ -1061,33 +1102,34 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     mat_a[r] @ mat_b[group(r)]` where rows are sorted by group and `offs` holds the
     cumulative end index per group.
 
-    Per-group `Slice + MatMul + Concat`. `G` (number of experts) is static for any
-    concrete model, so unroll at translation time: emit one `Slice + MatMul` triple
-    per group and a final `Concat`. Avoids the `(M, K, N)` materialisation a naive
-    `weight[group_idx]` gather would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`.
+    `G` (number of experts) is static, so it unrolls into one `MatMul` per group and a final
+    `Concat`, avoiding the `(M, K, N)` materialisation of a `weight[group_idx]` gather. The group
+    ends and weights come from one `Split` each, not a `Slice` per group: onnxscript's
+    `SlicesSplit` rule tries every pair of `Slice`s, which dominated the export time.
     """
     G = mat_b.shape[0]
     if not isinstance(G, int):
         raise ValueError("_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time")
 
-    offs_i64 = op.Cast(offs, to=7)
+    def per_group(x):
+        return op.Split(x, axis=0, num_outputs=G) if G > 1 else [x]
+
     axes_0 = op.Constant(value_ints=[0])
-    zero_1d = op.Constant(value_ints=[0])
+    ends, weights = per_group(op.Cast(offs, to=7)), per_group(mat_b)
+    biases = per_group(bias) if bias is not None else None
 
     outputs = []
-    prev_end = zero_1d
+    prev_end = op.Constant(value_ints=[0])
+    one = op.Constant(value_int=1)
     for g in range(G):
-        g_lo = op.Constant(value_ints=[g])
-        g_hi = op.Constant(value_ints=[g + 1])
-        end = op.Slice(offs_i64, g_lo, g_hi, axes_0)  # (1,) — offs[g]
-        a_g = op.Slice(mat_a, prev_end, end, axes_0)  # (n_g, K)
-        w_g = op.Squeeze(op.Slice(mat_b, g_lo, g_hi, axes_0), axes_0)  # (K, N)
-        out_g = op.MatMul(a_g, w_g)  # (n_g, N)
-        if bias is not None:
+        rows_g = op.Range(op.Squeeze(prev_end, axes_0), op.Squeeze(ends[g], axes_0), one)
+        a_g = op.Gather(mat_a, rows_g, axis=0)  # (n_g, K)
+        out_g = op.MatMul(a_g, op.Squeeze(weights[g], axes_0))  # (n_g, N)
+        if biases is not None:
             # per-group bias ``(G, N)`` → ``(N,)`` broadcasts over the group's rows
-            out_g = op.Add(out_g, op.Squeeze(op.Slice(bias, g_lo, g_hi, axes_0), axes_0))
+            out_g = op.Add(out_g, op.Squeeze(biases[g], axes_0))
         outputs.append(out_g)
-        prev_end = end
+        prev_end = ends[g]
 
     result = op.Concat(*outputs, axis=0)  # (M, N)
     if out_dtype is not None:
