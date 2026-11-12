@@ -325,6 +325,35 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
                     (gradient,) = torch.autograd.grad(loss, logits)
                     torch.testing.assert_close(gradient, torch.zeros_like(logits))
 
+    def test_label_smoothing_positive_external_count(self):
+        for shift_labels in (False, True):
+            for num_items_in_batch in (0.25, 1, 6, torch.tensor(0.25), torch.tensor(1), torch.tensor(6)):
+                with self.subTest(shift_labels=shift_labels, num_items_in_batch=num_items_in_batch):
+                    logits = torch.randn(2, 4, 12, requires_grad=True)
+                    labels = torch.tensor([[1, 2, -100, 4], [5, -100, 7, 8]])
+                    loss = LabelSmoother()(
+                        SequenceClassifierOutput(logits=logits),
+                        labels,
+                        shift_labels=shift_labels,
+                        num_items_in_batch=num_items_in_batch,
+                    )
+                    reference_logits = logits[..., :-1, :] if shift_labels else logits
+                    reference_labels = labels[..., 1:] if shift_labels else labels
+                    expected = (
+                        nn.functional.cross_entropy(
+                            reference_logits.reshape(-1, 12),
+                            reference_labels.reshape(-1),
+                            reduction="sum",
+                            label_smoothing=0.1,
+                        )
+                        / num_items_in_batch
+                    )
+                    torch.testing.assert_close(loss, expected)
+                    torch.testing.assert_close(
+                        torch.autograd.grad(loss, logits, retain_graph=True)[0],
+                        torch.autograd.grad(expected, logits)[0],
+                    )
+
     def test_label_smoothing_multi_label_incompatibility(self):
         """Test that Trainer warns and disables label smoothing for multi-label classification"""
 

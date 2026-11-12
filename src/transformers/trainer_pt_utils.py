@@ -477,7 +477,10 @@ class LabelSmoother:
         else:
             denominator = num_items_in_batch
         # An all-ignored batch contributes a differentiable zero to the loss.
-        denominator = denominator.clamp_min(1) if torch.is_tensor(denominator) else max(denominator, 1)
+        if torch.is_tensor(denominator):
+            denominator = denominator.masked_fill(denominator == 0, 1)
+        elif denominator == 0:
+            denominator = 1
         nll_loss = nll_loss.sum() / denominator
         smoothed_loss = smoothed_loss.sum() / (denominator * log_probs.shape[-1])
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
