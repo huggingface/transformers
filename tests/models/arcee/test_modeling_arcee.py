@@ -54,6 +54,10 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = ArceeForCausalLM if is_torch_available() else None
 
+    def test_config(self):
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
+
     def test_arcee_mlp_uses_relu_squared(self):
         """Test that ArceeMLP uses ReLU² activation instead of SiLU."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

@@ -27,10 +27,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoModel
 from .configuration_vipllava import VipLlavaConfig
 
@@ -48,12 +50,12 @@ class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -64,32 +66,32 @@ class VipLlavaModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
 
 
 class VipLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: VipLlavaConfig):
         super().__init__()
-        num_feature_layers = 1 if isinstance(config.vision_feature_layers, int) else len(config.vision_feature_layers)
+        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
         self.projector_layernorm = nn.LayerNorm(
             num_feature_layers * config.vision_config.hidden_size, eps=config.projector_layernorm_eps
         )
@@ -140,28 +142,26 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
+    @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layers: int | list[int] | None = None,
+        pixel_values: torch.Tensor,
+        vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
-        vision_feature_layers (`Union[int, list[int]]`, *optional*):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
-        vision_feature_layers = (
-            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
-        )
-        # We need hidden states to select intermediate vision features by layer index below.
-        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
             **kwargs,
@@ -169,11 +169,11 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
 
         # If multiple feature layers are provided (which is usually the case)
         # then the image features are concatenated after the CLS is removed.
-        if isinstance(vision_feature_layers, int):
-            image_features = image_outputs.hidden_states[vision_feature_layers][:, 1:]
+        if isinstance(vision_feature_layer, int):
+            image_features = image_outputs.hidden_states[vision_feature_layer][:, 1:]
         else:
             # Usually, we select the features from index 1: the layers -2, -5, -8, -11 and 6
-            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layer]
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         image_outputs.pooler_output = image_features
@@ -181,7 +181,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         return image_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -204,27 +204,32 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         )
         return special_image_mask
 
+    @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layers: int | list[int] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
-        vision_feature_layers (`Union[int, list[int]]`, *optional*):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
-        vision_feature_layers = (
-            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -233,11 +238,14 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
-            ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values=pixel_values, vision_feature_layer=vision_feature_layer
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -249,7 +257,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            **lm_kwargs,
+            **kwargs,
         )
 
         output = VipLlavaModelOutputWithPast(
@@ -257,7 +265,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
         return output
 
@@ -269,6 +277,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
 )
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
@@ -279,55 +288,54 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layers: int | list[int] | None = None,
+        pixel_values: torch.Tensor,
+        vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
-        vision_feature_layers (`Union[int, list[int]]`, *optional*):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
         return self.model.get_image_features(
-            pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
+            pixel_values=pixel_values, vision_feature_layer=vision_feature_layer, **kwargs
         )
 
+    @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layers: int | list[int] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
         r"""
-        vision_feature_layers (`Union[int, list[int]]`, *optional*):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
@@ -349,8 +357,8 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
-        vision_feature_layers = (
-            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
 
         outputs: VipLlavaModelOutputWithPast = self.model(
@@ -361,19 +369,19 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            vision_feature_layers=vision_feature_layers,
-            **lm_kwargs,
+            vision_feature_layer=vision_feature_layer,
+            mm_encoder_outputs=mm_encoder_outputs,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return VipLlavaCausalLMOutputWithPast(

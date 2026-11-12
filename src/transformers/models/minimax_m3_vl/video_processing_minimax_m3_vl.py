@@ -14,13 +14,34 @@ from torchvision.transforms import InterpolationMode
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from .image_processing_minimax_m3_vl import smart_resize
 
 
 class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
+        The min pixels of a frame to resize the frame.
+    max_pixels (`int`, *optional*, defaults to `768 * 28 * 28`):
+        The max pixels of a frame to resize the frame.
+    total_pixels (`int`, *optional*, defaults to `int(64000 * 28 * 28 * 0.9)`):
+        The max total number of pixels across all frames of a video.
+    min_frames (`int`, *optional*, defaults to 4):
+        The minimum number of frames that can be sampled.
+    max_frames (`int`, *optional*, defaults to 768):
+        The maximum number of frames that can be sampled.
+    vision_segment_max_frames (`int`, *optional*, defaults to 4):
+        Maximum temporal patches per vision attention segment. Set to `None` to keep each video as one segment.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -29,9 +50,11 @@ class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
     total_pixels: int
     min_frames: int
     max_frames: int
+    vision_segment_max_frames: int | None
     fps: float | int
 
 
+@auto_docstring
 class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     do_resize = True
     resample = PILImageResampling.BICUBIC
@@ -53,16 +76,51 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     fps = 1.0
     min_frames = 4
     max_frames = 768
+    vision_segment_max_frames = 4
     valid_kwargs = MiniMaxM3VLVideoProcessorKwargs
-    model_input_names = ["pixel_values_videos", "video_grid_thw"]
+    model_input_names = ["pixel_values_videos", "video_grid_thw", "num_chunks_per_video"]
 
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLVideoProcessorKwargs]):
         super().__init__(**kwargs)
 
+    def get_num_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
+    ) -> int:
+        """
+        A utility that returns number of video patches for a given video size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without a video input.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs or {}
+        min_pixels = videos_kwargs.get("min_pixels", self.min_pixels)
+        max_pixels = videos_kwargs.get("max_pixels", self.max_pixels)
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor=factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
+
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: PILImageResampling | InterpolationMode | int | None,
@@ -76,6 +134,7 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
         merge_size: int,
         min_pixels: int,
         max_pixels: int,
+        vision_segment_max_frames: int | None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -127,9 +186,19 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
         processed = reorder_videos(processed_grouped, grouped_idx)
         grids = reorder_videos(grids, grouped_idx)
         pixel_values_videos = torch.cat(processed, dim=0)
-        video_grid_thw = torch.tensor(grids, dtype=torch.long)
+        video_grid_thw, num_chunks_per_video = [], []
+        for t, h, w in grids:
+            max_frames = t if vision_segment_max_frames is None else vision_segment_max_frames
+            chunks = [[min(max_frames, t - start), h, w] for start in range(0, t, max_frames)]
+            video_grid_thw.extend(chunks)
+            num_chunks_per_video.append(len(chunks))
+        video_grid_thw = torch.tensor(video_grid_thw, dtype=torch.long)
         return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
+            data={
+                "pixel_values_videos": pixel_values_videos,
+                "video_grid_thw": video_grid_thw,
+                "num_chunks_per_video": num_chunks_per_video,
+            },
             tensor_type=return_tensors,
         )
 

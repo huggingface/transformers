@@ -35,7 +35,6 @@ from ..utils import is_torch_flex_attn_available, logging
 from ..utils.import_utils import (
     get_torch_version,
     is_torch_greater_or_equal,
-    is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
 
@@ -78,12 +77,10 @@ class WrappedFlexAttention:
         """
         if not self._is_flex_compiled or training != self.training:
             self.training = training
-            if is_torch_less_or_equal("2.5.1"):
-                self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            elif version.parse(get_torch_version()).base_version == "2.6.0" and training:
+            if version.parse(get_torch_version()).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
@@ -242,8 +239,7 @@ def make_flex_block_causal_mask(
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
-        # compiling the mask is not BC with older torch
-        _compile=not is_torch_less_or_equal("2.5.1"),
+        _compile=True,
     )
 
 

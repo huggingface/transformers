@@ -186,5 +186,5 @@ for i in range(cfg.vocab_size):
 encoder = {v: k for k, v in decoder.items()}
 
 # save the vocab
-with open("./vocab.json", "w") as file:
+with open("./vocab.json", "w", encoding="utf-8") as file:
     file.write(json.dumps(encoder))

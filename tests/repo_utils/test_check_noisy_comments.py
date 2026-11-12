@@ -589,6 +589,31 @@ class NoisyCommentsTest(unittest.TestCase):
             self.assertEqual(blames[2].author_email, "someone@example.com")
             self.assertEqual(blames[1].commit_date, date(2026, 1, 1))
 
+    def test_blame_disables_lazy_fetch(self):
+        """Regression guard: on a partial clone (`--filter=blob:none`), plain `git blame` fetches
+        each missing historical blob one at a time over the network -- ~12s per file even when the
+        fetch itself fails fast, and well over a minute for a file with a long history. Measured on
+        this checker's default (diff-only) scan: 52m48s before this fix, ~108s after. Passing
+        `GIT_NO_LAZY_FETCH=1` makes a missing object a local, immediate failure instead; `blame`'s
+        own nonzero exit code already means "no blame info" to the caller (see
+        `test_ownership_filter_keeps_findings_without_blame`), so this changes nothing when every
+        object is local -- the ordinary case in CI -- and only trades a slow network stall for a
+        fast local failure when it is not.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, "def foo():\n    return 1\n")
+
+            completed = type("Completed", (), {"returncode": 0, "stdout": ""})()
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "_FILE_LINE_BLAME_CACHE", {}),
+                patch.object(check_noisy_comments.subprocess, "run", return_value=completed) as mock_run,
+            ):
+                check_noisy_comments._file_line_blames(path)
+
+            self.assertEqual(mock_run.call_args.kwargs.get("env", {}).get("GIT_NO_LAZY_FETCH"), "1")
+
     def test_noqa_marker_suppresses_only_the_named_rule(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
@@ -629,11 +654,51 @@ class NoisyCommentsTest(unittest.TestCase):
         )
         with (
             patch.object(check_noisy_comments, "_PATCH_ADDED_LINES_CACHE", {}),
-            patch.object(check_noisy_comments, "_git_output", side_effect=["abc123", diff]),
+            patch.object(check_noisy_comments, "_git_output", side_effect=["abc123", diff, ""]),
         ):
             added = check_noisy_comments._patch_added_lines()
 
         self.assertEqual(added, {check_noisy_comments.ROOT / "kept.py": {11, 12, 13, 43}})
+
+    def test_patch_added_lines_counts_every_line_of_untracked_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / "new.py").write_text("def foo():\n    # one\n    return 1\n", encoding="utf-8")
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "_PATCH_ADDED_LINES_CACHE", {}),
+                patch.object(check_noisy_comments, "_git_output", side_effect=["abc123", "", "new.py\n"]),
+            ):
+                added = check_noisy_comments._patch_added_lines()
+
+            self.assertEqual(added, {repo_root / "new.py": {1, 2, 3}})
+
+    def test_cli_without_targets_scopes_a_local_run_to_the_patch(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, NOISY_SOURCE)
+            argv = [
+                "check_noisy_comments.py",
+                "--fail-on-findings",
+                "--no-cache",
+                "--no-owner-filter",
+                "--no-date-filter",
+                "--progress",
+                "never",
+            ]
+
+            # A finding already on `main` (none of its lines in the patch) must not fail `make style`.
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "DEFAULT_TARGETS", ["."]),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
+                patch.object(check_noisy_comments, "_patch_added_lines", return_value={path: {8}}),
+                patch.object(sys, "argv", argv),
+                redirect_stdout(io.StringIO()) as stdout,
+            ):
+                exit_code = check_noisy_comments.main()
+
+            self.assertEqual(exit_code, 0, stdout.getvalue())
 
     def test_patch_scope_keeps_only_findings_overlapping_added_lines(self):
         with tempfile.TemporaryDirectory() as tmpdir:

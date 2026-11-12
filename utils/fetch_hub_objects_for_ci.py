@@ -26,8 +26,8 @@ from pathlib import Path
 # huggingface_hub reads HUGGINGFACE_CO_STAGING at import time and hardcodes hub-ci.huggingface.co.
 _staging_mode = os.environ.pop("HUGGINGFACE_CO_STAGING", None)
 
-import httpx  # noqa: E402
 from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
+from huggingface_hub.utils import httpx  # noqa: E402
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging  # noqa: E402
 from transformers.utils.import_utils import is_mistral_common_available  # noqa: E402
@@ -91,7 +91,7 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/two_dogs.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
     # we should rely on this single dataset for our tests
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",

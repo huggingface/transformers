@@ -247,7 +247,7 @@ class Mamba2ModelTester:
         model.eval()
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         token_emb = model.embeddings(input_ids)
         outputs_fast = model.layers[0].mixer.cuda_kernels_forward(token_emb)
@@ -278,7 +278,10 @@ class Mamba2ModelTester:
         input_ids = input_ids.to(torch_device)
         seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
         with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
 
         self.parent.assertTrue(seen, "the Mamba2 mixer was never called")
         self.parent.assertIn("seq_idx", seen[0])
@@ -315,6 +318,34 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
+    def test_mamba2_grouped_rmsnorm(self):
+        config = self.model_tester.get_config()
+        for n_groups in (1, 2, 8):
+            with self.subTest(n_groups=n_groups):
+                config.n_groups = n_groups
+                norm = Mamba2Mixer(config, layer_idx=0).norm
+                hidden_size = config.expand * config.hidden_size
+                norm.weight = torch.nn.Parameter(torch.linspace(0.5, 1.5, hidden_size))
+                hidden_states = torch.arange(1.0, hidden_size + 1).reshape(1, 1, -1).requires_grad_()
+                gate = torch.linspace(-1.0, 1.0, hidden_size).reshape_as(hidden_states).requires_grad_()
+                gated_states = hidden_states * torch.nn.functional.silu(gate)
+                expected = torch.cat(
+                    [
+                        torch.nn.functional.rms_norm(group, (group.shape[-1],), eps=norm.variance_epsilon)
+                        for group in gated_states.chunk(n_groups, dim=-1)
+                    ],
+                    dim=-1,
+                )
+                expected = expected * norm.weight
+                actual = norm(hidden_states, gate)
+                torch.testing.assert_close(actual, expected)
+                inputs = (hidden_states, gate, norm.weight)
+                torch.testing.assert_close(
+                    torch.autograd.grad(actual.sum(), inputs), torch.autograd.grad(expected.sum(), inputs)
+                )
+                for empty_states in (hidden_states[:0], hidden_states[:, :0]):
+                    torch.testing.assert_close(norm(empty_states), empty_states)
 
     def test_kwargs_reach_mamba2_mixer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -31,17 +31,12 @@ from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
-    is_vision_available,
     logging,
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
-
-
-if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
 
 
 logger = logging.get_logger(__name__)
@@ -66,17 +61,17 @@ def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
 @dataclass
 class Owlv2Output(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+    logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size * num_max_text_queries, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size * num_max_text_queries, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of
         [`Owlv2VisionModel`].
     text_model_output (tuple[`BaseModelOutputWithPooling`]):
@@ -85,11 +80,11 @@ class Owlv2Output(ModelOutput):
         The output of the [`Owlv2VisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -100,74 +95,6 @@ class Owlv2Output(ModelOutput):
         )
 
 
-# Copied from transformers.loss.loss_for_object_detection._upcast
-def _upcast(t: Tensor) -> Tensor:
-    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
-    if t.is_floating_point():
-        return t if t.dtype in (torch.float32, torch.float64) else t.float()
-    else:
-        return t if t.dtype in (torch.int32, torch.int64) else t.int()
-
-
-# Copied from transformers.loss.loss_for_object_detection.box_area
-def box_area(boxes: Tensor) -> Tensor:
-    """
-    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
-
-    Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
-            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
-            < x2` and `0 <= y1 < y2`.
-
-    Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
-    """
-    boxes = _upcast(boxes)
-    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-
-# Copied from transformers.loss.loss_for_object_detection.box_iou
-def box_iou(boxes1, boxes2):
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
-    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / union
-    return iou, union
-
-
-# Copied from transformers.loss.loss_for_object_detection.generalized_box_iou
-def generalized_box_iou(boxes1, boxes2):
-    """
-    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
-
-    Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
-    """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
-    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
-        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
-    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
-        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
-    iou, union = box_iou(boxes1, boxes2)
-
-    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
-
-    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
-    area = width_height[:, :, 0] * width_height[:, :, 1]
-
-    return iou - (area - union) / area
-
-
 @auto_docstring(
     custom_intro="""
     Output type of [`Owlv2ForObjectDetection`].
@@ -176,28 +103,28 @@ def generalized_box_iou(boxes1, boxes2):
 @dataclass
 class Owlv2ObjectDetectionOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
         A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_patches, num_queries)`):
         Classification logits (including no-object) for all queries.
-    objectness_logits (`torch.FloatTensor` of shape `(batch_size, num_patches, 1)`):
+    objectness_logits (`torch.Tensor` of shape `(batch_size, num_patches, 1)`):
         The objectness logits of all image patches. OWL-ViT represents images as a set of image patches where the
         total number of patches is (image_size / patch_size)**2.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_patches, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized bounding boxes.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, num_max_text_queries, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
         Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
         embeddings for each patch.
-    class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+    class_embeds (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size)`):
         Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
         number of patches is (image_size / patch_size)**2.
     text_model_output (tuple[`BaseModelOutputWithPooling`]):
@@ -206,14 +133,14 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
         The output of the [`Owlv2VisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     loss_dict: dict | None = None
-    logits: torch.FloatTensor | None = None
-    objectness_logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
-    class_embeds: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    objectness_logits: torch.Tensor | None = None
+    pred_boxes: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
+    class_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -233,25 +160,25 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTImageGuidedObjectDetectionOutput with OwlViT->Owlv2,OWL-ViT->OWLv2
 class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_patches, num_queries)`):
         Classification logits (including no-object) for all queries.
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
         Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
         image embeddings for each patch.
-    query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+    query_image_embeds (`torch.Tensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
         Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
         image embeddings for each patch.
-    target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+    target_pred_boxes (`torch.Tensor` of shape `(batch_size, num_patches, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual target image in the batch
         (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
         retrieve the unnormalized bounding boxes.
-    query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+    query_pred_boxes (`torch.Tensor` of shape `(batch_size, num_patches, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual query image in the batch
         (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
         retrieve the unnormalized bounding boxes.
-    class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+    class_embeds (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size)`):
         Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
         number of patches is (image_size / patch_size)**2.
     text_model_output (tuple[`BaseModelOutputWithPooling`]):
@@ -260,12 +187,12 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
         The output of the [`Owlv2VisionModel`].
     """
 
-    logits: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
-    query_image_embeds: torch.FloatTensor | None = None
-    target_pred_boxes: torch.FloatTensor | None = None
-    query_pred_boxes: torch.FloatTensor | None = None
-    class_embeds: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
+    query_image_embeds: torch.Tensor | None = None
+    target_pred_boxes: torch.Tensor | None = None
+    query_pred_boxes: torch.Tensor | None = None
+    class_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -340,7 +267,7 @@ class Owlv2VisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -368,7 +295,7 @@ class Owlv2TextEmbeddings(nn.Module):
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
@@ -502,7 +429,7 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -615,6 +542,8 @@ class Owlv2Encoder(nn.Module):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextTransformer(Owlv2PreTrainedModel):
+    config: Owlv2TextConfig
+
     def __init__(self, config: Owlv2TextConfig):
         super().__init__(config)
 
@@ -730,6 +659,8 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2VisionTransformer(Owlv2PreTrainedModel):
+    config: Owlv2VisionConfig
+
     def __init__(self, config: Owlv2VisionConfig):
         super().__init__(config)
 
@@ -746,7 +677,7 @@ class Owlv2VisionTransformer(Owlv2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -790,7 +721,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -798,7 +729,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2VisionModel
 
@@ -923,7 +854,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         return_loss: bool | None = None,
         interpolate_pos_encoding: bool = False,
@@ -939,7 +870,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2Model
 
@@ -1009,7 +940,7 @@ class Owlv2BoxPredictionHead(nn.Module):
         self.gelu = nn.GELU()
         self.dense2 = nn.Linear(width, out_dim)
 
-    def forward(self, image_features: torch.Tensor) -> torch.FloatTensor:
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         output = self.dense0(image_features)
         output = self.gelu(output)
         output = self.dense1(output)
@@ -1033,10 +964,10 @@ class Owlv2ClassPredictionHead(nn.Module):
 
     def forward(
         self,
-        image_embeds: torch.FloatTensor,
-        query_embeds: torch.FloatTensor | None,
+        image_embeds: torch.Tensor,
+        query_embeds: torch.Tensor | None,
         query_mask: torch.Tensor | None,
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1108,11 +1039,11 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return box_coordinates
 
-    def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
+    def objectness_predictor(self, image_features: torch.Tensor) -> torch.Tensor:
         """Predicts the probability that each image feature token is an object.
 
         Args:
-            image_features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_dim)`)):
+            image_features (`torch.Tensor` of shape `(batch_size, num_patches, hidden_dim)`)):
                 Features extracted from the image.
         Returns:
             Objectness scores.
@@ -1144,10 +1075,10 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.box_predictor
     def box_predictor(
         self,
-        image_feats: torch.FloatTensor,
-        feature_map: torch.FloatTensor,
+        image_feats: torch.Tensor,
+        feature_map: torch.Tensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """
         Args:
             image_feats:
@@ -1178,10 +1109,10 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.class_predictor
     def class_predictor(
         self,
-        image_feats: torch.FloatTensor,
-        query_embeds: torch.FloatTensor | None = None,
+        image_feats: torch.Tensor,
+        query_embeds: torch.Tensor | None = None,
         query_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         """
         Args:
             image_feats:
@@ -1199,11 +1130,11 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         attention_mask: torch.Tensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         outputs = self.owlv2(
             pixel_values=pixel_values,
             input_ids=input_ids,
@@ -1246,10 +1177,10 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_embedder with owlvit->owlv2, OwlViTModel->Owlv2Model
     def image_embedder(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         # Get Owlv2Model vision embeddings (same as CLIP)
         vision_outputs: BaseModelOutputWithPooling = self.owlv2.vision_model(
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
@@ -1285,48 +1216,19 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (image_embeds, vision_outputs)
 
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.embed_image_query
     def embed_image_query(
         self,
-        query_image_features: torch.FloatTensor,
-        query_feature_map: torch.FloatTensor,
+        query_image_features: torch.Tensor,
+        query_feature_map: torch.Tensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map, interpolate_pos_encoding)
-        pred_boxes_as_corners = center_to_corners_format(pred_boxes)
 
-        # Loop over query images
-        best_class_embeds = []
-        best_box_indices = []
-        pred_boxes_device = pred_boxes_as_corners.device
-
-        for i in range(query_image_features.shape[0]):
-            each_query_box = torch.tensor([[0, 0, 1, 1]], device=pred_boxes_device)
-            each_query_pred_boxes = pred_boxes_as_corners[i]
-            ious, _ = box_iou(each_query_box, each_query_pred_boxes)
-
-            # If there are no overlapping boxes, fall back to generalized IoU
-            if torch.all(ious[0] == 0.0):
-                ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
-
-            # Use an adaptive threshold to include all boxes within 80% of the best IoU
-            iou_threshold = torch.max(ious) * 0.8
-
-            selected_inds = (ious[0] >= iou_threshold).nonzero()
-            if selected_inds.numel():
-                selected_embeddings = class_embeds[i][selected_inds.squeeze(1)]
-                mean_embeds = torch.mean(class_embeds[i], axis=0)
-                mean_sim = torch.einsum("d,id->i", mean_embeds, selected_embeddings)
-                best_box_ind = selected_inds[torch.argmin(mean_sim)]
-                best_class_embeds.append(class_embeds[i][best_box_ind])
-                best_box_indices.append(best_box_ind)
-
-        if best_class_embeds:
-            query_embeds = torch.stack(best_class_embeds)
-            box_indices = torch.stack(best_box_indices)
-        else:
-            query_embeds, box_indices = None, None
+        # No query box is given, so use the box with the highest objectness as the query
+        objectness_logits = self.objectness_predictor(query_image_features)
+        box_indices = objectness_logits.argmax(dim=-1, keepdim=True)
+        query_embeds = torch.gather(class_embeds, 1, box_indices[..., None].expand(-1, -1, class_embeds.shape[-1]))
 
         return query_embeds, box_indices, pred_boxes
 
@@ -1334,18 +1236,18 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     @auto_docstring
     def image_guided_detection(
         self,
-        pixel_values: torch.FloatTensor,
-        query_pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        query_pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Owlv2ImageGuidedObjectDetectionOutput:
         r"""
-        query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        query_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values of query image(s) to be detected. Pass in one query image per target image.
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
@@ -1377,19 +1279,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.938 at location [327.31, 54.94, 547.39, 268.06]
-        Detected similar object with confidence 0.959 at location [5.78, 360.65, 619.12, 366.39]
-        Detected similar object with confidence 0.902 at location [2.85, 360.01, 627.63, 380.8]
-        Detected similar object with confidence 0.985 at location [176.98, -29.45, 672.69, 182.83]
-        Detected similar object with confidence 1.0 at location [6.53, 14.35, 624.87, 470.82]
-        Detected similar object with confidence 0.998 at location [579.98, 29.14, 615.49, 489.05]
-        Detected similar object with confidence 0.985 at location [206.15, 10.53, 247.74, 466.01]
-        Detected similar object with confidence 0.947 at location [18.62, 429.72, 646.5, 457.72]
-        Detected similar object with confidence 0.996 at location [523.88, 20.69, 586.84, 483.18]
-        Detected similar object with confidence 0.998 at location [3.39, 360.59, 617.29, 499.21]
-        Detected similar object with confidence 0.969 at location [4.47, 449.05, 614.5, 474.76]
-        Detected similar object with confidence 0.966 at location [31.44, 463.65, 654.66, 471.07]
-        Detected similar object with confidence 0.924 at location [30.93, 468.07, 635.35, 475.39]
+        Detected similar object with confidence 1.0 at location [341.76, 22.77, 640.65, 370.25]
+        Detected similar object with confidence 1.0 at location [6.59, 51.43, 329.05, 476.77]
         ```"""
         # Compute feature maps for the input and query images
         query_feature_map = self.image_embedder(
@@ -1435,7 +1326,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -1448,7 +1339,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch

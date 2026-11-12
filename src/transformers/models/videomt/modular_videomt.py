@@ -18,6 +18,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...file_utils import ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -120,28 +121,28 @@ class VideomtForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
         The computed loss, returned when labels are present.
-    class_queries_logits (`torch.FloatTensor`):
+    class_queries_logits (`torch.Tensor`):
         A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
         query. Note the `+ 1` is needed because we incorporate the null class.
-    masks_queries_logits (`torch.FloatTensor`):
+    masks_queries_logits (`torch.Tensor`):
         A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
         query.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last layer.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
-    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `tuple(torch.Tensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     """
 
-    loss: torch.FloatTensor | None = None
-    class_queries_logits: torch.FloatTensor | None = None
-    masks_queries_logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    class_queries_logits: torch.Tensor | None = None
+    masks_queries_logits: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class VideomtPreTrainedModel(EomtPreTrainedModel):
@@ -152,7 +153,7 @@ class VideomtPreTrainedModel(EomtPreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
         if isinstance(module, VideomtEmbeddings):
-            nn.init.zeros_(module.mask_token)
+            init.zeros_(module.mask_token)
 
 
 class VideomtLayerNorm2d(EomtLayerNorm2d):

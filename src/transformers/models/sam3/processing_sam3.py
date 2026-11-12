@@ -589,7 +589,7 @@ class Sam3Processor(ProcessorMixin):
         ```python
         >>> from transformers import AutoModel, AutoProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = AutoModel.from_pretrained("facebook/sam3-base")
@@ -645,7 +645,7 @@ class Sam3Processor(ProcessorMixin):
         ```python
         >>> from transformers import AutoModel, AutoProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = AutoModel.from_pretrained("facebook/sam3-base")

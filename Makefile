@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -31,6 +31,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	config_docstrings, \
 	config_attributes, \
 	doctest_list, \
+	gitattributes, \
 	update_metadata, \
 	add_dates, \
 	deps_table
@@ -66,13 +67,15 @@ fix-repo:
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
-# Run tests for examples, requires pytest-random-order
-test-examples:
-	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./examples/pytorch/
-
-# Run benchmark
-benchmark:
-	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+# Run pinned MIC fixtures against this checkout (MODEL=bert, ALL=1, BASE=origin/main, FLEET=prototypes|control, JOBS=4).
+# Opt-in checker (network + model runtimes), deliberately not in any CI checker list above.
+run-mic: export MODEL := $(MODEL)
+run-mic: export ALL := $(ALL)
+run-mic: export BASE := $(BASE)
+run-mic: export FLEET := $(FLEET)
+run-mic: export JOBS := $(JOBS)
+run-mic:
+	@python utils/checkers.py mic
 
 codex:
 	mkdir -p .agents

@@ -34,7 +34,7 @@ from transformers.utils import (
     to_py_obj,
     transpose,
 )
-from transformers.utils.generic import retry, split_attention_implementation
+from transformers.utils.generic import retry, torch_float
 
 
 if is_torch_available():
@@ -66,6 +66,11 @@ class GenericTester(unittest.TestCase):
         }
 
         self.assertEqual(flatten_dict(input_dict), expected_dict)
+
+    def test_torch_float(self):
+        result = torch_float(9.797958971132712)
+        self.assertIsInstance(result, float)
+        self.assertEqual(result, 9.797958971132712)
 
     def test_transpose_numpy(self):
         x = np.random.randn(3, 4)
@@ -129,15 +134,6 @@ class GenericTester(unittest.TestCase):
         self.assertTrue(to_py_obj(t2) == x2)
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-
-    def test_split_attention_implementation(self):
-        self.assertEqual(split_attention_implementation(None), (False, None))
-        self.assertEqual(split_attention_implementation("sdpa"), (False, "sdpa"))
-        self.assertEqual(split_attention_implementation("paged|flash_attention_2"), (True, "flash_attention_2"))
-        self.assertEqual(
-            split_attention_implementation("paged|kernels-community/flash-attn3"),
-            (True, "kernels-community/flash-attn3"),
-        )
 
     @require_torch
     def test_to_py_obj_torch(self):

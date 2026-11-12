@@ -68,8 +68,7 @@ class SolarOpenConfig(Glm4MoeConfig):
     num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
-        kwargs.setdefault("partial_rotary_factor", 1.0)
-        super().__post_init__(**kwargs)
+        raise NotImplementedError("no need to override for SolarOpen")
 
 
 class SolarOpenDecoderLayer(LlamaDecoderLayer):

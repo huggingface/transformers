@@ -39,48 +39,18 @@ if is_vision_available():
 
 
 class EomtImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        size=None,
-        do_resize=True,
-        do_pad=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        num_labels=10,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_pad = do_pad
-        self.size = size if size is not None else {"shortest_edge": 18, "longest_edge": 18}
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.num_labels = num_labels
-        # for the post_process methods
-        self.num_queries = 3
-        self.height = 18
-        self.width = 18
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("height", 18)
+        kwargs.setdefault("width", 18)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-            "num_labels": self.num_labels,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 18})
+        kwargs.setdefault("do_pad", True)
+
+        super().__init__(**kwargs)
 
     def prepare_fake_eomt_outputs(self, batch_size, patch_offsets=None):
         return EomtForUniversalSegmentationOutput(
@@ -109,34 +79,11 @@ class EomtImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
+    image_processor_tester_class = EomtImageProcessingTester
+
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = EomtImageProcessingTester(self)
         self.model_id = "tue-mps/coco_panoptic_eomt_large_640"
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "resample"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, self.image_processor_tester.size)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"shortest_edge": 42})
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -149,7 +96,12 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, self.image_processor_tester.height, self.image_processor_tester.width)
+            expected_output_image_shape = (
+                1,
+                3,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
+            )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
@@ -175,7 +127,12 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
 
             # Test Non batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, self.image_processor_tester.height, self.image_processor_tester.width)
+            expected_output_image_shape = (
+                1,
+                3,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
+            )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
@@ -197,7 +154,12 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
                 self.assertIsInstance(image, torch.Tensor)
 
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 3, self.image_processor_tester.height, self.image_processor_tester.width)
+            expected_output_image_shape = (
+                1,
+                3,
+                self.image_processor_tester.height,
+                self.image_processor_tester.width,
+            )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values

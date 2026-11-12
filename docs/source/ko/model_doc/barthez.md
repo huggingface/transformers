@@ -45,12 +45,6 @@ BARThez 전용 토크나이저는 아래에 문서화되어 있습니다.
 
 </Tip>
 
-## 리소스 [[resources]]
-
-- BARThez는 🤗 BART와 유사한 방식으로 시퀀스-투-시퀀스 작업에 맞춰 미세 조정될 수 있습니다. 다음을 확인하세요:
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
-
-
 ## BarthezTokenizer [[bartheztokenizer]]
 
 [[autodoc]] BarthezTokenizer

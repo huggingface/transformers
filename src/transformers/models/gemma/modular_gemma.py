@@ -101,6 +101,17 @@ class GemmaConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     use_bidirectional_attention: bool | None = None
 
+    def __post_init__(self, **kwargs):
+        # #35235 dropped this conversion (which is needed per #29402) which we now handle here instead
+        if self.hidden_act == "gelu":
+            logger.warning_once(
+                'We found `hidden_act="gelu"` in this Gemma config. This is a legacy value of the official '
+                'releases but it is meant to target the tanh approximation. Setting `hidden_act="gelu_pytorch_tanh"` instead.'
+            )
+            self.hidden_act = "gelu_pytorch_tanh"
+
+        super().__post_init__(**kwargs)
+
 
 class GemmaTextScaledWordEmbedding(nn.Embedding):
     """
@@ -181,7 +192,7 @@ class GemmaModel(LlamaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:

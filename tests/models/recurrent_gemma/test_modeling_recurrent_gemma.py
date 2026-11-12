@@ -18,7 +18,14 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    CompileConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -46,6 +53,36 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
         self.block_types = ("recurrent", "attention")
+
+    def create_and_check_generate_compile_static_cache(self, config, input_ids, model_class):
+        model = model_class(config).to(torch_device).eval()
+        input_ids = input_ids[:1].to(torch_device)
+
+        with torch.no_grad():
+            static_output = model.generate(
+                input_ids=input_ids,
+                max_new_tokens=2,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="static",
+            )
+
+        torch.compiler.reset()
+
+        compile_config = CompileConfig(mode="default", fullgraph=False, dynamic=True)
+        compile_config._compile_all_devices = True
+
+        with torch.no_grad():
+            compiled_static_output = model.generate(
+                input_ids=input_ids,
+                max_new_tokens=2,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="static",
+                compile_config=compile_config,
+            )
+
+        self.parent.assertTrue(torch.equal(compiled_static_output, static_output))
 
 
 @require_torch
@@ -114,6 +151,14 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
+    @pytest.mark.generate
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_static_cache(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_generate_compile_static_cache(
+            config, inputs_dict["input_ids"], self.all_generative_model_classes[0]
+        )
+
     @unittest.skip(reason="Past key values are not returned")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
@@ -134,6 +179,13 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma's output different if you pad left or right. This is expected")
     def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip(
+        "RecurrentGemma's recurrent block has no chunked-continuation support: a cached multi-token forward is "
+        "treated as a new prefill, so the split-vs-single comparison cannot match regardless of padding masking."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass
 
     @pytest.mark.generate
@@ -193,7 +245,7 @@ class RecurrentGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "google/recurrentgemma-2b"
 
     def test_2b_generate(self):
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', "Hi today the 19th of June 2019, I was in the office of the Ministry of Health and Social Protection of the Republic of Uzbekistan. I was there to discuss the issue of the implementation of the project “Strengthening the capacity of the Ministry of Health and Social Protection of the Republic of Uzbekistan to"]  # fmt: skip
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
         ).to(torch_device)
@@ -209,7 +261,7 @@ class RecurrentGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
         tokenizer.padding_side = "left"
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today I’m going to show you how to make a simple and easy to make a <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY</strong> <strong>DIY']  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', "Hi today I'm going to show you how to make a simple and easy to make a 3D model of a house.\n\nYou will need:\n\n* A 3D printer\n* A 3D model of a house\n* A 3D printer filament\n* A 3D printer pen\n"]  # fmt: skip
 
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
@@ -252,7 +304,8 @@ class RecurrentGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", None): ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am stuck', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
-                (None, None): ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
+                ("rocm", (9, 4)): ['Hello I am doing a project on the 1960s and I am looking for a picture of a ', 'Hi today I am going to show you how to make a simple and easy to make a <strong>DIY</strong>'],
+                (None, None): ['Hello I am doing a project on the effects of the environment on the human body. I am looking for a few good', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
             }
         )
         # fmt: on

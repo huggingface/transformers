@@ -301,7 +301,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
     def test_model_integration(self):
         # reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_single_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             expected = json.load(f)
 
         samples = self._load_datasamples(1)
@@ -336,7 +336,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
     def test_model_integration_batched(self):
         # reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_batch_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             expected = json.load(f)
 
         samples = self._load_datasamples(5)
@@ -391,7 +391,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_streaming_rnnt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_streaming.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             expected = json.load(f)
         right = expected["att_context_size"][1]
 

@@ -152,13 +152,13 @@ def main():
     if training_args.do_eval:
         eval_metrics = trainer.evaluate()
         if eval_output_file and training_args.process_index == 0:
-            with open(eval_output_file, "w") as f:
+            with open(eval_output_file, "w", encoding="utf-8") as f:
                 json.dump(eval_metrics, f)
 
     # Save per-step losses for equivalence testing
     if training_args.do_train and loss_output_file and training_args.process_index == 0:
         losses = [log["loss"] for log in trainer.state.log_history if "loss" in log]
-        with open(loss_output_file, "w") as f:
+        with open(loss_output_file, "w", encoding="utf-8") as f:
             json.dump(losses, f)
 
 

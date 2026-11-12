@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -115,11 +115,11 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
 @dataclass
 class GraniteSpeechPlusModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
+    audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
     """
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -148,7 +148,7 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
         return audio_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -206,12 +206,12 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteSpeechPlusModelOutputWithPast:
@@ -487,25 +487,25 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
 @dataclass
 class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
+    audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    audio_hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -516,6 +516,7 @@ class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
 )
 class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: GraniteSpeechPlusConfig):
         super().__init__(config)
@@ -540,12 +541,12 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -554,10 +555,6 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         r"""
         input_features_mask (`torch.Tensor`, *optional*):
             Mask to be applied to audio features prior to scattering into the language embeddings.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         # TODO (@alex-jw-brooks) add an example to this docstring once models are released
         outputs = self.model(
@@ -573,8 +570,8 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

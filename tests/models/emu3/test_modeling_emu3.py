@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
 
-from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
+from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -36,9 +36,6 @@ from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-if is_vision_available():
-    pass
 
 if is_torch_available():
     import torch
@@ -138,10 +135,6 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
-    def test_custom_4d_attention_mask(self):
-        pass
 
 
 class Emu3Vision2TextModelTester:
@@ -293,8 +286,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else {}
     )
     skip_test_image_features_output_shape = True  # Emu3 uses index -3 for hidden_size instead of -1
-
-    test_torch_exportable = False  # data-dependent control flow in vision/segmentation head
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)

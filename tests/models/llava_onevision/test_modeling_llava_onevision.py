@@ -308,7 +308,7 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             ]
         )
         config = self.model_tester.get_config()
-        inputs_dict = {"pixel_values": pixel_values_videos}
+        inputs_dict = {"pixel_values_videos": pixel_values_videos}
         return config, inputs_dict
 
 
@@ -401,6 +401,9 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt").to(
             torch_device, torch.float16
         )
+
+        video_features = model.get_video_features(inputs.pixel_values_videos).pooler_output
+        self.assertEqual(video_features.shape[1], (inputs.input_ids == model.config.video_token_id).sum().item())
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)

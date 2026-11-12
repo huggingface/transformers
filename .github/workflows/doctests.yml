@@ -16,6 +16,8 @@ permissions:
 
 jobs:
   setup:
+    permissions:
+      contents: read
     name: Setup
     runs-on: 
       group: aws-g5-4xlarge-cache

@@ -1119,8 +1119,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             compressed-tensors decompresses them on the first forward pass.
         use_optimized_inference (`bool`, *optional*, defaults to `False`): when `True`, the layers whose scheme we
             have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
-            CUDA SM89+ or XPU). Inference only, and opt-in: without it the model goes through the regular
-            compressed-tensors route. Ignored when `dequantize=True`.
+            CUDA SM89+, XPU, or MPS with torch >= 2.15). Inference only, and opt-in: without it the model goes
+            through the regular compressed-tensors route. Ignored when `dequantize=True`.
     """
 
     def __init__(
@@ -1173,14 +1173,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if not self.dequantize and not self.is_quantization_compressed:
-            # Nothing is stored compressed, so there is neither anything to execute compressed nor
-            # anything to accelerate: the weights are already dense.
-            logger.warning(
-                "Compressed execution is only supported for compressed checkpoints. Setting `dequantize=True`."
-            )
-            self.dequantize = True
-
         if self.use_optimized_inference:
             # Whether the optimized path is reachable at all is decided here; whether the hardware
             # can run its kernels is left to `HfQuantizer.validate_environment`.
@@ -1705,6 +1697,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
+        expert_dtype (`str`, *optional*, defaults to `"fp8"`):
+            Format of the MoE experts' weights: `"fp8"`, or `"fp4"` for DeepSeek-V4's FP4-packed experts.
     """
 
     def __init__(
@@ -1715,6 +1709,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_not_convert: list | None = None,
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
+        expert_dtype: str = "fp8",
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1728,6 +1723,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
+        self.expert_dtype = expert_dtype
         self.post_init()
 
     def post_init(self):
@@ -1743,6 +1739,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        if self.expert_dtype not in ("fp8", "fp4"):
+            raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}

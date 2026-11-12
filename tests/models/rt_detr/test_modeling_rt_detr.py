@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_scipy,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -48,7 +49,7 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrForObjectDetection, RTDetrModel
-    from transformers.loss.loss_rt_detr import RTDetrLoss
+    from transformers.loss.loss_rt_detr import RTDetrHungarianMatcher, RTDetrLoss
 
 if is_vision_available():
     from PIL import Image
@@ -260,8 +261,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-
-    test_missing_keys = False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -607,6 +606,36 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for key in ("loss_vfl", "loss_bbox", "loss_giou"):
             torch.testing.assert_close(outputs.loss_dict[key], reference[key])
 
+    def _prepare_matcher_and_targets(self, num_queries, num_targets):
+        config = RTDetrConfig(num_labels=4)
+        matcher = RTDetrHungarianMatcher(config)
+        logits = torch.rand(1, num_queries, config.num_labels)
+        pred_boxes = torch.rand(1, num_queries, 4) * 0.5 + 0.25
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets) % config.num_labels,
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+        return matcher, logits, pred_boxes, targets
+
+    @require_scipy
+    def test_matcher_with_nan_logits(self):
+        """NaN costs must not make `linear_sum_assignment` fail. Predictions with NaN costs must only be
+        matched if there is no finite prediction left.
+
+        See https://github.com/huggingface/transformers/issues/47000
+        """
+        num_queries, num_nan_queries, num_targets = 4, 2, 2
+        matcher, logits, pred_boxes, targets = self._prepare_matcher_and_targets(num_queries, num_targets)
+        logits[0, :num_nan_queries] = float("nan")
+
+        indices = matcher({"logits": logits, "pred_boxes": pred_boxes}, targets)
+
+        source_indices, target_indices = indices[0]
+        self.assertEqual(source_indices.tolist(), list(range(num_nan_queries, num_queries)))
+        self.assertEqual(sorted(target_indices.tolist()), list(range(num_targets)))
+
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
@@ -713,6 +742,21 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
+
+    def test_base_model_from_detection_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: detection checkpoints
+        # store every weight under the `model.` prefix, and `RTDetrModel` used to load them with all weights
+        # randomly initialized.
+        base_model, loading_info = RTDetrModel.from_pretrained(CHECKPOINT, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # only the object detection heads are not part of the base model
+        self.assertTrue(all("class_embed" in k or "bbox_embed" in k for k in loading_info["unexpected_keys"]))
+
+        head_model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

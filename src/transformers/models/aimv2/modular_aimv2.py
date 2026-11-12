@@ -77,6 +77,7 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     is_native: bool = False
 
     layer_norm_eps = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
@@ -344,7 +345,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
@@ -386,7 +387,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
-
+    config: Aimv2TextConfig
     _can_record_outputs = {
         "hidden_states": Aimv2EncoderLayer,
         "attentions": Aimv2Attention,
@@ -480,7 +481,7 @@ class Aimv2Model(CLIPModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Aimv2Output:
@@ -489,7 +490,7 @@ class Aimv2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Aimv2Model
 

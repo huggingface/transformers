@@ -17,13 +17,14 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import (
     auto_docstring,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ...utils.deprecation import deprecate_attr
+from ..auto import AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
 from ..janus.image_processing_pil_janus import JanusImageProcessorPil
@@ -53,29 +54,15 @@ class DeepseekVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_vl"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 100015
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 class DeepseekVLBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -114,7 +101,7 @@ class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
 
 @auto_docstring
 class DeepseekVLModel(JanusModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
         self.config = config
 
@@ -159,20 +146,10 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
-    valid_processor_kwargs = DeepseekVLProcessorKwargs
+    text_kwargs = {"return_tensors": "pt"}
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,
@@ -194,6 +171,8 @@ class DeepseekVLProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "DeepseekVLConfig",

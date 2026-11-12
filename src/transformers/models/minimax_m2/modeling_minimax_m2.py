@@ -34,11 +34,10 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_minimax_m2 import MiniMaxM2Config
 
@@ -146,8 +145,7 @@ class MiniMaxM2RMSNorm(nn.Module):
 
 
 class MiniMaxM2RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MiniMaxM2Config, device=None):
+    def __init__(self, config: MiniMaxM2Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -158,13 +156,12 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: MiniMaxM2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -188,18 +185,10 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -445,7 +434,7 @@ class MiniMaxM2Model(MiniMaxM2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -529,6 +518,9 @@ def load_balancing_loss_func(
     # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
     # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
     compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
     tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     total_rows = 0.0
@@ -541,9 +533,9 @@ def load_balancing_loss_func(
         routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
         _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
         if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
             )
             # Sum of routing probabilities per expert
             router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
@@ -570,7 +562,7 @@ class MiniMaxM2ForCausalLM(MiniMaxM2PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: MiniMaxM2Config):
         super().__init__(config)
         self.model = MiniMaxM2Model(config)
         self.vocab_size = config.vocab_size
@@ -590,7 +582,7 @@ class MiniMaxM2ForCausalLM(MiniMaxM2PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
@@ -598,11 +590,6 @@ class MiniMaxM2ForCausalLM(MiniMaxM2PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -637,9 +624,8 @@ class MiniMaxM2ForCausalLM(MiniMaxM2PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

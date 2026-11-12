@@ -14,8 +14,10 @@
 
 import copy
 import random
-from inspect import signature
+import tempfile
 from unittest.mock import patch
+
+from huggingface_hub import get_safetensors_metadata
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
@@ -29,15 +31,17 @@ from .test_modeling_common import (
 if is_torch_available():
     import torch
 
+    from transformers import PreTrainedConfig
+    from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers.utils.auto_docstring import get_checkpoint_from_config_class
+
 
 class ALMModelTester(MultiModalModelTester):
-    audio_config_class = None
     audio_config_key = "audio_config"
     # Name under which the audio mask is passed to the model's forward (e.g. "feature_attention_mask"
     # for Qwen2Audio). Leave as `None` if the model does not consume a separate audio-level mask;
     # `_prepare_modality_inputs` then skips adding it to the inputs dict.
     audio_mask_key = None
-    _required_attributes = MultiModalModelTester._required_attributes + ("audio_config_class",)
 
     @property
     def pipeline_model_mapping(self):
@@ -63,9 +67,10 @@ class ALMModelTester(MultiModalModelTester):
 
     # -- Overridable ALM-specific hooks ------------------------------------------------------
 
-    def create_audio_features(self):
+    def create_audio_features(self, batch_size: int | None = None):
         """Create audio feature tensor. Override for different shapes (e.g. [B, T, features])."""
-        return floats_tensor([self.batch_size, self.num_mel_bins, self.feat_seq_length])
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size, self.num_mel_bins, self.feat_seq_length])
 
     def get_audio_embeds_mask(self, audio_embeds_mask):
         """Get audio embeds mask from audio mask. Override for different shapes."""
@@ -95,7 +100,7 @@ class ALMModelTester(MultiModalModelTester):
         """Key name for audio features in the inputs dict."""
         return "input_features"
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         """Create audio-level attention mask with contiguous valid regions per batch element.
 
         Each element gets a random offset and length, producing masks like [0, 0, 1, 1, 1, 0, 0].
@@ -103,13 +108,14 @@ class ALMModelTester(MultiModalModelTester):
         """
         # Use a locally-seeded RNG so repeated calls within a test produce the same mask
         rng = random.Random(0)
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # Sample lengths in [1, feat_seq_length] and offsets in [0, feat_seq_length - length]
-        lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
+        lengths = ids_tensor([batch_size], vocab_size=self.feat_seq_length, rng=rng).abs() + 1
         lengths = lengths.clamp(max=self.feat_seq_length)
 
         # Presuming feat_seq_length is set correctly, ensure at least one batch has a full-length mask for valid audio tokens
-        lengths[rng.randint(0, self.batch_size - 1)] = self.feat_seq_length
-        offsets = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
+        lengths[rng.randint(0, batch_size - 1)] = self.feat_seq_length
+        offsets = ids_tensor([batch_size], vocab_size=self.feat_seq_length, rng=rng).abs()
         offsets = offsets % (self.feat_seq_length - lengths + 1)
 
         positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
@@ -122,12 +128,9 @@ class ALMModelTester(MultiModalModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.audio_token_id}
 
-    def _build_modality_sub_configs(self):
-        return {self.audio_config_key: self.get_audio_config()}
-
-    def _prepare_modality_inputs(self, input_ids, config):
-        audio_features = self.create_audio_features()
-        audio_mask = self.create_audio_mask()
+    def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
+        audio_features = self.create_audio_features(batch_size=batch_size)
+        audio_mask = self.create_audio_mask(batch_size=batch_size)
         audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
         num_audio_tokens = audio_embeds_mask.sum(dim=1)
         input_ids = self.place_audio_tokens(input_ids, config, num_audio_tokens)
@@ -135,17 +138,12 @@ class ALMModelTester(MultiModalModelTester):
         modality_inputs = {self.get_audio_feature_key(): audio_features}
         if self.audio_mask_key is not None:
             modality_inputs[self.audio_mask_key] = audio_mask
+
+        additional_inputs = self.get_additional_inputs(
+            config, input_ids, modality_inputs=modality_inputs, batch_size=batch_size
+        )
+        modality_inputs.update(additional_inputs)
         return input_ids, modality_inputs
-
-    # -- Audio sub-config construction -------------------------------------------------------
-
-    @property
-    def audio_config_args(self):
-        return list(signature(self.audio_config_class.__init__).parameters.keys())
-
-    def get_audio_config(self):
-        kwargs = self._collect_kwargs(self.audio_config_args, self.audio_config_class)
-        return self.audio_config_class(**kwargs)
 
 
 class ALMModelTest(MultiModalModelTest):
@@ -164,9 +162,10 @@ class ALMModelTest(MultiModalModelTest):
         # `test_sdpa_can_dispatch_on_flash` already pops the attention mask, but we cannot simply pop the
         # audio mask here since it will raise an error in `get_audio_features` (cf. `test_mismatching_num_audio_tokens`).
         # Therefore we substitute a full-ones mask instead.
-        def full_ones_mask():
+        def full_ones_mask(batch_size: int | None = None):
+            batch_size = batch_size if batch_size is not None else self.model_tester.batch_size
             return torch.ones(
-                [self.model_tester.batch_size, self.model_tester.feat_seq_length],
+                [batch_size, self.model_tester.feat_seq_length],
                 dtype=torch.bool,
                 device=torch_device,
             )
@@ -248,3 +247,46 @@ class ALMModelTest(MultiModalModelTest):
                     [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key]], dim=0
                 )
             _ = model(**curr_input_dict)
+
+    # TODO: @eustlb, escalate to core? Core `test_reverse_loading_mapping` only checks self-consistency (no reference
+    # layout), so it misses #45534. No saved layout is enforced: built from config, all rules are reverted and rule
+    # order picks the layout when rules collide (#45534, nemotron3_5_transcribe, inkling); after `from_pretrained`,
+    # used rules can still collide (inkling), untested. Escalating = run this check for every model with a mapping.
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        """
+        Model built from config (no `from_pretrained`) must save under its reference checkpoint's tensor names.
+        Regression test for #45534: saved `language_model.model.model.*` instead of the checkpoint's
+        `language_model.model.*`.
+
+        Test:
+            1. reference = repo in config docstring, fetch only its config + safetensors header
+            2. build model from that config on meta
+            3. run `save_pretrained`, capture the names it writes (file write patched out)
+            4. every saved name must be in the checkpoint -> catches #45534
+        """
+        model_class = self.model_tester.conditional_generation_class
+        config_class = model_class.config_class
+        repo = get_checkpoint_from_config_class(config_class)
+        if repo is None:  # `auto_docstring(custom_intro=...)` drops the link, the sub-configs keep it (e.g. Inkling)
+            sub_config_classes = [
+                c for c in config_class.sub_configs.values() if isinstance(c, type) and issubclass(c, PreTrainedConfig)
+            ]
+            repo = next(filter(None, map(get_checkpoint_from_config_class, sub_config_classes)), None)
+        if repo is None:
+            self.skipTest(f"No reference checkpoint declared for {config_class.__name__}")
+        config = config_class.from_pretrained(repo)
+        with torch.device("meta"):
+            model = model_class(config)
+        if not get_model_conversion_mapping(model, add_legacy=False):
+            self.skipTest("No checkpoint conversion mapping: the model saves its own parameter names")
+        checkpoint_keys = set(get_safetensors_metadata(repo).weight_map)
+
+        # Real `save_pretrained`, only the file write is replaced (meta tensors can't be written)
+        saved_keys = set()
+        with (
+            tempfile.TemporaryDirectory() as tmpdirname,
+            patch("transformers.modeling_utils.safe_save_file", lambda shard, *_, **__: saved_keys.update(shard)),
+        ):
+            model.save_pretrained(tmpdirname)
+
+        self.assertEqual(saved_keys - checkpoint_keys, set(), f"Saved under names that are not in {repo}")

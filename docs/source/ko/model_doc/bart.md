@@ -85,26 +85,25 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 - [분산형 학습: 🤗 Transformers와 Amazon SageMaker를 이용하여 요약하기 위한 BART/T5 학습](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq)에 대한 블로그 포스트.
 - [blurr를 이용하여 fastai로 요약하기 위한 BART를 미세 조정](https://colab.research.google.com/github/ohmeow/ohmeow_website/blob/master/posts/2021-05-25-mbart-sequence-classification-with-blurr.ipynb)하는 방법에 대한 노트북. 🌎
 - [Trainer 클래스를 사용하여 두 가지 언어로 요약하기 위한 BART 미세 조정](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb)하는 방법에 대한 노트북. 🌎
-- 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)에서는  [`BartForConditionalGeneration`]이 지원됩니다.
-- [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)에서 지원됩니다.
-- 이 [예제 스크립트에서는](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization)[`FlaxBartForConditionalGeneration`]이 지원됩니다.
+- 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)에서는  [`BartForConditionalGeneration`]이 지원됩니다.
+- [`TFBartForConditionalGeneration`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)에서 지원됩니다.
 - Hugging Face `datasets` 객체를 활용하여 [`BartForConditionalGeneration`]을 학습시키는 방법의 예는 이 [포럼 토론](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904)에서 찾을 수 있습니다.
 - 🤗 Hugging Face 코스의 [요약](https://huggingface.co/course/chapter7/5?fw=pt#summarization)장.
 - [요약 작업 가이드](../tasks/summarization)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`BartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)을 참고하세요.
-- [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참고하세요.
-- [`FlaxBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)을 참고 하세요.
+- [`BartForConditionalGeneration`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)을 참고하세요.
+- [`TFBartForConditionalGeneration`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참고하세요.
+- [`FlaxBartForConditionalGeneration`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)을 참고 하세요.
 - 🤗 Hugging Face 코스의 [마스크 언어 모델링](https://huggingface.co/course/chapter7/3?fw=pt) 챕터.
 - [마스크 언어 모델링 작업 가이드](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="translation"/>
 
 - [Seq2SeqTrainer를 이용하여 인도어를 영어로 번역하는 mBART를 미세 조정](https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb)하는 방법에 대한 가이드. 🌎
-- [`BartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)을 참고하세요.
-- [`TFBartForConditionalGeneration`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)을 참고 하세요.
+- [`BartForConditionalGeneration`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)을 참고하세요.
+- [`TFBartForConditionalGeneration`]는 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)을 참고 하세요.
 - [번역 작업 가이드](../tasks/translation)
 
 추가적으로 볼 것들:

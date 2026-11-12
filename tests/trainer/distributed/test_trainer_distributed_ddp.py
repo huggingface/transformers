@@ -149,11 +149,11 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
-        with open(f"{output_dir}/base_losses.json") as f:
+        with open(f"{output_dir}/base_losses.json", encoding="utf-8") as f:
             base_loss = json.load(f)
-        with open(f"{output_dir}/multi/broken_losses.json") as f:
+        with open(f"{output_dir}/multi/broken_losses.json", encoding="utf-8") as f:
             broken_loss = json.load(f)
-        with open(f"{output_dir}/multi/fixed_losses.json") as f:
+        with open(f"{output_dir}/multi/fixed_losses.json", encoding="utf-8") as f:
             fixed_loss = json.load(f)
 
         broken_diff = [abs(base_loss[i] - broken_loss[i]) for i in range(len(base_loss))]
@@ -195,9 +195,9 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         for rank in range(num_processes):
-            with open(os.path.join(torchrun_dir, f"env_rank{rank}.json")) as f:
+            with open(os.path.join(torchrun_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:
                 tr = json.load(f)
-            with open(os.path.join(accelerate_dir, f"env_rank{rank}.json")) as f:
+            with open(os.path.join(accelerate_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:
                 ac = json.load(f)
 
             for info in (tr, ac):

@@ -35,11 +35,10 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
@@ -57,23 +56,23 @@ logger = logging.get_logger(__name__)
 @dataclass
 class IdeficsBaseModelOutputWithPast(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
 
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -84,28 +83,28 @@ class IdeficsBaseModelOutputWithPast(ModelOutput):
 @dataclass
 class IdeficsCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
 
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: tuple[torch.Tensor] | None = None
 
 
 def expand_inputs_for_generation(
@@ -358,8 +357,7 @@ class IdeficsRMSNorm(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Idefics
 class IdeficsRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: IdeficsConfig, device=None):
+    def __init__(self, config: IdeficsConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -370,14 +368,13 @@ class IdeficsRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: IdeficsConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: IdeficsConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -393,23 +390,15 @@ class IdeficsRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -670,7 +659,7 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -773,14 +762,14 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         cross_attention_gate: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
-        image_hidden_states (`torch.FloatTensor`):
+        image_hidden_states (`torch.Tensor`):
             Input to the layer of shape `(batch, seq_len, embed_dim)`
-        image_attention_mask (`torch.FloatTensor`, *optional*):
+        image_attention_mask (`torch.Tensor`, *optional*):
             image attention mask of size
             `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-        cross_attention_gate (`torch.FloatTensor`, *optional*):
+        cross_attention_gate (`torch.Tensor`, *optional*):
             gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no images.
         """
         if image_hidden_states is None:
@@ -949,19 +938,19 @@ class IdeficsModel(IdeficsPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_encoder_embeddings: torch.FloatTensor | None = None,
-        perceiver_embeddings: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_encoder_embeddings: torch.Tensor | None = None,
+        perceiver_embeddings: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsBaseModelOutputWithPast:
         r"""
-        image_encoder_embeddings (`torch.FloatTensor`, *optional*):
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
             The output of the image encoder.
-        perceiver_embeddings (`torch.FloatTensor`, *optional*):
+        perceiver_embeddings (`torch.Tensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
@@ -1096,7 +1085,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config, vision_model=None):
+    def __init__(self, config: IdeficsConfig, vision_model=None):
         super().__init__(config)
         self.model = IdeficsModel(config)
 
@@ -1124,10 +1113,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_encoder_embeddings: torch.FloatTensor | None = None,
-        perceiver_embeddings: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_encoder_embeddings: torch.Tensor | None = None,
+        perceiver_embeddings: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1136,16 +1125,12 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsCausalLMOutputWithPast:
         r"""
-        image_encoder_embeddings (`torch.FloatTensor`, *optional*):
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
             The output of the image encoder.
-        perceiver_embeddings (`torch.FloatTensor`, *optional*):
+        perceiver_embeddings (`torch.Tensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -1189,9 +1174,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1242,6 +1226,12 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
 
         if image_attention_mask is not None and inputs_embeds is None:
             seq_length = model_inputs["input_ids"].shape[1]
+            padding_length = seq_length - image_attention_mask.shape[1]
+            if padding_length > 0:
+                image_attention_mask = torch.cat(
+                    [image_attention_mask, image_attention_mask[:, -1:].expand(-1, padding_length, -1)],
+                    dim=1,
+                )
             model_inputs["image_attention_mask"] = image_attention_mask[:, -seq_length:]
 
         return model_inputs

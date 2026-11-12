@@ -25,7 +25,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
@@ -98,9 +98,16 @@ def get_resize_output_image_size(
 
 
 class SmolVLMVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    max_image_size (`dict[str, int]`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the frames accepted by the model. This is a dictionary containing the key
+        "longest_edge".
+    """
+
     max_image_size: dict[str, int]
 
 
+@auto_docstring
 class SmolVLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     size = {"longest_edge": 4 * 364}
@@ -241,8 +248,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Number of seconds to skip from the start and end if the video is long enough.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
@@ -283,7 +289,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -299,8 +304,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos

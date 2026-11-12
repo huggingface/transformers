@@ -53,10 +53,9 @@ class ZayaConfig(PreTrainedConfig):
     model_type = "zaya"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 262272

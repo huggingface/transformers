@@ -33,15 +33,16 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gpt_neo import GPTNeoConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -212,7 +213,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
-        device_type = query.device.type if query.device.type != "mps" else "cpu"
+        device_type = query.device.type
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)
@@ -265,9 +266,10 @@ class GPTNeoAttention(nn.Module):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](
-                config, self.attention_type, layer_id
+            attn_implementation = (
+                "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
             )
+            self.attention = GPT_NEO_ATTENTION_CLASSES[attn_implementation](config, self.attention_type, layer_id)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
@@ -374,7 +376,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTNeoModel(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -518,7 +520,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.transformer = GPTNeoModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -578,9 +580,8 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -614,7 +615,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     """
 )
 class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTNeoModel(config)
@@ -652,10 +653,6 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -734,7 +731,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
 @auto_docstring
 class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -750,10 +747,10 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
@@ -818,7 +815,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
 
 @auto_docstring
 class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTNeoModel(config)
@@ -831,10 +828,10 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,

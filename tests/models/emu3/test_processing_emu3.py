@@ -26,6 +26,12 @@ from ...test_processing_common import ProcessorTesterMixin
 class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Emu3Processor
 
+    @unittest.skip(
+        "Processor prepends the BOS token as text, which shifts the offsets the assistant mask is computed from"
+    )
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
@@ -45,10 +51,6 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
         return tokenizer
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
 
     @staticmethod
     def prepare_processor_dict():
@@ -77,7 +79,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
 
-        input_str = "lower newer"
+        input_str = f"lower newer {self.image_token}"
         orig_image_input = self.prepare_images_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 

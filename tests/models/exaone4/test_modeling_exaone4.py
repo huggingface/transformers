@@ -23,15 +23,14 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -66,18 +65,8 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Exaone4IntegrationTest(unittest.TestCase):
+class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     TEST_MODEL_ID = "LGAI-EXAONE/EXAONE-4.0-32B"
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_model_logits(self):

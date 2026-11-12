@@ -34,7 +34,7 @@ The example below demonstrates how to detect text with PP-FormulaNet_plus-L usin
 ```py
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 

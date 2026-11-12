@@ -13,9 +13,11 @@
 """Video processor class for PerceptionLM."""
 
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 
 
+@auto_docstring
 class PerceptionLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN

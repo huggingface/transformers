@@ -289,7 +289,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ResNetModel(ResNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ResNetConfig):
         super().__init__(config)
         self.config = config
         self.embedder = ResNetEmbeddings(config)
@@ -338,7 +338,7 @@ class ResNetModel(ResNetPreTrainedModel):
     """
 )
 class ResNetForImageClassification(ResNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ResNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.resnet = ResNetModel(config)
@@ -353,7 +353,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -392,7 +392,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 class ResNetBackbone(BackboneMixin, ResNetPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: ResNetConfig):
         super().__init__(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes
@@ -419,7 +419,7 @@ class ResNetBackbone(BackboneMixin, ResNetPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

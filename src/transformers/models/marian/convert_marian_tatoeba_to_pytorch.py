@@ -56,9 +56,9 @@ class TatoebaConverter:
     def __init__(self, save_dir="marian_converted"):
         assert Path(DEFAULT_REPO).exists(), "need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git"
         self.download_lang_info()
-        self.model_results = json.load(open("Tatoeba-Challenge/models/released-model-results.json"))
+        self.model_results = json.load(open("Tatoeba-Challenge/models/released-model-results.json", encoding="utf-8"))
         self.alpha3_to_alpha2 = {}
-        for line in open(ISO_PATH):
+        for line in open(ISO_PATH, encoding="utf-8"):
             parts = line.split("\t")
             if len(parts[0]) == 3 and len(parts[3]) == 2:
                 self.alpha3_to_alpha2[parts[0]] = parts[3]
@@ -302,7 +302,7 @@ class TatoebaConverter:
             results = [url_to_name(model["download"]) for model in self.model_results[model_name]]
             ymls = [f for f in os.listdir(p) if f.endswith(".yml") and f[:-4] in results]
             ymls.sort(key=lambda x: results.index(x[:-4]))
-            metadata = yaml.safe_load(open(p / ymls[0]))
+            metadata = yaml.safe_load(open(p / ymls[0], encoding="utf-8"))
             metadata.update(self.model_type_info_from_model_name(ymls[0][:-4]))
         elif method == "newest":
             ymls = [f for f in os.listdir(p) if f.endswith(".yml")]
@@ -310,7 +310,7 @@ class TatoebaConverter:
             ymls.sort(
                 key=lambda x: datetime.datetime.strptime(re.search(r"\d\d\d\d-\d\d?-\d\d?", x).group(), "%Y-%m-%d")
             )
-            metadata = yaml.safe_load(open(p / ymls[-1]))
+            metadata = yaml.safe_load(open(p / ymls[-1], encoding="utf-8"))
             metadata.update(self.model_type_info_from_model_name(ymls[-1][:-4]))
         else:
             raise NotImplementedError(f"Don't know argument method='{method}' to parse_metadata()")
