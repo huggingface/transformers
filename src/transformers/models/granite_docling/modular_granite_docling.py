@@ -32,7 +32,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, SizeDict, is_valid_image, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -572,13 +572,8 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
         return num_rows * num_cols + 1 if num_rows * num_cols > 1 else 1
 
 
-class GraniteDoclingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @auto_docstring
 class GraniteDoclingProcessor(Idefics3Processor):
-    valid_processor_kwargs = GraniteDoclingProcessorKwargs
     # rows/cols build the prompt. They are ragged across a batch, so they stay Python lists and are dropped
     # before the processor returns.
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "rows", "cols"]
@@ -1317,9 +1312,8 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
         router_logits = outputs.router_logits
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         logits = logits / self.config.text_config.logits_scaling
 
         loss = None

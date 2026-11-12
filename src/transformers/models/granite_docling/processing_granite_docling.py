@@ -30,13 +30,11 @@ if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
 
-class GraniteDoclingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @auto_docstring
 class GraniteDoclingProcessor(ProcessorMixin):
-    valid_processor_kwargs = GraniteDoclingProcessorKwargs
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
     # rows/cols build the prompt. They are ragged across a batch, so they stay Python lists and are dropped
     # before the processor returns.
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "rows", "cols"]
@@ -104,7 +102,7 @@ class GraniteDoclingProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[GraniteDoclingProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 
