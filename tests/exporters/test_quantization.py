@@ -15,7 +15,7 @@
 
 Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports:
 `PT2EQuantizer` and `NNCFTorchFXQuantizer` on the FX graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch),
-and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`) and OpenVINO
+and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`, `ModelOptOnnxQuantizer`) and OpenVINO
 (`NNCFOpenVINOQuantizer`). Calibration and per-component recipes go through `export_for_generation`, whose components
 take the attention mask as an input (PT2E's retrace trips on in-graph mask construction).
 """
@@ -39,6 +39,7 @@ from transformers.exporters.quantizers.utils import capture_calibration_inputs
 from transformers.exporters.utils import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
+    require_modelopt,
     require_nncf,
     require_onnxruntime,
     require_onnxscript,
@@ -531,6 +532,31 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         )
         quantize_op = "DequantizeLinear" if weights_only else "QuantizeLinear"
         self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
+        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(outputs)
+        self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @parameterized.expand([("dense",), ("moe",)])
+    @require_onnxscript
+    @require_onnxruntime
+    @require_modelopt
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_modelopt_onnx(self, family):
+        """ModelOpt quantizes the converted ONNX model for TensorRT (`ModelOptOnnxQuantizer`), int8 QDQ calibrated on
+        the model's inputs: it gains quantize nodes and still runs in ONNX Runtime. Kept in fp32 and calibrated on the
+        CPU so ONNX Runtime's CPU kernels run it."""
+        from transformers.exporters import ModelOptOnnxConfig, ModelOptOnnxQuantizer, OnnxConfig, OnnxExporter
+
+        model, inputs = self._quantization_target(family)
+        quantizer = ModelOptOnnxQuantizer(
+            ModelOptOnnxConfig(calibration_eps=["cpu"], high_precision_dtype="fp32"),
+            calibration_dataset=[copy.deepcopy(inputs)],
+        )
+        program = (
+            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
+        )
+        self.assertTrue(_has_onnx_quantize_ops(program))
         outputs = _run_onnx_program(program, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))

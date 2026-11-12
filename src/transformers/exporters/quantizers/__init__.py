@@ -18,6 +18,7 @@ from ...utils import _LazyModule
 
 _import_structure = {
     "base": ["CalibrationSet", "ExportQuantizer"],
+    "quantizer_modelopt": ["ModelOptOnnxConfig", "ModelOptOnnxQuantizer"],
     "quantizer_nncf": [
         "NNCFOnnxQuantizer",
         "NNCFOpenVINOQuantizer",
@@ -31,6 +32,7 @@ _import_structure = {
 
 if TYPE_CHECKING:
     from .base import CalibrationSet, ExportQuantizer
+    from .quantizer_modelopt import ModelOptOnnxConfig, ModelOptOnnxQuantizer
     from .quantizer_nncf import (
         NNCFOnnxQuantizer,
         NNCFOpenVINOQuantizer,

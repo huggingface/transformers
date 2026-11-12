@@ -35,6 +35,8 @@ _import_structure = {
     "metadata": ["ExportMetadata"],
     "quantizers": [
         "ExportQuantizer",
+        "ModelOptOnnxConfig",
+        "ModelOptOnnxQuantizer",
         "NNCFOnnxQuantizer",
         "NNCFOpenVINOQuantizer",
         "NNCFQuantizationConfig",
@@ -58,6 +60,8 @@ if TYPE_CHECKING:
     from .metadata import ExportMetadata
     from .quantizers import (
         ExportQuantizer,
+        ModelOptOnnxConfig,
+        ModelOptOnnxQuantizer,
         NNCFOnnxQuantizer,
         NNCFOpenVINOQuantizer,
         NNCFQuantizationConfig,

@@ -111,6 +111,10 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.quantizers.NNCFWeightCompressionConfig
 
+[[autodoc]] exporters.quantizers.ModelOptOnnxQuantizer
+
+[[autodoc]] exporters.quantizers.ModelOptOnnxConfig
+
 ## Utilities
 
 Lower-level functions that power `export_for_generation`, useful when you need to intervene

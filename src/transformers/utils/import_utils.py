@@ -1090,6 +1090,11 @@ def is_nncf_available() -> bool:
 
 
 @lru_cache
+def is_modelopt_available() -> bool:
+    return _is_package_available("modelopt")[0]
+
+
+@lru_cache
 @_make_compile_constant
 def is_onnxruntime_available() -> bool:
     return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]

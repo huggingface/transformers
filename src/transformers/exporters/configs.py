@@ -118,7 +118,8 @@ class DynamoConfig(ExportConfigMixin):
             [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
             [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
             [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
-            converted OpenVINO / ONNX model.
+            converted OpenVINO / ONNX model, or [`~exporters.quantizers.ModelOptOnnxQuantizer`] on the converted ONNX
+            model for TensorRT.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO

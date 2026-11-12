@@ -147,10 +147,18 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
 
 
 class _FeedReader:
-    """The `get_next` interface `quantize_static` reads its calibration feeds through."""
+    """The `CalibrationDataReader` interface `quantize_static` (and ModelOpt, which also reads the first feed and
+    rewinds) reads its calibration feeds through."""
 
     def __init__(self, calibration: CalibrationSet):
-        self.feeds = iter(calibration)
+        self.calibration = calibration
+        self.rewind()
 
     def get_next(self):
         return next(self.feeds, None)
+
+    def get_first(self):
+        return next(iter(self.calibration))
+
+    def rewind(self):
+        self.feeds = iter(self.calibration)

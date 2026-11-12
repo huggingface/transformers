@@ -120,6 +120,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_modelopt_available,
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
@@ -669,6 +670,10 @@ def require_openvino(test_case):
 
 def require_nncf(test_case):
     return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
+
+
+def require_modelopt(test_case):
+    return unittest.skipUnless(is_modelopt_available(), "test requires NVIDIA ModelOpt")(test_case)
 
 
 def require_timm(test_case):
