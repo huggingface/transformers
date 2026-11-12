@@ -51,8 +51,10 @@ class NVFP4HfQuantizer(HfQuantizer):
         return 0.5
 
     def validate_environment(self, device_map, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return  # the `dequantize` load operation is pure torch
+        if self.quantization_config.weight_only and not self.pre_quantized:
+            raise ValueError("`NVFP4Config(weight_only=True)` loads a pre-quantized weight-only (W4A16) checkpoint.")
+        if self.pre_quantized and (self.quantization_config.dequantize or self.quantization_config.weight_only):
+            return  # the `dequantize` load operation and the weight-only forward are pure torch
         if not is_kernels_available():
             raise ImportError(
                 "NVFP4 quantization requires the `kernels` package. "
@@ -105,15 +107,18 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return None
+        weight_only = self.quantization_config.weight_only
         if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
             # TODO: quantize experts from a full-precision checkpoint too
             has_gate = getattr(module, "has_gate", True)
+            if weight_only:  # the kernels' implementations quantize activations: eager only
+                return NVFP4Experts(module.config, has_gate=has_gate, weight_only=True)
             experts_class = use_experts_implementation(
                 experts_class=NVFP4Experts, experts_interface=ALL_NVFP4_EXPERTS_FUNCTIONS, has_gate=has_gate
             )
             return experts_class(module.config, has_gate=has_gate)
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
-            return NVFP4Linear(module.in_features, module.out_features)
+            return NVFP4Linear(module.in_features, module.out_features, weight_only=weight_only)
         return None
 
     def get_quantize_ops(self):

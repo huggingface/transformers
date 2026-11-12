@@ -345,6 +345,17 @@ class NVFP4ExpertsTest(unittest.TestCase):
             gate_up, down = _dequantized_expert(checkpoint, prefix, names, 2)
             torch.testing.assert_close(dense.model.layers[0].mlp.experts.gate_up_proj[2], gate_up)
             torch.testing.assert_close(dense.model.layers[0].mlp.experts.down_proj[2], down)
+            if model_class is Qwen3_5MoeForCausalLM:
+                # `W4A16_NVFP4`: the experts stay packed and run their dequantized weights on full precision inputs
+                experts = quantized.model.layers[0].mlp.experts
+                self.assertTrue(experts.weight_only)
+                self.assertEqual(experts.gate_up_proj.dtype, torch.uint8)
+                hidden_states = torch.randn(4, config.hidden_size)
+                top_k_index, top_k_weights = torch.tensor([[0, 2], [2, 3], [1, 0], [3, 2]]), torch.rand(4, 2)
+                torch.testing.assert_close(
+                    experts(hidden_states, top_k_index, top_k_weights),
+                    dense.model.layers[0].mlp.experts(hidden_states, top_k_index, top_k_weights),
+                )
 
     def test_forward(self, *_):
         config, checkpoint = _mixtral_checkpoint()

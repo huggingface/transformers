@@ -87,4 +87,5 @@ the model before measuring generation throughput.
   scales have no sharding plan yet.
 - CPU and disk offload are not supported.
 - MoE experts are only quantized from pre-quantized checkpoints, not on the fly.
+- Weight-only (`W4A16_NVFP4`) layers dequantize their weights in each forward, without the kernels.
 - NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.

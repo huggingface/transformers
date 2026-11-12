@@ -25,10 +25,10 @@ from ..utils.quantization_config import FineGrainedFP8Config, Mxfp4Config, NVFP4
 logger = logging.get_logger(__name__)
 
 
-# ModelOpt `quant_algo` -> its config. W4A16 NVFP4 loads with the W4A4 config, which quantizes activations
+# ModelOpt `quant_algo` -> its config
 MODELOPT_ALGOS = {
     "NVFP4": NVFP4Config,
-    "W4A16_NVFP4": NVFP4Config,
+    "W4A16_NVFP4": lambda: NVFP4Config(weight_only=True),
     "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
     "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
     # E4M3 weights, a ue8m0 scale per 32: on the FP8 kernels for now (not their best path on Blackwell)
@@ -53,13 +53,6 @@ def modelopt_plan(config: dict) -> dict | None:
     base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
     plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
     plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in layers.items()}
-    algos = {layer["quant_algo"] for layer in layers.values()}
-    if "W4A16_NVFP4" in algos:
-        logger.warning(
-            "This checkpoint is NVFP4 weight-only (W4A16), but NVFP4 layers quantize their activations to FP4 beyond "
-            "single-token decoding, which changes the numerics. Pass `quantization_config=NVFP4Config(dequantize=True)` "
-            "to run them in full precision instead."
-        )
     if config.get("kv_cache_quant_algo"):
         logger.warning(
             f"The checkpoint's `kv_cache_quant_algo={config['kv_cache_quant_algo']}` is not supported: the KV cache "

@@ -2074,14 +2074,24 @@ class NVFP4Config(QuantizationConfigMixin):
             Module-name patterns that should remain in their original precision.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize a pre-quantized checkpoint while loading it.
+        weight_only (`bool`, *optional*, defaults to `False`):
+            Whether the pre-quantized checkpoint is weight-only (W4A16): its layers keep their packed weights and
+            dequantize them in each forward, so activations stay in full precision.
         kwargs (`dict[str, Any]`, *optional*):
             Additional values are ignored and reported through the Transformers logger.
     """
 
-    def __init__(self, modules_to_not_convert: list[str] | None = None, dequantize: bool = False, **kwargs):
+    def __init__(
+        self,
+        modules_to_not_convert: list[str] | None = None,
+        dequantize: bool = False,
+        weight_only: bool = False,
+        **kwargs,
+    ):
         self.quant_method = QuantizationMethod.NVFP4
         self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
+        self.weight_only = weight_only
         if kwargs:
             logger.info(
                 f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
