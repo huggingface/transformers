@@ -367,7 +367,82 @@ def _dump_cuda_driver_log(title, max_chars=20000):
         return
     with open(path, encoding="utf-8", errors="replace") as f:
         content = f.read()
-    log(f"===== {title} ({path}, {len(content)} chars, last {max_chars} shown) =====\n{content[-max_chars:]}")
+    # Drop the noise (other threads calling cuCtxGetDevice without a context), keep the real errors.
+    lines = [
+        line
+        for line in content.splitlines()
+        if "No CUDA context is current" not in line and "CUDA_ERROR_INVALID_CONTEXT) from cuCtxGetDevice" not in line
+    ]
+    filtered = "\n".join(lines)
+    log(
+        f"===== {title} ({path}, {len(content)} chars; {len(lines)} lines after dropping INVALID_CONTEXT noise, "
+        f"last {max_chars} chars shown) =====\n{filtered[-max_chars:]}"
+    )
+
+
+# ───────────────────────────── CUDA driver log callback: Python stack at the offending call ─────────────────────────────
+#
+# Run 43288869427 (CUDA_LOG_FILE) showed that, during the capture and on the capturing thread, something calls
+# cuMemFree / cuMemFreeHost / cuCtxSynchronize ("API call conflicts with a stream capture sequence initiated from the
+# calling thread"), i.e. CUDA resources (very likely ONNX Runtime's, from earlier ONNX tests) are destroyed mid-capture.
+# This callback is invoked by the driver on the thread making the bad call: it dumps that thread's Python stack.
+# It does nothing at all (no Python call) unless the driver logs something.
+
+STACKS_PATH = None
+_stacks_file = None
+_cb_state = {"dumped": 0}
+_cu_logs_callback = None  # keep the ctypes callback alive
+
+
+def _install_cuda_logs_callback(out_dir):
+    global STACKS_PATH, _stacks_file, _cu_logs_callback
+    try:
+        libcuda = ctypes.CDLL("libcuda.so.1")
+    except OSError as e:
+        log(f"cuLogsRegisterCallback: cannot load libcuda: {e!r}")
+        return
+    if not hasattr(libcuda, "cuLogsRegisterCallback"):
+        log("cuLogsRegisterCallback: not available in this driver")
+        return
+    STACKS_PATH = os.path.join(out_dir, f"cuda_capture_conflict_stacks_{os.getpid()}.log")
+    _stacks_file = open(STACKS_PATH, "w", encoding="utf-8")  # noqa: SIM115  (kept open for faulthandler)
+
+    callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t)
+
+    def _callback(data, level, message, length):
+        # Only act on capture conflicts / invalidation; at most 12 dumps (the burst is ~25 calls in ~2 ms).
+        if _cb_state["dumped"] >= 12 or not message:
+            return
+        if b"stream capture" not in message and b"nvalidated" not in message:
+            return
+        _cb_state["dumped"] += 1
+        try:
+            _stacks_file.write(
+                f"\n===== [{time.time() - S.t0:9.3f}s] [{threading.current_thread().name} "
+                f"ident={threading.get_ident()}] test={S.test} CUDA: {message.decode(errors='replace')}\n"
+            )
+            _stacks_file.write(f"gc enabled={gc.isenabled()} counts={gc.get_count()}\n")
+            _stacks_file.flush()
+            faulthandler.dump_traceback(file=_stacks_file, all_threads=False)
+            _stacks_file.flush()
+        except Exception:  # noqa: S110  (never raise from a driver callback)
+            pass
+
+    _cu_logs_callback = callback_type(_callback)
+    handle = ctypes.c_void_p()
+    libcuda.cuLogsRegisterCallback.argtypes = [callback_type, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    libcuda.cuLogsRegisterCallback.restype = ctypes.c_int
+    result = libcuda.cuLogsRegisterCallback(_cu_logs_callback, None, ctypes.byref(handle))
+    log(f"cuLogsRegisterCallback -> {result} (0 = CUDA_SUCCESS); Python stacks of capture conflicts -> {STACKS_PATH}")
+
+
+def _dump_capture_conflict_stacks(title):
+    if not STACKS_PATH or not os.path.exists(STACKS_PATH):
+        log(f"===== {title}: no stacks file =====")
+        return
+    with open(STACKS_PATH, encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    log(f"===== {title} ({STACKS_PATH}, {len(content)} chars) =====\n{content[-40000:]}")
 
 
 _capture_trace_modes = []
@@ -761,6 +836,8 @@ class CaptureDebugPlugin:
         CUDA_LOG_PATH = os.path.join(out_dir, f"cuda_driver_errors_{os.getpid()}.log")
         os.environ.setdefault("CUDA_LOG_FILE", CUDA_LOG_PATH)
         CUDA_LOG_PATH = os.environ["CUDA_LOG_FILE"]
+        if sys.platform == "linux":
+            _install_cuda_logs_callback(out_dir)
         try:
             import torch
 
@@ -886,6 +963,7 @@ class CaptureDebugPlugin:
             dump_threads("threads at test failure")
             # The failure already happened: CUDA queries / imports can no longer hide it.
             _dump_cuda_driver_log("CUDA driver error log at test failure")
+            _dump_capture_conflict_stacks("Python stacks of the calls that conflicted with the capture")
             log(f"after failure: peek_error={CUDART.peek_error()} thread_mode={CUDART.thread_capture_mode()}")
             _log_environment()
             log(
@@ -912,6 +990,7 @@ class CaptureDebugPlugin:
     def pytest_unconfigure(self, config):
         log(f"session end: total captures={S.capture_count}")
         _dump_cuda_driver_log("CUDA driver error log at session end")
+        _dump_capture_conflict_stacks("Python stacks of capture conflicts at session end")
         if _gc_callback in gc.callbacks:
             gc.callbacks.remove(_gc_callback)
         fh, S.fh = S.fh, None
