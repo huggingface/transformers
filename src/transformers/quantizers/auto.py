@@ -394,20 +394,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         """The quantizer of the whole model, if a single one"""
         return self.quantizers["*"] if list(self.quantizers) == ["*"] else None
 
-    @property
-    def __class__(self):
-        # `isinstance(hf_quantizer, Bnb4BitHfQuantizer)` keeps working for a single quantizer
-        return QuantizationPlanHfQuantizer if self.quantizer is None else type(self.quantizer)
-
-    def __reduce__(self):  # copied and pickled as the plan, not as `__class__`
-        return QuantizationPlanHfQuantizer, (self.quantizers,), self.__dict__
-
-    def __getattr__(self, name):
-        # A single quantizer's own attributes, e.g. GGUF's `metadata` or compressed-tensors' `compressor`
-        if name.startswith("__") or "quantizers" not in self.__dict__ or self.quantizer is None:
-            raise AttributeError(name)
-        return getattr(self.quantizer, name)
-
     def map_module_to_quantizer(self, model):
         r"""
         The plan's patterns, in order, for `get_quantizer`. A checkpoint's plan names checkpoint modules: renamed
@@ -549,6 +535,12 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
         transform.operations = [load, *ops] if dequantize else [*ops, load]
         return transform
+
+    def param_needs_quantization(self, model, param_name, **kwargs):
+        if self.patterns is None:
+            self.map_module_to_quantizer(model)
+        quantizer = self.get_quantizer(param_name)
+        return quantizer is not None and quantizer.param_needs_quantization(model, param_name, **kwargs)
 
     def param_element_size(self, model, param_name, param):
         if self.patterns is None:

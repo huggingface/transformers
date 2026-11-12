@@ -211,7 +211,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             has_gate=has_gate,
         )
         new_module = experts_class(getattr(module, "config", self.text_config), has_bias=has_bias, has_gate=has_gate)
-        new_module._hf_quantized_needs_local_tp = True
+        new_module._hf_quantized_needs_local_tp = True  # ty: ignore[unresolved-attribute]
         return new_module
 
     def get_state_dict_and_metadata(self, model):

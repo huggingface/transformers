@@ -151,6 +151,18 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertEqual(type(model.model.layers[1].mlp.gate_proj).__name__, "FP8Linear")
         self.assertEqual(list(plan.quantizers), ["*"])  # the skips stay out of the saved plan
 
+    def test_param_needs_quantization_asks_the_param_quantizer(self):
+        # The loading's shape check asks the plan: it must answer as the param's quantizer, or the quantized weights
+        # of bitsandbytes, whose shape differs from the module's, are reported mismatched
+        plan = AutoHfQuantizer.from_plan({"*.mlp.*": FineGrainedFP8Config(), "*": None}, None, pre_quantized=False)
+        with torch.device("meta"):
+            model = LlamaForCausalLM(
+                LlamaConfig(hidden_size=64, intermediate_size=128, num_hidden_layers=1, vocab_size=128)
+            )
+        plan.preprocess_model(model)
+        self.assertTrue(plan.param_needs_quantization(model, "model.layers.0.mlp.up_proj.weight"))
+        self.assertFalse(plan.param_needs_quantization(model, "model.layers.0.self_attn.q_proj.weight"))
+
     def plan_from_config(self, quantization_config, **kwargs):
         config = DeepseekV4Config(**TINY_DEEPSEEK, **kwargs, quantization_config=dict(quantization_config))
         with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):  # NVFP4 checks for a Blackwell GPU
@@ -217,6 +229,14 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertEqual(list(plan), ["lm_head", "*"])
         self.assertIsNone(plan["lm_head"])
         self.assertEqual(repr(plan["*"]), repr(NVFP4Config()))
+
+    def test_modelopt_weight_only_nvfp4(self):
+        # W4A16 NVFP4 keeps its activations in full precision, and the dropped KV cache quantization is not silent
+        saved = {"quant_method": "modelopt", "quant_algo": "W4A16_NVFP4", "kv_cache_quant_algo": "FP8"}
+        with self.assertLogs("transformers.quantizers.schema_readers", level="WARNING") as logs:
+            config = self.plan_from_config(saved)[0].quantization_config  # a single config for the whole model
+        self.assertEqual(repr(config), repr(NVFP4Config(weight_only=True)))
+        self.assertTrue(any("kv_cache_quant_algo=FP8" in line for line in logs.output))
 
     def test_modelopt_checkpoint_names(self):
         hf_quantizer, config = self.plan_from_config(self.DEEPSEEK)

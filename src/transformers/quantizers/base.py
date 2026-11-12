@@ -125,7 +125,7 @@ class HfQuantizer(ABC):
 
     @property
     def quantized_element_size(self) -> float | None:
-        "Bytes per element of a quantized weight, `None` to use the param's own element size."
+        """Bytes per element of a quantized weight, `None` to use the param's own element size."""
         return None
 
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
@@ -159,7 +159,7 @@ class HfQuantizer(ABC):
 
     @property
     def all_quantizers(self) -> list["HfQuantizer"]:
-        "The quantizers loading the model: this one, or the ones of a quantization plan"
+        """The quantizers loading the model: this one, or the ones of a quantization plan"""
         return [self]
 
     def get_quantizer(self, name: str) -> "HfQuantizer | None":
@@ -209,7 +209,7 @@ class HfQuantizer(ABC):
 
     @property
     def replaces_modules(self) -> bool:
-        "Whether this quantizer swaps its modules through `quantized_module`"
+        """Whether this quantizer swaps its modules through `quantized_module`"""
         return type(self).quantized_module is not HfQuantizer.quantized_module
 
     def replace_modules(self, model):
@@ -230,7 +230,6 @@ class HfQuantizer(ABC):
                 new_module = quantizer.quantized_module(name, module)
             if new_module is None:
                 continue
-            new_module.source_cls = type(module)
             model.set_submodule(name, new_module)
             replaced.add(quantizer)
             swapped += (f"{name}.",)
@@ -390,14 +389,14 @@ class HfQuantizer(ABC):
         return {}
 
     def get_load_operation(self):
-        "The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"
+        """The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"""
         if not self.pre_quantized:
             return None
         dequantize = getattr(self.quantization_config, "dequantize", False)
         return self.get_load_operations().get("dequantize" if dequantize else "deserialize")
 
     def get_weight_conversions(self):
-        "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
+        """General converters: a param's serialized names load together. Their ops are set per param, by the plan"""
         from ..core_model_loading import WeightConverter, _IdentityOp
 
         # Only to read a checkpoint this format can load (it has a load op). Nothing is converted back on save: a
@@ -413,7 +412,7 @@ class HfQuantizer(ABC):
     checkpoint_renames: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):
-        "A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"
+        """A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"""
         return weight_conversions
 
 

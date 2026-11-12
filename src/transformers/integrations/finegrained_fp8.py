@@ -916,7 +916,7 @@ class Fp8Quantize(ConversionOps):
 
 
 class Fp8Deserialize(ConversionOps):
-    "Loads an FP8 linear's tensors as its params: 4-D ModelOpt scales flattened, each cast to its param's dtype"
+    """Loads an FP8 linear's tensors as its params: 4-D ModelOpt scales flattened, each cast to its param's dtype"""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

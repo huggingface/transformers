@@ -4348,7 +4348,7 @@ class PreTrainedModel(
 
         if gguf_file:
             # Read before the dtype is settled: a GGUF's own float type is what `dtype="auto"` resolves to.
-            hf_quantizer.read_header(checkpoint_files[0])
+            hf_quantizer.quantizer.read_header(checkpoint_files[0])
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
@@ -4394,7 +4394,7 @@ class PreTrainedModel(
                 )
 
         if gguf_file:
-            state_dict = hf_quantizer.get_state_dict(checkpoint_files[0], model)
+            state_dict = hf_quantizer.quantizer.get_state_dict(checkpoint_files[0], model)
 
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)

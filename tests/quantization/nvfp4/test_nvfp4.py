@@ -16,7 +16,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers import MixtralConfig, MixtralForCausalLM, NVFP4Config, Qwen3_5MoeForCausalLM, Qwen3_5MoeTextConfig
+from transformers.distributed import DistributedConfig
 from transformers.integrations.mxfp4 import FP4_VALUES
 from transformers.integrations.nvfp4 import (
     NVFP4Dequantize,
@@ -26,39 +29,40 @@ from transformers.integrations.nvfp4 import (
     NVFP4Quantize,
     load_nvfp4_kernel,
     swizzle_sf,
+    swizzled_sf_shape,
 )
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
+from transformers.testing_utils import is_expert_parallel_test, require_torch
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
+
+from ...distributed_testing_utils import run_distributed
 
 
 if is_torch_available():
     import torch
     from safetensors.torch import save_file
     from torch import nn
-
-
-def _padded_sf_shape(rows, columns):
-    return -(-rows // 128) * 128, -(-columns // 64)  # 128 x 4 tiles of fp8 scales, four per int32
+    from torch.nn.functional import ScalingType
 
 
 def _unswizzle(sf, rows, columns):
-    "Inverse of `swizzle_sf`: the row-major `(rows, columns)` block scales"
+    """Inverse of `swizzle_sf`: the row-major `(rows, columns)` block scales"""
     row_tiles, col_tiles = -(-rows // 128), -(-columns // 4)
     tiles = sf.reshape(-1).view(torch.uint8).view(row_tiles, col_tiles, 32, 4, 4).transpose(2, 3)
     return tiles.reshape(row_tiles, col_tiles, 128, 4).transpose(1, 2).reshape(row_tiles * 128, -1)[:rows, :columns]
 
 
 def _dequantize(packed, sf_rowmajor):
-    "e2m1 values times their fp8 block scales"
+    """e2m1 values times their fp8 block scales"""
     values = torch.tensor(FP4_VALUES)[torch.stack([packed & 0xF, packed >> 4], -1).int()].flatten(-2)
     scales = sf_rowmajor.view(torch.float8_e4m3fn).float().repeat_interleave(16, -1)
     return values * scales
 
 
 def _quantize(input, global_scale):
-    "NVFP4 activations: `input * global_scale` as e2m1 values and row-major fp8 block scales"
+    """NVFP4 activations: `input * global_scale` as e2m1 values and row-major fp8 block scales"""
     blocks = (input.float() * global_scale).view(input.shape[0], -1, 16)
     sf = (blocks.abs().amax(-1) / 6).to(torch.float8_e4m3fn)
     scaled = blocks / sf.float().clamp(min=1e-12).unsqueeze(-1)
@@ -67,20 +71,20 @@ def _quantize(input, global_scale):
 
 
 def _fake_kernel():
-    "The NVFP4 kernel's entry points, computing in float32 from the dequantized operands"
+    """The NVFP4 kernel's entry points, computing in float32 from the dequantized operands"""
 
     def pack(weight, device):
         out_features, in_features = weight.shape
         return SimpleNamespace(
             qweight=torch.empty(out_features, in_features // 2, dtype=torch.uint8, device=device),
-            sf=torch.empty(_padded_sf_shape(out_features, in_features), dtype=torch.int32, device=device),
+            sf=torch.empty(swizzled_sf_shape(out_features, in_features), dtype=torch.int32, device=device),
             sf_rowmajor=torch.empty(out_features, in_features // 16, dtype=torch.uint8, device=device),
             global_scale=torch.ones(1, dtype=torch.float32, device=device),
         )
 
     def scaled_fp4_quant(input, global_scale, swizzled):
         qinput, sf = _quantize(input, global_scale)
-        return qinput, swizzle_sf(sf).view(torch.int32).view(_padded_sf_shape(*input.shape)) if swizzled else sf
+        return qinput, swizzle_sf(sf).view(torch.int32).view(swizzled_sf_shape(*input.shape)) if swizzled else sf
 
     def cutlass_scaled_fp4_mm(qinput, weight, input_sf, weight_sf, alpha):
         (rows, k), out_features = qinput.shape, weight.shape[0]
@@ -96,18 +100,22 @@ def _fake_kernel():
         PackedWeight=SimpleNamespace,
         gemm=gemm,
         pack=pack,
-        swizzled_sf_shape=_padded_sf_shape,
         scaled_fp4_quant=scaled_fp4_quant,
         cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm,
     )
 
 
 def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, swizzle_a, swizzle_b, offs, **_):
-    "`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile"
+    """`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile. Rows past
+    the last group are left unwritten, NaN here. Like torch's, it needs each operand's global scale too (ones here)."""
+    if recipe_a != [ScalingType.BlockWise1x16, ScalingType.TensorWise] or recipe_b != recipe_a:
+        raise ValueError("No gemm implementation was found")
+    (scale_a, _), (scale_b, _) = scale_a, scale_b
     a, b = mat_a.view(torch.uint8), mat_b.transpose(-2, -1).view(torch.uint8)  # (rows, k / 2), (groups, n, k / 2)
     k_blocks = a.shape[1] // 8
     a_sf = _unswizzle(scale_a, scale_a.numel() // (-(-k_blocks // 4) * 4), k_blocks)
-    output, start, padded_start = a.new_zeros(a.shape[0], b.shape[1], dtype=torch.float32), 0, 0
+    output = a.new_full((a.shape[0], b.shape[1]), float("nan"), dtype=torch.float32)
+    start, padded_start = 0, 0
     for group, end in enumerate(offs.tolist()):
         input = _dequantize(a[start:end], a_sf[padded_start : padded_start + end - start])
         output[start:end] = input @ _dequantize(b[group], _unswizzle(scale_b[group], b.shape[1], k_blocks)).T
@@ -116,7 +124,7 @@ def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, 
 
 
 def _modelopt_quantize(weight):
-    "ModelOpt's NVFP4 (`NVFP4QTensor.quantize`): `weight ~= fp4 * weight_scale * weight_scale_2`"
+    """ModelOpt's NVFP4 (`NVFP4QTensor.quantize`): `weight ~= fp4 * weight_scale * weight_scale_2`"""
     weight_scale_2 = weight.abs().amax().float() / (6 * 448)
     packed, weight_scale = _quantize(weight, 1 / weight_scale_2)
     return packed, weight_scale.view(torch.float8_e4m3fn), weight_scale_2
@@ -162,7 +170,6 @@ class NVFP4IntegrationTest(unittest.TestCase):
             PackedWeight=kernel.PackedWeight,
             gemm=kernel.gemm,
             pack=kernel.pack,
-            swizzled_sf_shape=kernel.swizzled_sf_shape,
             _ops=SimpleNamespace(ops=SimpleNamespace(scaled_fp4_quant=kernel.scaled_fp4_quant)),
         )
         with (
@@ -277,7 +284,7 @@ def _modelopt_experts_checkpoint(model, names, rename):
 
 
 def _dequantized_expert(checkpoint, prefix, names, expert):
-    "The dense `gate_up_proj` and `down_proj` of one expert, from its ModelOpt tensors"
+    """The dense `gate_up_proj` and `down_proj` of one expert, from its ModelOpt tensors"""
     projections = []
     for name in names:
         name = f"{prefix}.{expert}.{name}"
@@ -345,6 +352,17 @@ class NVFP4ExpertsTest(unittest.TestCase):
             gate_up, down = _dequantized_expert(checkpoint, prefix, names, 2)
             torch.testing.assert_close(dense.model.layers[0].mlp.experts.gate_up_proj[2], gate_up)
             torch.testing.assert_close(dense.model.layers[0].mlp.experts.down_proj[2], down)
+            if model_class is Qwen3_5MoeForCausalLM:
+                # `W4A16_NVFP4`: the experts stay packed and run their dequantized weights on full precision inputs
+                experts = quantized.model.layers[0].mlp.experts
+                self.assertTrue(experts.weight_only)
+                self.assertEqual(experts.gate_up_proj.dtype, torch.uint8)
+                hidden_states = torch.randn(4, config.hidden_size)
+                top_k_index, top_k_weights = torch.tensor([[0, 2], [2, 3], [1, 0], [3, 2]]), torch.rand(4, 2)
+                torch.testing.assert_close(
+                    experts(hidden_states, top_k_index, top_k_weights),
+                    dense.model.layers[0].mlp.experts(hidden_states, top_k_index, top_k_weights),
+                )
 
     def test_forward(self, *_):
         config, checkpoint = _mixtral_checkpoint()
@@ -376,8 +394,71 @@ class NVFP4ExpertsTest(unittest.TestCase):
             torch.testing.assert_close(experts(hidden_states, top_k_index, top_k_weights), eager, rtol=0, atol=0)
             experts.config._experts_implementation = "grouped_mm"
             grouped = experts(hidden_states, top_k_index, top_k_weights)
+            # `generate` switches `grouped_mm` to `batched_mm` while decoding on GPU
+            experts.config._experts_implementation = "batched_mm"
+            torch.testing.assert_close(experts(hidden_states, top_k_index, top_k_weights), grouped, rtol=0, atol=0)
         # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first
         torch.testing.assert_close(grouped, eager, rtol=0.05, atol=0.05)
+        # A bf16 model routes with bf16 weights
+        with patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm):
+            experts.config._experts_implementation = "grouped_mm"
+            bf16_grouped = experts(hidden_states, top_k_index, top_k_weights.bfloat16())
+        torch.testing.assert_close(bf16_grouped, grouped, rtol=0.02, atol=0.02)
+
+    def test_load_linear_with_static_input_scale(self, *_):
+        # ModelOpt's W4A4 linears save a static `input_scale` (e.g. nvidia/Qwen3-30B-A3B-NVFP4's attention)
+        config, checkpoint = _mixtral_checkpoint()
+        config.quantization_config.modules_to_not_convert.remove("q_proj")
+        for layer in range(config.num_hidden_layers):
+            q_proj = f"model.layers.{layer}.self_attn.q_proj"
+            packed, weight_scale, weight_scale_2 = _modelopt_quantize(checkpoint[f"{q_proj}.weight"].float())
+            checkpoint |= {f"{q_proj}.weight": packed, f"{q_proj}.weight_scale": weight_scale}
+            checkpoint |= {f"{q_proj}.weight_scale_2": weight_scale_2, f"{q_proj}.input_scale": torch.tensor(1 / 448)}
+        quantized, info = _load(config, MixtralForCausalLM, checkpoint)
+        self.assertFalse(any(info.values()), info)
+        layer = quantized.model.layers[0].self_attn.q_proj
+        self.assertIsInstance(layer, NVFP4Linear)
+        torch.testing.assert_close(layer.input_scale, torch.tensor([1 / 448]))
+
+
+def _expert_parallelism_shards_each_expert(rank, path, weight_only):
+    """Each rank holds its half of every expert tensor, swizzled scales included, and the model runs as one process's,
+    through both experts implementations. The W4A4 GEMMs run on the fake kernel, from the dequantized operands."""
+    from torch.distributed.tensor import DTensor
+
+    with (
+        patch.object(NVFP4HfQuantizer, "validate_environment"),
+        patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel),
+        patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm),
+    ):
+        model = MixtralForCausalLM.from_pretrained(path, distributed_config=DistributedConfig(tp_size=2, ep_size=2))
+        reference = MixtralForCausalLM.from_pretrained(path)
+        experts, expected = model.model.layers[0].mlp.experts, reference.model.layers[0].mlp.experts
+        assert experts.num_experts == 2
+        for name, param in experts.named_parameters():
+            local = param.to_local() if isinstance(param, DTensor) else param
+            torch.testing.assert_close(local, getattr(expected, name).chunk(2)[rank], msg=name)
+
+        input_ids = torch.tensor([[1, 5, 9, 2, 7, 3]])
+        for implementation in ("eager", "grouped_mm"):
+            model.set_experts_implementation(implementation)
+            reference.set_experts_implementation(implementation)
+            with torch.no_grad():
+                torch.testing.assert_close(model(input_ids).logits, reference(input_ids).logits, msg=implementation)
+
+
+@is_expert_parallel_test
+@require_torch
+class NVFP4ExpertParallelTest(unittest.TestCase):
+    @parameterized.expand([("w4a4", False), ("weight_only", True)])
+    def test_expert_parallelism(self, _, weight_only):
+        config, checkpoint = _mixtral_checkpoint()
+        config.quantization_config.weight_only = weight_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config.save_pretrained(tmp)
+            save_file(checkpoint, f"{tmp}/model.safetensors", metadata={"format": "pt"})
+            run_distributed(world_size=2, backend="gloo")(_expert_parallelism_shards_each_expert)(tmp, weight_only)
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")
@@ -395,20 +476,57 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)
-    def test_rejects_multi_device_map_until_tp_metadata_is_supported(self, _, __):
+    def test_multi_device_map_only_for_pre_quantized_checkpoints(self, _, __):
+        device_map = {"model.layers.0": 0, "model.layers.1": 1}
+        # Quantizing on the fly packs every weight on one device
         with self.assertRaisesRegex(ValueError, "multi-device `device_map`"):
-            self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
+            self.quantizer.validate_environment(device_map=device_map)
+        # A pre-quantized checkpoint spreads over several, each of them Blackwell
+        quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
+        capabilities = {0: (10, 0), 1: (9, 0)}
+        with patch("torch.cuda.get_device_capability", lambda device: capabilities[device.index]):
+            with self.assertRaisesRegex(RuntimeError, "sm90 on cuda:1"):
+                quantizer.validate_environment(device_map=device_map)
+            capabilities[1] = (10, 0)
+            quantizer.validate_environment(device_map=device_map)
 
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_parallel_plan_replicates_nvfp4_modules(self, _):
-        # Their scales have no sharding plan yet: NVFP4 modules stay whole, the others keep their style
+    @staticmethod
+    def _parallel_model(nvfp4_linear=True, **distributed):
         layer = nn.Module()
-        layer.proj, layer.other = NVFP4Linear(64, 32), nn.Linear(64, 32)
+        layer.proj = NVFP4Linear(64, 32) if nvfp4_linear else nn.Linear(64, 32)
+        layer.experts = NVFP4Experts(
+            SimpleNamespace(hidden_size=64, moe_intermediate_size=32, num_experts=4, hidden_act="silu")
+        )
         model = nn.Module()
         model.layers = nn.ModuleList([layer])
-        plan = {"layers.*.proj": "colwise", "layers.*.other": "rowwise"}
-        self.quantizer.update_parallel_plan(model, plan)
-        self.assertEqual(plan, {"layers.*.proj": "replicate", "layers.*.other": "rowwise"})
+        model.config = SimpleNamespace(distributed_config=SimpleNamespace(**distributed) if distributed else None)
+        model.ep_plan = {
+            "layers.*.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.experts.down_proj": "grouped_gemm",
+            "layers.*.experts": "ep_dispatch_experts",
+        }
+        return model
+
+    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
+    def test_expert_parallelism_shards_every_expert_tensor(self, _):
+        model = self._parallel_model(nvfp4_linear=False, tp_size=2, ep_size=2)
+        self.quantizer.update_parallel_plan(model, model.ep_plan)
+        for proj in ("gate_up_proj", "down_proj"):
+            for suffix in ("", "_sf", "_scale", "_scale_2", "_input_scale"):
+                self.assertEqual(model.ep_plan[f"layers.*.experts.{proj}{suffix}"], "grouped_gemm", proj + suffix)
+
+    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
+    def test_rejects_tensor_parallelism(self, _):
+        # A tensor-parallel NVFP4 linear, or NVFP4 experts without expert parallelism to shard them
+        for nvfp4_linear, ep_size in ((True, 2), (False, 1)):
+            with self.subTest(nvfp4_linear=nvfp4_linear, ep_size=ep_size):
+                model = self._parallel_model(nvfp4_linear=nvfp4_linear, tp_size=2, ep_size=ep_size)
+                with self.assertRaisesRegex(ValueError, "does not support tensor parallelism"):
+                    self.quantizer.update_parallel_plan(model, {})
+        # Not distributed, or no tensor parallelism
+        for distributed in ({}, {"tp_size": 1, "ep_size": 2}):
+            model = self._parallel_model(**distributed)
+            self.quantizer.update_parallel_plan(model, {})
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)

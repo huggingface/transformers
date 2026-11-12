@@ -501,7 +501,7 @@ class Mxfp4Experts(nn.Module):
         self._alloc_proj("down_proj", self.hidden_dim, self.intermediate_dim)
 
     def _alloc_proj(self, proj: str, out_dim: int, in_dim: int):
-        "Two e2m1 values per `int8`, a ue8m0 scale per 32 of them"
+        """Two e2m1 values per `int8`, a ue8m0 scale per 32 of them"""
         weight = torch.empty(self.num_experts, out_dim, in_dim // 2, dtype=torch.int8)
         scale = torch.empty(self.num_experts, out_dim, in_dim // 32, dtype=torch.float8_e8m0fnu)
         self.register_parameter(proj, nn.Parameter(weight, requires_grad=False))
@@ -546,7 +546,7 @@ class Mxfp4Experts(nn.Module):
 
 
 def _w4a8_experts(self, hidden_states, matmul):
-    "up (-> gate) -> down on the routed rows, each projection through `matmul(input, weight, scale)`"
+    """up (-> gate) -> down on the routed rows, each projection through `matmul(input, weight, scale)`"""
     up_proj = "gate_up_proj" if self.has_gate else "up_proj"
     proj_out = matmul(hidden_states, getattr(self, up_proj), getattr(self, f"{up_proj}_scale_inv"))
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
@@ -554,7 +554,7 @@ def _w4a8_experts(self, hidden_states, matmul):
 
 
 def fp4_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    "W4A8 on the finegrained-fp8 Triton kernel, one row per (token, expert) pair"
+    """W4A8 on the finegrained-fp8 Triton kernel, one row per (token, expert) pair"""
     kernel = load_finegrained_fp8_kernel()
     num_tokens, num_top_k = top_k_index.shape
     expert_ids = top_k_index.reshape(-1)
@@ -568,7 +568,7 @@ def fp4_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weigh
 
 
 def fp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    "W4A8 on the finegrained-fp8 Triton kernel, the (token, expert) pairs grouped by expert"
+    """W4A8 on the finegrained-fp8 Triton kernel, the (token, expert) pairs grouped by expert"""
     kernel = load_finegrained_fp8_kernel()
     num_tokens, num_top_k = top_k_index.shape
     expert_ids, perm = torch.sort(top_k_index.reshape(-1))
@@ -589,7 +589,7 @@ def fp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weigh
 
 
 def deepgemm_fp4_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    "W4A8 on DeepGEMM's M-grouped FP8 x FP4 GEMM (Blackwell only)"
+    """W4A8 on DeepGEMM's M-grouped FP8 x FP4 GEMM (Blackwell only)"""
     if not deepgemm_allowed(hidden_states.device):
         raise RuntimeError(
             "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
@@ -659,7 +659,10 @@ ALL_FP4_EXPERTS_FUNCTIONS = FP4ExpertsInterface()
 
 
 def dequantize_mxfp4(weight, scale, dtype):
-    "`(..., N, K // 2)` e2m1 pairs packed in `int8` (low nibble first), times their `(..., N, K // 32)` ue8m0 scales"
+    """
+    `(..., N, K // 2)` e2m1 pairs packed in `int8` (low nibble first), times their `(..., N, K // 32)` ue8m0
+    scales
+    """
     lut = torch.tensor(FP4_VALUES, dtype=torch.float32, device=weight.device)
     weight = weight.view(torch.uint8)
     values = torch.stack([lut[(weight & 0xF).int()], lut[(weight >> 4).int()]], dim=-1).flatten(-2)
@@ -672,7 +675,7 @@ def dequantize_convertops(blocks, scales, dtype):
 
 
 def swizzled(module, proj, missing_keys, full_layer_name):
-    "The serialized params of `proj` (`gate_up_proj_blocks`, `gate_up_proj_scales`) now live in its Triton tensor"
+    """The serialized params of `proj` (`gate_up_proj_blocks`, `gate_up_proj_scales`) now live in its Triton tensor"""
     prefix = full_layer_name.rpartition(".")[0]
     for name in (f"{proj}_blocks", f"{proj}_scales"):
         module._parameters.pop(name, None)

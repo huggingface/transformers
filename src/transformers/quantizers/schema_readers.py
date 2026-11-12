@@ -18,13 +18,17 @@ Readers of a checkpoint's own quantization scheme (ModelOpt's per-layer `quantiz
 A new scheme gets its own function here, added to `SCHEMA_READERS`.
 """
 
+from ..utils import logging
 from ..utils.quantization_config import FineGrainedFP8Config, Mxfp4Config, NVFP4Config
 
 
-# ModelOpt `quant_algo` -> its config. W4A16 NVFP4 loads with the W4A4 config, which quantizes activations
+logger = logging.get_logger(__name__)
+
+
+# ModelOpt `quant_algo` -> its config
 MODELOPT_ALGOS = {
     "NVFP4": NVFP4Config,
-    "W4A16_NVFP4": NVFP4Config,
+    "W4A16_NVFP4": lambda: NVFP4Config(weight_only=True),
     "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
     "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
     # E4M3 weights, a ue8m0 scale per 32: on the FP8 kernels for now (not their best path on Blackwell)
@@ -49,6 +53,11 @@ def modelopt_plan(config: dict) -> dict | None:
     base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
     plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
     plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in layers.items()}
+    if config.get("kv_cache_quant_algo"):
+        logger.warning(
+            f"The checkpoint's `kv_cache_quant_algo={config['kv_cache_quant_algo']}` is not supported: the KV cache "
+            "stays in the model's dtype."
+        )
     return plan | {"*": base} if base else plan
 
 
