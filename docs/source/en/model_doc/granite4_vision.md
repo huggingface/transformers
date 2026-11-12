@@ -33,7 +33,7 @@ The model builds on [LLaVA-NeXT](llava_next) with several architectural innovati
 3. **DeepStack Feature Injection** with 8 vision-to-LLM injection points:
    - *LayerDeepstack*: features from 4 vision encoder depths are projected into different early LLM layers.
    - *SpatialDeepstack*: deepest vision features are split into 4 spatial groups and injected at later LLM layers.
-4. **Language Model**: [Granite 4.1](https://huggingface.co/ibm-granite/granite-4.1-4b-base) (4B params) with LoRA adapters (rank 256) across all self-attention and MLP layers.
+4. **Language Model**: [Granite 4.1](https://huggingface.co/ibm-granite/granite-4.1-3b) (3.4B params) with LoRA adapters (rank 256) across all self-attention and MLP layers.
 
 The model is delivered as a LoRA adapter on top of the base LLM, enabling single deployments to support both multimodal and text-only workloads. Total parameter count is ~4B.
 

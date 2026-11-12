@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-[Zamba2](https://huggingface.co/papers/2411.15242) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
+[Zamba2](https://huggingface.co/papers/2411.15242) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/Zyphra) repository for model weights.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).
 

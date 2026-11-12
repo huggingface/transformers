@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [mBART](https://huggingface.co/papers/2001.08210) is a multilingual machine translation model that pretrains the entire translation model (encoder-decoder) unlike previous methods that only focused on parts of the model. The model is trained on a denoising objective which reconstructs the corrupted text. This allows mBART to handle the source language and the target text to translate to.
 
-[mBART-50](https://huggingface.co/paper/2008.00401) is pretrained on an additional 25 languages.
+[mBART-50](https://huggingface.co/papers/2008.00401) is pretrained on an additional 25 languages.
 
 You can find all the original mBART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mbart) organization.
 
