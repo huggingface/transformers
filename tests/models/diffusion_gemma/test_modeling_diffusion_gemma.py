@@ -220,6 +220,36 @@ class DiffusionGemmaVisionText2TextModelTest(
         result = model(inputs_dict["input_ids"])
         self.assertEqual(result.last_hidden_state.shape, expected_shape)
 
+    def test_encoder_prefill_multimodal_mask_assigned(self):
+        """Tests that DiffusionGemmaEncoderModel assigns create_masks_for_generate return value to causal_mask_mapping."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaModel(config=config).to(torch_device).eval()
+
+        batch_size = self.model_tester.batch_size
+        seq_length = inputs_dict["input_ids"].shape[1]
+        attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=torch_device)
+        mm_token_type_ids = torch.zeros((batch_size, seq_length), dtype=torch.long, device=torch_device)
+        mm_token_type_ids[:, seq_length // 2 :] = 1
+
+        passed_mask = {}
+        orig_forward = model.encoder.language_model.forward
+
+        def spy_forward(*args, **kwargs):
+            passed_mask["attention_mask"] = kwargs.get("attention_mask")
+            return orig_forward(*args, **kwargs)
+
+        model.encoder.language_model.forward = spy_forward
+        try:
+            model.encoder(
+                input_ids=inputs_dict["input_ids"],
+                attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.assertIsInstance(passed_mask["attention_mask"], dict)
+            self.assertIn("full_attention", passed_mask["attention_mask"])
+        finally:
+            model.encoder.language_model.forward = orig_forward
+
     def test_vision_axial_rope(self):
         # override -> uses gemma4Vision backbone which also overrides this test
 

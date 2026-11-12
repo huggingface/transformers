@@ -1110,7 +1110,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            self.create_masks_for_generate(
+            causal_mask_mapping = self.create_masks_for_generate(
                 config=self.config.get_text_config(),
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
