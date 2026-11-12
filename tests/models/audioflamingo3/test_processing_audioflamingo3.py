@@ -34,6 +34,7 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "nvidia/audio-flamingo-3-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-audioflamingo3"
     checkpoint = "nvidia/audio-flamingo-3-hf"
+    supports_multiple_audios_per_text = False
 
     audio_unstructured_max_length = 201
 

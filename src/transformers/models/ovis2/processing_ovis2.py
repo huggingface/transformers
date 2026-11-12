@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_attr
 
@@ -38,6 +38,8 @@ class Ovis2Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token = "<image>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        # `<image>` is expanded into `<IMG_ATOM>` tokens, which are the ones holding the image features
+        self.image_token_ids = [tokenizer.convert_tokens_to_ids("<IMG_ATOM>")]
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -54,6 +56,32 @@ class Ovis2Processor(ProcessorMixin):
                     placeholder += "<IMG_ROW>"
         placeholder += "<IMG_END>"
         return placeholder
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [self.image_seq_length * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:

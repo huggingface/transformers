@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import Idefics2Processor
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
@@ -23,6 +25,8 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import (
         Idefics2Processor,
     )
@@ -70,6 +74,26 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_len": 2}
+
+    # Override as Idefics2 doesn't return `mm_token_type_ids` and only loads PIL images
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = [
+            Image.fromarray(np.random.randint(255, size=(h, w, 3), dtype=np.uint8)) for h, w in image_sizes
+        ]
+
+        processor = self.get_processor()
+        for do_image_splitting in [False, True]:
+            with self.subTest(do_image_splitting=do_image_splitting):
+                processor.image_processor.do_image_splitting = do_image_splitting
+
+                text = [f"This is an image {self.image_token}"] * len(image_inputs)
+                inputs = processor(text=text, images=image_inputs, padding=True, return_tensors="pt")
+                num_image_tokens_from_call = (inputs.input_ids == self.image_token_id).sum(-1).tolist()
+                num_mm_data_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+                self.assertListEqual(num_image_tokens_from_call, num_mm_data_from_helper["num_image_tokens"])
+                self.assertEqual(inputs.pixel_values.shape[1], num_mm_data_from_helper["num_image_patches"][0])
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor(use_tiny_ckpt=False)

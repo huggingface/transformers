@@ -32,6 +32,7 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmAsrProcessor
     # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-ASR-Nano-2512"
     tiny_model_id = "hf-internal-testing/tiny-processor-glmasr"
+    supports_multiple_audios_per_text = False
 
     audio_unstructured_max_length = 201
 

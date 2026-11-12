@@ -18,7 +18,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, is_valid_image
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
@@ -352,6 +352,32 @@ class GotOcr2Processor(ProcessorMixin):
         current_patch_index = kwargs["patch_indices"][image_idx - 1] if image_idx > 0 else 0
         num_patches = sum(image_inputs["num_patches"][current_patch_index : current_patch_index + num_pages])
         return self.image_token * num_image_tokens * num_patches
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            merged_kwargs = self._merge_kwargs(**kwargs)
+            images_kwargs = merged_kwargs["images_kwargs"]
+            num_image_tokens = images_kwargs.get("num_image_tokens", merged_kwargs["num_image_tokens"])
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_image_tokens * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:

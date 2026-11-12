@@ -32,6 +32,7 @@ from ...test_processing_common import ProcessorTesterMixin
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_asr"
+    supports_multiple_audios_per_text = False
 
     @require_torch
     def test_can_load_various_tokenizers(self):

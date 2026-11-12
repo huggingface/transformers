@@ -15,10 +15,12 @@
 Processor class for Qwen2Audio.
 """
 
+import math
+
 import numpy as np
 
 from ...audio_utils import AudioInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_attr
@@ -71,6 +73,32 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
                 )
 
+    def _get_audio_token_length(self, num_frames: int) -> int:
+        conv_output_length = (num_frames - 1) // 2 + 1
+        return (conv_output_length - 2) // 2 + 1
+
+    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            audio_lengths (`list[int]`, *optional*):
+                The lengths of audio inputs in number of samples. Used to dynamically
+                compute per-audio token counts.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        data = {}
+        if audio_lengths is not None:
+            hop_length = self.feature_extractor.hop_length
+            max_frames = self.feature_extractor.nb_max_frames
+            # Audio is padded or truncated to `nb_max_frames` mel frames
+            num_frames = [min(math.ceil(length / hop_length), max_frames) for length in audio_lengths]
+            data["num_audio_tokens"] = [self._get_audio_token_length(n) for n in num_frames]
+        return MultiModalData(**data)
+
     def _process_audio(self, audio: AudioInput, **kwargs):
         audio = self.feature_extractor.fetch_audio(audio)
 
@@ -85,7 +113,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         # Qwen2ASR doesn't have its own feature extractor
         # Save the number of tokens based on crops/padding in analogy with some vision processors
         audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
-        audio_inputs["num_audio_tokens"] = [(((l - 1) // 2 + 1) - 2) // 2 + 1 for l in audio_lengths]
+        audio_inputs["num_audio_tokens"] = [self._get_audio_token_length(l) for l in audio_lengths]
 
         audio_replacements = []
         for idx in range(len(audio)):

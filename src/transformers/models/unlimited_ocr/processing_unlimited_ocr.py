@@ -21,7 +21,7 @@ import math
 import re
 
 from ...image_utils import make_flat_list_of_images
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 
@@ -69,18 +69,49 @@ class UnlimitedOcrProcessor(ProcessorMixin):
             raise ValueError("You have to specify text.")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
-        image_size = kwargs.get("size") or self.image_processor.size
-        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        patches_grid = (
+            image_inputs["patches_grid"][image_idx] if image_inputs["num_local_patches"][image_idx] else None
+        )
+        return self.image_token * self._get_num_image_tokens(patches_grid, **kwargs)
+
+    def _get_num_image_tokens(self, patches_grid, size=None, tile_size=None, **kwargs) -> int:
+        image_size = size or self.image_processor.size
+        tile_size = tile_size or self.image_processor.tile_size
         size = max(image_size["height"], image_size["width"])
 
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
 
-        num_columns, num_rows = image_inputs["patches_grid"][image_idx]
         num_tokens = num_queries_global * (num_queries_global + 1) + 1
-        if image_inputs["num_local_patches"][image_idx] > 0:
+        if patches_grid is not None:
+            num_columns, num_rows = patches_grid
             num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
-        return self.image_token * num_tokens
+        return num_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            num_image_tokens = [
+                self._get_num_image_tokens(
+                    self.image_processor.get_patches_grid(*image_size, images_kwargs), **images_kwargs
+                )
+                for image_size in image_sizes
+            ]
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, return_detections: bool = False, **kwargs):
         """

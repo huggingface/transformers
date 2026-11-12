@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from dataclasses import dataclass
 from math import pi
 
@@ -143,6 +144,13 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         self.audio_eos_token = audio_eos_token
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
+
+    def _get_num_audio_tokens(self, audio_length: int, sampling_rate: int) -> int:
+        window_size = int(sampling_rate * self.feature_extractor.chunk_length)
+        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
+        num_frames = math.ceil(min(audio_length, max_windows * window_size) / self.feature_extractor.hop_length)
+        # +2 for the audio BOS/EOS tokens
+        return int(self._get_audio_token_length(num_frames)) + 2
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]

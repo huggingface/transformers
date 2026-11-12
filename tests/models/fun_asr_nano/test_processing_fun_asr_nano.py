@@ -33,6 +33,7 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # TODO: swap for `tiny_model_id = "hf-internal-testing/tiny-processor-fun_asr_nano"` once that repo exists.
     # The generic component setup builds a Qwen2 tokenizer with an empty vocab, which tokenizes to nothing.
     model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+    supports_multiple_audios_per_text = False
 
     # Overwrite to skip the numpy cases (keeping as many cases as the parent), as
     # `FunAsrNanoProcessor.__call__` is PyTorch-only like `AudioFlamingo3Processor`.

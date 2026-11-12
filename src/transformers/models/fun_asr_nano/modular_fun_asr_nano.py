@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 
 import torch.nn as nn
@@ -131,6 +132,13 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
     def _get_audio_token_length(self, audio_lengths):
         raise AttributeError("Not needed for Fun-ASR-Nano")
+
+    def _get_num_audio_tokens(self, audio_length: int, sampling_rate: int) -> int:
+        # Kaldi fbank frames (`snip_edges=True`) followed by LFR subsampling
+        frame_length = int(sampling_rate * self.feature_extractor.frame_length / 1000)
+        frame_shift = int(sampling_rate * self.feature_extractor.frame_shift / 1000)
+        num_frames = 1 + (audio_length - frame_length) // frame_shift if audio_length >= frame_length else 0
+        return math.ceil(num_frames / self.feature_extractor.stride_lfr)
 
     def _process_audio(self, audio, **kwargs):
         audio_inputs = self.feature_extractor(audio, **kwargs)
