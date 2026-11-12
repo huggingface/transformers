@@ -70,8 +70,8 @@ class NVFP4HfQuantizer(HfQuantizer):
             raise ValueError("NVFP4 quantization does not support CPU or disk offload.")
         if len(cuda_devices) != 1:
             raise ValueError(
-                "NVFP4 quantization currently supports one CUDA device per process: a multi-device `device_map` is not "
-                "supported yet (tensor parallelism is, NVFP4 layers stay whole on every rank)."
+                "NVFP4 quantization currently supports one CUDA device. Tensor parallelism and multi-device "
+                "`device_map` configurations are not supported yet."
             )
         self.quantization_device = cuda_devices.pop()
 
@@ -80,15 +80,13 @@ class NVFP4HfQuantizer(HfQuantizer):
             raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
 
     def update_parallel_plan(self, model, parallel_plan):
-        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
-        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear
-
-        # Its swizzled scales have no sharding parallel_plan yet: its modules stay whole on every rank
-        nvfp4 = (NVFP4Linear, NVFP4Experts)
-        modules = {replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, nvfp4)}
-        parallel_plan.update(
-            {key: "replicate" for key in parallel_plan if key in modules or key.rpartition(".")[0] in modules}
-        )
+        distributed_config = getattr(model.config, "distributed_config", None)
+        sizes = {name: getattr(distributed_config, f"{name}_size", None) or 1 for name in ("tp", "ep")}
+        if any(size > 1 for size in sizes.values()):
+            raise ValueError(
+                "NVFP4 quantization does not support tensor or expert parallelism yet because its scale metadata does "
+                f"not have a sharding plan (got tp_size={sizes['tp']}, ep_size={sizes['ep']})."
+            )
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
         from ..integrations.nvfp4 import NVFP4Linear

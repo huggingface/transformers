@@ -399,16 +399,21 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "multi-device `device_map`"):
             self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
 
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_parallel_plan_replicates_nvfp4_modules(self, _):
-        # Their scales have no sharding plan yet: NVFP4 modules stay whole, the others keep their style
-        layer = nn.Module()
-        layer.proj, layer.other = NVFP4Linear(64, 32), nn.Linear(64, 32)
-        model = nn.Module()
-        model.layers = nn.ModuleList([layer])
-        plan = {"layers.*.proj": "colwise", "layers.*.other": "rowwise"}
-        self.quantizer.update_parallel_plan(model, plan)
-        self.assertEqual(plan, {"layers.*.proj": "replicate", "layers.*.other": "rowwise"})
+    def test_rejects_tensor_and_expert_parallelism_until_scale_metadata_is_supported(self):
+        for sizes in ({"tp_size": 2}, {"ep_size": 2}):
+            with self.subTest(**sizes):
+                model = SimpleNamespace(config=SimpleNamespace(distributed_config=SimpleNamespace(**sizes)))
+                with self.assertRaisesRegex(ValueError, "scale metadata does not have a sharding plan"):
+                    self.quantizer.update_parallel_plan(model, {})
+
+    def test_update_parallel_plan_keeps_non_parallel_configs(self):
+        configs = (
+            SimpleNamespace(),
+            SimpleNamespace(distributed_config=SimpleNamespace(tp_size=1, ep_size=1)),
+        )
+        for config in configs:
+            with self.subTest(config=config):
+                self.quantizer.update_parallel_plan(SimpleNamespace(config=config), {})
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)
