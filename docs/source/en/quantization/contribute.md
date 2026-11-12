@@ -66,7 +66,7 @@ Define the quantized modules and load operations in a new file in [transformers/
 
 6. Add the `get_quantize_ops` method to the quantizer class if the quantization supports quantizing on the fly. In transformers, we materialize each tensor and apply a sequence of different operations on it. In our case, the quantization operation happens at the end. You need to create a `XXXQuantize`, a subclass of `ConversionOps`, and add a `convert` method. In the `convert` method, you need to quantize the weights and return a dictionary of quantized params.
 
-7. If the quantization supports loading pre-quantized weights, set `serialized_names` (what each param is stored as) and `get_load_operations` (the `"deserialize"` and `"dequantize"` ops). Add `renamed_names` if the checkpoint names a tensor differently than your module. Loading builds the converters from them, see [Load pre-quantized checkpoints](#load-pre-quantized-checkpoints).
+7. If the quantization supports loading pre-quantized weights, set `serialized_names` (what each param is stored as) and `get_load_operations` (the `"deserialize"` and `"dequantize"` ops). Add `checkpoint_renames` if the checkpoint names a tensor differently than your module. Loading builds the converters from them, see [Load pre-quantized checkpoints](#load-pre-quantized-checkpoints).
 
 8. Write the `_process_model_after_weight_loading` method if needed. This method enables implementing additional features that require manipulating the model after loading the weights.
 
@@ -134,7 +134,7 @@ Result: Reconstructed quantized tensor → layer.weight
 - `"deserialize"` runs after the model's converters (e.g. the experts merge), on the pre-quantized tensors of one param. Leave it out if your module stores the tensors exactly as the checkpoint does.
 - `"dequantize"` runs before the model's converters, on the weight and its serialized names, and returns the full-precision weight.
 - `get_load_operation()` picks the one for the config: `"dequantize"` when it sets `dequantize=True`, else `"deserialize"`. `update_weight_transform` attaches it to each param once the param's first key matches a converter.
-- `renamed_names` maps globs on a checkpoint key's last names to yours, first match wins. Keys are renamed per layer (`rename_layer`) before anything else, so `serialized_names` only uses your names.
+- `checkpoint_renames` maps globs on a checkpoint key's last names to yours, first match wins. Keys are renamed per layer (`rename_layer`) before anything else, so `serialized_names` only uses your names.
 
 ```py
 class YourHfQuantizer(HfQuantizer):
@@ -143,7 +143,7 @@ class YourHfQuantizer(HfQuantizer):
         # fused experts: the model's converters merge each expert's tensors into these
         "gate_up_proj": ["gate_up_proj_qdata", "gate_up_proj_scale", "gate_up_proj_zero_point"],
     }
-    renamed_names = {"scale": "weight_scale", "zp": "weight_zero_point"}  # the checkpoint's `.scale` / `.zp`
+    checkpoint_renames = {"scale": "weight_scale", "zp": "weight_zero_point"}  # the checkpoint's `.scale` / `.zp`
 
     def get_load_operations(self):
         return {"deserialize": YourDeserialize, "dequantize": YourDequantize}

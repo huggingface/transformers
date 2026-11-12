@@ -32,6 +32,9 @@ MODELOPT_ALGOS = {
 }
 
 
+# TODO: MiniMax M3's `moe_quant_algo` (its MoE layers' own algo), once it is supported
+
+
 def modelopt_plan(config: dict) -> dict | None:
     """
     ModelOpt's per-layer `quantized_layers`, or its single `quant_algo` for every layer. The layers it leaves out keep

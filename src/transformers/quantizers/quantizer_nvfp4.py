@@ -125,7 +125,7 @@ class NVFP4HfQuantizer(HfQuantizer):
     }
 
     # An expert's `input_scale`, named after its weight: the experts' converter takes it along
-    renamed_names = {"experts.*.input_scale": "weight_input_scale"}
+    checkpoint_renames = {"experts.*.input_scale": "weight_input_scale"}
 
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize

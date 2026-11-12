@@ -407,7 +407,7 @@ class HfQuantizer(ABC):
 
     # Globs of a checkpoint's keys (the first one naming a key wins) to our name, on the format's layers, see
     # `rename_layer`. E.g. `{"scale": "weight_scale_inv"}` renames `*.scale`
-    renamed_names: dict[str, str] = {}
+    checkpoint_renames: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):
         "A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"

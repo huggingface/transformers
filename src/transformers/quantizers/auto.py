@@ -360,7 +360,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     Every quantized model loads through one: a single quantizer is the plan `{"*": q}`. It knows every module's
     quantizer, so it builds the conversions and gives each param its ops; a quantizer only describes its format
-    (`serialized_names`, `renamed_names`, `get_load_operations`, `quantized_module`).
+    (`serialized_names`, `checkpoint_renames`, `get_load_operations`, `quantized_module`).
     """
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
@@ -420,7 +420,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             get_quantizer("model.layers.0.mlp.experts.gate_up_proj")  # matches `p0` -> nvfp4
             get_quantizer("model.layers.0.self_attn.q_proj")          # matches `p1` -> fp8
 
-        and, for FP8's `renamed_names = {"scale": "weight_scale_inv", "input_scale": "activation_scale"}`:
+        and, for FP8's `checkpoint_renames = {"scale": "weight_scale_inv", "input_scale": "activation_scale"}`:
 
             self.renamers[fp8] = ((?P<p0>.*\.scale)|(?P<p1>.*\.input_scale), ["weight_scale_inv", "activation_scale"])
             rename_layer("layers.0.self_attn.q_proj.scale")  # `p0` -> "layers.0.self_attn.q_proj.weight_scale_inv"
@@ -448,10 +448,10 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.patterns = [(f"*{pattern.removesuffix('.*')}.*", patterns[pattern]) for pattern in order]
         self.compile_matcher()
 
-        # Each format's `renamed_names` as one regex too, with our names in order, for `rename_layer`
+        # Each format's `checkpoint_renames` as one regex too, with our names in order, for `rename_layer`
         self.renamers = {}
         for quantizer in self.all_quantizers:
-            names = quantizer.renamed_names
+            names = quantizer.checkpoint_renames
             if quantizer.pre_quantized and names:
                 renamer = re.compile("|".join(f"(?P<p{i}>.*\\.{n.replace('*', '.*')})" for i, n in enumerate(names)))
                 self.renamers[quantizer] = (renamer, list(names.values()))
@@ -499,7 +499,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
             if getattr(quantizer.quantization_config, "dequantize", False):
-                names += [*quantizer.serialized_names["weight"], *quantizer.renamed_names.values()]
+                names += [*quantizer.serialized_names["weight"], *quantizer.checkpoint_renames.values()]
 
         for i, converter in enumerate(weight_conversions):
             sources = converter._original_source_patterns
@@ -514,9 +514,9 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def rename_layer(self, key):
         """
-        A checkpoint key in its layer's format names: the first of its format's `renamed_names` (theirs -> ours)
+        A checkpoint key in its layer's format names: the first of its format's `checkpoint_renames` (theirs -> ours)
         naming the key's last name. E.g. on an FP8 layer, `q_proj.scale` -> `q_proj.weight_scale_inv`, see
-        `map_module_to_quantizer` for the regex. A key of a format without `renamed_names` is kept.
+        `map_module_to_quantizer` for the regex. A key of a format without `checkpoint_renames` is kept.
         """
         renamer, ours = self.renamers.get(self.get_quantizer(key), (None, None))
         match = renamer.fullmatch(key) if renamer else None

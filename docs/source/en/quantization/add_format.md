@@ -48,7 +48,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
         "down_proj": ["down_proj", "down_proj_scale_inv"],
     }
-    renamed_names = {"scale": "weight_scale_inv"}  # DeepSeek-V4 saves `.scale`
+    checkpoint_renames = {"scale": "weight_scale_inv"}  # DeepSeek-V4 saves `.scale`
 
     def get_load_operations(self):
         return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}
@@ -59,7 +59,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 ```
 
 - `serialized_names` lists the tensors a param is stored as. They load together, with the same ops.
-- `renamed_names` maps globs on the last names of a checkpoint key to ours, first match wins. It is applied per layer
+- `checkpoint_renames` maps globs on the last names of a checkpoint key to ours, first match wins. It is applied per layer
   (`rename_layer`), before anything else, so the rest of loading only sees our names. A glob can look further up the
   key, e.g. NVFP4's `{"experts.*.input_scale": "weight_input_scale"}` renames only the experts' `input_scale`.
 - `get_load_operations` returns the op classes for `"deserialize"` and `"dequantize"`. `get_load_operation()` picks the
