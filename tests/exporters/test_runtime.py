@@ -437,7 +437,7 @@ class ExportedModelTest(unittest.TestCase):
             exported.save_pretrained(directory)
             torch.utils._pytree._deregister_pytree_node(DynamicCache)
             outputs = ExportedModel.from_pretrained(directory, device="cpu")(**inputs)
-        self.assertIsInstance(outputs.past_key_values, DynamicCache)
+        self.assertIsInstance(outputs.cache, DynamicCache)
 
     @pytest.mark.torch_export_test
     def test_dynamo_loads_cache_output(self):
