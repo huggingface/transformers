@@ -411,6 +411,17 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_relative_position_bias_tables_get_gradients(self):
+        # The bias tables were looked up under torch.no_grad() and never trained (#50636)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = LayoutLMv2Model(config).to(torch_device)
+        model.train()
+        model(**inputs_dict).last_hidden_state.sum().backward()
+        for name in ("rel_pos_bias", "rel_pos_x_bias", "rel_pos_y_bias"):
+            grad = getattr(model.encoder, name).weight.grad
+            self.assertIsNotNone(grad, name)
+            self.assertGreater(grad.abs().sum().item(), 0, name)
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/layoutlmv2-base-uncased"
