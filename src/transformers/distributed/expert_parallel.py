@@ -19,6 +19,7 @@ import contextlib
 from typing import TYPE_CHECKING, NamedTuple
 
 from ..utils import logging
+from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 from .parallel_utils import ALL_PARALLEL_STYLES, _use_local_dtensor_params
 
@@ -172,8 +173,7 @@ class EpRouterParallel(ExpertParallelLayer):
         # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
         # before the mask (each slot has exactly one owning rank, so the sum is exact).
         process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        if torch.is_grad_enabled() and router_scores.requires_grad:
-            router_scores = _AllReduceBackward.apply(router_scores, process_group)
+        router_scores = _AllReduceBackward.apply(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -192,7 +192,7 @@ class EPImplementation:
     reuses).
 
     Calling it with `(hidden_states, top_k_index, top_k_weights)`, the batch this rank holds (global expert ids),
-    returns the weighted expert output for each of its tokens. It runs this rank's experts with `run_experts`, on
+    returns the weighted expert output for each of its tokens. It runs this rank's experts with `experts_forward`, on
     whatever rows, local expert ids and weights it brought them.
 
     Gradients must reach every rank that holds a token, routing weights included, so a collective that autograd does not
@@ -202,17 +202,14 @@ class EPImplementation:
     # Set by implementations that only run when every rank of the EP group holds the same batch, e.g. `AllReduceEP`.
     needs_shared_batch = False
 
-    def __init__(self, experts, ep_mesh, tp_mesh=None):
-        self.experts = experts
+    def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh):
         self.experts_forward = experts.forward  # the experts' own forward, on local expert ids
         self.num_local_experts = experts.num_experts
         self.ep_mesh = ep_mesh
         self.tp_mesh = tp_mesh
         # Every rank of the EP group holds the same batch when the EP group is the TP group.
-        self.shares_batch = False
-        if tp_mesh is not None:
-            tp_ranks, ep_ranks = (get_process_group_ranks(mesh.get_group()) for mesh in (tp_mesh, ep_mesh))
-            self.shares_batch = tp_ranks == ep_ranks
+        tp_ranks, ep_ranks = (get_process_group_ranks(mesh.get_group()) for mesh in (tp_mesh, ep_mesh))
+        self.shares_batch = tp_ranks == ep_ranks
         if self.needs_shared_batch and not self.shares_batch:
             raise ValueError(
                 f"{type(self).__name__} needs every rank of the expert group to hold the same batch (`ep_size == tp_size`)."
@@ -220,16 +217,6 @@ class EPImplementation:
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         raise NotImplementedError
-
-    def run_experts(self, tokens, expert_ids, weights):
-        """This rank's experts on `tokens`, routed to `expert_ids` (local ids) with `weights`."""
-        with _use_local_dtensor_params(self.experts):
-            if tokens.shape[0] == 0:
-                # Keep the empty rows connected to backward, so the reverse exchange and FSDP's reduction still run.
-                return self.experts_forward(
-                    tokens.sum(dim=0, keepdim=True), expert_ids.new_zeros((1, 1)), weights.new_ones((1, 1))
-                )[:0]
-            return self.experts_forward(tokens, expert_ids, weights)
 
 
 class _AllToAllState(NamedTuple):
@@ -271,13 +258,20 @@ class AllToAllEP(EPImplementation):
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         tokens, expert_ids, weights, state = self._dispatch_tokens(hidden_states, top_k_index, top_k_weights)
-        return self._combine_tokens(self.run_experts(tokens, expert_ids, weights), state)
+        if tokens.shape[0] == 0:
+            # Keep the empty rows connected to backward, so the reverse exchange and FSDP's reduction still run.
+            expert_output = self.experts_forward(
+                tokens.sum(dim=0, keepdim=True), expert_ids.new_zeros((1, 1)), weights.new_ones((1, 1))
+            )[:0]
+        else:
+            expert_output = self.experts_forward(tokens, expert_ids, weights)
+        return self._combine_tokens(expert_output, state)
 
     def _dispatch_tokens(self, hidden_states, top_k_index, top_k_weights):
         """Each (token, expert) pair to the expert's rank: the rows this rank's experts run on, their local expert ids
         and weights, and what `_combine_tokens` needs to bring the results back."""
         num_tokens = hidden_states.size(0)
-        if self.tp_mesh is not None and self.tp_mesh.size() > 1:
+        if self.tp_mesh.size() > 1:
             # Replicate -> Shard(0) is a local chunk (no communication); its backward all-gathers the row gradients.
             hidden_states, top_k_index, top_k_weights = (
                 DTensor.from_local(t, self.tp_mesh, [Replicate()], run_check=False)
@@ -323,7 +317,7 @@ class AllToAllEP(EPImplementation):
         token_outputs[state.order] = recv_out
         token_outputs = token_outputs.view(*state.top_k_weights.shape, hidden_dim)
         output = (token_outputs * state.top_k_weights.unsqueeze(-1)).sum(dim=1)
-        if self.tp_mesh is None or self.tp_mesh.size() == 1:
+        if self.tp_mesh.size() == 1:
             return output
         # Shard(0) -> Replicate is one all-gather of the row slices, uneven or empty ones too.
         output = DTensor.from_local(
@@ -362,13 +356,11 @@ class AllReduceEP(EPImplementation):
         ep_group = self.ep_mesh.get_group()
         # Each rank backpropagates through its own experts only, so the gradients of the shared inputs it computes are
         # partial: sum them over the group (the forward all-reduce has an identity backward).
-        if torch.is_grad_enabled() and hidden_states.requires_grad:
-            hidden_states = _AllReduceBackward.apply(hidden_states, ep_group)
-        if torch.is_grad_enabled() and top_k_weights.requires_grad:
-            top_k_weights = _AllReduceBackward.apply(top_k_weights, ep_group)
+        hidden_states = _AllReduceBackward.apply(hidden_states, ep_group)
+        top_k_weights = _AllReduceBackward.apply(top_k_weights, ep_group)
         off_rank = (top_k_index // self.num_local_experts) != self.ep_mesh.get_local_rank()
         local_index = torch.where(off_rank, self.num_local_experts, top_k_index % self.num_local_experts)
-        expert_output = self.run_experts(hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0.0))
+        expert_output = self.experts_forward(hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0.0))
         return _AllReduceForward.apply(expert_output, ep_group)
 
 
@@ -379,7 +371,7 @@ class AutoEP(EPImplementation):
     back to the host, so decode captures in a CUDA graph.
     """
 
-    def __init__(self, experts, ep_mesh, tp_mesh=None):
+    def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh):
         super().__init__(experts, ep_mesh, tp_mesh)
         self.all_to_all = AllToAllEP(experts, ep_mesh, tp_mesh)
         # Only built where it can run: an EP group whose ranks hold different batches has no all-reduce path.
@@ -415,7 +407,7 @@ class MegaMoeEP(EPImplementation):
     # them, as the layers run one after another. `MegaMoeEP.symm_buffers.clear()` frees them.
     symm_buffers: dict[str, dict] = {}
 
-    def __init__(self, experts, ep_mesh, tp_mesh=None):
+    def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh | None = None):
         super().__init__(experts, ep_mesh, tp_mesh)
         self.group_symm_buffers = self.symm_buffers.setdefault(ep_mesh.get_group().group_name, {})
 
@@ -431,45 +423,52 @@ class MegaMoeEP(EPImplementation):
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
         rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
 
-        with _use_local_dtensor_params(self.experts):
-            local_output = self.experts_forward(
-                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, self.group_symm_buffers
-            )
+        local_output = self.experts_forward(
+            hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, self.group_symm_buffers
+        )
         output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
         all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
         return output[:num_tokens].to(hidden_states.dtype)
 
 
-class EpDispatchExpertsParallel(ExpertParallelLayer):
-    """Whole experts per rank (`Shard(0)` on the EP mesh), reached through the `EPImplementation` that
-    `DistributedConfig.ep_implementation` names in `ep_implementations`. Add an entry there to register one."""
+class EPImplementationInterface(GeneralInterface):
+    """Registry of the `EPImplementation`s `DistributedConfig.ep_implementation` names. Add one with
+    `EPImplementationInterface.register(name, cls)`."""
 
-    ep_implementations = {
+    _global_mapping = {
         "auto": AutoEP,
         "all_to_all": AllToAllEP,
         "all_reduce": AllReduceEP,
         "deepgemm_megamoe": MegaMoeEP,
     }
 
+
+class EpDispatchExpertsParallel(ExpertParallelLayer):
+    """Whole experts per rank (`Shard(0)` on the EP mesh), reached through the `EPImplementation` that
+    `DistributedConfig.ep_implementation` names in `EPImplementationInterface`."""
+
     def should_use_local_tensors(self, module):
         return True
 
-    def install_forward(self, module, ep_mesh, *, tp_mesh=None, ep_implementation="auto"):
-        """`tp_mesh` is the group of ranks holding the same batch."""
-        if ep_implementation not in self.ep_implementations:
+    def install_forward(self, module, ep_mesh, *, tp_mesh, ep_implementation="auto"):
+        """`tp_mesh` is the group of ranks holding the same batch (size 1 without TP)."""
+        implementations = EPImplementationInterface()
+        if ep_implementation not in implementations:
             raise ValueError(
                 f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "
-                f"{', '.join(repr(name) for name in self.ep_implementations)}, or add an `EPImplementation` to "
-                "`EpDispatchExpertsParallel.ep_implementations`."
+                f"{', '.join(repr(name) for name in implementations)}, or register an `EPImplementation` "
+                "with `EPImplementationInterface.register`."
             )
-        implementation = self.ep_implementations[ep_implementation](module, ep_mesh, tp_mesh)
+        implementation = implementations[ep_implementation](module, ep_mesh, tp_mesh)
 
         def ep_forward(hidden_states, top_k_index, top_k_weights):
             if isinstance(hidden_states, DTensor):
                 hidden_states = hidden_states.to_local()
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
-            return implementation(hidden_states, top_k_index, top_k_weights).to(hidden_states.dtype)
+            with self.context_around_forward(module, ep_mesh):
+                output = implementation(hidden_states, top_k_index, top_k_weights)
+            return output.to(hidden_states.dtype)
 
         module.forward = ep_forward
         return module
@@ -482,11 +481,15 @@ if is_torch_distributed_available():
 
 
 def apply_expert_parallelism(
-    model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str], ep_implementation: str = "auto"
+    model: nn.Module,
+    ep_mesh: DeviceMesh,
+    tp_mesh: DeviceMesh,
+    plan: dict[str, str],
+    ep_implementation: str = "auto",
 ):
     """
-    Shard experts on EP; `ep_dispatch_experts` modules reach them through the `ep_implementation` registered in
-    `EpDispatchExpertsParallel.ep_implementations`.
+    Shard experts on EP; `ep_dispatch_experts` modules reach them through the `EPImplementation` that
+    `ep_implementation` names in `EPImplementationInterface`.
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
@@ -502,7 +505,7 @@ def apply_expert_parallelism(
             module = modules[name]
             # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
             if style_name == "ep_dispatch_experts":
-                style.install_forward(module, ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation)
+                style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation)
             else:
                 style.install_forward(module, ep_mesh)
         module._is_hooked = True

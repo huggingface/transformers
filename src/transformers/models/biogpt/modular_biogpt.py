@@ -101,8 +101,8 @@ class BioGptDecoderLayer(BartDecoderLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
         """
@@ -178,8 +178,8 @@ class BioGptModel(BioGptPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -272,8 +272,8 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -337,9 +337,9 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -415,9 +415,9 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,

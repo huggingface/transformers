@@ -13,6 +13,7 @@
 # limitations under the License.
 from unittest.mock import patch
 
+import pytest
 import torch
 from parameterized import parameterized
 from torch.distributed.device_mesh import init_device_mesh
@@ -25,6 +26,7 @@ from transformers.distributed.expert_parallel import (
     AutoEP,
     EpDispatchExpertsParallel,
     EPImplementation,
+    EPImplementationInterface,
 )
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
@@ -107,20 +109,7 @@ class TestExpertParallelLayer(TestCasePlus):
 
     def test_install_forward_checks_ep_implementation(self):
         """An unknown name and `"all_reduce"` without a shared batch are refused; a registered implementation runs."""
-        with self.assertRaises(ValueError):
-            EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="fast")
-        with self.assertRaises(ValueError):
-            EpDispatchExpertsParallel().install_forward(
-                _DummyExperts(), self.MockDeviceMesh(2, 0), ep_implementation="all_reduce"
-            )
-
-        class Custom(EPImplementation):
-            def __call__(self, hidden_states, top_k_index, top_k_weights):
-                return hidden_states + 1
-
-        with patch.dict(EpDispatchExpertsParallel.ep_implementations, {"custom": Custom}):
-            experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
-        torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
+        run_distributed(world_size=2, backend="gloo")(_install_forward_checks_ep_implementation)()
 
     def test_megamoe_hands_experts_a_slice_of_the_shared_batch(self):
         """`"deepgemm_megamoe"` hands each rank a padded slice with global ids, the EP group and the shared buffers."""
@@ -128,20 +117,50 @@ class TestExpertParallelLayer(TestCasePlus):
 
 
 class _DummyExperts(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.num_experts = 2
+    """Toy experts: expert `i` multiplies a token by `scales[i]` (1 by default, on 2 experts). The id `num_experts`
+    marks a route to another rank's expert (`AllReduceEP` masks them that way) and adds nothing."""
 
-    def forward(self, tokens, expert_ids, weights):
-        assert type(tokens) is torch.Tensor, type(tokens)
-        return tokens
+    def __init__(self, scales=None):
+        super().__init__()
+        scales = torch.ones(2) if scales is None else scales
+        self.num_experts = len(scales)
+        # one extra scale of 0 for the id `num_experts`
+        self.scales = torch.cat([scales, torch.zeros(1)])
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        assert type(hidden_states) is torch.Tensor, type(hidden_states)
+        # each expert is a scalar, so a token's output is the token times the weighted sum of its experts' scales
+        factor = (self.scales[top_k_index] * top_k_weights).sum(dim=-1, keepdim=True)
+        return hidden_states * factor
 
 
 # Worker functions for the expert-parallel layer tests, spawned through `run_distributed`.
 def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
-    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
+    mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
+    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), mesh["ep"], tp_mesh=mesh["tp"])
     experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))
+
+
+def _install_forward_checks_ep_implementation(rank):
+    mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
+    ep_mesh, tp_mesh = mesh["ep"], mesh["tp"]
+    # an unknown name, and `"all_reduce"` on ranks holding different batches
+    for ep_implementation in ("fast", "all_reduce"):
+        with pytest.raises(ValueError):
+            EpDispatchExpertsParallel().install_forward(
+                _DummyExperts(), ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation
+            )
+
+    class Custom(EPImplementation):
+        def __call__(self, hidden_states, top_k_index, top_k_weights):
+            return hidden_states + 1
+
+    with patch.dict(EPImplementationInterface._global_mapping, {"custom": Custom}):
+        experts = EpDispatchExpertsParallel().install_forward(
+            _DummyExperts(), ep_mesh, tp_mesh=tp_mesh, ep_implementation="custom"
+        )
+    torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
 
 def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
@@ -155,22 +174,6 @@ def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
         ):
             AutoEP(_DummyExperts(), ep_mesh, tp_mesh)(None, None, None)
         assert (all_reduce_call.called, all_to_all_call.called) == (all_reduce, not all_reduce), (tp_mesh, grad)
-
-
-class _ScaledExperts(torch.nn.Module):
-    """Toy experts: expert `i` multiplies a token by `scales[i]`. The id `num_experts` marks a route to another rank's
-    expert (`AllReduceEP` masks them that way) and adds nothing."""
-
-    def __init__(self, scales):
-        super().__init__()
-        self.num_experts = len(scales)
-        # one extra scale of 0 for the id `num_experts`
-        self.scales = torch.cat([scales, torch.zeros(1)])
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        # each expert is a scalar, so a token's output is the token times the weighted sum of its experts' scales
-        factor = (self.scales[top_k_index] * top_k_weights).sum(dim=-1, keepdim=True)
-        return hidden_states * factor
 
 
 def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
@@ -189,14 +192,14 @@ def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
 
     # expected: all 4 experts on one process
     expected_inputs = [t.clone().requires_grad_() for t in (hidden_states, top_k_weights)]
-    expected = forward(_ScaledExperts(scales), *expected_inputs)
+    expected = forward(_DummyExperts(scales), *expected_inputs)
     expected.backward(grad_output)
 
     # actual: the same batch through this rank's 2 experts, behind `ep_implementation`. Both ranks hold the batch
     # (the EP group is the TP group), so every implementation applies.
     mesh = init_device_mesh("cpu", (2,))
     experts = EpDispatchExpertsParallel().install_forward(
-        _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, ep_implementation=ep_implementation
+        _DummyExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, ep_implementation=ep_implementation
     )
     inputs = [t.clone().requires_grad_() for t in (hidden_states, top_k_weights)]
     if mode == "inference":

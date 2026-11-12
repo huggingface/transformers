@@ -239,28 +239,28 @@ class FlaubertPredLayer(nn.Module):
 # Copied from transformers.models.xlm.modeling_xlm.XLMSquadHeadOutput with XLM->Flaubert
 class FlaubertSquadHeadOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
         Classification loss as the sum of start token, end token (and is_impossible if provided) classification
         losses.
-    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    start_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top config.start_n_top start token possibilities (beam-search).
     start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top config.start_n_top start token possibilities (beam-search).
-    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    end_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
         (beam-search).
     end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    cls_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the `is_impossible` label of the answers.
     """
 
-    loss: torch.FloatTensor | None = None
-    start_top_log_probs: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    start_top_log_probs: torch.Tensor | None = None
     start_top_index: torch.LongTensor | None = None
-    end_top_log_probs: torch.FloatTensor | None = None
+    end_top_log_probs: torch.Tensor | None = None
     end_top_index: torch.LongTensor | None = None
-    cls_logits: torch.FloatTensor | None = None
+    cls_logits: torch.Tensor | None = None
 
 
 # Copied from transformers.models.xlm.modeling_xlm.XLMPoolerStartLogits with XLM->Flaubert
@@ -277,17 +277,17 @@ class FlaubertPoolerStartLogits(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
 
-    def forward(self, hidden_states: torch.FloatTensor, p_mask: torch.FloatTensor | None = None) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, p_mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
         Returns:
-            `torch.FloatTensor`: The start logits for SQuAD.
+            `torch.Tensor`: The start logits for SQuAD.
         """
         x = self.dense(hidden_states).squeeze(-1)
 
@@ -320,20 +320,20 @@ class FlaubertPoolerEndLogits(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        start_states: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
-        p_mask: torch.FloatTensor | None = None,
-    ) -> torch.FloatTensor:
+        p_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
@@ -345,7 +345,7 @@ class FlaubertPoolerEndLogits(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The end logits for SQuAD.
+            `torch.Tensor`: The end logits for SQuAD.
         """
         assert start_states is not None or start_positions is not None, (
             "One of start_states, start_positions should be not None"
@@ -388,16 +388,16 @@ class FlaubertPoolerAnswerClass(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        start_states: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         cls_index: torch.LongTensor | None = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
@@ -412,7 +412,7 @@ class FlaubertPoolerAnswerClass(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The SQuAD 2.0 answer class.
+            `torch.Tensor`: The SQuAD 2.0 answer class.
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
@@ -459,16 +459,16 @@ class FlaubertSQuADHead(nn.Module):
     @auto_docstring
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         cls_index: torch.LongTensor | None = None,
         is_impossible: torch.LongTensor | None = None,
-        p_mask: torch.FloatTensor | None = None,
+        p_mask: torch.Tensor | None = None,
         return_dict: bool = False,
-    ) -> FlaubertSquadHeadOutput | tuple[torch.FloatTensor]:
+    ) -> FlaubertSquadHeadOutput | tuple[torch.Tensor]:
         r"""
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+        hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
             Final hidden states of the model on the sequence tokens.
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Positions of the first token for the labeled span.
@@ -478,7 +478,7 @@ class FlaubertSQuADHead(nn.Module):
             Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Whether the question has a possible answer in the paragraph or not.
-        p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+        p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
             Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
             should be masked.
         """
@@ -605,20 +605,18 @@ class FlaubertSequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: torch.LongTensor | None = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -766,13 +764,13 @@ class FlaubertModel(FlaubertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         langs: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         lengths: torch.LongTensor | None = None,
-        cache: dict[str, torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: dict[str, torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -791,8 +789,8 @@ class FlaubertModel(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`:
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+        cache (`dict[str, torch.Tensor]`, *optional*):
+            Dictionary strings to `torch.Tensor` that contains precomputed hidden-states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
@@ -1001,8 +999,8 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`:
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+        cache (`dict[str, torch.Tensor]`, *optional*):
+            Dictionary strings to `torch.Tensor` that contains precomputed hidden-states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
@@ -1090,7 +1088,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -1192,7 +1190,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -1282,7 +1280,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -1348,30 +1346,30 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
 # Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 class FlaubertForQuestionAnsweringOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
         Classification loss as the sum of start token, end token (and is_impossible if provided) classification
         losses.
-    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    start_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top config.start_n_top start token possibilities (beam-search).
     start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top config.start_n_top start token possibilities (beam-search).
-    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    end_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
         (beam-search).
     end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    cls_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the `is_impossible` label of the answers.
     """
 
-    loss: torch.FloatTensor | None = None
-    start_top_log_probs: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    start_top_log_probs: torch.Tensor | None = None
     start_top_index: torch.LongTensor | None = None
-    end_top_log_probs: torch.FloatTensor | None = None
+    end_top_log_probs: torch.Tensor | None = None
     end_top_index: torch.LongTensor | None = None
-    cls_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    cls_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -1420,7 +1418,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1428,7 +1426,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the classification token to use as input for computing plausibility of the
             answer.
-        p_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        p_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
 
@@ -1556,10 +1554,10 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.

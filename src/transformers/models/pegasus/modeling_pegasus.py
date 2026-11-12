@@ -280,8 +280,8 @@ class PegasusEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
@@ -354,12 +354,12 @@ class PegasusDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
         """
@@ -757,7 +757,7 @@ class PegasusModel(PegasusPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.Tensor | None = None,
         decoder_attention_mask: torch.Tensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
@@ -904,7 +904,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.Tensor | None = None,
         decoder_attention_mask: torch.Tensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
@@ -1065,10 +1065,10 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

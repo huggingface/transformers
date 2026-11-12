@@ -133,7 +133,7 @@ class PI0Config(PreTrainedConfig):
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.dit_config.hidden_size % 2 != 0:
-            raise ValueError(f"DiT hidden dim=({self.config.dit_config.hidden_size}) must be divisible by 2")
+            raise ValueError(f"DiT hidden dim=({self.dit_config.hidden_size}) must be divisible by 2")
 
 
 __all__ = ["PI0Config"]
