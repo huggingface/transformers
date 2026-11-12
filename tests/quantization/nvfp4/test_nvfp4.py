@@ -459,16 +459,15 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
             self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
 
     @staticmethod
-    def _parallel_model(**distributed):
+    def _parallel_model(nvfp4_linear=True, **distributed):
         layer = nn.Module()
-        layer.proj = NVFP4Linear(64, 32)
+        layer.proj = NVFP4Linear(64, 32) if nvfp4_linear else nn.Linear(64, 32)
         layer.experts = NVFP4Experts(
             SimpleNamespace(hidden_size=64, moe_intermediate_size=32, num_experts=4, hidden_act="silu")
         )
         model = nn.Module()
         model.layers = nn.ModuleList([layer])
         model.config = SimpleNamespace(distributed_config=SimpleNamespace(**distributed) if distributed else None)
-        model.tp_plan = {"layers.*.proj": "colwise", "layers.*.experts": "moe_tp_experts"}
         model.ep_plan = {
             "layers.*.experts.gate_up_proj": "grouped_gemm",
             "layers.*.experts.down_proj": "grouped_gemm",
@@ -478,26 +477,24 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
     def test_expert_parallelism_shards_every_expert_tensor(self, _):
-        # The NVFP4 linear opted out of tensor parallelism, the experts take the EP rules
-        model = self._parallel_model(tp_size=2, ep_size=2, tp_plan={"layers.*.proj": "replicate"})
+        model = self._parallel_model(nvfp4_linear=False, tp_size=2, ep_size=2)
         self.quantizer.update_parallel_plan(model, model.ep_plan)
-        self.quantizer.update_parallel_plan(model, model.tp_plan)
         for proj in ("gate_up_proj", "down_proj"):
             for suffix in ("", "_sf", "_scale", "_scale_2", "_input_scale"):
                 self.assertEqual(model.ep_plan[f"layers.*.experts.{proj}{suffix}"], "grouped_gemm", proj + suffix)
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_rejects_tensor_parallelism_on_nvfp4_modules(self, _):
-        for distributed in ({"tp_size": 2, "tp_plan": None}, {"tp_size": 2, "tp_plan": {"layers.*.proj": "rowwise"}}):
-            with (
-                self.subTest(**distributed),
-                self.assertRaisesRegex(ValueError, "does not support tensor parallelism"),
-            ):
-                model = self._parallel_model(**distributed)
-                self.quantizer.update_parallel_plan(model, model.tp_plan)
-        # Not distributed, the plans are never applied
-        model = self._parallel_model()
-        self.quantizer.update_parallel_plan(model, model.tp_plan)
+    def test_rejects_tensor_parallelism(self, _):
+        # A tensor-parallel NVFP4 linear, or NVFP4 experts without expert parallelism to shard them
+        for nvfp4_linear, ep_size in ((True, 2), (False, 1)):
+            with self.subTest(nvfp4_linear=nvfp4_linear, ep_size=ep_size):
+                model = self._parallel_model(nvfp4_linear=nvfp4_linear, tp_size=2, ep_size=ep_size)
+                with self.assertRaisesRegex(ValueError, "does not support tensor parallelism"):
+                    self.quantizer.update_parallel_plan(model, {})
+        # Not distributed, or no tensor parallelism
+        for distributed in ({}, {"tp_size": 1, "ep_size": 2}):
+            model = self._parallel_model(**distributed)
+            self.quantizer.update_parallel_plan(model, {})
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)

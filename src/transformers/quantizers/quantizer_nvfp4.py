@@ -97,26 +97,16 @@ class NVFP4HfQuantizer(HfQuantizer):
             if isinstance(modules.get(module_name), NVFP4Experts) and hasattr(modules[module_name], f"{param}_sf"):
                 parallel_plan.setdefault(f"{key}_sf", style)
 
-        # Tensor parallelism would split the swizzled scales, which have no sharding plan yet
+        # Tensor parallelism would split the swizzled scales, which have no sharding plan yet. Expert parallelism takes
+        # the experts' rules, and shards them whole
         distributed_config = getattr(model.config, "distributed_config", None)
-        if parallel_plan is not model.tp_plan or getattr(distributed_config, "tp_size", None) in (None, 1):
+        if (getattr(distributed_config, "tp_size", None) or 1) == 1:
             return
-        override = distributed_config.tp_plan
-        applied = {} if override == {} else parallel_plan | (override or {})
-        # Under expert parallelism, the experts keep their EP rules only
-        experts_split = (getattr(distributed_config, "ep_size", None) or 1) == 1
-        sharded = []
-        for key, style in applied.items():
-            module = modules.get(key, modules.get(key.rpartition(".")[0]))
-            if style == "replicate":
-                continue
-            if isinstance(module, NVFP4Linear) or (isinstance(module, NVFP4Experts) and experts_split):
-                sharded.append(key)
-        if sharded:
+        tp_sharded = (NVFP4Linear,) if (distributed_config.ep_size or 1) > 1 else (NVFP4Linear, NVFP4Experts)
+        if any(isinstance(module, tp_sharded) for module in modules.values()):
             raise ValueError(
-                f"NVFP4 quantization does not support tensor parallelism yet, which would shard {sharded[:3]}: its "
-                "scale metadata does not have a sharding plan. Expert parallelism shards NVFP4 experts, and "
-                '`DistributedConfig(tp_plan={...: "replicate"})` keeps the other NVFP4 layers whole on every rank.'
+                "NVFP4 quantization does not support tensor parallelism yet: its scale metadata does not have a "
+                "sharding plan. NVFP4 experts shard with expert parallelism, so only the experts may be NVFP4."
             )
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
