@@ -525,25 +525,26 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
-    @parameterized.expand([("dense",), ("moe",)])
+    @parameterized.expand([("dense", "int8"), ("moe", "int8"), ("dense", "int4")])
     @require_onnxscript
     @require_onnxruntime
     @require_modelopt
     @pytest.mark.onnx_export_test
     @disable_hub_kernels
-    def test_modelopt_onnx(self, family):
-        """ModelOpt quantizes the converted ONNX model for TensorRT (`ModelOptOnnxQuantizer`), int8 QDQ calibrated on
-        the model's inputs: it gains quantize nodes and still runs in ONNX Runtime. Kept in fp32 and calibrated on the
-        CPU so ONNX Runtime's CPU kernels run it."""
+    def test_modelopt_onnx(self, family, quantize_mode):
+        """ModelOpt quantizes the converted ONNX model for TensorRT (`ModelOptOnnxQuantizer`), int8 QDQ or int4 weights
+        (AWQ clip), calibrated on the model's inputs: it gains quantization nodes and still runs in ONNX Runtime. Kept
+        in fp32 and calibrated on the CPU so ONNX Runtime's CPU kernels run it."""
         from transformers.exporters import ModelOptOnnxConfig, ModelOptOnnxQuantizer, OnnxConfig, OnnxExporter
 
         model, inputs = self._quantization_target(family)
-        quantizer = ModelOptOnnxQuantizer(
-            ModelOptOnnxConfig(calibration_eps=["cpu"], high_precision_dtype="fp32"),
-            calibration_dataset=[copy.deepcopy(inputs)],
-        )
+        config = ModelOptOnnxConfig(quantize_mode=quantize_mode, calibration_eps=["cpu"], high_precision_dtype="fp32")
+        if quantize_mode == "int4":
+            config.block_size = 16  # the test model's hidden size is smaller than the default 128-wide blocks
+        quantizer = ModelOptOnnxQuantizer(config, calibration_dataset=[copy.deepcopy(inputs)])
         exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
-        self.assertTrue(any(node.op_type == "QuantizeLinear" for node in exported.program.graph))
+        quantize_op = "DequantizeLinear" if quantize_mode == "int4" else "QuantizeLinear"
+        self.assertTrue(any(node.op_type == quantize_op for node in exported.program.graph))
         outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))

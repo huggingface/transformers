@@ -161,8 +161,8 @@ def _load_external_tensor_attributes(model: onnx_ir.Model) -> None:
 
 
 class _FeedReader:
-    """The `CalibrationDataReader` interface `quantize_static` (and ModelOpt, which also reads the first feed and
-    rewinds) reads its calibration feeds through."""
+    """The `CalibrationDataReader` interface `quantize_static` (and ModelOpt, which also reads the first feed, rewinds,
+    and iterates it for int4) reads its calibration feeds through."""
 
     def __init__(self, calibration: CalibrationSet):
         self.calibration = calibration
@@ -176,3 +176,6 @@ class _FeedReader:
 
     def rewind(self):
         self.feeds = iter(self.calibration)
+
+    def __iter__(self):
+        return iter(self.calibration)
