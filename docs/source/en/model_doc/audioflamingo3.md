@@ -245,55 +245,47 @@ print(decoded_outputs)
 ➡️ Training:
 
 ```python
+from datasets import Audio, load_dataset
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
 
 model_id = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(model_id)
+NUM_SAMPLES = 2
+
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 conversation = [
     [
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Transcribe the input speech."},
-                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3"},
+                {"type": "audio", "audio": sample["audio"]["array"]},
             ],
         },
-        {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "The transcription of the audio is 'summer follows spring the days grow longer and the nights are warm'."}],
-        }
-    ],
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
-                },
-                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
-            ],
-        },
-        {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "The transcription of the audio is 'some transcription of the audio'."}],
-        }
-
+        {"role": "assistant", "content": [{"type": "text", "text": sample["text"]}]},
     ]
+    for sample in ds.select(range(NUM_SAMPLES))
 ]
 
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
     processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
+print("Loss:", loss.item())
 loss.backward()
 ```
 
