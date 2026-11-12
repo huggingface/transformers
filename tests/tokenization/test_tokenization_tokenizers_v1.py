@@ -22,7 +22,7 @@ import unittest
 import numpy as np
 
 from transformers import AutoTokenizer
-from transformers.testing_utils import require_tokenizers_v1
+from transformers.testing_utils import require_tokenizers_v1, require_torchvision
 from transformers.utils import is_tokenizers_available, is_tokenizers_v1_available
 
 from ..test_tokenization_common import TokenizerTesterMixin
@@ -171,6 +171,7 @@ class TokenizersV1BackendTest(unittest.TestCase):
 
     def test_vocab(self):
         self.assertEqual(self.tokenizer.get_vocab(), VOCAB)
+        self.assertEqual(self.tokenizer.vocab, VOCAB)
         self.assertEqual(self.tokenizer.vocab_size, 9)
         self.assertEqual(len(self.tokenizer), 9)
 
@@ -263,6 +264,25 @@ class TokenizersV1BackendTest(unittest.TestCase):
     def test_training_raises(self):
         with self.assertRaises(NotImplementedError):
             self.tokenizer.train_new_from_iterator([["hello world"]], vocab_size=10)
+
+    def test_is_not_fast_without_offsets(self):
+        # `is_fast` gates the offset-based paths (token classification pipeline, whole word masking)
+        self.assertFalse(self.tokenizer.is_fast)
+
+    @require_torchvision
+    def test_processors_with_hardcoded_tokenizer_class_load_v1_backend(self):
+        from transformers import FuyuImageProcessorPil, FuyuProcessor, PixtralImageProcessor, PixtralProcessor
+
+        for processor_class, image_processor in (
+            (PixtralProcessor, PixtralImageProcessor()),
+            (FuyuProcessor, FuyuImageProcessorPil()),
+        ):
+            with self.subTest(processor_class.__name__):
+                self.tokenizer.add_tokens(["|SPEAKER|", "|NEWLINE|"], special_tokens=True)  # looked up by Fuyu
+                self.tokenizer.save_pretrained(self.tmpdir.name)
+                image_processor.save_pretrained(self.tmpdir.name)
+                processor = processor_class.from_pretrained(self.tmpdir.name)
+                self.assertIsInstance(processor.tokenizer, TokenizersV1Backend)
 
 
 @require_tokenizers_v1
