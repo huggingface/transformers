@@ -659,19 +659,6 @@ class FP8ModelOptLoadingTest(unittest.TestCase):
                 error = (model.get_submodule(name).weight - weight).abs()
                 self.assertTrue((error <= weight.abs() / 8 + weight.abs().amax() / 448 * 2**-9).all(), name)
 
-    def test_dequantized_saves_fp8(self):
-        from safetensors.torch import load_file
-
-        model = AutoModelForCausalLM.from_pretrained(self.EMBEDDING, quantization_config={"dequantize": True})
-        with tempfile.TemporaryDirectory() as tmp:
-            model.save_pretrained(tmp)
-            saved = load_file(f"{tmp}/model.safetensors")
-            reloaded = AutoModelForCausalLM.from_pretrained(tmp, quantization_config={"dequantize": True})
-        self.assertEqual(saved["model.layers.0.self_attn.q_proj.weight"].dtype, torch.float8_e4m3fn)
-        self.assertIn("model.layers.0.self_attn.q_proj.weight_scale_inv", saved)
-        self.assertFalse(model.config.quantization_config.dequantize)  # the saved checkpoint loads quantized
-        torch.testing.assert_close(reloaded.state_dict(), model.state_dict(), atol=1e-2, rtol=0.1)
-
     @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
     def test_quantized(self):
         from transformers.integrations import FP8Linear

@@ -400,13 +400,13 @@ class HfQuantizer(ABC):
         "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
         from ..core_model_loading import WeightConverter, _IdentityOp
 
-        # Only to read a checkpoint this format can load (it has a load op)
-        operation = self.get_load_operation()
-        if operation is None:
+        # Only to read a checkpoint this format can load (it has a load op). Nothing is converted back on save: a
+        # dequantized model saves unquantized.
+        # TODO: quantize back on save (each format's dequantize reversed). Needs what was dequantized on load per param
+        # (module and layout, e.g. `modules_to_convert`, per-tensor vs block scales): the config alone can't say
+        if self.get_load_operation() is None:
             return []
-        # Dequantized, the op is reversed on save (e.g. FP8 quantizes back)
-        ops = [operation(self)] if getattr(self.quantization_config, "dequantize", False) else [_IdentityOp()]
-        return [WeightConverter(names, param, ops) for param, names in self.serialized_names.items()]
+        return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
 
     # Globs of a checkpoint's keys (the first one naming a key wins) to our name, on the format's layers, see
     # `rename_layer`. E.g. `{"scale": "weight_scale_inv"}` renames `*.scale`

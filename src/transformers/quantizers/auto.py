@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import re
 import warnings
 from typing import TypeGuard
@@ -489,7 +488,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         Dequantized, the converter is widened to read the scales along (`*.gate_proj.weight_scale_inv`, ...), into the
         one target `gate_up_proj`: `Fp8Dequantize` folds each scale into its weight before the merge.
         """
-        from ..core_model_loading import WeightConverter, _IdentityOp
+        from ..core_model_loading import WeightConverter
 
         if self.patterns is None:
             self.map_module_to_quantizer(model)
@@ -502,25 +501,15 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             if getattr(quantizer.quantization_config, "dequantize", False):
                 names += [*quantizer.serialized_names["weight"], *quantizer.checkpoint_renames.values()]
 
-        # A single format dequantizes on the converters: saving reverses it (e.g. FP8 quantizes back)
-        quantizer = self.quantizer
-        load = [quantizer.get_load_operation()(quantizer)] if quantizer is not None and names else []
         for i, converter in enumerate(weight_conversions):
             sources = converter._original_source_patterns
             if names and isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
                 sources = [source.removesuffix("weight") + name for source in sources for name in names]
                 weight_conversions[i] = converter.copy(
-                    sources, converter._original_target_patterns, operations=[*load, *converter.operations]
+                    sources, converter._original_target_patterns, operations=converter.operations
                 )
-                # Reversed on save to the weights only: quantizing back names their scales
-                weight_conversions[i]._original_source_patterns = converter._original_source_patterns
 
         general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
-        if quantizer is None:  # mixed: each param gets its format's op, see `update_weight_transform`
-            general = [
-                c.copy(c._original_source_patterns, c._original_target_patterns, operations=[_IdentityOp()])
-                for c in general
-            ]
         return [*weight_conversions, *general]
 
     def rename_layer(self, key):
@@ -556,8 +545,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         if operation is None or not isinstance(transform, WeightConverter) or name.rpartition(".")[2] not in tensors:
             return transform  # e.g. a merged expert bias: not one of the format's tensors
         # Dequantized, the scales fold into the weight before the model's ops
-        load = operation(quantizer)
-        ops = [op for op in transform.operations if not isinstance(op, operation)]  # already on a single format's
+        load, ops = operation(quantizer), transform.operations
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
         transform.operations = [load, *ops] if dequantize else [*ops, load]
         return transform
@@ -637,8 +625,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         The patterns loaded with `dequantize=True` become unquantized (`None`, so a broader pattern like `"*"` can't
         claim their modules): with none quantized left, the model is plain unquantized.
         """
-        from ..core_model_loading import _IdentityOp
-
         for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
         dequantized = {
@@ -646,14 +632,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             for quantizer in self.all_quantizers
             if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
         }
-        # A single format whose dequantization reverses (FP8 quantizes back) saves in its format, loaded as is
-        quantizer = self.quantizer
-        if quantizer in dequantized and not isinstance(
-            quantizer.get_load_operation()(quantizer).reverse_op, _IdentityOp
-        ):
-            quantizer.quantization_config = copy.copy(quantizer.quantization_config)
-            quantizer.quantization_config.dequantize = False
-            dequantized = set()
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
         self.patterns = [(glob, None if q in dequantized else q) for glob, q in self.patterns]
         if not self.all_quantizers:
