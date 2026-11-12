@@ -81,11 +81,14 @@ class GradientCheckpointingLayer(nn.Module):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
+        # We checkpoint `forward` instead of `__call__` so module hooks (e.g. FSDP2's) stay outside the checkpoint.
+        # Otherwise they would run a second time when the backward pass recomputes the layer.
         forward = cls.forward
 
         @wraps(forward)
         def forward_with_checkpointing(self, *args, **kwargs):
-            # when a subclass calls `super().forward()`, only its own (outermost) `forward` checkpoints
+            # Subclasses of a layer are wrapped too (e.g. the `FSDP<Layer>` class that FSDP2 creates), so a `forward`
+            # can be wrapped more than once. Only the outermost wrapper checkpoints.
             is_outermost = type(self).forward is forward_with_checkpointing
             if self.gradient_checkpointing and self.training and is_outermost:
                 do_warn = False
