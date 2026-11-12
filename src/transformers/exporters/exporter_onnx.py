@@ -46,14 +46,16 @@ import functools
 import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import OnnxConfig
+from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
+from .metadata import ExportMetadata
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
@@ -66,7 +68,7 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    from torch.export import ExportedProgram
+    from torch.fx.experimental.symbolic_shapes import guard_or_false
     from torch.onnx import ONNXProgram
 
 
@@ -74,6 +76,8 @@ if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
+
+    from .onnxruntime_fusions import fuse_for_onnxruntime
 
     # torch.dtype -> onnx_ir.DataType, mirroring torch.onnx's private _TORCH_DTYPE_TO_ONNX so we
     # don't depend on that path. Only the dtypes a `Cast` target can realistically be; exotic
@@ -106,7 +110,7 @@ logger = logging.get_logger(__file__)
 
 
 class OnnxExporter(DynamoExporter):
-    """Exporter that converts a [`PreTrainedModel`] to an ONNX `ONNXProgram`.
+    """Exporter that converts a [`PreTrainedModel`] to an ONNX graph (an `onnx_ir.Model`).
 
     Example:
 
@@ -114,28 +118,37 @@ class OnnxExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
     >>> exporter = OnnxExporter()
-    >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
-    >>> outputs = onnx_program(**inputs)  # run in-memory
-    >>> exporter.export(model, inputs, config=OnnxConfig(output_path="model.onnx"))  # save to disk
+    >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
+    >>> onnx_model = exported.program  # an `onnx_ir.Model`
+    >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.ONNX
+    config_class = OnnxConfig
+    program_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
     tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
-    def export(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: OnnxConfig | dict[str, Any],
-    ) -> ONNXProgram:
-        if isinstance(config, dict):
-            config = OnnxConfig(**config)
-        elif type(config) is not OnnxConfig:
-            raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
+        config: OnnxConfig,
+    ) -> tuple[onnx_ir.Model, ExportMetadata]:
+        quantizer = config.quantizer
+        # A model quantized before export has no ops the fusions match.
+        ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
+        # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
+        experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+        with (
+            apply_patches("onnx"),
+            use_experts_implementation(model, experts_implementation),
+            patch_model_outputs(model) as (inputs_names, outputs_names),
+        ):
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -151,23 +164,72 @@ class OnnxExporter(DynamoExporter):
 
         apply_onnx_ir_fixes(onnx_program)
 
-        quantizer = config.quantizer
+        if ort_fusions:
+            fuse_for_onnxruntime(onnx_program.model, ort_fusions)
+
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
-        if config.output_path is not None:
-            onnx_program.save(
-                config.output_path,
-                include_initializers=config.export_params,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
-                external_data=config.external_data,
-            )
+        _update_onnx_metadata(metadata, onnx_program.model)
+        return onnx_program.model, metadata
 
-        return onnx_program
+    @classmethod
+    def save_program(cls, program: onnx_ir.Model, path) -> None:
+        """Weights go to a `<name>.onnx.data` sidecar file, so models past the 2 GB protobuf limit save too."""
+        onnx_ir.save(program, str(path), external_data=f"{Path(path).name}.data")
+
+    @classmethod
+    def program_files(cls, filename: str) -> list[str]:
+        return [filename, f"{filename}.data"]
+
+    @classmethod
+    def load_program(cls, path) -> onnx_ir.Model:
+        """The saved graph, its weights left in `model.onnx.data` until read. Its `meta["path"]` keeps the file, which
+        ONNX Runtime opens to read the weights itself."""
+        model = onnx_ir.load(str(path))
+        model.meta["path"] = str(path)
+        # The Hub cache links `model.onnx.data` to a blob outside the snapshot, which `onnx_ir` refuses to read: the
+        # weights are read from the blob instead. Only this file is redirected; any other location stays checked.
+        data = Path(path).with_name(f"{Path(path).name}.data")
+        if data.is_symlink():
+            for graph in model.graphs():
+                for value in graph.initializers.values():
+                    tensor = value.const_value
+                    if isinstance(tensor, onnx_ir.ExternalTensor) and Path(tensor.path) == data:
+                        value.const_value = onnx_ir.ExternalTensor(
+                            data.resolve(),
+                            tensor.offset,
+                            tensor.length,
+                            tensor.dtype,
+                            shape=tensor.shape,
+                            name=tensor.name,
+                        )
+        return model
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
 # Model forward wrapper and I/O naming used by OnnxExporter.export.
+
+
+def _update_onnx_metadata(metadata: ExportMetadata, onnx_model: onnx_ir.Model) -> None:
+    """Record the graph's own input and output names: dotted leaf paths, with `input.` / `output.` prefixes on mutated
+    inputs."""
+    metadata.input_names = [value.name for value in onnx_model.graph.inputs]
+    metadata.output_names = [value.name for value in onnx_model.graph.outputs]
+
+
+@contextmanager
+def use_experts_implementation(model, experts_implementation: str | None):
+    """Run the model's experts with `experts_implementation` inside the block, then restore its own."""
+    if experts_implementation is None or not getattr(model, "_can_set_experts_implementation", lambda: False)():
+        yield
+        return
+    original = model.get_experts_implementation()
+    model.set_experts_implementation(experts_implementation)
+    try:
+        yield
+    finally:
+        model.set_experts_implementation(original)
 
 
 @contextmanager
@@ -257,16 +319,28 @@ def _patch_sdpa(original):
     zeros; ONNX Runtime evaluates the softmax literally and, when the mask is `-inf` (parakeet's
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
+
+    A boolean mask goes in as an additive one (torchlib's boolean softmax adds a redundant `IsNaN`/`Where`), and
+    unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
+    microsoft/onnxruntime#33876). The key, value and mask lengths are checked equal, so a dynamic export gives them
+    one symbol, which onnxscript's attention fusion needs.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
-        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
+        torch._check(key.shape[-2] == value.shape[-2])
         if attn_mask is None:
-            return attn_output
+            return original(query, key, value, attn_mask, *args, **kwargs)
+        # A mask width that's data-dependent (SAM 3's) can't be compared to 1: left unchecked.
+        if guard_or_false(attn_mask.shape[-1] != 1):
+            torch._check(attn_mask.shape[-1] == key.shape[-2])
+        # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
-            unattended = ~attn_mask.any(dim=-1, keepdim=True)
+            attended = attn_mask.to(query.dtype)
+            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
-            unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
+            attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
+        unattended = attended.sum(dim=-1, keepdim=True) < 1
+        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
 
@@ -1028,33 +1102,34 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     mat_a[r] @ mat_b[group(r)]` where rows are sorted by group and `offs` holds the
     cumulative end index per group.
 
-    Per-group `Slice + MatMul + Concat`. `G` (number of experts) is static for any
-    concrete model, so unroll at translation time: emit one `Slice + MatMul` triple
-    per group and a final `Concat`. Avoids the `(M, K, N)` materialisation a naive
-    `weight[group_idx]` gather would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`.
+    `G` (number of experts) is static, so it unrolls into one `MatMul` per group and a final
+    `Concat`, avoiding the `(M, K, N)` materialisation of a `weight[group_idx]` gather. The group
+    ends and weights come from one `Split` each, not a `Slice` per group: onnxscript's
+    `SlicesSplit` rule tries every pair of `Slice`s, which dominated the export time.
     """
     G = mat_b.shape[0]
     if not isinstance(G, int):
         raise ValueError("_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time")
 
-    offs_i64 = op.Cast(offs, to=7)
+    def per_group(x):
+        return op.Split(x, axis=0, num_outputs=G) if G > 1 else [x]
+
     axes_0 = op.Constant(value_ints=[0])
-    zero_1d = op.Constant(value_ints=[0])
+    ends, weights = per_group(op.Cast(offs, to=7)), per_group(mat_b)
+    biases = per_group(bias) if bias is not None else None
 
     outputs = []
-    prev_end = zero_1d
+    prev_end = op.Constant(value_ints=[0])
+    one = op.Constant(value_int=1)
     for g in range(G):
-        g_lo = op.Constant(value_ints=[g])
-        g_hi = op.Constant(value_ints=[g + 1])
-        end = op.Slice(offs_i64, g_lo, g_hi, axes_0)  # (1,) — offs[g]
-        a_g = op.Slice(mat_a, prev_end, end, axes_0)  # (n_g, K)
-        w_g = op.Squeeze(op.Slice(mat_b, g_lo, g_hi, axes_0), axes_0)  # (K, N)
-        out_g = op.MatMul(a_g, w_g)  # (n_g, N)
-        if bias is not None:
+        rows_g = op.Range(op.Squeeze(prev_end, axes_0), op.Squeeze(ends[g], axes_0), one)
+        a_g = op.Gather(mat_a, rows_g, axis=0)  # (n_g, K)
+        out_g = op.MatMul(a_g, op.Squeeze(weights[g], axes_0))  # (n_g, N)
+        if biases is not None:
             # per-group bias ``(G, N)`` → ``(N,)`` broadcasts over the group's rows
-            out_g = op.Add(out_g, op.Squeeze(op.Slice(bias, g_lo, g_hi, axes_0), axes_0))
+            out_g = op.Add(out_g, op.Squeeze(biases[g], axes_0))
         outputs.append(out_g)
-        prev_end = end
+        prev_end = ends[g]
 
     result = op.Concat(*outputs, axis=0)  # (M, N)
     if out_dtype is not None:

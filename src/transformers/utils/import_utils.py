@@ -174,7 +174,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.18.0"
+KERNELS_MIN_VERSION = "0.18.2"
 KERNELS_MAX_VERSION = "0.19.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
@@ -1091,8 +1091,9 @@ def is_nncf_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
-def is_onnxruntime_available() -> bool:
-    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+def is_onnxruntime_available(min_version: str | None = None) -> bool:
+    available, onnxruntime_version = _is_package_available("onnxruntime", return_version=True)
+    return available and (min_version is None or version.parse(onnxruntime_version) >= version.parse(min_version))
 
 
 @lru_cache

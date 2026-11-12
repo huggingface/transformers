@@ -28,14 +28,9 @@ from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    torch_compilable_check,
-)
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_attr
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -61,7 +56,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextScaledWordEmbedding,
     get_block_sequence_ids_for_mask,
 )
-from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
+from ..gemma4.processing_gemma4 import Gemma4Processor
 from ..gemma4.video_processing_gemma4 import (
     Gemma4VideoProcessor,
     Gemma4VideoProcessorKwargs,
@@ -336,10 +331,6 @@ class Gemma4UnifiedVideoProcessor(Gemma4VideoProcessor):
             "num_soft_tokens_per_video": num_soft_tokens_per_video,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
-    pass
 
 
 @auto_docstring
@@ -778,6 +769,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                     position_embeddings,
                     causal_mask_mapping,
                     logits_to_keep,
+                    past_key_values=past_key_values,
                     **kwargs,
                 )
 
@@ -805,6 +797,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         position_embeddings,
         causal_mask_mapping,
         logits_to_keep,
+        past_key_values,
         **kwargs,
     ):
         """
@@ -827,10 +820,10 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         # Flex cannot slice mask
         elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
             can_optimize = False
-        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
         elif (
             self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
-            and logits_to_keep > 1
+            and (logits_to_keep > 1 or getattr(past_key_values, "is_compileable", False))
             and any(mask is None for mask in causal_mask_mapping.values())
         ):
             can_optimize = False
@@ -1401,6 +1394,8 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
 
         return model_inputs
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma4UnifiedProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Gemma4UnifiedImageProcessor",

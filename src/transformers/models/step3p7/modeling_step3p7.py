@@ -35,13 +35,19 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+    torch_int,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -104,8 +110,8 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_hw = freq.flatten(1)
-        return torch.cat((freq_hw, freq_hw), dim=-1)
+        freq_wh = freq.flip(1).flatten(1)
+        return torch.cat((freq_wh, freq_wh), dim=-1)
 
 
 class Step3p7VisionMLP(nn.Module):
@@ -121,18 +127,6 @@ class Step3p7VisionMLP(nn.Module):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -167,6 +161,18 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -182,9 +188,7 @@ def apply_rotary_pos_emb_vision(
 
 
 class Step3p7VisionAttention(nn.Module):
-    """CLIP-style vision attention; the only difference from [`CLIPAttention`] is
-    that queries and keys are rotated by the tower's 3D RoPE before the
-    (interface-dispatched) scaled dot-product attention."""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
@@ -200,8 +204,6 @@ class Step3p7VisionAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        # The vision tower has no grouped-query attention; the shared eager kernel
-        # still expects this attribute to drive its (no-op) `repeat_kv`.
         self.num_key_value_groups = 1
 
     def forward(
@@ -214,7 +216,6 @@ class Step3p7VisionAttention(nn.Module):
         """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-
         queries = self.q_proj(hidden_states).view(hidden_shape)
         keys = self.k_proj(hidden_states).view(hidden_shape)
         values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
