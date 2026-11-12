@@ -164,6 +164,10 @@ class TorchvisionBackend(BaseImageProcessor):
         image = tvF.grayscale_to_rgb(image)
 
         if image.shape[0] == 4:
+            if image.is_floating_point() and (image.min() < 0.0 or image.max() > 1.0):
+                raise ValueError(
+                    f"The image to be converted to RGB contains values outside the range [0, 1], got [{image.min().item()}, {image.max().item()}]."
+                )
             if input_data_format is None:
                 input_data_format = infer_channel_dimension_format(image, num_channels=(4,))
 
