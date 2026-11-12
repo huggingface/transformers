@@ -122,7 +122,13 @@ from .utils import (
     resolve_revision,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
+from .utils.hub import (
+    DownloadKwargs,
+    _get_gguf_checkpoint_files,
+    create_and_tag_model_card,
+    get_checkpoint_shard_files,
+    hf_api,
+)
 from .utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -764,26 +770,11 @@ def _get_resolved_checkpoint_files(
             logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
 
     elif gguf_file:
-        # Case 1: the GGUF file is present locally
-        if os.path.isfile(gguf_file):
-            resolved_archive_file = gguf_file
-        # Case 2: The GGUF path is a location on the Hub
-        # Load from URL or cache if already cached
-        else:
-            cached_file_kwargs = {
-                "cache_dir": cache_dir,
-                "force_download": force_download,
-                "proxies": proxies,
-                "local_files_only": local_files_only,
-                "token": token,
-                "user_agent": user_agent,
-                "revision": revision,
-                "subfolder": subfolder,
-                "_raise_exceptions_for_gated_repo": False,
-                "_raise_exceptions_for_missing_entries": False,
-            }
-
-            resolved_archive_file = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
+        return _get_gguf_checkpoint_files(
+            pretrained_model_name_or_path,
+            gguf_file,
+            **{**download_kwargs, "revision": revision, "user_agent": user_agent, "tqdm_class": tqdm_class},
+        ), None
 
     # We now download and resolve all checkpoint files if the checkpoint is sharded
     sharded_metadata = None
@@ -4334,7 +4325,7 @@ class PreTrainedModel(
 
         if gguf_file:
             # Read before the dtype is settled: a GGUF's own float type is what `dtype="auto"` resolves to.
-            hf_quantizer.read_header(checkpoint_files[0])
+            hf_quantizer.read_header(checkpoint_files)
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
@@ -4380,7 +4371,7 @@ class PreTrainedModel(
                 )
 
         if gguf_file:
-            state_dict = hf_quantizer.get_state_dict(checkpoint_files[0], model)
+            state_dict = hf_quantizer.get_state_dict(checkpoint_files, model)
 
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
