@@ -492,6 +492,7 @@ class VideoLlama3Model(Qwen2VLModel):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -508,6 +509,9 @@ class VideoLlama3Model(Qwen2VLModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = image_embeds
+            return vision_outputs
         split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
         return vision_outputs

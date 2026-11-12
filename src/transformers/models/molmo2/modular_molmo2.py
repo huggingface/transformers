@@ -1513,6 +1513,7 @@ class Molmo2Model(LlavaModel):
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_shape = None
@@ -1532,6 +1533,9 @@ class Molmo2Model(LlavaModel):
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
         pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        if return_flat:
+            image_outputs.pooler_output = pooled_features
+            return image_outputs
         split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
         image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
         return image_outputs

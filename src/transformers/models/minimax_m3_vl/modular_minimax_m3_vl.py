@@ -970,6 +970,7 @@ class MiniMaxM3VLModel(LlavaModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
+        return_flat: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         # Return the raw vision-tower output (so callers can inspect hidden states /
@@ -977,6 +978,9 @@ class MiniMaxM3VLModel(LlavaModel):
         # ready to scatter into the text embeddings — in `pooler_output`.
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        if return_flat:
+            vision_outputs.pooler_output = image_features
+            return vision_outputs
         split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_features, split_sizes)
         return vision_outputs

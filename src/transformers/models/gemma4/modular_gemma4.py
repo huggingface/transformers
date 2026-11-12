@@ -1944,6 +1944,7 @@ class Gemma4Model(Gemma3nModel):
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -1958,6 +1959,9 @@ class Gemma4Model(Gemma3nModel):
         last_hidden_state = vision_outputs.last_hidden_state
         pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
         non_pad_mask = (image_position_ids != -1).all(dim=-1)
@@ -1972,6 +1976,7 @@ class Gemma4Model(Gemma3nModel):
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -1999,6 +2004,9 @@ class Gemma4Model(Gemma3nModel):
         last_hidden_state = vision_outputs.last_hidden_state
         pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         k_squared = self.config.vision_config.pooling_kernel_size**2
         non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
         num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared

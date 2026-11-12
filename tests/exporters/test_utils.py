@@ -422,6 +422,21 @@ class DecomposeMultimodalTest(unittest.TestCase):
             actual = main.module(**main.inputs).logits
         torch.testing.assert_close(actual, expected)
 
+    def test_vision_graph_runs_on_another_image_count(self):
+        """The vision graph takes any number of images: the getter returns its features as one tensor, which a
+        per-image list would have fixed to the traced count."""
+        from transformers.exporters import DynamoExporter
+        from transformers.exporters.components import ModalityEncoder
+
+        model, _ = _tiny_llava()
+        vision = ModalityEncoder(model.model, "get_image_features")
+        pixel_values = torch.randn(2, 3, 30, 30)
+        exported = DynamoExporter().export(vision, {"pixel_values": pixel_values}, DynamoConfig(dynamic=True))
+        with torch.no_grad():
+            for images in (pixel_values, pixel_values[:1], torch.randn(3, 3, 30, 30)):
+                expected = torch.cat(model.model.get_image_features(images).pooler_output)
+                torch.testing.assert_close(exported(pixel_values=images), expected)
+
     def test_embedded_inputs_drop_the_modality_side_inputs(self):
         """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
         `image_position_ids`), which a text-only call doesn't carry."""

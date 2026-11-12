@@ -631,6 +631,7 @@ class Qwen3VLModel(Qwen2VLModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values = pixel_values.type(self.visual.dtype)
@@ -638,6 +639,8 @@ class Qwen3VLModel(Qwen2VLModel):
             pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
         )
         image_embeds = vision_output.pooler_output
+        if return_flat:
+            return vision_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_output.pooler_output = torch.split(image_embeds, split_sizes)
         vision_output.deepstack_features = [

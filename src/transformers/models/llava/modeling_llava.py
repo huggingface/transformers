@@ -149,6 +149,7 @@ class LlavaModel(LlavaPreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         image_sizes: torch.Tensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
@@ -174,6 +175,11 @@ class LlavaModel(LlavaPreTrainedModel):
 
         image_features = self.multi_modal_projector(selected_image_feature)
 
+        if return_flat:
+            image_outputs.pooler_output = (
+                image_features.squeeze(0) if image_sizes is not None else image_features.flatten(0, 1)
+            )
+            return image_outputs
         # If image_sizes is provided, we need to split the image features accordingly,
         # but only if the image_sizes is not None (the default in this and related architectures)
         if image_sizes is not None:
