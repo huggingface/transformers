@@ -43,25 +43,25 @@ Each row recommends a first method to try. Check the full comparison table befor
 | [AutoRound](./auto_round) | `auto-round` | Pre-quantized only | 2–8 | CUDA, XPU, CPU | ✅ | ❌ | ❌ |
 | [AWQ](./awq) | `awq` | Pre-quantized only | 4 | CUDA, ROCm, XPU, CPU | ✅ except ExLlama backends | ✅ with `gptqmodel>=5.0.0` | ❌ |
 | [BitNet](./bitnet) | `bitnet` | Pre-quantized only | 1.58 | CUDA | ✅ | Only `autobitlinear` in `online` mode | ❌ |
-| [bitsandbytes](./bitsandbytes) | `bitsandbytes` | While loading | 4, 8 | CUDA, XPU, HPU, CPU | ✅ | ✅ | ❌ |
+| [bitsandbytes](./bitsandbytes) | `bitsandbytes` | While loading, or pre-quantized | 4, 8 | CUDA, XPU, HPU, CPU | ✅ | ✅ | ❌ |
 | [compressed-tensors](./compressed_tensors) | `compressed-tensors` | Pre-quantized only | Set by checkpoint | CUDA, XPU, MPS, CPU | ✅ | ✅ except with FP8 kernels | ✅ |
-| [EETQ](./eetq) | `eetq` | While loading | 8 | CUDA | ✅ | ✅ | ❌ |
-| [FBGEMM FP8](./fbgemm_fp8) | `fbgemm_fp8` | While loading | 8 | CUDA (compute capability 9.0+), XPU | ✅ | ❌ | ❌ |
-| [Fine-grained FP8](./finegrained_fp8) | `fp8`, `mxfp8` | While loading | 8 | CUDA (compute capability 8.9+), XPU | ✅ | ❌ | ✅ |
-| [Four Over Six](./fouroversix) | `fouroversix` | While loading | 4 | CUDA (fastest on Blackwell), CPU | ✅ | Only with `keep_master_weights=True` | ❌ |
-| [FP-Quant](./fp_quant) | `fp_quant` | While loading | 4 | CUDA, XPU | ✅ | Only with `store_master_weights=True` | ❌ |
+| [EETQ](./eetq) | `eetq` | While loading, or pre-quantized | 8 | CUDA | ✅ | ✅ | ❌ |
+| [FBGEMM FP8](./fbgemm_fp8) | `fbgemm_fp8` | While loading, or pre-quantized | 8 | CUDA (compute capability 9.0+), XPU | ✅ | ❌ | ❌ |
+| [Fine-grained FP8](./finegrained_fp8) | `fp8`, `mxfp8` | While loading, or pre-quantized | 8 | CUDA (compute capability 8.9+), XPU | ✅ | ❌ | ✅ |
+| [Four Over Six](./fouroversix) | `fouroversix` | While loading, or pre-quantized | 4 | CUDA (fastest on Blackwell), CPU | ✅ | Only with `keep_master_weights=True` | ❌ |
+| [FP-Quant](./fp_quant) | `fp_quant` | While loading, or pre-quantized | 4 | CUDA, XPU | ✅ | Only with `store_master_weights=True` | ❌ |
 | [GGUF](./gguf) | `gguf` | Pre-quantized only | 1–8 | CUDA, MPS, XPU, CPU | ❌ | ❌ | ✅ |
-| [GPTQ](./gptq) | `gptq` | While loading, with calibration | 2, 3, 4, 8 | CUDA, ROCm, XPU, CPU | ✅ | ✅ | ❌ |
-| [HIGGS](./higgs) | `higgs` | While loading | 2, 3, 4 | CUDA | ✅ | ❌ | ❌ |
-| [HQQ](./hqq) | `hqq` | While loading | 1, 2, 3, 4, 8 | CUDA, XPU | ✅ | ✅ | ❌ |
-| [Metal](./metal) | `metal` | While loading | 2, 4, 8 | MPS | ✅ | ❌ | ❌ |
-| [MXFP4](./mxfp4) | `mxfp4` | While loading | 4 | CUDA (compute capability 7.5+), XPU, CPU | ✅ | ❌ | ❌ |
-| [NVFP4](./nvfp4) | `nvfp4` | While loading, or pre-quantized (ModelOpt) | 4 | One Blackwell GPU | ❌ | ❌ | ✅ |
+| [GPTQ](./gptq) | `gptq` | While loading with calibration, or pre-quantized | 2, 3, 4, 8 | CUDA, ROCm, XPU, CPU | ✅ | ✅ | ❌ |
+| [HIGGS](./higgs) | `higgs` | While loading, or pre-quantized | 2, 3, 4 | CUDA | ✅ | ❌ | ❌ |
+| [HQQ](./hqq) | `hqq` | While loading, or pre-quantized | 1, 2, 3, 4, 8 | CUDA, XPU | ✅ | ✅ | ❌ |
+| [Metal](./metal) | `metal` | While loading, or pre-quantized | 2, 4, 8 | MPS | ✅ | ❌ | ❌ |
+| [MXFP4](./mxfp4) | `mxfp4` | While loading, or pre-quantized | 4 | CUDA (compute capability 7.5+), XPU, CPU | ✅ | ❌ | ❌ |
+| [NVFP4](./nvfp4) | `nvfp4` | While loading, or pre-quantized | 4 | One Blackwell GPU | ❌ | ❌ | ✅ |
 | [Quanto](./quanto) | `quanto` | While loading | 2, 4, 8 | CUDA, MPS, XPU, CPU | ❌ | ✅ | ❌ |
 | [Quark](./quark) | `quark` | Pre-quantized only | Set by checkpoint | CUDA, ROCm, CPU | ❌ | ❌ | ❌ |
-| [SINQ](./sinq) | `sinq` | While loading | 2, 3, 4, 6, 8 | One CUDA GPU, CPU | ✅ | ✅ | ❌ |
+| [SINQ](./sinq) | `sinq` | While loading, or pre-quantized | 2, 3, 4, 6, 8 | One CUDA GPU, CPU | ✅ | ✅ | ❌ |
 | [SpQR](./spqr) | `spqr` | Pre-quantized only | 3 | CUDA | ✅ | ❌ | ❌ |
-| [torchao](./torchao) | `torchao` | While loading | 4, 8 | CUDA, XPU, CPU | ✅ | Only 8-bit schemes | ✅ |
+| [torchao](./torchao) | `torchao` | While loading, or pre-quantized | 4, 8 | CUDA, XPU, CPU | ✅ | Only 8-bit schemes | ✅ |
 | [VPTQ](./vptq) | `vptq` | Pre-quantized only | 1–8 | CUDA | ✅ | ❌ | ❌ |
 
 </details>

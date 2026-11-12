@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Transformers supports many quantization methods such as QLoRA, GPTQ, LLM.int8, and AWQ. However, there are still many more quantization approaches that haven't been integrated yet. To make adding and using these quantization methods with Transformers easier, use the [`~quantizers.HfQuantizer`] class. [`~quantizers.HfQuantizer`] is designed to be an internal helper class for adding a quantization method instead of something applied to every PyTorch module.
 
-This guide will show you how to integrate a new quantization method with [`~quantizers.HfQuantizer`]. If your method is a new low-precision dtype (e.g. a vLLM or ModelOpt format), start with [Add a quantized format](./add_format): it may only need a config or a module subclass.
+This guide will show you how to integrate a new quantization method with [`~quantizers.HfQuantizer`]. A new quantization recipe gets its own config and quantizer, even if an existing method's kernels could run it: one config describes one recipe. [Add a quantized format](./add_format) walks through the modules, load ops, and checkpoint scheme readers of a low-precision format such as NVFP4 or MXFP4.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 ## Create new HFQuantizer class
 
-0. The best starting point would be to have a look at another quantization method such as Finegrained Fp8. You will have to update or create three files in total: the [config file](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/quantization_config.py), the [integration file](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/finegrained_fp8.py) and the [quantizer file](https://github.com/huggingface/transformers/blob/main/src/transformers/quantizers/quantizer_finegrained_fp8.py).
+0. The best starting point would be to have a look at another quantization method such as NVFP4. You will have to update or create three files in total: the [config file](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/quantization_config.py), the [integration file](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/nvfp4.py) and the [quantizer file](https://github.com/huggingface/transformers/blob/main/src/transformers/quantizers/quantizer_nvfp4.py).
 
 1. Create a new quantization config class inside [src/transformers/utils/quantization_config.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/utils/quantization_config.py). Add the new quantization config to the [\_import_structure](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/__init__.py#L1088) inside Transformers' [src/transformers/\_\_init\_\_.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/__init__.py) file.
 
@@ -60,7 +60,7 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 4. Write the `validate_environment` and `update_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. Refer to other quantizers for an example of it is implemented.
 
-5. Write the `quantized_module(name, module)` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. `quantized_module` returns the quantized module replacing `module` (e.g. an [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)), or `None` to keep it. It is called on meta, only for the modules your quantizer owns (see [Several methods in one model](./overview#several-methods-in-one-model)) and that `modules_to_not_convert` doesn't skip, so don't walk the model yourself. Only quantizers implementing `quantized_module` can be mixed with other methods in a quantization plan.
+5. Write the `quantized_module(name, module)` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. `quantized_module` returns the quantized module replacing `module` (e.g. an [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)), or `None` to keep it. It is called on meta, only for the modules your quantizer owns (see [Quantization plans](./overview#quantization-plans)) and that `modules_to_not_convert` doesn't skip, so don't walk the model yourself. Only quantizers implementing `quantized_module` can be mixed with other methods in a quantization plan.
 
 Define the quantized modules and load operations in a new file in [transformers/src/integrations/](https://github.com/huggingface/transformers/tree/main/src/transformers/integrations).
 
@@ -82,12 +82,13 @@ Define the quantized modules and load operations in a new file in [transformers/
 | `quantizers/quantizer_your_method.py`        | Implement `YourMethodHfQuantizer` inheriting from `HfQuantizer`                                  |
 | `integrations/your_method.py`                | Implement `ConversionOps` subclasses and helper functions                                        |
 | `quantizers/auto.py`                         | Register quantizer and config in `AUTO_QUANTIZER_MAPPING` and `AUTO_QUANTIZATION_CONFIG_MAPPING` |
+| `quantizers/schema_readers.py`               | Optional: read a checkpoint's own quantization scheme into a plan, see [Add a quantized format](./add_format#4-read-the-checkpoints-own-scheme) |
 | `docs/source/en/quantization/your_method.md` | Document usage for users                                                                         |
 | `tests/quantization/your_method/`            | Add integration tests                                                                            |
 
 ## Understanding `get_quantize_ops` vs `get_load_operations`
 
-These two methods handle different scenarios for loading weights. Understanding when to use each is essential. The quantization plan (`AutoHfQuantizer`) gives each param the ops of its module's quantizer while loading, so the same ops run when your method quantizes only part of a model, or mixes with others.
+These two methods handle different scenarios for loading weights. Understanding when to use each is essential. The quantization plan (a `QuantizationPlanHfQuantizer`, built by `AutoHfQuantizer.from_plan`) gives each param the ops of its module's quantizer while loading, so the same ops run when your method quantizes only part of a model, or mixes with others.
 
 ### `get_quantize_ops` — Quantize on the fly
 

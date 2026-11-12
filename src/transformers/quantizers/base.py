@@ -84,8 +84,9 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
-    # Set by a quantization plan: the modules of the other quantizers (skipped), the ones it names (never skipped)
-    modules_named: list[str] = []
+    # The exact module names of the quantization plan (e.g. `lm_head` in `{"lm_head": fp8, "*": fp8}`), set by the
+    # plan: they override a format's default skips, `get_modules_to_not_convert` leaves them out
+    plan_module_names: list[str] = []
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -162,8 +163,12 @@ class HfQuantizer(ABC):
         return [self]
 
     def get_quantizer(self, name: str) -> "HfQuantizer | None":
-        "The quantizer of the module or param `name`: this one, or in a quantization plan the one of its pattern"
-        return self
+        """
+        The quantizer of the module or param `name`: this one unless `modules_to_not_convert` skips its module, or in
+        a quantization plan the one of its pattern (the skips are folded into the plan, see its `replace_modules`)
+        """
+        module = name.rpartition(".")[0]
+        return self if should_convert_module(module, getattr(self, "modules_to_not_convert", None)) else None
 
     def validate_environment(self, *args, **kwargs):
         """
@@ -219,8 +224,6 @@ class HfQuantizer(ABC):
             param = next(iter(module._parameters), None)
             quantizer = self.get_quantizer(f"{name}.{param}") if param is not None else None
             if quantizer is None or not quantizer.replaces_modules:
-                continue
-            if not should_convert_module(name, getattr(quantizer, "modules_to_not_convert", None)):
                 continue
             with torch.device("meta"):
                 new_module = quantizer.quantized_module(name, module)
@@ -332,7 +335,7 @@ class HfQuantizer(ABC):
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        return [name for name in set(modules_to_not_convert) if name not in self.modules_named]
+        return [name for name in set(modules_to_not_convert) if name not in self.plan_module_names]
 
     @property
     def is_qat_trainable(self) -> bool:
@@ -396,6 +399,8 @@ class HfQuantizer(ABC):
         "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
         from ..core_model_loading import WeightConverter, _IdentityOp
 
+        # Only to read a checkpoint this format can load (it has a load op). Nothing is converted back on save: a format
+        # only converts what is possible and easy for now
         if self.get_load_operation() is None:
             return []
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]

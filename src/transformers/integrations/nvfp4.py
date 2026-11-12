@@ -25,12 +25,15 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
+from .moe import ExpertsInterface
 from .mxfp4 import FP4_VALUES
 
 
 if is_torch_available():
     import torch
     import torch.nn as nn
+
+    _FP8_DTYPE = torch.float8_e4m3fn  # the dtype of the NVFP4 block scales
 
 
 # NVFP4 uses one FP8 scale factor for every 16 consecutive weight values.
@@ -45,7 +48,9 @@ class NVFP4Kernel:
     gemm: Callable
     pack: Callable
     swizzled_sf_shape: Callable
-    ops: object  # the raw ops, for the W4A4 GEMM with a static activation scale
+    # The raw ops, for the W4A4 GEMM with a static activation scale
+    scaled_fp4_quant: Callable
+    cutlass_scaled_fp4_mm: Callable
 
 
 @functools.cache
@@ -66,12 +71,14 @@ def load_nvfp4_kernel() -> NVFP4Kernel:
             "PyTorch and CUDA versions."
         )
 
+    ops = getattr(getattr(kernel, "_ops", None), "ops", None)
     entry_points = {
         "PackedWeight": getattr(kernel, "PackedWeight", None),
         "gemm": getattr(kernel, "gemm", None),
         "pack": getattr(kernel, "pack", None),
         "swizzled_sf_shape": getattr(kernel, "swizzled_sf_shape", None),
-        "ops": getattr(getattr(kernel, "_ops", None), "ops", None),
+        "scaled_fp4_quant": getattr(ops, "scaled_fp4_quant", None),
+        "cutlass_scaled_fp4_mm": getattr(ops, "cutlass_scaled_fp4_mm", None),
     }
     missing = [name for name, entry_point in entry_points.items() if entry_point is None]
     if missing:
@@ -108,12 +115,11 @@ def nvfp4_linear(
     if input_scale is None or input.numel() <= 2 * in_features:
         return kernel.gemm(packed_weight, input)  # dynamic activation scale, or the W4A16 decode GEMV
     # The kernel's W4A4 GEMM, with the static activation global scale instead of one from the input's amax
-    qinput, input_sf = kernel.ops.scaled_fp4_quant(
+    qinput, input_sf = kernel.scaled_fp4_quant(
         input.reshape(-1, in_features).to(torch.bfloat16).contiguous(), 1 / input_scale, True
     )
-    fp8 = torch.float8_e4m3fn
-    output = kernel.ops.cutlass_scaled_fp4_mm(
-        qinput, weight, input_sf.view(fp8), weight_sf.view(fp8), input_scale / weight_global_scale
+    output = kernel.cutlass_scaled_fp4_mm(
+        qinput, weight, input_sf.view(_FP8_DTYPE), weight_sf.view(_FP8_DTYPE), input_scale / weight_global_scale
     )
     return output.reshape(*input.shape[:-1], out_features)
 
@@ -216,7 +222,7 @@ class NVFP4Experts(nn.Module):
         from torch.nn.functional import ScalingType, SwizzleType, scaled_grouped_mm
 
         input_scale, scale_2 = self.scales(name, expert_ids)
-        qinput, input_sf = load_nvfp4_kernel().ops.scaled_fp4_quant(
+        qinput, input_sf = load_nvfp4_kernel().scaled_fp4_quant(
             (input.float() / input_scale[:, None]).to(torch.bfloat16).contiguous(),
             torch.ones(1, device=input.device),
             False,
@@ -227,13 +233,13 @@ class NVFP4Experts(nn.Module):
         rows = torch.arange(input_sf.shape[0], device=input.device) + (torch.cumsum(padding, 0) - padding)[expert_ids]
         grouped_sf = input_sf.new_zeros(input_sf.shape[0] + 127 * self.num_experts, input_sf.shape[1])
         grouped_sf[rows] = input_sf
-        fp4, fp8 = torch.float4_e2m1fn_x2, torch.float8_e4m3fn
+        fp4 = torch.float4_e2m1fn_x2
         output = scaled_grouped_mm(
             qinput.view(fp4),
             getattr(self, name).view(fp4).transpose(-2, -1),
-            swizzle_sf(grouped_sf).view(-1, -(-input_sf.shape[1] // 4) * 4).view(fp8),
+            swizzle_sf(grouped_sf).view(-1, -(-input_sf.shape[1] // 4) * 4).view(_FP8_DTYPE),
             ScalingType.BlockWise1x16,
-            getattr(self, f"{name}_sf").view(self.num_experts, -1).view(fp8),
+            getattr(self, f"{name}_sf").view(self.num_experts, -1).view(_FP8_DTYPE),
             ScalingType.BlockWise1x16,
             swizzle_a=SwizzleType.SWIZZLE_32_4_4,
             swizzle_b=SwizzleType.SWIZZLE_32_4_4,
@@ -252,26 +258,38 @@ class NVFP4Experts(nn.Module):
             final_hidden_states.index_add_(0, token_idx, current.to(final_hidden_states.dtype))
         return final_hidden_states.to(hidden_states.dtype)
 
-    def grouped_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-        "Tokens sorted by expert, one grouped NVFP4 GEMM per projection"
-        expert_ids, perm = torch.sort(top_k_index.reshape(-1))
-        # histc instead of bincount avoids cuda graph issues; CPU and MPS only support float input
-        histc_input = expert_ids.float() if hidden_states.device.type in ("cpu", "mps") else expert_ids.int()
-        tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1).long()
-        grouped = (expert_ids, tokens_per_expert, torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32))
-        hidden = hidden_states[perm // top_k_index.shape[-1]]
-        hidden = self._activate(self.grouped_linear(self.in_proj, hidden, *grouped))
-        hidden = self.grouped_linear("down_proj", hidden, *grouped) * top_k_weights.reshape(-1)[perm, None]
-        output = torch.empty_like(hidden, dtype=torch.float32)
-        output[perm] = hidden  # back to the token order
-        return output.view(*top_k_index.shape, -1).sum(dim=1).to(hidden_states.dtype)
-
     def forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-        grouped = self.config._experts_implementation == "grouped_mm"
-        # torch's grouped NVFP4 GEMM only runs on sm90 / sm100 (e.g. not on sm120): one GEMM per expert elsewhere
-        if hidden_states.is_cuda and torch.cuda.get_device_capability(hidden_states.device) not in ((9, 0), (10, 0)):
-            grouped = False
-        return (self.grouped_forward if grouped else self.eager_forward)(hidden_states, top_k_index, top_k_weights)
+        experts_forward = ALL_NVFP4_EXPERTS_FUNCTIONS.get_interface(
+            self.config._experts_implementation, type(self).eager_forward
+        )
+        return experts_forward(self, hidden_states, top_k_index, top_k_weights)
+
+
+def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
+    "Tokens sorted by expert, one grouped NVFP4 GEMM per projection"
+    # torch's grouped NVFP4 GEMM only runs on sm90 / sm100 (e.g. not on sm120): one GEMM per expert elsewhere
+    if hidden_states.is_cuda and torch.cuda.get_device_capability(hidden_states.device) not in ((9, 0), (10, 0)):
+        return self.eager_forward(hidden_states, top_k_index, top_k_weights)
+    expert_ids, perm = torch.sort(top_k_index.reshape(-1))
+    # histc instead of bincount avoids cuda graph issues; CPU and MPS only support float input
+    histc_input = expert_ids.float() if hidden_states.device.type in ("cpu", "mps") else expert_ids.int()
+    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1).long()
+    grouped = (expert_ids, tokens_per_expert, torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32))
+    hidden = hidden_states[perm // top_k_index.shape[-1]]
+    hidden = self._activate(self.grouped_linear(self.in_proj, hidden, *grouped))
+    hidden = self.grouped_linear("down_proj", hidden, *grouped) * top_k_weights.reshape(-1)[perm, None]
+    output = torch.empty_like(hidden, dtype=torch.float32)
+    output[perm] = hidden  # back to the token order
+    return output.view(*top_k_index.shape, -1).sum(dim=1).to(hidden_states.dtype)
+
+
+class NVFP4ExpertsInterface(ExpertsInterface):
+    """Interface for registering custom NVFP4 experts forward functions; `eager` is `NVFP4Experts.eager_forward`."""
+
+    _global_mapping = {"grouped_mm": nvfp4_grouped_mm_experts_forward}
+
+
+ALL_NVFP4_EXPERTS_FUNCTIONS = NVFP4ExpertsInterface()
 
 
 class NVFP4Quantize(ConversionOps):
@@ -371,7 +389,7 @@ class NVFP4Dequantize(ConversionOps):
         values = torch.tensor(FP4_VALUES, device=packed.device)
         weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
         weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
-        scales = scales.view(torch.float8_e4m3fn).float().unsqueeze(-1)
+        scales = scales.view(_FP8_DTYPE).float().unsqueeze(-1)
         return (weight * scales * scale_2).flatten(1)
 
 

@@ -448,7 +448,7 @@ if matched_tp_pattern := tp_plan_alt.search(renamed_key):
 
 ## Quantization integration
 
-Every quantized model loads through an `AutoHfQuantizer`, a quantization plan mapping module patterns to quantizers (a single method is the plan `{"*": quantizer}`). It hooks into the loading pipeline at three points:
+Every quantized model loads through a `QuantizationPlanHfQuantizer` (built by `AutoHfQuantizer.from_plan`), a quantization plan mapping module patterns to quantizers (a single method is the plan `{"*": quantizer}`; a checkpoint describing its quantization in its own scheme, like ModelOpt's `quantized_layers`, is read into a plan by `read_quantization_schema`). It hooks into the loading pipeline at three points:
 
 - **Renaming**: `rename_layer` renames each checkpoint key with its layer's format `renamed_names` (e.g. FP8's `scale` → `weight_scale_inv`) before any [`WeightRenaming`] or [`WeightConverter`] sees it.
 - **Conversions**: `update_weight_conversions` appends each format's converters, which collect a param's `serialized_names` together. A model [`WeightConverter`] whose source ends in `.weight` also matches the tensors named after it, so `mlp.experts.*.gate_proj.weight_scale_inv` goes through the experts merge into `mlp.experts.gate_up_proj_scale_inv`. With `dequantize=True`, the model's converters read the scales into the weight's target instead.

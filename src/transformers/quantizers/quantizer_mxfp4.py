@@ -165,7 +165,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         if not any(isinstance(module, GptOssMLP) for module in model.modules()):
-            # `quantized_module` swaps the experts for `Mxfp4Experts`, which run on the FP8 experts' kernels
+            # `quantized_module` swaps the experts for `Mxfp4Experts`, run W4A8 by the finegrained-fp8 or DeepGEMM kernels
             fp8_gpu = torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9)
             if not (fp8_gpu or torch.xpu.is_available()) and not self.quantization_config.dequantize:
                 logger.warning_once(
@@ -196,9 +196,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
         from ..integrations.moe import use_experts_implementation
-        from ..integrations.mxfp4 import Mxfp4Experts, Mxfp4GptOssExperts
+        from ..integrations.mxfp4 import ALL_FP4_EXPERTS_FUNCTIONS, Mxfp4Experts, Mxfp4GptOssExperts
 
         if isinstance(module, Mxfp4GptOssExperts):
             return module  # swapped with its MLP by `replace_with_mxfp4_linear`
@@ -207,13 +206,28 @@ class Mxfp4HfQuantizer(HfQuantizer):
         has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
         experts_class = use_experts_implementation(
             experts_class=Mxfp4Experts,
-            experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
+            experts_interface=ALL_FP4_EXPERTS_FUNCTIONS,
             has_bias=has_bias,
             has_gate=has_gate,
         )
         new_module = experts_class(getattr(module, "config", self.text_config), has_bias=has_bias, has_gate=has_gate)
         new_module._hf_quantized_needs_local_tp = True
         return new_module
+
+    def update_parallel_plan(self, model, parallel_plan):
+        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
+        from ..integrations.mxfp4 import Mxfp4Experts
+
+        super().update_parallel_plan(model, parallel_plan)
+        # The style of the experts' kernel (e.g. MegaMoE's), on the `Mxfp4Experts` only
+        implementation = getattr(model.config, "_experts_implementation", None)
+        overwrite = Mxfp4Experts._impl_tp_layer_overrides.get(implementation, {})
+        experts = {
+            replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, Mxfp4Experts)
+        }
+        for key, style in parallel_plan.items():
+            if key.rpartition(".")[0] in experts:
+                parallel_plan[key] = overwrite.get(style, style)
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize

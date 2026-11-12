@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
+
 from ..utils import get_current_accelerator, is_torch_available, logging
 
 
@@ -19,11 +21,23 @@ if is_torch_available():
     import torch
     from torch import nn
 
+from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
-from .finegrained_fp8 import FP8Experts
+from .deepgemm import (
+    _assert_sm100_requirements,
+    _coerce_sf_for_kernel,
+    _combine_routed_output,
+    _dispatch_routed_input,
+    _pad_for_deepgemm,
+    deepgemm_allowed,
+    deepgemm_fp8_fp4_megamoe_experts_forward,
+    load_deepgemm_kernel,
+)
+from .finegrained_fp8 import load_finegrained_fp8_kernel
 from .hub_kernels import use_kernel_forward_from_hub
+from .moe import ExpertsInterface
 
 
 logger = logging.get_logger(__name__)
@@ -486,18 +500,199 @@ class Mxfp4GptOssMLP(nn.Module):
         return routed_out, router_logits
 
 
-class Mxfp4Experts(FP8Experts):
-    """MXFP4 experts (e.g. DeepSeek-V4's): e2m1 pairs packed in `int8`, a ue8m0    scale per 32, run W4A8 on the FP8 kernels. mostly for BC"""
+# The finegrained-fp8 kernels' block size for MXFP4 weights: a scale per 32 values of a row
+MXFP4_BLOCK_SIZE = (1, 32)
+
+
+class Mxfp4Experts(nn.Module):
+    """
+    MXFP4 experts (e.g. DeepSeek-V4's): e2m1 pairs packed in `int8`, a ue8m0 scale per 32 values. The default forward
+    dequantizes each routed expert; the `ALL_FP4_EXPERTS_FUNCTIONS` run them W4A8 on the GPU.
+    """
+
+    # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer
+    _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
+        "deepgemm_megamoe": {
+            "ep_dispatch_experts": "megamoe_experts",
+            "moe_tp_experts": "megamoe_experts",
+            "ep_router": "megamoe_router",
+        },
+    }
 
     def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
-        super().__init__(
-            config,
-            block_size=(1, 32),
-            scale_fmt="ue8m0",
-            has_bias=has_bias,
-            has_gate=has_gate,
-            weight_dtype=torch.int8,
+        super().__init__()
+        if has_bias:
+            raise ValueError("Mxfp4Experts does not support bias")
+        self.config = config
+        self.has_bias = has_bias
+        self.has_gate = has_gate
+        self.hidden_dim = config.hidden_size
+        self.num_experts = getattr(config, "num_local_experts", None) or config.num_experts
+        self.intermediate_dim = getattr(config, "moe_intermediate_size", None) or config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = getattr(config, "swiglu_limit", None)
+
+        up_proj = "gate_up_proj" if has_gate else "up_proj"
+        up_dim = 2 * self.intermediate_dim if has_gate else self.intermediate_dim
+        self._alloc_proj(up_proj, up_dim, self.hidden_dim)
+        self._alloc_proj("down_proj", self.hidden_dim, self.intermediate_dim)
+
+    def _alloc_proj(self, proj: str, out_dim: int, in_dim: int):
+        "Two e2m1 values per `int8`, a ue8m0 scale per 32 of them"
+        weight = torch.empty(self.num_experts, out_dim, in_dim // 2, dtype=torch.int8)
+        scale = torch.empty(self.num_experts, out_dim, in_dim // 32, dtype=torch.float8_e8m0fnu)
+        self.register_parameter(proj, nn.Parameter(weight, requires_grad=False))
+        self.register_parameter(f"{proj}_scale_inv", nn.Parameter(scale, requires_grad=False))
+        self.register_parameter(f"{proj}_bias", None)
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        if self.limit is not None:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
+
+    def dequantized(self, proj: str, expert_idx: int, dtype: torch.dtype) -> torch.Tensor:
+        weight, scale = getattr(self, proj)[expert_idx], getattr(self, f"{proj}_scale_inv")[expert_idx]
+        return dequantize_mxfp4(weight, scale, dtype)
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        # Default: dequantize each routed expert to the activations' dtype, accumulate in float32
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+        up_proj = "gate_up_proj" if self.has_gate else "up_proj"
+
+        with torch.no_grad():
+            expert_mask = nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
+
+        for expert_idx in expert_hit:
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            proj_out = nn.functional.linear(current_state, self.dequantized(up_proj, expert_idx, current_state.dtype))
+            proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+            proj_out = nn.functional.linear(proj_out, self.dequantized("down_proj", expert_idx, proj_out.dtype))
+            routing_weights = top_k_weights[token_idx, top_k_pos, None]
+            weighted_out = proj_out * routing_weights.to(proj_out.dtype)
+            final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
+        return final_hidden_states.to(hidden_states.dtype)
+
+
+def _w4a8_experts(self, hidden_states, matmul):
+    "up (-> gate) -> down on the routed rows, each projection through `matmul(input, weight, scale)`"
+    up_proj = "gate_up_proj" if self.has_gate else "up_proj"
+    proj_out = matmul(hidden_states, getattr(self, up_proj), getattr(self, f"{up_proj}_scale_inv"))
+    proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+    return matmul(proj_out, self.down_proj, self.down_proj_scale_inv)
+
+
+def fp4_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    "W4A8 on the finegrained-fp8 Triton kernel, one row per (token, expert) pair"
+    kernel = load_finegrained_fp8_kernel()
+    num_tokens, num_top_k = top_k_index.shape
+    expert_ids = top_k_index.reshape(-1)
+    matmul = partial(kernel.batched_matmul, block_size=MXFP4_BLOCK_SIZE, expert_ids=expert_ids)
+    proj_out = _w4a8_experts(self, hidden_states.repeat_interleave(num_top_k, dim=0), matmul)
+    weighted_out = proj_out * top_k_weights.reshape(-1, 1).to(proj_out.dtype)
+    if self._is_expert_parallel:  # the kernel leaves the rows of other ranks' experts uninitialized
+        weighted_out.masked_fill_((expert_ids >= self.num_experts).unsqueeze(-1), 0.0)
+    # reshape + sum: deterministic, unlike `index_add_` on CUDA
+    return weighted_out.view(num_tokens, num_top_k, -1).sum(dim=1).to(hidden_states.dtype)
+
+
+def fp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    "W4A8 on the finegrained-fp8 Triton kernel, the (token, expert) pairs grouped by expert"
+    kernel = load_finegrained_fp8_kernel()
+    num_tokens, num_top_k = top_k_index.shape
+    expert_ids, perm = torch.sort(top_k_index.reshape(-1))
+    # histc, not bincount (cuda graphs): CPU wants a float input, CUDA an int one (deterministic mode)
+    histc_input = expert_ids.float() if hidden_states.device.type == "cpu" else expert_ids.int()
+    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+    matmul = partial(
+        kernel.grouped_matmul, offsets=offsets, tokens_per_expert=tokens_per_expert, block_size=MXFP4_BLOCK_SIZE
+    )
+    proj_out = _w4a8_experts(self, hidden_states[perm // num_top_k], matmul)
+    weighted_out = proj_out * top_k_weights.reshape(-1)[perm, None].to(proj_out.dtype)
+    if self._is_expert_parallel:  # other ranks' experts sort last, past `offsets[-1]`: uninitialized
+        weighted_out.masked_fill_((expert_ids >= self.num_experts).unsqueeze(-1), 0.0)
+    unsorted = torch.empty_like(weighted_out)
+    unsorted[perm] = weighted_out
+    return unsorted.view(num_tokens, num_top_k, -1).sum(dim=1).to(hidden_states.dtype)
+
+
+def deepgemm_fp4_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    "W4A8 on DeepGEMM's M-grouped FP8 x FP4 GEMM (Blackwell only)"
+    if not deepgemm_allowed(hidden_states.device):
+        raise RuntimeError(
+            "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
+            "its kernels are bound to a single CUDA context and corrupt across devices. Use "
+            "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
         )
+    # Before the kernel's load: FP4 has no Hopper kernel
+    _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
+    deepgemm = load_deepgemm_kernel()
+    if hidden_states.dtype != torch.bfloat16:
+        raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
+
+    num_tokens, num_top_k = top_k_index.shape
+    sorted_hidden, sorted_weights, _, sentinel_mask, perm, sorted_to_padded, grouped_layout, padded_rows = (
+        _dispatch_routed_input(
+            hidden_states,
+            top_k_index,
+            top_k_weights,
+            self.num_experts,
+            deepgemm.m_alignment,
+            True,  # SM100's psum layout
+            is_expert_parallel=self._is_expert_parallel,
+        )
+    )
+
+    def matmul(input, weight, scale):
+        # FP8 activations with a packed ue8m0 scale per 32, like the weights
+        act, act_scale = deepgemm.per_token_cast_to_fp8(input, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
+        out = torch.empty(padded_rows, weight.size(1), device=input.device, dtype=torch.bfloat16)
+        deepgemm.grouped_fp8_fp4_matmul_nt(
+            (act, _coerce_sf_for_kernel(act_scale, True, expected_mn=padded_rows)),
+            (weight, _coerce_sf_for_kernel(scale, True, expected_mn=weight.size(-2))),
+            out,
+            grouped_layout,
+            recipe=(1, 1, 32),
+            use_psum_layout=True,
+        )
+        return out
+
+    out = _w4a8_experts(self, _pad_for_deepgemm(sorted_hidden, sorted_to_padded, padded_rows), matmul)
+    hidden_dim = hidden_states.size(-1)
+    return _combine_routed_output(
+        out,
+        sorted_weights,
+        sentinel_mask,
+        perm,
+        sorted_to_padded,
+        num_tokens,
+        num_top_k,
+        hidden_dim,
+        hidden_states.dtype,
+    )
+
+
+class FP4ExpertsInterface(ExpertsInterface):
+    """Interface for registering custom FP4 experts forward functions."""
+
+    _global_mapping = {
+        "batched_mm": fp4_batched_mm_experts_forward,
+        "grouped_mm": fp4_grouped_mm_experts_forward,
+        "deepgemm": deepgemm_fp4_experts_forward,
+        "deepgemm_megamoe": deepgemm_fp8_fp4_megamoe_experts_forward,
+    }
+
+
+ALL_FP4_EXPERTS_FUNCTIONS = FP4ExpertsInterface()
 
 
 def dequantize_mxfp4(weight, scale, dtype):

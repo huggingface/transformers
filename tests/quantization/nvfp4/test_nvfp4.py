@@ -24,6 +24,7 @@ from transformers.integrations.nvfp4 import (
     NVFP4Experts,
     NVFP4Linear,
     NVFP4Quantize,
+    load_nvfp4_kernel,
     swizzle_sf,
 )
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
@@ -96,7 +97,8 @@ def _fake_kernel():
         gemm=gemm,
         pack=pack,
         swizzled_sf_shape=_padded_sf_shape,
-        ops=SimpleNamespace(scaled_fp4_quant=scaled_fp4_quant, cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm),
+        scaled_fp4_quant=scaled_fp4_quant,
+        cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm,
     )
 
 
@@ -153,6 +155,22 @@ class NVFP4IntegrationTest(unittest.TestCase):
         self.assertEqual(model["convert"].weight_sf.dtype, torch.int32)
         self.assertEqual(model["convert"].weight_scale.dtype, torch.uint8)
         self.assertEqual(model["convert"].weight_scale_2.dtype, torch.float32)
+
+    def test_kernel_missing_an_op_fails_at_load(self):
+        kernel = _fake_kernel()
+        hub_kernel = SimpleNamespace(
+            PackedWeight=kernel.PackedWeight,
+            gemm=kernel.gemm,
+            pack=kernel.pack,
+            swizzled_sf_shape=kernel.swizzled_sf_shape,
+            _ops=SimpleNamespace(ops=SimpleNamespace(scaled_fp4_quant=kernel.scaled_fp4_quant)),
+        )
+        with (
+            patch("transformers.integrations.nvfp4.is_kernels_available", return_value=True),
+            patch("transformers.integrations.nvfp4.lazy_load_kernel", return_value=hub_kernel),
+            self.assertRaisesRegex(ImportError, "cutlass_scaled_fp4_mm"),
+        ):
+            load_nvfp4_kernel.__wrapped__()
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
     def test_linear_forward_uses_normal_function_entry_point(self, _):
@@ -354,6 +372,8 @@ class NVFP4ExpertsTest(unittest.TestCase):
             top_k_index = torch.tensor([[0, 3], [3, 0], [1, 3], [3, 1], [0, 1], [3, 0], [1, 0]])  # expert 2 is not hit
             top_k_weights = torch.rand(7, 2)
             eager = experts.eager_forward(hidden_states, top_k_index, top_k_weights)
+            # `experts_implementation` picks the forward through `ALL_NVFP4_EXPERTS_FUNCTIONS`, `eager` by default
+            torch.testing.assert_close(experts(hidden_states, top_k_index, top_k_weights), eager, rtol=0, atol=0)
             experts.config._experts_implementation = "grouped_mm"
             grouped = experts(hidden_states, top_k_index, top_k_weights)
         # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first

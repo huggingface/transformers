@@ -203,6 +203,13 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
+    def get_loading_attributes(self) -> dict[str, Any]:
+        """
+        The attributes a config passed to `from_pretrained` overrides on the checkpoint's own config (e.g.
+        `dequantize`). None by default.
+        """
+        return {}
+
 
 @dataclass
 class AutoRoundConfig(QuantizationConfigMixin):

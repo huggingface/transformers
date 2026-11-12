@@ -24,12 +24,56 @@ Transformers integrates more than 20 quantization methods through [`~PreTrainedM
 
 How you use quantization depends on whether your checkpoint is already quantized.
 
-| You have | What you do | Methods |
+| You have | What you do | Section |
 |---|---|---|
-| A full-precision checkpoint | Pass a quantization config to `from_pretrained`, and the weights are quantized as they load. | [Quantize a model while loading](#quantize-a-model-while-loading) |
-| A checkpoint that's already quantized | Call `from_pretrained` without a quantization config. Transformers reads the method from the checkpoint's `config.json`, or from the GGUF file you name. | [Load a pre-quantized checkpoint](#load-a-pre-quantized-checkpoint) |
+| A checkpoint that's already quantized | Call `from_pretrained` without a quantization config. Transformers reads the method from the checkpoint's `config.json`, or from the GGUF file you name. | [Load a pre-quantized checkpoint](#load-a-pre-quantized-checkpoint) (automatic) |
+| A full-precision checkpoint | Pass a quantization config to `from_pretrained`, and the weights are quantized as they load. | [Quantize a model while loading](#quantize-a-model-while-loading) (manual) |
 
 Some methods, such as AWQ, AutoRound, AQLM, compressed-tensors, and GGUF, can only be loaded from a checkpoint. You quantize the model with the method's own library first, and then load the result in Transformers.
+
+## Load a pre-quantized checkpoint
+
+A pre-quantized checkpoint stores a `quantization_config` in its `config.json`. When `from_pretrained` finds it, the matching quantizer is selected automatically.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B-FP8", device_map="auto")
+print(model.config.quantization_config.quant_method)  # "fp8"
+```
+
+Install the library that the method depends on before loading the checkpoint. Each method page lists what to install. To change loading options, like which kernel backend runs, pass a config of the same type. Its options are merged with the ones stored in the checkpoint.
+
+### Checkpoints quantized per layer
+
+Some checkpoints quantize different layers with different methods. Their `config.json` describes this in their own scheme, and Transformers converts it into a [quantization plan](#quantization-plans), which gives each layer its method. Loading them needs no `quantization_config` either.
+
+| Checkpoint | Scheme in `config.json` | Loads as |
+|---|---|---|
+| [nvidia/Qwen3.6-35B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4) | ModelOpt `quant_algo: "MIXED_PRECISION"`, one `quant_algo` per layer under `quantized_layers` | [FP8](./finegrained_fp8) and [NVFP4](./nvfp4) layers |
+| [deepseek-ai/DeepSeek-V4-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) | `quant_method: "fp8"` with `expert_dtype: "fp4"` | [MXFP4](./mxfp4) routed experts, [FP8](./finegrained_fp8) elsewhere |
+
+```py
+from transformers import AutoModelForCausalLM
+
+# each layer loads with the method its checkpoint lists
+model = AutoModelForCausalLM.from_pretrained("nvidia/Qwen3.6-35B-A3B-NVFP4", device_map="cuda")
+```
+
+### GGUF checkpoints
+
+A GGUF checkpoint is a single file that holds the weights, config, and tokenizer, and it has no `config.json` for `from_pretrained` to read. Name the file with `gguf_file`.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "unsloth/Qwen3.5-4B-GGUF",
+    gguf_file="Qwen3.5-4B-Q4_K_M.gguf",
+)
+```
+
+Most GGUF models are dequantized to full precision as they load, so they use as much memory as an unquantized model. Weights stay packed only on MPS with the [kernels](https://huggingface.co/docs/kernels/index) package installed, for Qwen3.5 and Qwen3.5 MoE. See [GGUF](./gguf) for details.
 
 ## Quantize a model while loading
 
@@ -52,73 +96,43 @@ model = AutoModelForCausalLM.from_pretrained(
 
 Every method in this group has its own config class, like [`TorchAoConfig`] or [`BitsAndBytesConfig`]. Most of them don't need a calibration dataset. [GPTQ](./gptq) is the exception because it calibrates on a dataset while the model loads.
 
-## Load a pre-quantized checkpoint
+## Quantization plans
 
-A pre-quantized checkpoint stores a `quantization_config` in its `config.json`. When `from_pretrained` finds it, the matching quantizer is selected automatically.
+A quantization plan maps module names or glob patterns, matched like the dtype plan's, to the config quantizing the modules they match. Exact names are tried first and `"*"` last, the first match wins, and modules no pattern matches (or mapped to `None`) stay unquantized. A single config is the plan `{"*": config}`, and the per-layer checkpoints above load as plans. You only write one yourself to quantize different parts of a model differently, or to change how a stored plan loads.
 
-```py
-from transformers import AutoModelForCausalLM
+### Pass a plan
 
-model = AutoModelForCausalLM.from_pretrained(
-    "TheBloke/zephyr-7B-alpha-AWQ",
-    device_map="auto",
-)
-print(model.config.quantization_config.quant_method)
-```
-
-Install the library that the method depends on before loading the checkpoint. Each method page lists what to install. To change loading options, like which kernel backend runs, pass a config of the same type. Its options are merged with the ones stored in the checkpoint.
-
-### GGUF checkpoints
-
-A GGUF checkpoint is a single file that holds the weights, config, and tokenizer, and it has no `config.json` for `from_pretrained` to read. Name the file with `gguf_file`.
+Pass the plan as `quantization_config`. For example, FP8 attention and NVFP4 MLPs, quantized while loading:
 
 ```py
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained(
-    "unsloth/Qwen3.5-4B-GGUF",
-    gguf_file="Qwen3.5-4B-Q4_K_M.gguf",
-)
-```
-
-Most GGUF models are dequantized to full precision as they load, so they use as much memory as an unquantized model. Weights stay packed only on MPS with the [kernels](https://huggingface.co/docs/kernels/index) package installed, for Qwen3.5 and Qwen3.5 MoE. See [GGUF](./gguf) for details.
-
-### Several methods in one model
-
-A quantization plan maps module names or glob patterns, matched like the dtype plan's, to the config quantizing the modules they match. Exact names are tried first and `"*"` last, the first match wins, and modules no pattern matches (or mapped to `None`) stay unquantized. For example, FP8 attention and experts with NVFP4 shared experts:
-
-```py
-from transformers import FineGrainedFP8Config, Mistral4ForCausalLM, NVFP4Config
+from transformers import AutoModelForCausalLM, FineGrainedFP8Config, NVFP4Config
 
 plan = {
-    "*.self_attn.*_proj*": FineGrainedFP8Config(weight_block_size=(32, 32)),
-    "*.mlp.experts.*": FineGrainedFP8Config(weight_block_size=(128, 128)),
-    "*.mlp.shared_experts.*": NVFP4Config(),
+    "*.self_attn.*": FineGrainedFP8Config(),
+    "*.mlp.*": NVFP4Config(),
 }
-model = Mistral4ForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Mistral4-fp8-nvfp4", quantization_config=plan)
-```
-
-A checkpoint saved with a plan stores it in its `config.json`, so loading it needs no `quantization_config`. Loading attributes apply to every pattern of the stored plan, e.g. to load the checkpoint in full precision:
-
-```py
-model = Mistral4ForCausalLM.from_pretrained(
-    "hf-internal-testing/tiny-random-Mistral4-fp8-nvfp4", quantization_config={"dequantize": True}
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B-Instruct", quantization_config=plan, device_map="cuda"
 )
 ```
 
-Pass a plan of configs instead to change a single pattern of the stored plan, e.g. `{"*.mlp.shared_experts.*": NVFP4Config(dequantize=True)}` for the shared experts only. A config of another class than the saved one raises an error.
+A model saved with a plan stores it in its `config.json`, so loading it needs no `quantization_config`. Saving needs every method of the plan to be serializable, which NVFP4 is not yet.
 
-Checkpoints that describe their mix another way load as a plan too, with no `quantization_config`: ModelOpt checkpoints (one `quant_algo`, or a `quant_algo` per layer under `quantized_layers`, e.g. [NVFP4](./nvfp4) experts and [FP8](./finegrained_fp8) attention) and DeepSeek-V4's FP8 checkpoints with [MXFP4](./mxfp4) experts (`expert_dtype: "fp4"`).
+### Change how a stored plan loads
+
+Loading attributes passed as a dict apply to every pattern of the stored plan, or of the plan read from the checkpoint's own scheme. For example, to load a per-layer checkpoint in full precision:
 
 ```py
-from transformers import AutoModelForCausalLM
-
-# ModelOpt `MIXED_PRECISION` checkpoint: each layer loads with its own config
-model = AutoModelForCausalLM.from_pretrained("my-org/model-nvfp4-fp8", device_map="cuda")
-print(model.config.quantization_config)  # the plan, {module pattern: config}
+model = AutoModelForCausalLM.from_pretrained(
+    "nvidia/Qwen3.6-35B-A3B-NVFP4", quantization_config={"dequantize": True}
+)
 ```
 
-Only methods that swap modules through `quantized_module` can be mixed in one plan: AQLM, BitNet, EETQ, FP8, HIGGS, Metal, MXFP4, NVFP4 and SINQ. The others (bitsandbytes, AWQ, torchao, compressed-tensors, ...) quantize the whole model alone, and a plan mixing them with another method raises an error. To support a new checkpoint layout, see [Add a quantized format](./add_format).
+Pass a plan of configs instead to change a single pattern of a plan saved by Transformers, e.g. `{"*.mlp.*": NVFP4Config(dequantize=True)}` for the MLPs only. A config of another class than the saved one raises an error.
+
+### Which methods can be mixed
+
+Only methods that swap modules through `quantized_module` can be mixed in one plan: AQLM, BitNet, EETQ, FP8, HIGGS, Metal, MXFP4, NVFP4 and SINQ. The others (bitsandbytes, AWQ, torchao, compressed-tensors, ...) quantize the whole model alone, and a plan mixing them with another method raises an error. To support a new format or checkpoint scheme, see [Add a quantized format](./add_format).
 
 ## Save a quantized model
 

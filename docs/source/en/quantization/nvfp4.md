@@ -63,10 +63,13 @@ quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
 
 ## Pre-quantized checkpoints
 
-Pre-quantized NVFP4 weights are stored as [ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) saves them
-(`weight`, `weight_scale`, `weight_scale_2`, `input_scale`), MoE experts included. ModelOpt checkpoints load without a
-`quantization_config`, as a [quantization plan](./overview#several-methods-in-one-model): a single `quant_algo` for the
-whole model, or `MIXED_PRECISION` with one per layer (e.g. NVFP4 experts with FP8 attention).
+Pre-quantized NVFP4 checkpoints store each linear as `weight` (e2m1 pairs), `weight_scale` (fp8 scales per 16
+values), `weight_scale_2` (a per-tensor scale) and `input_scale`, MoE experts included. This is the layout NVIDIA's
+[ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) exports, e.g.
+[nvidia/Qwen3-30B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3-30B-A3B-NVFP4). Such checkpoints load without a
+`quantization_config`. ModelOpt's config names the format with a `quant_algo`, one for the whole model or, with
+`MIXED_PRECISION`, one per layer (e.g. NVFP4 experts with FP8 attention), which loads as a
+[quantization plan](./overview#quantization-plans).
 
 ```py
 model = AutoModelForCausalLM.from_pretrained("nvidia/Qwen3.6-35B-A3B-NVFP4", device_map="cuda")

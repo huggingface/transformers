@@ -16,39 +16,29 @@ rendered properly in your Markdown viewer.
 
 # Add a quantized format
 
-A new quantization format has 3 things to define: what it stores, which module to replace, how to read and write the weights.
-The following should guide you in your addition.
+A quantized format is a recipe: what a checkpoint stores, which modules run it, and how its weights are read and
+written. Each recipe has its own config and quantizer, even if an existing kernel could run it. A config describes one
+recipe, and its options (block size, activation scheme, ...) are settings of that recipe, not other formats. Don't
+load a new format through an existing quantizer such as fine-grained FP8.
 
-## 1. It is `FineGrainedFP8` with other settings
+| Part | Where | Example |
+|---|---|---|
+| Config | `utils/quantization_config.py` | [`NVFP4Config`] |
+| Quantizer | `quantizers/quantizer_<format>.py` | `NVFP4HfQuantizer`, `Mxfp4HfQuantizer` |
+| Modules, kernels, load ops | `integrations/<format>.py` | `NVFP4Linear`, `NVFP4Experts`, `NVFP4Deserialize` |
+| Checkpoint scheme reader (optional) | `quantizers/schema_readers.py` | `modelopt_plan`, `fp4_experts_plan` |
 
-Take MXFP8: e4m3 weights, one ue8m0 scale per 32 values of a row. That is FP8 with a `(1, 32)` block and power-of-two scales, which [`FineGrainedFP8Config`] already describes:
+See [Contribute](./contribute) for the config, registration and tests. This page covers the format itself.
 
-```py
-from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+> [!WARNING]
+> MXFP8 checkpoints currently load through fine-grained FP8 (`quant_method: "mxfp8"`). Don't take it as a model for a
+> new format: MXFP8 is not just another dtype and granularity, it is natively accelerated on Blackwell and needs its
+> scales interleaved and swizzled for the best performance.
 
-config = FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")
-model = AutoModelForCausalLM.from_pretrained("my-org/model-mxfp8", quantization_config=config)
-```
+## 1. The quantizer: what the checkpoint stores
 
-Check the kernel actually supports your block size on the GPUs you target, and most probably you just have to add a setting to `FineGrainedFP8`.
-We'll add anything that reflects a "setting" and not an actual difference in computation.
-
-## 2. It is another dtype the FP8 kernels can run
-
-DeepSeek-V4's MXFP4 experts store two e2m1 values per byte, with a ue8m0 scale per 32. The finegrained-fp8 kernels run
-them as W4A8, so the module only changes how its params are allocated:
-
-```py
-class Mxfp4Experts(FP8Experts):
-    "MXFP4 experts: e2m1 pairs packed in `int8`, a ue8m0 scale per 32, run W4A8 on the FP8 kernels"
-
-    def __init__(self, config, has_bias=False, has_gate=True):
-        super().__init__(
-            config, block_size=(1, 32), scale_fmt="ue8m0", has_bias=has_bias, has_gate=has_gate, weight_dtype=torch.int8
-        )
-```
-
-The quantizer then says which modules become `Mxfp4Experts` and what the checkpoint stores (simplified):
+DeepSeek-V4 stores its routed experts in MXFP4: two e2m1 values per byte, with a ue8m0 scale per 32. The MXFP4
+quantizer says which modules become `Mxfp4Experts` and what the checkpoint stores (simplified):
 
 ```py
 class Mxfp4HfQuantizer(HfQuantizer):
@@ -79,9 +69,82 @@ class Mxfp4HfQuantizer(HfQuantizer):
   All quantizers of a plan swap their modules in one pass, so a quantizer never walks the model itself. Only formats
   that swap modules this way can be mixed with others in a plan.
 
-The experts need nothing else: the model's own converters take each expert's scales along with its weight. A converter
-pattern ending in `.weight` also matches the tensors named after it (`weight_scale_inv`, ...), and they land in the
-target named like it:
+## 2. The modules and kernels
+
+The module holds the tensors under the checkpoint's names and runs the format's kernel. `Mxfp4Experts` allocates
+e2m1 pairs in `int8` and their ue8m0 scales, and dispatches its forward through its own experts interface,
+`ALL_FP4_EXPERTS_FUNCTIONS` (`grouped_mm`, `batched_mm`, `deepgemm`, ...), with a default that dequantizes each routed
+expert (simplified):
+
+```py
+class Mxfp4Experts(nn.Module):
+    def __init__(self, config, has_bias=False, has_gate=True):
+        super().__init__()
+        self.num_experts, self.hidden_dim = config.num_experts, config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self._alloc_proj("gate_up_proj", 2 * self.intermediate_dim, self.hidden_dim)
+        self._alloc_proj("down_proj", self.hidden_dim, self.intermediate_dim)
+
+    def _alloc_proj(self, proj, out_dim, in_dim):
+        "Two e2m1 values per `int8`, a ue8m0 scale per 32 of them"
+        weight = torch.empty(self.num_experts, out_dim, in_dim // 2, dtype=torch.int8)
+        scale = torch.empty(self.num_experts, out_dim, in_dim // 32, dtype=torch.float8_e8m0fnu)
+        self.register_parameter(proj, nn.Parameter(weight, requires_grad=False))
+        self.register_parameter(f"{proj}_scale_inv", nn.Parameter(scale, requires_grad=False))
+```
+
+A kernel comes from the Hub, like any [kernels](https://huggingface.co/docs/kernels) kernel. Add it to
+`_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, then load it lazily where the module needs it:
+
+```py
+_HUB_KERNEL_MAPPING = {
+    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
+}
+
+def load_nvfp4_kernel():
+    return lazy_load_kernel("nvfp4")
+```
+
+NVFP4 needs its block scales swizzled for the GEMM and has a second, per-tensor scale, so `NVFP4Linear` keeps both
+the checkpoint's scales and the swizzled ones (simplified):
+
+```py
+class NVFP4Linear(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.weight = nn.Buffer(torch.empty(out_features, in_features // 2, dtype=torch.uint8))  # e2m1 pairs
+        self.weight_scale = nn.Buffer(torch.empty(out_features, in_features // 16, dtype=torch.uint8))
+        self.weight_scale_2 = nn.Buffer(torch.empty(1))
+        self.weight_sf = nn.Buffer(...)  # `weight_scale`, swizzled for the GEMM
+
+    def forward(self, input):
+        return nvfp4_linear(load_nvfp4_kernel(), input, self.weight, self.weight_sf, ...)
+```
+
+MoE experts need a grouped forward over the kernel. Register it in the format's experts interface, like
+`nvfp4_grouped_mm_experts_forward`, the `grouped_mm` implementation of `ALL_NVFP4_EXPERTS_FUNCTIONS`.
+`NVFP4Experts.forward` dispatches through it, with the per-expert `eager` loop as the default.
+
+## 3. The load ops
+
+The load ops turn the checkpoint's tensors into the module's. `deserialize` runs on the pre-quantized tensors of one
+param, after the model's own merges. `dequantize` runs before them, on the weight and its scales collected together,
+so `dequantize=True` gets plain weights and needs no kernel (or GPU):
+
+```py
+class NVFP4HfQuantizer(HfQuantizer):
+    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
+
+    def get_load_operations(self):
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
+
+    def get_quantize_ops(self):  # optional: quantize a full-precision checkpoint on load
+        return NVFP4Quantize(self)
+```
+
+Fused experts need nothing else: the model's own converters take each expert's scales along with its weight. A
+converter pattern ending in `.weight` also matches the tensors named after it (`weight_scale_inv`, ...), and they land
+in the target named like it:
 
 ```text
 checkpoint keys (after rename_layer)              model converter                   targets
@@ -101,78 +164,38 @@ Under tensor parallelism, a param named after a planned one (`gate_up_proj_scale
 shards like it. A format whose scales can't be sharded that way overrides `update_parallel_plan`, e.g. NVFP4 replicates
 its modules.
 
-## 3. It needs a new kernel
+## 4. Read the checkpoint's own scheme
 
-NVFP4 does not fit the FP8 kernels: its block scales must be swizzled for the GEMM and it has a second, per-tensor scale.
-Three pieces:
+Transformers' format for a model quantized with several methods is a [quantization plan](./overview#quantization-plans),
+`{module pattern: config}`. Some checkpoints describe their quantization in their own scheme instead, for example:
 
-**The kernel**, from the Hub, like any [kernels](https://huggingface.co/docs/kernels) kernel. Add it to
-`_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, then load it lazily where the module needs it:
+| Checkpoint scheme | Reader | Plan |
+|---|---|---|
+| ModelOpt `quant_algo`, or `MIXED_PRECISION` with one per layer under `quantized_layers` | `modelopt_plan` | each layer's `quant_algo` → its config, e.g. `NVFP4` → [`NVFP4Config`] |
+| DeepSeek-V4's FP8 config with `expert_dtype: "fp4"` | `fp4_experts_plan` | `{"*.mlp.experts": Mxfp4Config(), "*": <the FP8 config>}` |
 
-```py
-_HUB_KERNEL_MAPPING = {
-    "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
-    "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
-}
-
-def load_nvfp4_kernel():
-    return lazy_load_kernel("nvfp4")
-```
-
-**The module**, holding the tensors under the checkpoint's names and calling the kernel (simplified):
+Such a scheme gets a small reader in `quantizers/schema_readers.py`, converting it into a plan, instead of a special
+case in the loading code. A reader takes the checkpoint's `quantization_config` dict and returns a plan, or `None` for
+configs it doesn't handle:
 
 ```py
-class NVFP4Linear(nn.Module):
-    def __init__(self, in_features, out_features):
-        super().__init__()
-        self.weight = nn.Buffer(torch.empty(out_features, in_features // 2, dtype=torch.uint8))  # e2m1 pairs
-        self.weight_scale = nn.Buffer(torch.empty(out_features, in_features // 16, dtype=torch.uint8))
-        self.weight_scale_2 = nn.Buffer(torch.empty(1))
-        self.weight_sf = nn.Buffer(...)  # `weight_scale`, swizzled for the GEMM
+def fp4_experts_plan(config: dict) -> dict | None:
+    "DeepSeek-V4's FP8 checkpoints, whose routed experts are MXFP4 (`expert_dtype: fp4`)"
+    if config.get("quant_method") != "fp8" or config.get("expert_dtype") != "fp4":
+        return None
+    return {
+        "*.mlp.experts": Mxfp4Config(),
+        "*": {key: value for key, value in config.items() if key != "expert_dtype"},
+    }
 
-    def forward(self, input):
-        return nvfp4_linear(load_nvfp4_kernel(), input, self.weight, self.weight_sf, ...)
+
+SCHEMA_READERS = [modelopt_plan, fp4_experts_plan]  # tried in order, the first plan wins
 ```
 
-**The load ops**, which turn the checkpoint's tensors into the module's. `deserialize` runs on the pre-quantized
-tensors of one param, after the model's own merges. `dequantize` runs before them, on the weight and its scales
-collected together, so `dequantize=True` gets plain weights and needs no kernel (or GPU):
-
-```py
-class NVFP4HfQuantizer(HfQuantizer):
-    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
-
-    def get_load_operations(self):
-        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
-
-    def get_quantize_ops(self):  # optional: quantize a full-precision checkpoint on load
-        return NVFP4Quantize(self)
-```
-
-For MoE checkpoints, the experts module replacement requires a bit more work as you need a grouped forward over the kernel (see `NVFP4Experts.grouped_forward`), with a per-expert eager loop as the fallback.
-
-## 4. It is stored per layer in a mixed checkpoint
-
-For example ModelOpt checkpoints name their format with a `quant_algo`: one for the whole model, or with `MIXED_PRECISION`, one per layer under `quantized_layers`. Both are converted to `transformers'` format using the following:
-
-```py
-MODELOPT_ALGOS = {
-    "NVFP4": NVFP4Config,
-    "W4A16_NVFP4": NVFP4Config,
-    "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
-    "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
-}
-```
-
-A new `quant_algo` that is another FP8 variant (step 1) is one line here, e.g.
-`"MXFP8": lambda: FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")`. 
-
-Layers ModelOpt leaves out keep the base `quant_method` if it is one (e.g. DeepSeek-V4's block `fp8`), else stay unquantized like its `ignore`d ones.
-
-A checkpoint format that describes its layers some other way adds a function turning its `quantization_config` into a
-plan, `{module pattern: config}`, or `None` for configs it doesn't handle (like `fp4_experts_plan` for DeepSeek-V4's
-`expert_dtype: "fp4"`), and calls it next to `modelopt_plan` in `get_hf_quantizer`. The plan's names are checkpoint
-module names: `AutoHfQuantizer` renames them to the model's, like the keys of their params.
+Add the reader to `SCHEMA_READERS`. `get_hf_quantizer` calls `read_quantization_schema(config)`, which returns the plan
+of the first reader that handles the config. The plan's names are checkpoint module names: the
+`QuantizationPlanHfQuantizer` renames them to the model's, like the keys of their params. A new method in an existing
+scheme, e.g. a new ModelOpt `quant_algo`, maps to the config of its own quantizer.
 
 `AutoHfQuantizer.from_plan` then builds one quantizer per distinct config, and the plan gives each module and param the
 quantizer of its pattern, for the module swap, the load ops and the parallel plan alike.
