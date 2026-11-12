@@ -882,6 +882,14 @@ def _fill_megamoe_buffer(
     symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
 
 
+@functools.cache
+def _compiled_fill_megamoe_buffer():
+    """`_fill_megamoe_buffer` fused by `torch.compile` (one reduction and its pointwise ops, bit for bit the same):
+    B200, hidden 4096, in a CUDA graph, 1 token 32 -> 5 us, 16384 tokens 914 -> 45 us. Compiled on first use, and once
+    more when the batch size first changes."""
+    return torch.compile(_fill_megamoe_buffer, fullgraph=True)
+
+
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -966,7 +974,9 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         )
 
     symm_buffer = symm_buffers[buffer_key]
-    _fill_megamoe_buffer(symm_buffer, hidden_states, top_k_index, top_k_weights)
+    # a model compiled as a whole fuses the staging itself
+    fill = _fill_megamoe_buffer if torch.compiler.is_compiling() else _compiled_fill_megamoe_buffer()
+    fill(symm_buffer, hidden_states, top_k_index, top_k_weights)
 
     # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
     # fused SwiGLU sees the same value range the model was calibrated for.
