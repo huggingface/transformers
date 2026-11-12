@@ -46,6 +46,8 @@ class GPTNeoXConfig(PreTrainedConfig):
     model_type = "gpt_neox"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
+        # Not named `embed_tokens`, so it doesn't get the automatic rule; the tied `lm_head` needs it
+        "embed_in": "embedding_rowwise",
         "layers.*.attention.query_key_value": "colwise",
         "layers.*.attention.dense": "rowwise",
         "layers.*.mlp.dense_h_to_4h": "colwise",
