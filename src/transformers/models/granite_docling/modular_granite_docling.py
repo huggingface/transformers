@@ -33,7 +33,7 @@ from ...image_utils import ImageInput, SizeDict, is_valid_image, make_nested_lis
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
@@ -1095,7 +1095,7 @@ class GraniteDoclingModel(Idefics3Model):
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`):
             Real tiles, as returned by the processor. Padding tiles are false.
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
-            Returned (all-True) by the processor called with `fine_route=True`: the batch takes the fine connector
+            Requires processor called with `fine_route=True`: the batch takes the fine connector
             path, which yields four times as many image tokens per tile.
         """
         batch_size = pixel_values.shape[0]

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-05.*
+*This model was contributed to Hugging Face Transformers on 2026-11-12.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -46,7 +46,7 @@ GraniteDocling is a different architecture from [granite-docling-258M](https://h
 - On the 500M model, pass `fine_route=True` for dense pages (small print, long tables, multi-column text). That path uses four times as many image tokens, so the prompt is longer and inference is slower. The 2B model already uses that token density and has no second path, so `fine_route=True` raises an error for it.
 - The 500M model includes a density router, which decides that for you: [`~GraniteDoclingModel.predict_fine_route`] returns which pages of a batch need the fine path.
 
-The examples below convert page 1 of the [Docling Technical Report](https://arxiv.org/pdf/2408.09869) (`arXiv:2408.09869`). Change only the text prompt to switch task; the model returns DocLang filtered to the requested elements.
+The examples below convert page 1 of the [Docling Technical Report](https://huggingface.co/papers/2408.09869) (`arXiv:2408.09869`). Change only the text prompt to switch task; the model returns DocLang filtered to the requested elements.
 
 | Task | Prompt |
 |---|---|

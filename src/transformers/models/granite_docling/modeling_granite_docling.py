@@ -1064,7 +1064,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`):
             Real tiles, as returned by the processor. Padding tiles are false.
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
-            Returned (all-True) by the processor called with `fine_route=True`: the batch takes the fine connector
+            Requires processor called with `fine_route=True`: the batch takes the fine connector
             path, which yields four times as many image tokens per tile.
         """
         batch_size = pixel_values.shape[0]
