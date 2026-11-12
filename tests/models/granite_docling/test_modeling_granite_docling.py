@@ -238,6 +238,7 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(beams[2:], second_alone)
 
 
+@unittest.skip(reason="waiting for official ckpts to go public")
 @require_torch
 @slow
 class GraniteDoclingIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
