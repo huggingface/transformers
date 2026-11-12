@@ -159,6 +159,7 @@ class Mistral4Attention(DeepseekV3Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
 
