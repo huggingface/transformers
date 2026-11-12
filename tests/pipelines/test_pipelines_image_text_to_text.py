@@ -47,6 +47,21 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
+    @require_torch
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+            max_new_tokens=2,
+        )
+        kwargs = {"num_beams": 2, "num_return_sequences": 2, "do_sample": False}
+
+        single = pipe(text="Hello", generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], batch_size=2, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual([len(group) for group in batched], [2, 2])
+
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, dtype="float32"):
         pipe = ImageTextToTextPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
@@ -292,7 +307,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<|im_start|>assistant\n",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
                 "content": {"close": "<|im_end|>", "content": "text"},
             },
         }
@@ -311,14 +326,14 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
         parsed_message = outputs[0]["generated_text"][-1]
         # The model never emits </think> here, so everything it generates stays inside the
-        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
         # the parser would never see the opening <think> and would mis-route the generated
         # text into `content` instead.
         self.assertEqual(parsed_message["role"], "assistant")
-        self.assertIn("thinking", parsed_message)
+        self.assertIn("reasoning_content", parsed_message)
         self.assertNotIn("content", parsed_message)
-        self.assertIsInstance(parsed_message["thinking"], str)
-        self.assertGreater(len(parsed_message["thinking"]), 0)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @slow
     @require_torch

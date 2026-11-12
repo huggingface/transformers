@@ -21,8 +21,9 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
@@ -38,7 +39,7 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..cosmos3_edge.configuration_cosmos3_edge import Cosmos3EdgeVisionConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
@@ -431,7 +432,10 @@ class Ovis2_5Config(PreTrainedConfig):
     """
 
     model_type = "ovis2_5"
-    sub_configs = {"vision_config": Ovis2_5VisionConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": Ovis2_5VisionConfig,
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: PreTrainedConfig | dict | None = None
@@ -462,19 +466,10 @@ class Ovis2_5Config(PreTrainedConfig):
             self.vision_config.pop("num_patches", None)
             if legacy_visual_vocab_size is not None:
                 self.vision_config.setdefault("vocab_size", legacy_visual_vocab_size)
-            self.vision_config = Ovis2_5VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Ovis2_5VisionConfig()
 
-        if isinstance(self.text_config, dict):
-            model_type = self.text_config.pop("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"]()
-
+        super().__post_init__(**kwargs)
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        super().__post_init__(**kwargs)
 
 
 class Ovis2_5VisionRotaryEmbedding(MuseGlimmerVisionRotaryEmbedding):
@@ -630,7 +625,7 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ovis2_5VisualTokenProjector):
-            nn.init.zeros_(module.indicator_padding)
+            init.zeros_(module.indicator_padding)
 
 
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")

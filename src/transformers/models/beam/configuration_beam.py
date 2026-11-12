@@ -46,16 +46,15 @@ class BeamConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        # trf-ignore: TRF035
-        # TODO: the attn gate bias needs to be local -> new colwise local style  # noqa: NC001
-        # "layers.*.self_attn.q_proj": "colwise",
-        # "layers.*.self_attn.k_proj": "colwise",
-        # "layers.*.self_attn.v_proj": "colwise",
-        # "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.gate_proj": "colwise",
-        # "layers.*.self_attn.gate_bias": "colwise",
-        # "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.gate_bias": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -63,10 +62,6 @@ class BeamConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    # Token dispatch by default, so `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`, 4 on
-    # Qwen3-30B): with `tp_size=1` the attention is left to FSDP2. For router masking with all-reduce, set
-    # `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}`
-    # (prefixed with `model.` on the causal LM).
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

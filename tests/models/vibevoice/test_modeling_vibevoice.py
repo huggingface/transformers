@@ -25,6 +25,7 @@ from transformers import (
     AutoProcessor,
     VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
+    VibeVoiceModel,
     is_torch_available,
 )
 from transformers.testing_utils import cleanup, is_diffusers_available, require_diffusers, slow, torch_device
@@ -34,6 +35,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    floats_tensor,
     ids_tensor,
 )
 from ...test_processing_common import url_to_local_path
@@ -220,7 +222,7 @@ class VibeVoiceModelTester:
 
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (VibeVoiceForConditionalGeneration, VibeVoiceModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-to-audio": VibeVoiceForConditionalGeneration,
@@ -257,6 +259,16 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             # static-cache compilation. TODO: fix in a follow-up PR.
             "test_generate_with_static_cache",
             "test_static_cache_no_recompile_with_smaller_length",
+            # FIXME @eustlib: dummy inputs dont have audio inputs so we can't run multimodal tests
+            "test_get_audio_features_attentions",
+            "test_get_audio_features_hidden_states",
+            "test_get_audio_features_output",
+            # Base model doesn't appear in AutoModel but rather a generatiev model is there
+            # FIXME eustlib, model with gen head deserves to be in task-specific mapping
+            "test_training",
+            "test_training_gradient_checkpointing",
+            "test_training_gradient_checkpointing_use_reentrant_false",
+            "test_training_gradient_checkpointing_use_reentrant_true",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
@@ -277,6 +289,19 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_get_audio_features_sample(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+        num_samples = 4 * config.audio_config.hop_length
+        input_values = floats_tensor([2, 1, num_samples])
+        padding_mask = torch.ones([2, num_samples], dtype=torch.bool, device=torch_device)
+
+        mean = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
+        repeat = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
+        torch.testing.assert_close(repeat, mean)
+        sampled = model.model.get_audio_features(input_values, padding_mask).pooler_output
+        self.assertFalse(torch.allclose(sampled, mean))
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         """

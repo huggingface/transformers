@@ -65,10 +65,9 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.router": "ep_router",
         "layers.*.experts.gate_up_proj": "grouped_gemm",
         "layers.*.experts.down_proj": "grouped_gemm",
-        "layers.*.experts": "moe_tp_experts",
+        "layers.*.experts": "ep_dispatch_experts",
     }
 
     base_model_pp_plan = {
@@ -120,7 +119,7 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }
@@ -198,7 +197,7 @@ class DiffusionGemmaConfig(PreTrainedConfig):
 
     model_type = "diffusion_gemma"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
+        "text_config": DiffusionGemmaTextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision"),
     }
 

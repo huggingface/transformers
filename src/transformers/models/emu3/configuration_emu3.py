@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -129,8 +129,8 @@ class Emu3Config(PreTrainedConfig):
     model_type = "emu3"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "vq_config": SubConfigSpec(config_class=Emu3VQVAEConfig),
-        "text_config": SubConfigSpec(config_class=Emu3TextConfig),
+        "vq_config": Emu3VQVAEConfig,
+        "text_config": Emu3TextConfig,
     }
 
     vq_config: dict | Emu3VQVAEConfig | None = None

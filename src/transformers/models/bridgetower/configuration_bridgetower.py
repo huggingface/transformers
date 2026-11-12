@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -129,8 +129,8 @@ class BridgeTowerConfig(PreTrainedConfig):
 
     model_type = "bridgetower"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=BridgeTowerTextConfig),
-        "vision_config": SubConfigSpec(config_class=BridgeTowerVisionConfig),
+        "text_config": BridgeTowerTextConfig,
+        "vision_config": BridgeTowerVisionConfig,
     }
 
     share_cross_modal_transformer_layers: bool = True

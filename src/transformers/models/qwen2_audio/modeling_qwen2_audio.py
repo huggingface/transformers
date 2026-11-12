@@ -51,14 +51,14 @@ class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    attention_mask (`torch.FloatTensor`, *optional*):
+    attention_mask (`torch.Tensor`, *optional*):
         Attention mask, potentially updated by the audio merging logic so that audio tokens are unmasked.
     labels (`torch.LongTensor`, *optional*):
         Labels, potentially re-aligned by the legacy audio merging logic. Returned so the language-modeling
         head can compute the loss against the expanded sequence.
     """
 
-    attention_mask: torch.FloatTensor | None = None
+    attention_mask: torch.Tensor | None = None
     labels: torch.LongTensor | None = None
 
 
@@ -70,9 +70,9 @@ class Qwen2AudioModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
@@ -83,16 +83,16 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
         If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
         that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
         all `input_ids` of shape `(batch_size, sequence_length)`.
-    attention_mask (`torch.FloatTensor`, *optional*):
+    attention_mask (`torch.Tensor`, *optional*):
         Attentions mask, used to update attention mask and position_ids.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    attention_mask: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    attention_mask: torch.Tensor | None = None
 
 
 # Copied from transformers.models.whisper.modeling_whisper.eager_attention_forward
@@ -239,8 +239,8 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
@@ -338,7 +338,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -369,7 +369,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -500,9 +500,9 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
                 * If tokens are same but audio token sizes are different, then cannot infer left or right padding
                 ```python
                 url1 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
-                audio1, _ = librosa.load(BytesIO(urlopen(url1).read()), sr=processor.feature_extractor.sampling_rate)
+                audio1 = load_audio(url1, sampling_rate=processor.feature_extractor.sampling_rate)
                 url2 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"
-                audio2, _ = librosa.load(BytesIO(urlopen(url2).read()), sr=processor.feature_extractor.sampling_rate)
+                audio2 = load_audio(url2, sampling_rate=processor.feature_extractor.sampling_rate)
                 prompts = [
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
@@ -643,12 +643,12 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -780,12 +780,12 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -800,17 +800,15 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         Example:
 
         ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
         >>> from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+        >>> from transformers.audio_utils import load_audio
 
         >>> model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
         >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
-        >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
+        >>> audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
 

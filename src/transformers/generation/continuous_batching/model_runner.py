@@ -21,12 +21,12 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
-from .requests import RequestState, RequestStatus, logger
+from .requests import RequestState, RequestStatus, create_warmup_future_states
 from .utils import (
     accelerator_graph_capture_context,
     create_accelerator_graph,
-    create_warmup_future_states,
     get_memory_pools,
+    logger,
     memory_pool_context,
     pad_to_interval,
     pad_to_pow2,
@@ -299,10 +299,12 @@ class ModelRunner:
             num_requests = 1
             status = RequestStatus.PREFILLING
             logger.debug(f"Warming up varlen path for {num_q_tokens = }, {max_kv_read = }.")
-        future_states = create_warmup_future_states(num_requests, status, num_q_tokens, max_kv_read, self.cache)
+        # To limit the compute cost of prefill warmup, we cap the past length to the page size
+        past_length = min(max_kv_read, self.cb_config.page_size)
+        future_states = create_warmup_future_states(num_requests, status, num_q_tokens, past_length, self.cache)
         if not future_states:
             logger.warning(
-                f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {max_kv_read = }."
+                f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {past_length = }."
             )
             return 0.0
 
@@ -320,6 +322,17 @@ class ModelRunner:
                 future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
             )
             batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
+            # Flash sizes the workspace according to max_length_k, so we set it to the maximum value for one request
+            if not use_decode_fast_path:
+                # The graph key is read from the IO holding the graphs, so we update it there as well
+                io = self.inputs_and_outputs
+                io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+                for allocator in self.cache.cache_allocators.values():
+                    max_length_k = allocator.get_seqlen_k(max_kv_read, num_q_tokens)
+                    if self.use_cuda_graph_varlen:
+                        max_length_k = pad_to_pow2(max_length_k, self.cache.max_tokens_read, 1024)
+                    batch_data["max_length_k"][allocator.layer_type] = max_length_k
+                    io.max_length_k[allocator.layer_type] = max_length_k
             self.compute_batch(model, batch_data)
             duration = time.perf_counter() - start
             logger.debug(f"Warmup completed in {duration:.2f}s")

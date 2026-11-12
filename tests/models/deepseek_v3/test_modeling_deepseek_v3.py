@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
@@ -214,7 +215,12 @@ class DeepseekV3ModelTester:
 
 @require_torch
 class DeepseekV3ModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase, TensorParallelTesterMixin
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    unittest.TestCase,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
 ):
     all_model_classes = (
         (

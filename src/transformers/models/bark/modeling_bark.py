@@ -39,6 +39,7 @@ from ...utils import (
     is_accelerate_available,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -54,7 +55,7 @@ from .generation_configuration_bark import (
 )
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
@@ -188,16 +189,6 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    def _split_heads(self, tensor, num_heads, attn_head_size):
-        """
-        Splits hidden_size dim into attn_head_size and num_heads
-        """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(new_shape)
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim - (batch, seq_length, head, head_features)
-        return tensor
-
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
         Merges attn_head_size dim and num_attn_heads dim into hidden_size
@@ -231,9 +222,9 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
 
         attn_output = _flash_attention_forward(
-            query,
-            key,
-            value,
+            query.transpose(1, 2),
+            key.transpose(1, 2),
+            value.transpose(1, 2),
             attention_mask,
             query_len,
             dropout=self.dropout if self.training else 0.0,
@@ -284,9 +275,10 @@ class BarkBlock(GradientCheckpointingLayer):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](
-            config, is_causal=is_causal, layer_idx=layer_idx
+        attn_implementation = (
+            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
         )
+        self.attn = BARK_ATTENTION_CLASSES[attn_implementation](config, is_causal=is_causal, layer_idx=layer_idx)
 
         self.mlp = BarkMLP(config)
 
@@ -360,7 +352,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
     output_modalities = ("audio",)
 
-    def __init__(self, config):
+    def __init__(self, config: BarkSubModelConfig):
         super().__init__(config)
         self.config = config
 
@@ -667,9 +659,9 @@ class BarkCoarseModel(BarkCausalModel):
             history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
         Returns:
-            `tuple(torch.FloatTensor)`:
-            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
-            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
+            `tuple(torch.Tensor)`:
+            - **x_semantic_history** (`torch.Tensor` -- Processed semantic speaker prompt.
+            - **x_coarse_history** (`torch.Tensor`) -- Processed coarse speaker prompt.
         """
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)
@@ -866,7 +858,7 @@ class BarkFineModel(BarkPreTrainedModel):
     config: BarkFineConfig
     main_input_name = "codebook_idx"
 
-    def __init__(self, config):
+    def __init__(self, config: BarkFineConfig):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
@@ -1258,7 +1250,7 @@ class BarkFineModel(BarkPreTrainedModel):
 class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BarkConfig):
         super().__init__(config)
 
         self.semantic = BarkSemanticModel(config.semantic_config)

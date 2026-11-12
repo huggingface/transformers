@@ -19,10 +19,11 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_fuyu import FuyuConfig
 
 
@@ -73,9 +74,9 @@ class FuyuModel(FuyuPreTrainedModel):
         embeddings.
 
         Args:
-            word_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            word_embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Tensor of word embeddings.
-            continuous_embeddings (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+            continuous_embeddings (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size)`):
                 Tensor of continuous embeddings. The length of the list is the batch size. Each entry is shape
                 [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
                 indices in image_patch_input_indices for that batch element.
@@ -109,17 +110,17 @@ class FuyuModel(FuyuPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         patch_embeddings = self.vision_embed_tokens(pixel_values)
         return BaseModelOutputWithPooling(last_hidden_state=patch_embeddings)
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -144,24 +145,20 @@ class FuyuModel(FuyuPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_patches", version="v5.24", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
-        r"""
-        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
-            Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
-            hidden size of the model.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -179,8 +176,8 @@ class FuyuModel(FuyuPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
-        if mm_encoder_outputs.get("image") is None and image_patches is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(image_patches, return_dict=True)
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             patch_embeddings = mm_encoder_outputs["image"].last_hidden_state.to(
@@ -219,15 +216,18 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_patches", version="v5.23", new_name="pixel_values")
+    # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
         image_patches: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         labels: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -235,7 +235,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
+        image_patches (`torch.Tensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -270,7 +270,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
         outputs = self.model(
             input_ids=input_ids,
-            image_patches=image_patches,
+            pixel_values=pixel_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -281,9 +281,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

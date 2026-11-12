@@ -112,6 +112,32 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
+    # Read by `generation_pocket_tts.py`, and by `loss/loss_lsd.py` for the `lsd_*` / `flow_loss_*` ones
+    "PocketTTSConfig": [
+        "eos_threshold",
+        "min_frames_before_eos",
+        "num_flow_steps",
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Same as `PocketTTSConfig`: read by the inherited `generation_pocket_tts.py` and by `loss/loss_lsd.py`
+    "GradiumPhononTTSConfig": [
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Encoder/decoder halves share every field of their codec's config; each half reads only its own.
+    "MimiEncoderConfig": True,
+    "MimiDecoderConfig": True,
+    "PocketTTSAudioTokenizerEncoderConfig": True,
+    "PocketTTSAudioTokenizerDecoderConfig": True,
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
@@ -208,6 +234,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "MistralLarge4TextConfig": ["layer_types", "first_k_dense_replace", "kv_source_layers"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
@@ -294,6 +321,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
     "GlmgaConfig": ["vision_config"],
+    # Use the Llama implementation, which the auto mappings point to
+    "InternLM3Config": True,
+    "IQuestCoderConfig": True,
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
@@ -360,6 +390,7 @@ ATTRIBUTES_TO_ALLOW = (
     "num_mtp_layers",  # for MTP, not used by main model architecture
     # used by GenericForTokenClassification in modeling_layers.py via getattr
     "token_classification_bias",
+    "num_kv_shared_layers",  # used to derive other config properties that are used
 )
 
 

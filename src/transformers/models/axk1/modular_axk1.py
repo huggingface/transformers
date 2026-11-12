@@ -246,7 +246,10 @@ class AXK1DecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    # The released checkpoints also store `post_mlp_layernorm` for the dense layers, which do not use it
+    _keys_to_ignore_on_load_unexpected = ["inv_freq", r"mlp\.post_mlp_layernorm"]
+    # and route without a score correction bias
+    _keys_to_ignore_on_load_missing = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -23,16 +23,15 @@ from safetensors.torch import load_file
 
 from transformers import (
     AutoProcessor,
-    InklingAudioConfig,
     InklingConfig,
     InklingTextConfig,
-    InklingVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     slow,
     torch_device,
 )
@@ -90,13 +89,44 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(config.intermediate_size, 24576)
         self.assertEqual(config.moe_intermediate_size, 3072)
 
+    @parameterized.expand([("bfloat16", False), ("bfloat16", True), ("float32", True)])
+    @require_torch_bf16
+    def test_router_precision(self, dtype, use_autocast):
+        dtype = getattr(torch, dtype)
+        config = self.model_tester.get_config()
+        config.num_experts_per_tok = 2
+        model = InklingForCausalLM(config)
+        gate = model.model.layers[1].mlp.gate
+        with torch.no_grad():
+            gate.weight.zero_()
+            gate.weight[:8, 0].copy_(torch.tensor([6.25, 6.5, 7, 7.5, 8, 8.5, 9, 10]))
+            gate.e_score_correction_bias.fill_(0.000123)
+            gate.global_scale.fill_(1.234567)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model = InklingForCausalLM.from_pretrained(tmp_dir, dtype=dtype).to(torch_device)
+
+        loaded_gate = model.model.layers[1].mlp.gate
+        hidden_states = torch.zeros(1, config.hidden_size, dtype=dtype, device=torch_device)
+        hidden_states[..., 0] = 1
+        with torch.autocast(device_type=hidden_states.device.type, dtype=torch.bfloat16, enabled=use_autocast):
+            _, weights, indices, gammas = loaded_gate(hidden_states)
+
+        # These exactly representable logits have distinct FP32 sigmoid scores, but all round to 1 in BF16.
+        self.assertEqual(indices.sort().values.tolist(), [[6, 7]])
+        torch.testing.assert_close(
+            loaded_gate.e_score_correction_bias.cpu(), gate.e_score_correction_bias, rtol=0, atol=0
+        )
+        torch.testing.assert_close(loaded_gate.global_scale.cpu(), gate.global_scale, rtol=0, atol=0)
+        self.assertEqual(weights.dtype, dtype)
+        self.assertEqual(gammas.dtype, dtype)
+
 
 class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
-    text_config_class = InklingTextConfig
-    audio_config_class = InklingAudioConfig
+
     audio_mask_key = "audio_input_ids_mask"
 
     def __init__(self, parent, **kwargs):
@@ -115,6 +145,8 @@ class InklingAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("num_channels", 3)
         super().__init__(parent, **kwargs)
 
     @property
@@ -134,12 +166,6 @@ class InklingAudio2TextModelTester(ALMModelTester):
 
     def get_audio_feature_key(self):
         return "audio_input_ids"
-
-    def _build_modality_sub_configs(self):
-        return {
-            "audio_config": self.get_audio_config(),
-            "vision_config": InklingVisionConfig(patch_size=5, num_hidden_layers=2, num_channels=3),
-        }
 
 
 @require_torch
@@ -246,8 +272,6 @@ class InklingVision2TextModelTester(VLMModelTester):
     base_model_class = InklingModel
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
-    text_config_class = InklingTextConfig
-    vision_config_class = InklingVisionConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 4)
@@ -263,6 +287,8 @@ class InklingVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
+        kwargs.setdefault("n_mel_bins", 4)
+        kwargs.setdefault("mel_vocab_size", 8)
         super().__init__(parent, **kwargs)
 
     @property
@@ -279,11 +305,15 @@ class InklingVision2TextModelTester(VLMModelTester):
             [batch_size, self.temporal_patch_size, self.patch_size, self.patch_size, self.num_channels]
         )
 
-    def _build_modality_sub_configs(self):
-        return {
-            "vision_config": self.get_vision_config(),
-            "audio_config": InklingAudioConfig(n_mel_bins=4, mel_vocab_size=8),
-        }
+    def place_image_tokens(self, input_ids, config):
+        # override - model always generates encoded-images of one-token each
+        image_token_id = getattr(config, "image_token_id", self.image_token_id)
+        # Clear any accidental image tokens first
+        input_ids = input_ids.clone()
+        input_ids[input_ids == image_token_id] = self.bos_token_id
+        # Place image tokens at the start
+        input_ids[:, : self.num_image_tokens] = image_token_id
+        return input_ids
 
 
 @require_torch

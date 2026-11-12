@@ -19,7 +19,6 @@ import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
-import librosa
 import pytest
 import requests
 
@@ -28,6 +27,7 @@ from transformers import (
     Qwen3OmniMoeForConditionalGeneration,
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeThinkerForConditionalGeneration,
+    Qwen3OmniMoeThinkerModel,
     is_torch_available,
     is_vision_available,
 )
@@ -38,7 +38,9 @@ from transformers.testing_utils import (
     Expectations,
     backend_device_count,
     get_cpu_ram_total_gib,
+    is_librosa_available,
     require_flash_attn,
+    require_librosa,
     require_torch,
     require_torch_accelerator,
     run_first,
@@ -48,6 +50,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -56,6 +59,9 @@ from ...test_modeling_common import (
 )
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
+
+if is_librosa_available():
+    import librosa
 
 if is_torch_available():
     import torch
@@ -263,13 +269,20 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
 
 @require_torch
 class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
-    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
 ):
     """
     Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen3OmniMoeThinkerModel,
+            Qwen3OmniMoeThinkerForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     skip_test_audio_features_output_shape = True  # Qwen3OmniMoe merges batch_size and audio_output_lengths in index 0
     _is_composite = True
@@ -312,6 +325,29 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    def test_inputs_embeds_matches_input_ids(self):
+        # overwrite because `get_rope_index` takes `audio_seqlens` instead of every forward input
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3OmniMoeThinkerModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        inputs = self._prepare_for_class(inputs_dict, Qwen3OmniMoeThinkerModel)
+        inputs["position_ids"] = model.get_rope_index(
+            inputs["input_ids"],
+            image_grid_thw=inputs["image_grid_thw"],
+            attention_mask=inputs["attention_mask"],
+            audio_seqlens=inputs["feature_attention_mask"].sum(-1),
+        )[0]
+
+        wte = model.get_input_embeddings()
+        input_ids = inputs.pop("input_ids")
+        inputs_embeds = wte(input_ids)
+        with torch.no_grad():
+            out_ids = model(input_ids=input_ids, **inputs)[0]
+            out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+        torch.testing.assert_close(out_embeds, out_ids)
+
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -329,22 +365,22 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.model._supports_sdpa else "eager"
-                audio_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.visual._supports_sdpa else "eager"
+                text_attn = "sdpa" if model.base_model.language_model._supports_sdpa else "eager"
+                audio_attn = "sdpa" if model.base_model.audio_tower._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.base_model.visual._supports_sdpa else "eager"
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.model.config._attn_implementation == text_attn)
-                self.assertTrue(model.audio_tower.config._attn_implementation == audio_attn)
-                self.assertTrue(model.visual.config._attn_implementation == vision_attn)
+                self.assertTrue(model.base_model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.base_model.audio_tower.config._attn_implementation == audio_attn)
+                self.assertTrue(model.base_model.visual.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.visual.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.audio_tower.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.base_model.visual.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
@@ -462,10 +498,6 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
 
     @unittest.skip("We don't really care about this one, test is not that slow")
     def test_model_is_small(self):
-        pass
-
-    @unittest.skip("Qwen3Omni has no base model, model architecture is special")
-    def test_model_base_model_prefix(self):
         pass
 
     @unittest.skip("FIXME this is important, but in a rush to merge, cannot investigate now")
@@ -663,6 +695,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
 
 
 @require_torch
+@require_librosa
 class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
 
@@ -812,6 +845,7 @@ class Qwen3OmniModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_DECODED_TEXTS = Expectations(
             {
                 (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\n*   **The Sound:** The sound you hear is", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\n*   **The Sound:** The sound you hear is"],
+                ("cuda", (8, 6)): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"],
             }
         ).get_expectation()  # fmt: skip
 

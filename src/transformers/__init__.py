@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.21.0.dev0"
+__version__ = "5.23.0.dev0"
 
 import re
 import sys
@@ -78,6 +78,7 @@ _import_structure = {
         "default_data_collator",
     ],
     "debug_utils": [],
+    "decision": ["DecisionConfig"],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "distributed": ["DistributedConfig"],
@@ -119,6 +120,7 @@ _import_structure = {
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
+        "DecisionPipeline",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
         "FeatureExtractionPipeline",
@@ -349,6 +351,7 @@ else:
         "DynamicIndexedLayer",
         "DynamicLayer",
         "EncoderDecoderCache",
+        "Fp8QuantizedLayer",
         "HQQQuantizedLayer",
         "QuantizedCache",
         "QuantoQuantizedLayer",
@@ -468,6 +471,7 @@ if TYPE_CHECKING:
     from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
+    from .cache_utils import Fp8QuantizedLayer as Fp8QuantizedLayer
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
@@ -503,6 +507,7 @@ if TYPE_CHECKING:
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
+    from .decision import DecisionConfig as DecisionConfig
     from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
@@ -627,6 +632,7 @@ if TYPE_CHECKING:
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
+    from .pipelines import DecisionPipeline as DecisionPipeline
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline

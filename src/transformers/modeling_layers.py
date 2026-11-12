@@ -17,7 +17,7 @@ import copy
 import os
 import re
 import sys
-from functools import partial
+from functools import partial, wraps
 from typing import TYPE_CHECKING
 
 import torch
@@ -79,36 +79,48 @@ class GradientCheckpointingLayer(nn.Module):
     # same states). Writers must leave it `False`, otherwise the cache is updated a second time on the backward replay.
     _can_checkpoint_with_cache = False
 
-    def __call__(self, *args, **kwargs):
-        if self.gradient_checkpointing and self.training:
-            do_warn = False
-            layer_name = self.__class__.__name__
-            message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # We checkpoint `forward` instead of `__call__` so module hooks (e.g. FSDP2's) stay outside the checkpoint.
+        # Otherwise they would run a second time when the backward pass recomputes the layer.
+        forward = cls.forward
 
-            if "use_cache" in kwargs and kwargs["use_cache"]:
-                kwargs["use_cache"] = False
-                message += " `use_cache=False`,"
-                do_warn = True
+        @wraps(forward)
+        def forward_with_checkpointing(self, *args, **kwargs):
+            # Subclasses of a layer are wrapped too (e.g. the `FSDP<Layer>` class that FSDP2 creates), so a `forward`
+            # can be wrapped more than once. Only the outermost wrapper checkpoints.
+            is_outermost = type(self).forward is forward_with_checkpointing
+            if self.gradient_checkpointing and self.training and is_outermost:
+                do_warn = False
+                layer_name = self.__class__.__name__
+                message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
 
-            if not self._can_checkpoint_with_cache:
-                # different names for the same thing in different layers
-                if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                    kwargs["past_key_values"] = None
-                    message += " `past_key_values=None`,"
+                if "use_cache" in kwargs and kwargs["use_cache"]:
+                    kwargs["use_cache"] = False
+                    message += " `use_cache=False`,"
                     do_warn = True
 
-                if "layer_past" in kwargs and kwargs["layer_past"] is not None:
-                    kwargs["layer_past"] = None
-                    message += " `layer_past=None`,"
-                    do_warn = True
+                if not self._can_checkpoint_with_cache:
+                    # different names for the same thing in different layers
+                    if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
+                        kwargs["past_key_values"] = None
+                        message += " `past_key_values=None`,"
+                        do_warn = True
 
-            # warn if anything was changed
-            if do_warn:
-                message = message.rstrip(",") + "."
-                logger.warning_once(message)
+                    if "layer_past" in kwargs and kwargs["layer_past"] is not None:
+                        kwargs["layer_past"] = None
+                        message += " `layer_past=None`,"
+                        do_warn = True
 
-            return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
-        return super().__call__(*args, **kwargs)
+                # warn if anything was changed
+                if do_warn:
+                    message = message.rstrip(",") + "."
+                    logger.warning_once(message)
+
+                return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
+            return forward(self, *args, **kwargs)
+
+        cls.forward = forward_with_checkpointing
 
 
 @auto_docstring
@@ -133,7 +145,7 @@ class GenericForSequenceClassification:
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -213,7 +225,7 @@ class GenericForQuestionAnswering:
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -280,7 +292,7 @@ class GenericForTokenClassification:
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],

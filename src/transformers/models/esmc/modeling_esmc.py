@@ -284,7 +284,7 @@ class EsmcLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class EsmcPreTrainedModel(PreTrainedModel):
-    config_class = EsmcConfig
+    config: EsmcConfig
     base_model_prefix = "esmc"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -525,7 +525,7 @@ class EsmcForSequenceClassification(EsmcPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:

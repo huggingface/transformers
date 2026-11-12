@@ -14,19 +14,13 @@
 """Processor class for Ovis2.5."""
 
 from ...image_utils import make_flat_list_of_images
-from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import BatchFeature, MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
 from ...video_utils import make_batched_videos
 
 
-class Ovis2_5ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @auto_docstring
 class Ovis2_5Processor(ProcessorMixin):
-    valid_processor_kwargs = Ovis2_5ProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -124,22 +118,18 @@ class Ovis2_5Processor(ProcessorMixin):
         vision_data = {}
 
         if image_sizes is not None:
-            images_kwargs = dict(Ovis2_5ProcessorKwargs._defaults.get("images_kwargs", {}))
-            images_kwargs.update(kwargs)
-            merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
+            merge_size = kwargs.get("merge_size") or self.image_processor.merge_size
             num_image_patches = [
-                self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
+                self.image_processor.get_number_of_image_patches(height, width, kwargs)
                 for height, width in image_sizes
             ]
             vision_data["num_image_patches"] = num_image_patches
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
-            videos_kwargs = dict(Ovis2_5ProcessorKwargs._defaults.get("videos_kwargs", {}))
-            videos_kwargs.update(kwargs)
-            merge_size = videos_kwargs.get("merge_size") or self.video_processor.merge_size
+            merge_size = kwargs.get("merge_size") or self.video_processor.merge_size
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
+                self.video_processor.get_number_of_video_patches(num_frames, height, width, kwargs)
                 for num_frames, height, width in video_sizes
             ]
             vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]

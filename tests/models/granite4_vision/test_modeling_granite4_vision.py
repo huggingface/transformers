@@ -17,11 +17,9 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    CLIPVisionConfig,
     Granite4VisionConfig,
     Granite4VisionForConditionalGeneration,
     Granite4VisionModel,
-    GraniteConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -47,8 +45,6 @@ class Granite4VisionModelTester(VLMModelTester):
     base_model_class = Granite4VisionModel
     config_class = Granite4VisionConfig
     conditional_generation_class = Granite4VisionForConditionalGeneration
-    text_config_class = GraniteConfig
-    vision_config_class = CLIPVisionConfig
 
     def __init__(self, parent, **kwargs):
         # Vision hidden_size must be divisible by 64 (QFormer num_attention_heads = hidden_size // 64)
@@ -66,7 +62,7 @@ class Granite4VisionModelTester(VLMModelTester):
         kwargs.setdefault("downsample_rate", "1/2")
         kwargs.setdefault("deepstack_layer_map", [[1, 0]])
         kwargs.setdefault("projector_dropout", 0.0)
-        kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
+        kwargs.setdefault("image_token_id", 3)
 
         # Compute num_image_tokens after downsampling:
         # image_side = image_size/patch_size = 4, ds 1/2 -> patches_h = patches_w = 2
@@ -172,7 +168,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
         EXPECTED_RESPONSE = Expectations({
             ("cuda", None): "The image depicts two cats resting on a pink couch. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
-            ("cuda", (8, 6)): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
+            ("cuda", (8, 6)): "The image shows two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
             ("xpu", None): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
         }).get_expectation()  # fmt: skip
 
@@ -256,12 +252,12 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         # its own expected value separately. See https://github.com/pytorch/pytorch/issues/196886
         EXPECTED_SINGLE = Expectations(
             {
-                ("cuda", None): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",
+                ("cuda", (8, 6)): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
             }
         ).get_expectation()  # fmt: skip
         EXPECTED_BATCH = Expectations(
             {
-                ("cuda", None): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
+                ("cuda", (8, 6)): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded_single, EXPECTED_SINGLE)

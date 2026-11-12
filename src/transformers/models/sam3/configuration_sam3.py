@@ -138,6 +138,7 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_detr_encoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6
@@ -159,6 +160,7 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_detr_decoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6
@@ -220,11 +222,11 @@ class Sam3Config(PreTrainedConfig):
 
     model_type = "sam3"
     sub_configs_defaults = {
-        "geometry_encoder_config": SubConfigSpec(config_class=Sam3GeometryEncoderConfig),
-        "detr_encoder_config": SubConfigSpec(config_class=Sam3DETREncoderConfig),
-        "detr_decoder_config": SubConfigSpec(config_class=Sam3DETRDecoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3MaskDecoderConfig),
-        "vision_config": SubConfigSpec(config_class=Sam3VisionConfig),
+        "geometry_encoder_config": Sam3GeometryEncoderConfig,
+        "detr_encoder_config": Sam3DETREncoderConfig,
+        "detr_decoder_config": Sam3DETRDecoderConfig,
+        "mask_decoder_config": Sam3MaskDecoderConfig,
+        "vision_config": Sam3VisionConfig,
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="clip_text_model",

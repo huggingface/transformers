@@ -103,10 +103,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         renamings = get_model_conversion_mapping(model)
         remapped = []
         for name in skip:
-            renamed = name
+            # Renamings are written for weight names (`self_attn\.f_a_proj\.` for `self_attn.f_a_proj.weight`)
+            renamed = name + "."
             for rename in renamings:
                 renamed, _ = rename.rename_source_key(renamed)
-            remapped.append(renamed)
+            remapped.append(renamed.removesuffix("."))
         self.quantization_config.modules_to_not_convert = remapped
 
     def _process_model_before_weight_loading(
@@ -141,22 +142,19 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return model
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
-        from ..integrations.finegrained_fp8 import FP8Experts
+        from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
 
         super().update_parallel_plan(model, plan)
         # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) are scalars, not sharded
         scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
         plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
-        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
 
     def is_serializable(self):
         return True
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return True
 
     @property
     def is_compileable(self) -> bool:
@@ -177,6 +175,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming
 
-        # Some FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales under `.scale`
-        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv")
-        return [scale_rename] + super().update_weight_conversions(weight_conversions, model)
+        # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
+        # (e.g. Mistral Large 4)
+        scale_renames = [
+            WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
+            WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
+        ]
+        return scale_renames + super().update_weight_conversions(weight_conversions, model)

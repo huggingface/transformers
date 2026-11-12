@@ -24,14 +24,14 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
@@ -125,10 +125,9 @@ class InklingTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {
@@ -296,9 +295,9 @@ class InklingConfig(PreTrainedConfig):
 
     model_type = "inkling_mm_model"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=InklingTextConfig),
-        "vision_config": SubConfigSpec(config_class=InklingVisionConfig),
-        "audio_config": SubConfigSpec(config_class=InklingAudioConfig),
+        "text_config": InklingTextConfig,
+        "vision_config": InklingVisionConfig,
+        "audio_config": InklingAudioConfig,
     }
 
     text_config: InklingTextConfig | dict | None = None
@@ -323,11 +322,11 @@ class InklingConfig(PreTrainedConfig):
 
 
 class InklingModelOutputWithPast(Gemma3ModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class InklingCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class InklingRMSNorm(LlamaRMSNorm):
@@ -522,22 +521,24 @@ class InklingTopkRouter(nn.Module):
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(flat, self.weight)
+        # Keep routing in FP32 even under autocast, so distinct scores do not round to ties before top-k.
+        with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
+            router_logits = F.linear(flat.float(), self.weight.float())
 
-        # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
-        scores = router_logits.sigmoid()
-        routed_scores = scores[..., : -self.n_shared_experts]
-        scores_for_choice = routed_scores + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+            scores = router_logits.sigmoid()
+            routed_scores = scores[..., : -self.n_shared_experts]
+            scores_for_choice = routed_scores + self.e_score_correction_bias.float()
+            topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
 
-        routed_logits = router_logits[..., : -self.n_shared_experts]
-        shared_logits = router_logits[..., -self.n_shared_experts :]
-        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-        topk_log_probs = F.logsigmoid(topk_logits)
-        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
+            routed_logits = router_logits[..., : -self.n_shared_experts]
+            shared_logits = router_logits[..., -self.n_shared_experts :]
+            topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+            topk_log_probs = F.logsigmoid(topk_logits)
+            topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
 
-        topk_weights = topk_weights * self.route_scale * self.global_scale
+            topk_weights = topk_weights * self.route_scale * self.global_scale.float()
 
+        topk_weights = topk_weights.to(hidden_states.dtype)
         shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
         topk_weights = topk_weights[..., : self.top_k].contiguous()
 
@@ -714,7 +715,7 @@ class InklingNormedEmbedding(nn.Embedding):
 
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
-    config_class = InklingConfig
+    config: InklingConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InklingDecoderLayer"]
@@ -727,7 +728,14 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
-    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
+    _keep_in_fp32_modules_strict = [
+        "attn_sconv",
+        "mlp_sconv",
+        "k_sconv",
+        "v_sconv",
+        "e_score_correction_bias",
+        "gate.global_scale",
+    ]
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
@@ -793,7 +801,7 @@ class InklingTextModel(InklingPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -858,7 +866,7 @@ class InklingForCausalLM(Gemma3ForCausalLM):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -892,9 +900,8 @@ class InklingForCausalLM(Gemma3ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state / self.config.logits_mup_width_multiplier
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]
@@ -918,6 +925,8 @@ class InklingAudioModelEmbeddings(HiggsAudioV2Embeddings): ...
 
 @auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
+    config: InklingAudioConfig
+
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
@@ -1055,6 +1064,8 @@ def plan_out_scales(
 
 @auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
+    config: InklingVisionConfig
+
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
         self.scales = plan_out_scales(
@@ -1122,7 +1133,7 @@ class InklingModel(InklingPreTrainedModel):
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.vision_tower(pixel_values=pixel_values, **kwargs)
 
@@ -1149,8 +1160,8 @@ class InklingModel(InklingPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
+        features: torch.Tensor,
         token_id: int,
     ):
         """
@@ -1178,14 +1189,14 @@ class InklingModel(InklingPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         audio_input_ids: torch.LongTensor | None = None,
         audio_input_ids_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1307,7 +1318,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
@@ -1315,13 +1326,13 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         audio_input_ids: torch.LongTensor | None = None,
         audio_input_ids_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1392,9 +1403,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0] / self.config.text_config.logits_mup_width_multiplier
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.text_config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]

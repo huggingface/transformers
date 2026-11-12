@@ -25,7 +25,6 @@ from transformers import (
     Ovis2_5VisionConfig,
     is_torch_available,
 )
-from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -45,8 +44,6 @@ if is_torch_available():
 class Ovis2_5VisionText2TextModelTester(VLMModelTester):
     base_model_class = Ovis2_5Model
     config_class = Ovis2_5Config
-    text_config_class = Qwen3Config
-    vision_config_class = Ovis2_5VisionConfig
     conditional_generation_class = Ovis2_5ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -58,16 +55,22 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("max_position_embeddings", 32)
         kwargs.setdefault("attention_dropout", 0.0)
         kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("image_size", 4)
+        kwargs.setdefault("image_size", 8)
         kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault(
+            "num_image_tokens",
+            (kwargs["image_size"] // kwargs["patch_size"] // Ovis2_5VisionConfig.spatial_merge_size) ** 2,
+        )
         kwargs.setdefault("image_token_id", 4)
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("image_start_token_id", 5)
         kwargs.setdefault("image_end_token_id", 6)
         kwargs.setdefault("video_start_token_id", 7)
         kwargs.setdefault("video_end_token_id", 8)
-        kwargs.setdefault("visual_vocab_size", 12)
+        kwargs.setdefault("vision_vocab_size", 12)
+        kwargs.setdefault("vision_window_size", kwargs["image_size"])
+        kwargs.setdefault("vision_hidden_act", Ovis2_5VisionConfig.hidden_act)
+        kwargs.setdefault("vision_max_position_embeddings", Ovis2_5VisionConfig.max_position_embeddings)
         super().__init__(parent, **kwargs)
         self.num_image_patches = (self.image_size // self.patch_size) ** 2
 
@@ -81,14 +84,6 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
             self.video_end_token_id,
         }
 
-    def get_vision_config(self):
-        config = super().get_vision_config()
-        config.vocab_size = self.visual_vocab_size
-        config.window_size = self.image_size
-        config.hidden_act = self.vision_config_class.hidden_act
-        config.max_position_embeddings = self.vision_config_class.max_position_embeddings
-        return config
-
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         return torch.randn(
@@ -98,10 +93,10 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         )
 
     def place_image_tokens(self, input_ids, config):
-        input_ids = input_ids.clone()
+        input_ids = super().place_image_tokens(input_ids, config)
         input_ids[:, 0] = config.image_start_token_id
-        input_ids[:, 1] = config.image_token_id
-        input_ids[:, 2] = config.image_end_token_id
+        input_ids[:, 1 : self.num_image_tokens + 1] = config.image_token_id
+        input_ids[:, self.num_image_tokens + 1] = config.image_end_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
@@ -130,8 +125,9 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
         num_frames = 2
-        inputs["input_ids"][:, :4] = torch.tensor(
-            [config.video_start_token_id, config.video_token_id, config.video_token_id, config.video_end_token_id],
+        num_video_tokens = num_frames * self.model_tester.num_image_tokens
+        inputs["input_ids"][:, : num_video_tokens + 2] = torch.tensor(
+            [config.video_start_token_id] + [config.video_token_id] * num_video_tokens + [config.video_end_token_id],
             device=torch_device,
         )
         inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
