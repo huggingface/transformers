@@ -51,7 +51,7 @@ from ...utils.generic import (
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention, eager_attention_forward, rotate_half
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention, eager_attention_forward
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32DecoderLayer,
@@ -474,14 +474,21 @@ class Dots3NoteTextMoE(DeepseekV32MoE):
         )
 
 
+def rotate_half_text(x):
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
 def apply_rotary_pos_emb_text(q, k, cos, sin):
-    cos = cos.unsqueeze(1)
-    sin = sin.unsqueeze(1)
-    q = q.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
-    k = k.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
-    q_rot = q * cos + rotate_half(q) * sin
-    k_rot = k * cos + rotate_half(k) * sin
-    return q_rot.to(q.dtype), k_rot.to(k.dtype)
+    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1).unsqueeze(1)
+    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1).unsqueeze(1)
+    q_embed = q * cos + rotate_half_text(q) * sin
+    k_embed = k * cos + rotate_half_text(k) * sin
+    # Dots stores the rotated coordinates in half-split order.
+    q_embed = q_embed.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    k_embed = k_embed.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    return q_embed.to(q.dtype), k_embed.to(k.dtype)
 
 
 class Dots3NoteTextAttention(DeepseekV3Attention):
@@ -1326,6 +1333,7 @@ class Dots3NoteFeatureExtractor(WhisperFeatureExtractor):
 
 @auto_docstring
 class Dots3NoteProcessor(Qwen2VLProcessor):
+    return_mm_token_type_ids = AttributeError()
     valid_processor_kwargs = ProcessingKwargs
 
     @property

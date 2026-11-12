@@ -30,7 +30,7 @@ if is_torch_available():
 @require_torchvision
 class Dots3NoteProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Dots3NoteProcessor
-    tiny_model_id = "miraclezqc/TestForDots3"
+    tiny_model_id = "hf-internal-testing/dummy-dots3"
 
     @classmethod
     def _setup_test_attributes(cls, processor):

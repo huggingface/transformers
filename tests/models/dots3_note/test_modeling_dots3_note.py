@@ -77,6 +77,10 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Dots3NoteTextModelTester
     test_all_params_have_gradient = False  # The shared DSA indexer has no auxiliary training loss.
 
+    @unittest.skip("DSA/SWA require attention masks, which the Flash-only SDPA backend does not support.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def setUp(self):
         super().setUp()
         # DSA and SWA have different head counts, so no global num_attention_heads exists.
@@ -96,7 +100,6 @@ class Dots3NoteVision2TextModelTester(VLMModelTester):
     base_model_class = Dots3NoteModel
     config_class = Dots3NoteConfig
     conditional_generation_class = Dots3NoteForConditionalGeneration
-    sub_configs_to_skip = ["text_config"]
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 7)
@@ -122,14 +125,23 @@ class Dots3NoteVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("audio_hop_length", 4)
         kwargs.setdefault("audio_downsample_hidden_size", 4)
         kwargs.setdefault("audio_adapter_input_size", 64)
+        kwargs.setdefault("text_intermediate_size", 256)
+        kwargs.setdefault("text_num_key_value_heads", kwargs["num_attention_heads"])
+        kwargs.setdefault("text_q_lora_rank", 16)
+        kwargs.setdefault("text_kv_lora_rank", 16)
+        kwargs.setdefault("text_head_dim", 16)
+        kwargs.setdefault("text_qk_rope_head_dim", 8)
+        kwargs.setdefault("text_qk_nope_head_dim", 8)
+        kwargs.setdefault("text_v_head_dim", 16)
+        kwargs.setdefault("text_layer_types", ["indexed_attention", "sliding_attention"])
+        kwargs.setdefault("text_mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("text_per_layer_config", {})
+        kwargs.setdefault("text_index_head_dim", 32)
+        kwargs.setdefault("text_index_topk", 4)
+        kwargs.setdefault("text_n_routed_experts", 4)
+        kwargs.setdefault("text_shared_experts_intermediate_size", 16)
         super().__init__(parent, **kwargs)
         self.encoder_seq_length = self.seq_length
-        self.text_config = Dots3NoteTextModelTester(
-            self.parent,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_attention_heads,
-            pad_token_id=self.pad_token_id,
-        ).get_config()
 
     @property
     def _special_token_ids(self):
@@ -155,7 +167,6 @@ class Dots3NoteAudio2TextModelTester(ALMModelTester):
     config_class = Dots3NoteConfig
     audio_mask_key = "chunk_sample_lengths"
     conditional_generation_class = Dots3NoteForConditionalGeneration
-    sub_configs_to_skip = ["text_config"]
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("audio_token_id", 5)
@@ -177,14 +188,26 @@ class Dots3NoteAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("vision_mlp_layer_types", ["dense", "sparse"])
         kwargs.setdefault("vision_num_local_experts", 2)
         kwargs.setdefault("vision_num_experts_per_tok", 2)
+        kwargs.setdefault("text_intermediate_size", 256)
+        kwargs.setdefault("text_moe_intermediate_size", 64)
+        kwargs.setdefault("text_num_key_value_heads", kwargs["num_attention_heads"])
+        kwargs.setdefault("text_q_lora_rank", 16)
+        kwargs.setdefault("text_kv_lora_rank", 16)
+        kwargs.setdefault("text_qk_rope_head_dim", 8)
+        kwargs.setdefault("text_qk_nope_head_dim", 8)
+        kwargs.setdefault("text_v_head_dim", 16)
+        kwargs.setdefault("text_layer_types", ["indexed_attention", "sliding_attention"])
+        kwargs.setdefault("text_mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("text_per_layer_config", {})
+        kwargs.setdefault("text_index_head_dim", 32)
+        kwargs.setdefault("text_index_topk", 4)
+        kwargs.setdefault("text_n_routed_experts", 4)
+        kwargs.setdefault("text_num_experts_per_tok", 2)
+        kwargs.setdefault("text_shared_experts_intermediate_size", 16)
+        kwargs.setdefault("text_initializer_range", 0.02)
+        kwargs.setdefault("text_tie_word_embeddings", False)
         super().__init__(parent, **kwargs)
         self.encoder_seq_length = self.seq_length
-        self.text_config = Dots3NoteTextModelTester(
-            self.parent,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_attention_heads,
-            pad_token_id=self.pad_token_id,
-        ).get_config()
 
     def create_audio_mask(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -211,6 +234,10 @@ class Dots3NoteVision2TextModelTest(VLMModelTest, unittest.TestCase):
     skip_test_image_features_output_shape = True
     skip_test_video_features_output_shape = True
 
+    @unittest.skip("DSA/SWA require attention masks, which the Flash-only SDPA backend does not support.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def _audio_features_prepare_config_and_inputs(self):
         self.skipTest("Audio features are covered by Dots3NoteAudio2TextModelTest")
 
@@ -236,6 +263,10 @@ class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     additional_model_inputs = ["chunk_sample_lengths"]
 
+    @unittest.skip("DSA/SWA require attention masks, which the Flash-only SDPA backend does not support.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def _image_features_prepare_config_and_inputs(self):
         self.skipTest("Image features are covered by Dots3NoteVision2TextModelTest")
 
@@ -251,32 +282,65 @@ class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
 @require_torch
 @require_torchvision
 class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "miraclezqc/TestForDots3"
+    model_id = "hf-internal-testing/dummy-dots3"
 
     def test_text_generation(self):
-        expected = Expectations({(None, None): [247, 103, 217, 187, 59, 295, 13, 246]})
+        expected = Expectations(
+            {
+                ("cpu", None): (
+                    "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
+                    "\ufffd1\ufffd\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
+                    "\ufffdG\ufffd"
+                ),
+                ("cuda", None): (
+                    "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
+                    "\ufffd1\ufffd(\u007fj\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd"
+                ),
+            }
+        )
         self._check_generation("text", None, "Briefly introduce yourself.", expected)
 
     def test_image_generation(self):
         expected = Expectations(
             {
-                ("cpu", None): [247, 103, 217, 187, 59, 92, 279, 219],
-                ("cuda", None): [247, 103, 217, 187, 59, 295, 13, 246],
+                ("cpu", None): (
+                    "\ufffd3\u0229(\u0006\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<do"
+                    "ts_function_response>H\u001f\ufffd1\ufffd\u0016H\u001f\ufffd1\ufffd\u0016"
+                ),
+                ("cuda", None): (
+                    "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
+                    "\ufffdG\ufffd\u007fj\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<do"
+                    "ts_function_response>H"
+                ),
             }
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self._check_generation("image", url, "What is shown in this image?", expected)
 
     def test_audio_generation(self):
-        expected = Expectations({(None, None): [247, 103, 217, 187, 59, 295, 124, 304]})
+        expected = Expectations(
+            {
+                (None, None): (
+                    "\ufffd3\u0229\u0016H\u001f\ufffd1\ufffd\u0016H\u001f\ufffd1\ufffd\u0016H\u001f\ufffd1"
+                    "\ufffd\u0016H\u001f\ufffdH"
+                ),
+            }
+        )
         url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac"
         self._check_generation("audio", url, "Transcribe this recording.", expected)
 
     def test_video_generation(self):
         expected = Expectations(
             {
-                ("cpu", None): [247, 103, 217, 187, 59, 295, 13, 246],
-                ("cuda", None): [247, 103, 217, 187, 59, 92, 306, 158],
+                ("cpu", None): (
+                    "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001fW"
+                    "\ufffd\ufffdd!\u0014\ufffdo\u001f\ufffd1\ufffd\u0016H\u001f\ufffd"
+                ),
+                ("cuda", None): (
+                    "\ufffd3\u0229(\u007fj\ufffd<dots_function_response>H\u001f\ufffd1\ufffd\ufffd\ufffd"
+                    "\ufffd<no_think>\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<dots_f"
+                    "unction_response>H"
+                ),
             }
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4"
@@ -314,5 +378,7 @@ class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             ablated_inputs = {**inputs, media_key: torch.zeros_like(inputs[media_key])}
             ablated_logits = model(**ablated_inputs, use_cache=False).logits
             self.assertGreater((logits.float() - ablated_logits.float()).abs().max().item(), 0)
-        generated = model.generate(**inputs, do_sample=False, max_new_tokens=8)
-        self.assertEqual(generated[0, inputs.input_ids.shape[-1] :].tolist(), expected.get_expectation())
+
+        generated = model.generate(**inputs, do_sample=False, max_new_tokens=32)
+        decoded = processor.batch_decode(generated[:, inputs.input_ids.shape[-1] :], skip_special_tokens=True)
+        self.assertEqual(decoded[0], expected.get_expectation())

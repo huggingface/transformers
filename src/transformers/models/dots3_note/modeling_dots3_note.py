@@ -433,21 +433,21 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+def rotate_half_text(x):
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 def apply_rotary_pos_emb_text(q, k, cos, sin):
-    cos = cos.unsqueeze(1)
-    sin = sin.unsqueeze(1)
-    q = q.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
-    k = k.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
-    q_rot = q * cos + rotate_half(q) * sin
-    k_rot = k * cos + rotate_half(k) * sin
-    return q_rot.to(q.dtype), k_rot.to(k.dtype)
+    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1).unsqueeze(1)
+    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1).unsqueeze(1)
+    q_embed = q * cos + rotate_half_text(q) * sin
+    k_embed = k * cos + rotate_half_text(k) * sin
+    # Dots stores the rotated coordinates in half-split order.
+    q_embed = q_embed.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    k_embed = k_embed.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+    return q_embed.to(q.dtype), k_embed.to(k.dtype)
 
 
 class Dots3NoteTextAttention(nn.Module):
@@ -917,6 +917,13 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
