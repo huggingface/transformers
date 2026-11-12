@@ -342,6 +342,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("internlm3", "InternLM3Config"),
         ("internvl", "InternVLConfig"),
         ("internvl_vision", "InternVLVisionConfig"),
+        ("iquestcoder", "IQuestCoderConfig"),
         ("jais2", "Jais2Config"),
         ("jamba", "JambaConfig"),
         ("janus", "JanusConfig"),
