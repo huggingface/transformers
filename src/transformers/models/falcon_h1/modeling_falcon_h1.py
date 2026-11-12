@@ -234,7 +234,7 @@ class FalconH1Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class FalconH1RMSNormGated(torch.nn.Module):
+class FalconH1RMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, n_groups=1, norm_before_gate=True):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
