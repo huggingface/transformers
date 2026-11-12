@@ -350,6 +350,11 @@ def pytest_configure(config):
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
     register_network_debug_plugin(config)
 
+    # [Temporary] torch 2.15 CI-only CUDA graph capture failures (deepseek_v32 / whisper): debug plugin.
+    from ci_capture_debug import register_capture_debug_plugin
+
+    register_capture_debug_plugin(config)
+
 
 def pytest_collection_modifyitems(items):
     for item in items:
