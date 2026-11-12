@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -111,6 +112,10 @@ class TestExpertParallelLayer(TestCasePlus):
         """An unknown name and `"all_reduce"` without a shared batch are refused; a registered implementation runs."""
         run_distributed(world_size=2, backend="gloo")(_install_forward_checks_ep_implementation)()
 
+    def test_megamoe_hands_experts_a_slice_of_the_shared_batch(self):
+        """`"deepgemm_megamoe"` hands each rank a padded slice with global ids, the EP group and the shared buffers."""
+        run_distributed(world_size=2, backend="gloo")(_megamoe_hands_experts_a_slice_of_the_shared_batch)()
+
 
 class _DummyExperts(torch.nn.Module):
     """Toy experts: expert `i` multiplies a token by `scales[i]` (1 by default, on 2 experts). The id `num_experts`
@@ -162,14 +167,22 @@ def _install_forward_checks_ep_implementation(rank):
 def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
     mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
     ep_mesh, single = mesh["ep"], mesh["tp"]
-    for tp_mesh, grad, all_reduce in ((ep_mesh, False, True), (ep_mesh, True, False), (single, False, False)):
+    cases = (
+        (ep_mesh, False, True, True),
+        (ep_mesh, True, False, True),
+        (ep_mesh, True, True, False),
+        (single, False, False, False),
+    )
+    for tp_mesh, grad_enabled, requires_grad, all_reduce in cases:
+        hidden_states = torch.zeros(2, 4, requires_grad=requires_grad)
         with (
             patch.object(AllReduceEP, "__call__") as all_reduce_call,
             patch.object(AllToAllEP, "__call__") as all_to_all_call,
-            torch.set_grad_enabled(grad),
+            torch.set_grad_enabled(grad_enabled),
         ):
-            AutoEP(_DummyExperts(), ep_mesh, tp_mesh)(None, None, None)
-        assert (all_reduce_call.called, all_to_all_call.called) == (all_reduce, not all_reduce), (tp_mesh, grad)
+            AutoEP(_DummyExperts(), ep_mesh, tp_mesh)(hidden_states, None, None)
+        called = (all_reduce_call.called, all_to_all_call.called)
+        assert called == (all_reduce, not all_reduce), (tp_mesh, grad_enabled, requires_grad)
 
 
 def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
@@ -212,3 +225,40 @@ def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
     if mode != "inference":
         output.backward(grad_output)
         torch.testing.assert_close([t.grad for t in inputs], [t.grad for t in expected_inputs])
+
+
+class _MegaMoeExperts(torch.nn.Module):
+    """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
+
+    num_experts = 2
+    config = SimpleNamespace(_experts_implementation="deepgemm_megamoe")
+
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
+        return hidden_states * (torch.distributed.get_rank() + 1)
+
+
+def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
+    mesh = init_device_mesh("cpu", (2,))
+    # `"auto"` runs Mega MoE experts through `MegaMoeEP`, and any other implementation is refused
+    layers = [EpDispatchExpertsParallel().install_forward(_MegaMoeExperts(), mesh, tp_mesh=mesh) for _ in range(2)]
+    with pytest.raises(ValueError, match="deepgemm_megamoe"):
+        EpDispatchExpertsParallel().install_forward(
+            _MegaMoeExperts(), mesh, tp_mesh=mesh, ep_implementation="all_to_all"
+        )
+    # 3 tokens on 2 ranks: rank 1 gets the last token and one skipped slot
+    hidden_states = torch.arange(24.0).view(3, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5]])
+    outputs = [layer(hidden_states, top_k_index, top_k_weights) for layer in layers]
+
+    received_hidden, received_index, received_weights, process_group = layers[0].received
+    rows = slice(2 * rank, 2 * rank + 2)
+    padded_index = torch.cat([top_k_index, top_k_index.new_full((1, 2), -1)])
+    padded_weights = torch.cat([top_k_weights, top_k_weights.new_zeros(1, 2)])
+    torch.testing.assert_close(received_index, padded_index[rows])
+    torch.testing.assert_close(received_weights, padded_weights[rows])
+    torch.testing.assert_close(received_hidden[: 3 - 2 * rank], hidden_states[rows])
+    assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+    for output in outputs:
+        torch.testing.assert_close(output, hidden_states * torch.tensor([[1.0], [1.0], [2.0]]))
