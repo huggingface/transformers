@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import unittest
+from pathlib import Path
 
 from ..alm_tester import ALMModelTester
 from ..causal_lm_tester import CausalLMModelTester
+from ..models.mistral_large4.test_modeling_mistral_large4 import MistralLarge4VisionText2TextModelTester
 from ..multimodal_tester import MultiModalModelTester
 from ..vlm_tester import VLMModelTester
 
@@ -59,13 +62,6 @@ class SmallConfigDefaultsTest(unittest.TestCase):
         tester = self._tester_class(ALMModelTester)
         self.assertEqual(tester(self).num_mel_bins, 24)
         self.assertEqual(tester(self, num_mel_bins=16).num_mel_bins, 16)
-
-    def test_defaults_are_fresh_for_each_instance(self):
-        tester = self._tester_class(VLMModelTester)
-        first, second = tester(self), tester(self)
-        first.no_rope_layers.append(0)
-        self.assertEqual(second.no_rope_layers, [1, 0])
-        self.assertEqual(tester.get_small_config_defaults()["no_rope_layers"], [1, 0])
 
     def test_inherited_hook_keeps_existing_vision_defaults(self):
         class LegacyTester(VLMModelTester):
@@ -152,20 +148,21 @@ class MergedSmallConfigDefaultsTest(unittest.TestCase):
         class Tester(VLMModelTester):
             small_config_overrides = {"no_rope_layers": [1, 0]}
 
+            def _check_required_attributes(self):
+                pass
+
         values = Tester.get_small_config_defaults()
         values["vision_rope_parameters"]["rope_theta"] = 1
         values["no_rope_layers"].append(1)
+        first, second = Tester(self), Tester(self)
+        first.no_rope_layers.append(0)
         fresh = Tester.get_small_config_defaults()
         self.assertEqual(fresh["vision_rope_parameters"]["rope_theta"], 10_000)
         self.assertEqual(fresh["no_rope_layers"], [1, 0])
+        self.assertEqual(second.no_rope_layers, [1, 0])
         self.assertEqual(Tester.small_config_overrides["no_rope_layers"], [1, 0])
 
     def test_mistral_overrides_are_a_literal_and_preserve_test_dimensions(self):
-        import ast
-        from pathlib import Path
-
-        from ..models.mistral_large4.test_modeling_mistral_large4 import MistralLarge4VisionText2TextModelTester
-
         path = Path(__file__).parents[1] / "models/mistral_large4/test_modeling_mistral_large4.py"
         tree = ast.parse(path.read_text())
         cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name.endswith("ModelTester"))
