@@ -625,7 +625,6 @@ class TrainerOptimizerTest(TestCasePlus):
 
 
 @require_torch
-@require_torch
 class TrainerOptimizerGroupLookupTest(TestCasePlus):
     @parameterized.expand(
         [(kind, name) for kind in ("parameter", "name") for name in ("0.weight", "0.bias", "1.weight", "1.bias")]
@@ -711,6 +710,7 @@ class TrainerOptimizerGroupLookupTest(TestCasePlus):
             trainer.get_optimizer_group("missing.weight")
 
 
+@require_torch
 class TrainerLRTest(TestCasePlus):
     def test_get_learning_rates(self):
         model = nn.Sequential(nn.Linear(128, 64))
