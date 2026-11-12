@@ -17,39 +17,45 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
+import os
+import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, MutableMapping
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Unpack
+from typing import TYPE_CHECKING, Any
 
 from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
-from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
+from ..utils.hub import cached_file, cached_files, hf_api
+from ..utils.import_utils import is_torch_available
 from .components import Component
 from .configs import ExportConfigMixin, ExportFormat
 from .decompose import decompose_multimodal
-from .metadata import ExportMetadata, export_config_metadata, register_treespec_types
+from .metadata import ExportMetadata, register_treespec_types
 from .quantizers.utils import capture_calibration_inputs
-from .runtimes.base import ExportedModel
 from .utils import check_packages, decompose_for_generation
 
 
-if TYPE_CHECKING:
+if is_torch_available():
     import torch
 
+if TYPE_CHECKING:
     from ..cache_utils import Cache
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
+    from .runners.base import ModelRunner
 
 
 logger = logging.get_logger(__name__)
 
-# Backend, file and recorded metadata per component. Kept outside the artifacts because not every format
+# Backend, file and recorded metadata per component. Kept outside the programs because not every format
 # can carry the metadata (`torch.export` cannot).
 EXPORT_MANIFEST_FILE = "export.json"
+EXPORT_SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -60,13 +66,20 @@ class ExportedComponent:
     metadata: ExportMetadata
 
 
-class ExportArtifacts(Mapping, PushToHubMixin):
-    """What an export produced: a `Mapping` over `{name: ExportedComponent}`, plus the configs they were traced
-    against.
+class ExportedModel(PushToHubMixin):
+    """An exported model: its graphs (`components`, `{name: ExportedComponent}`) and the configs they were traced
+    against, called the way you'd call the model it came from.
 
     [`~HfExporter.export`] produces a single `"model"` component, whose program is `.program`;
     [`~HfExporter.export_multimodal`] one component per modality, plus the text embeddings and the model on
     `inputs_embeds`; [`~HfExporter.export_for_generation`] one component per generation stage.
+
+    ```python
+    >>> exported = OnnxExporter().export(model, inputs, OnnxConfig(dynamic=True))
+    >>> exported.save_pretrained("exported")
+    >>> outputs = ExportedModel.from_pretrained("exported", device="cuda")(**inputs)
+    >>> outputs.last_hidden_state
+    ```
     """
 
     def __init__(
@@ -80,59 +93,72 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
-
-    def __getitem__(self, name: str) -> ExportedComponent:
-        return self.components[name]
-
-    def __iter__(self):
-        return iter(self.components)
-
-    def __len__(self) -> int:
-        return len(self.components)
+        self._runners: dict[str, ModelRunner] | None = None
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self)})"
+        return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self.components)})"
+
+    def _single_component(self) -> str:
+        """The name of the export's one component: `.program` and calling it need a single graph."""
+        if len(self.components) != 1:
+            raise ValueError(
+                f"This export has {len(self.components)} components ({list(self.components)}): `.program` and "
+                "calling it need a single-graph export (`HfExporter.export`); take a component's program from "
+                "`.components[name]`."
+            )
+        return next(iter(self.components))
 
     @property
     def program(self):
         """The backend's own program, for a single-graph export."""
-        if len(self.components) != 1:
-            raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}), so there is "
-                "no single `.program`; index it by name and take that component's."
-            )
-        return next(iter(self.components.values())).program
+        return self.components[self._single_component()].program
 
-    def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
-        """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`]: a single graph
-        ([`~HfExporter.export`]), or a multimodal split ([`~HfExporter.export_multimodal`]) as an
-        [`ExportedMultimodalModel`]. `runner_kwargs` go to the backend's runners: `providers` and `session_options`
-        for ONNX Runtime, `config` (compile properties) and `torch_threads` (split the CPU with torch work around the
-        model) for OpenVINO."""
+    @property
+    def runners(self) -> dict[str, ModelRunner]:
+        """The runner of each component, on the backend's default device unless [`~ExportedModel.to`] picked one."""
+        if self._runners is None:
+            self.to()
+        return self._runners
+
+    @property
+    def device(self) -> torch.device:
+        """Where the export runs."""
+        return next(iter(self.runners.values())).device
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """The precision the export was traced at."""
+        return getattr(torch, next(iter(self.components.values())).metadata.export_dtype)
+
+    def to(self, device=None, **runner_kwargs) -> ExportedModel:
+        """Load the programs on their backend's runtime, on `device` (the backend's default when `None`).
+        `runner_kwargs` go to the backend's runner: `providers` and `session_options` for ONNX Runtime, `config`
+        (compile properties) and `torch_threads` (split the CPU with torch work around the model) for OpenVINO."""
         from .auto import get_runner_class
-        from .runtimes.multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
-        multimodal = {"language_model", "text_embeddings_model"} <= self.components.keys() <= MULTIMODAL_COMPONENTS
-        if len(self.components) != 1 and not multimodal:
-            raise ValueError(
-                f"This export has components {list(self.components)}, whose runtime isn't available yet. `runtime()` "
-                "runs a single graph (`HfExporter.export`) or a multimodal split (`HfExporter.export_multimodal`)."
-            )
         runner_class = get_runner_class(self.export_format)
-        runners = {
+        self._runners = {
             name: runner_class.from_program(component.program, component.metadata, device, **runner_kwargs)
             for name, component in self.components.items()
         }
-        if multimodal:
-            model = ExportedMultimodalModel(runners, self.config)
-        else:
-            model = ExportedModel(next(iter(runners.values())), self.config)
-        model.artifacts = self
-        return model
+        return self
+
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
+        """Run a single-graph export, returning what the source model returns. Kwargs the export was not traced with
+        are dropped, so a processor's whole output can be passed. `share_inputs` and `share_outputs` go to the runner
+        (see [`ModelRunner.__call__`]): with `share_outputs`, the outputs are valid until the next call."""
+        name = self._single_component()
+        runner = self.runners[name]
+        traced_kwargs = runner.metadata.kwargs
+        unused = [key for key in kwargs if key not in traced_kwargs]
+        if unused:
+            logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
+        inputs = {key: value for key, value in kwargs.items() if key in traced_kwargs}
+        return runner(share_inputs=share_inputs, share_outputs=share_outputs, **inputs)
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
-        metadata recorded when tracing it. [`~ExportArtifacts.from_pretrained`] loads them back.
+        metadata recorded when tracing it. [`~ExportedModel.from_pretrained`] loads them back.
 
         Args:
             save_directory (`str` or `Path`):
@@ -154,13 +180,22 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(directory)
 
-        components = {}
-        for name, component in self.components.items():
-            filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
-            exporter.save_program(component.program, directory / filename)
-            components[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
+        entries = {}
+        # Written aside, then moved over the old files: a program loaded from this directory may still read them
+        # (OpenVINO maps its weights), and a moved file leaves the one it replaces readable.
+        with tempfile.TemporaryDirectory(dir=directory) as staging:
+            for name, component in self.components.items():
+                filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
+                exporter.save_program(component.program, Path(staging) / filename)
+                entries[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
+            for file in Path(staging).iterdir():
+                os.replace(file, directory / file.name)
 
-        manifest = {"schema_version": 1, "export_format": str(self.export_format), "components": components}
+        manifest = {
+            "schema_version": EXPORT_SCHEMA_VERSION,
+            "export_format": str(self.export_format),
+            "components": entries,
+        }
         (directory / EXPORT_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         if self.config is not None:
             self.config.save_pretrained(directory)
@@ -173,47 +208,132 @@ class ExportArtifacts(Mapping, PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: str | Path, **kwargs: Unpack[DownloadKwargs]
-    ) -> ExportArtifacts:
-        """Load what [`~ExportArtifacts.save_pretrained`] wrote: each component through its backend's
-        [`~HfExporter.load_program`], with its metadata, and the configs saved next to them.
+        cls,
+        pretrained_model_name_or_path: str | Path,
+        *,
+        device=None,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str = "main",
+        subfolder: str = "",
+        trust_remote_code: bool = False,
+        **runner_kwargs,
+    ) -> ExportedModel:
+        """Load what [`~ExportedModel.save_pretrained`] wrote: each component through its backend's
+        [`~HfExporter.load_program`], with its metadata, and the configs saved next to them. The programs are loaded
+        on their backend's runtime right away, ready to run.
 
         Args:
             pretrained_model_name_or_path (`str` or `Path`):
                 A local directory, or a Hub repo id. From the Hub, only the files the manifest names are
                 downloaded, so an export can sit next to the model's own weights.
-            kwargs ([`~utils.hub.DownloadKwargs`], *optional*):
-                Download kwargs, as for [`~PreTrainedModel.from_pretrained`] (`subfolder`, `revision`, `token`, ...).
-        """
-        from .auto import get_exporter_class
+            device (`str` or `torch.device`, *optional*):
+                Where to run it (the backend's default when `None`).
+            cache_dir (`Union[str, os.PathLike]`, *optional*):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                Whether or not to only look at local files (i.e., do not try to download the model).
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
 
-        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **kwargs)
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
+
+                </Tip>
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
+                Whether to load the config of a model whose code lives in its repo, as for
+                [`~AutoConfig.from_pretrained`].
+            runner_kwargs (*optional*):
+                The backend's runner options, as for [`~ExportedModel.to`]: `providers` and `session_options` for
+                ONNX Runtime, `config` and `torch_threads` for OpenVINO.
+        """
+        from .auto import EXPORT_BACKENDS, get_exporter_class, get_runner_class
+
+        download_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "token": token,
+            "revision": revision,
+            "subfolder": subfolder,
+        }
+        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **download_kwargs)
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
+        if manifest.get("schema_version", 1) > EXPORT_SCHEMA_VERSION:
+            logger.warning(
+                f"This export was saved in a newer format (schema {manifest['schema_version']}) than this version of "
+                f"transformers reads ({EXPORT_SCHEMA_VERSION}): some fields might be ignored or misinterpreted."
+            )
         exporter = get_exporter_class(manifest["export_format"])
+        has_runner = EXPORT_BACKENDS[exporter.export_format].runner is not None
+        runner_options = []
+        if has_runner:
+            parameters = inspect.signature(get_runner_class(exporter.export_format).from_program).parameters
+            runner_options = [name for name in parameters if name not in ("program", "metadata", "device")]
+        unknown = [name for name in runner_kwargs if name not in runner_options]
+        if unknown:
+            raise TypeError(f"Unknown kwargs {unknown}: the {exporter.export_format} runner takes {runner_options}.")
         program_files = [
             file for entry in manifest["components"].values() for file in exporter.program_files(entry["file"])
         ]
-        cached_files(pretrained_model_name_or_path, program_files, **kwargs)
+        cached_files(pretrained_model_name_or_path, program_files, **download_kwargs)
         cached_files(
             pretrained_model_name_or_path,
             [CONFIG_NAME, GENERATION_CONFIG_NAME],
             _raise_exceptions_for_missing_entries=False,
-            **kwargs,
+            **download_kwargs,
         )
         directory = Path(manifest_file).parent
         components = {}
         for name, entry in manifest["components"].items():
-            metadata = ExportMetadata(**entry["metadata"])
+            metadata = ExportMetadata.from_dict(entry["metadata"])
             # A program whose inputs or outputs hold a cache can't be read back until the cache is a pytree node.
             for spec in (metadata.in_spec, metadata.out_spec):
                 if spec is not None:
                     register_treespec_types(spec)
             components[name] = ExportedComponent(exporter.load_program(directory / entry["file"]), metadata)
-        config = AutoConfig.from_pretrained(directory) if (directory / CONFIG_NAME).exists() else None
+        config = (
+            AutoConfig.from_pretrained(directory, trust_remote_code=trust_remote_code)
+            if (directory / CONFIG_NAME).exists()
+            else None
+        )
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
-        return cls(components, exporter.export_format, config=config, generation_config=generation_config)
+        model_class = _exported_model_class(components)
+        if not issubclass(model_class, cls):
+            raise TypeError(
+                f"{pretrained_model_name_or_path} runs as a {model_class.__name__}, not a {cls.__name__}: load it with "
+                f"`{model_class.__name__}.from_pretrained` or `ExportedModel.from_pretrained`."
+            )
+        model = model_class(components, exporter.export_format, config=config, generation_config=generation_config)
+        if has_runner:
+            model.to(device, **runner_kwargs)
+        return model
+
+
+def _exported_model_class(component_names) -> type[ExportedModel]:
+    """The class an export runs as, from its components: a multimodal split as an `ExportedMultimodalModel`."""
+    from .multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
+
+    if {"language_model", "text_embeddings_model"} <= set(component_names) <= MULTIMODAL_COMPONENTS:
+        return ExportedMultimodalModel
+    return ExportedModel
 
 
 class HfExporter(ABC):
@@ -222,7 +342,7 @@ class HfExporter(ABC):
 
     To add a backend, subclass and implement [`~HfExporter.export_program`] to trace one graph, and
     [`~HfExporter.save_program`] / [`~HfExporter.load_program`] to write one out and read it back. The public
-    [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build an [`ExportArtifacts`] on top of
+    [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build an [`ExportedModel`] on top of
     them.
     """
 
@@ -242,17 +362,9 @@ class HfExporter(ABC):
     def __init__(self):
         self.validate_environment()
 
-    def validate_environment(self, *args, **kwargs):
+    def validate_environment(self):
         """Check `required_packages` are installed and warn on version drift from `tested_versions`."""
         check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
-
-    def _as_config(self, config: ExportConfigMixin | dict[str, Any]) -> ExportConfigMixin:
-        """`config` as this exporter's `config_class`, built from a dict when handed one."""
-        if isinstance(config, dict):
-            return self.config_class(**config)
-        if not isinstance(config, self.config_class):
-            raise TypeError(f"Expected config to be a {self.config_class.__name__} or dict, got {type(config)}")
-        return config
 
     @abstractmethod
     def export_program(
@@ -260,7 +372,7 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin,
-    ) -> tuple[Any, dict[str, Any]]:
+    ) -> tuple[Any, ExportMetadata]:
         """
         Trace one graph. The backend extension point, paired with [`~HfExporter.save_program`].
 
@@ -277,7 +389,7 @@ class HfExporter(ABC):
                 Backend-specific configuration.
 
         Returns:
-            `tuple[Any, dict]`: The backend's program object (`ExportedProgram`, `ONNXProgram`,
+            `tuple[Any, ExportMetadata]`: The backend's program object (`ExportedProgram`, `onnx_ir.Model`,
             `ExecutorchProgramManager`, `openvino.Model`) and the metadata recorded while tracing it
             ([`~exporters.metadata.build_export_metadata`]), returned separately since only some formats can
             carry it.
@@ -302,9 +414,13 @@ class HfExporter(ABC):
         return [filename]
 
     def _export_component(self, model, sample_inputs, config: ExportConfigMixin | dict[str, Any]) -> ExportedComponent:
-        config = self._as_config(config)
+        if isinstance(config, dict):
+            config = self.config_class(**config)
+        elif not isinstance(config, self.config_class):
+            raise TypeError(f"Expected config to be a {self.config_class.__name__} or dict, got {type(config)}")
         program, metadata = self.export_program(model, sample_inputs, config=config)
-        return ExportedComponent(program, ExportMetadata(**metadata, export_config=export_config_metadata(config)))
+        metadata.export_config = json.loads(config.to_json_string())
+        return ExportedComponent(program, metadata)
 
     def _export_components(
         self, components: dict[str, Component], config: ExportConfigMixin | dict[str, ExportConfigMixin]
@@ -334,26 +450,26 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, Any],
-    ) -> ExportArtifacts:
+    ) -> ExportedModel:
         """
         Export the model as one graph.
 
         Takes the same **forward** kwargs as [`~HfExporter.export_program`].
 
         Returns:
-            [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.program`, and
-            `save_pretrained` writes it with its metadata and the model config (none for a plain `nn.Module`, such
-            as a decomposed `FSMTEncoder`).
+            [`ExportedModel`]: A single `"model"` component; the backend's program is `.program`, and
+            `save_pretrained` writes it with its metadata and the model config.
         """
         component = self._export_component(model, sample_inputs, config)
-        return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
+        # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
+        return ExportedModel({"model": component}, self.export_format, config=getattr(model, "config", None))
 
     def export_multimodal(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
-    ) -> ExportArtifacts:
+    ) -> ExportedModel:
         """
         Split a multi-modal model and export each component.
 
@@ -375,7 +491,7 @@ class HfExporter(ABC):
                 to those samples.
 
         Returns:
-            [`ExportArtifacts`]: One [`ExportedComponent`] per component.
+            [`ExportedMultimodalModel`]: One [`ExportedComponent`] per component, called like the model.
         """
         components = decompose_multimodal(model, sample_inputs)
         quantizer = getattr(config, "quantizer", None)
@@ -388,7 +504,9 @@ class HfExporter(ABC):
                 name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
                 for name in components
             }
-        return ExportArtifacts(
+        from .multimodal import ExportedMultimodalModel
+
+        return ExportedMultimodalModel(
             self._export_components(components, config),
             self.export_format,
             config=getattr(model, "config", None),
@@ -402,7 +520,7 @@ class HfExporter(ABC):
         *,
         generation_config: GenerationConfig | None = None,
         multi_token_decode: bool = False,
-    ) -> ExportArtifacts:
+    ) -> ExportedModel:
         """
         Decompose a generative model and export each component independently.
 
@@ -434,7 +552,7 @@ class HfExporter(ABC):
                 stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
         Returns:
-            [`ExportArtifacts`]: One [`ExportedComponent`] per stage, with the same keys as
+            [`ExportedModel`]: One [`ExportedComponent`] per stage, with the same keys as
             [`~exporters.utils.decompose_for_generation`].
         """
         components = decompose_for_generation(
@@ -460,7 +578,7 @@ class HfExporter(ABC):
                 }
 
         components = {name: Component(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
-        return ExportArtifacts(
+        return ExportedModel(
             self._export_components(components, config),
             self.export_format,
             config=getattr(model, "config", None),
