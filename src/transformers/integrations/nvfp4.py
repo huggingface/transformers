@@ -165,6 +165,11 @@ class NVFP4Linear(nn.Module):
         return f"in_features={self.in_features}, out_features={self.out_features}, nvfp4"
 
 
+def _frozen(*shape, dtype: torch.dtype) -> nn.Parameter:
+    "An uninitialized parameter loading quantized data, so without gradients"
+    return nn.Parameter(torch.empty(*shape, dtype=dtype), requires_grad=False)
+
+
 def _scale_halves(output: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
     "Scale each half of `output` (e.g. gate, up) by its own column of `scales` `(rows, num_halves)`"
     return (output.unflatten(-1, (scales.shape[-1], -1)) * scales.unsqueeze(-1)).flatten(-2)
@@ -193,17 +198,18 @@ class NVFP4Experts(nn.Module):
         self.in_proj = "gate_up_proj" if has_gate else "up_proj"
         in_proj_shape = (self.num_experts, 2 * intermediate if has_gate else intermediate, hidden)
         self.projections = {self.in_proj: in_proj_shape, "down_proj": (self.num_experts, hidden, intermediate)}
+        # Parameters, not buffers: expert parallelism shards them along their first axis, the experts'
         for name, (num_experts, out_features, in_features) in self.projections.items():
-            self.register_buffer(name, torch.empty(num_experts, out_features, in_features // 2, dtype=torch.uint8))
+            self.register_parameter(name, _frozen(num_experts, out_features, in_features // 2, dtype=torch.uint8))
             if not weight_only:
                 sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
-                self.register_buffer(f"{name}_sf", torch.empty(num_experts, *sf_shape, dtype=torch.int32))
-            block_scales = torch.empty(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
-            self.register_buffer(f"{name}_scale", block_scales)
+                self.register_parameter(f"{name}_sf", _frozen(num_experts, *sf_shape, dtype=torch.int32))
+            block_scales = _frozen(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
+            self.register_parameter(f"{name}_scale", block_scales)
             scales_shape = (num_experts, 2) if name == "gate_up_proj" else (num_experts,)
-            self.register_buffer(f"{name}_scale_2", torch.empty(scales_shape, dtype=torch.float32))
+            self.register_parameter(f"{name}_scale_2", _frozen(*scales_shape, dtype=torch.float32))
             # Weight-only checkpoints save it too, unused
-            self.register_buffer(f"{name}_input_scale", torch.empty(scales_shape, dtype=torch.float32))
+            self.register_parameter(f"{name}_input_scale", _frozen(*scales_shape, dtype=torch.float32))
 
     def _activate(self, up: torch.Tensor) -> torch.Tensor:
         if not self.has_gate:
@@ -273,6 +279,8 @@ class NVFP4Experts(nn.Module):
         "One NVFP4 GEMM per hit expert"
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         for expert_idx in top_k_index.unique():
+            if expert_idx >= self.num_experts:  # another rank's, under expert parallelism
+                continue
             token_idx, top_k_pos = torch.where(top_k_index == expert_idx)
             current = self._activate(self.linear(self.in_proj, expert_idx, hidden_states[token_idx]))
             current = self.linear("down_proj", expert_idx, current) * top_k_weights[token_idx, top_k_pos, None]
@@ -286,6 +294,8 @@ class NVFP4Experts(nn.Module):
 
 def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
     "Tokens sorted by expert, one grouped NVFP4 GEMM per projection"
+    if self.weight_only:  # the grouped GEMM quantizes activations
+        return self.eager_forward(hidden_states, top_k_index, top_k_weights)
     # torch's grouped NVFP4 GEMM only runs on sm90 / sm100 (e.g. not on sm120): one GEMM per expert elsewhere
     if hidden_states.is_cuda and torch.cuda.get_device_capability(hidden_states.device) not in ((9, 0), (10, 0)):
         return self.eager_forward(hidden_states, top_k_index, top_k_weights)
@@ -293,10 +303,15 @@ def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_wei
     # histc instead of bincount avoids cuda graph issues; CPU and MPS only support float input
     histc_input = expert_ids.float() if hidden_states.device.type in ("cpu", "mps") else expert_ids.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1).long()
+    # Expert parallelism marks other ranks' routes with ids past `num_experts`: sorted last, past every group, so
+    # the GEMM leaves their rows unwritten. Their ids are clamped for the scale lookups and their rows zeroed.
+    on_rank = expert_ids < self.num_experts
+    expert_ids = expert_ids.clamp(max=self.num_experts - 1)
     grouped = (expert_ids, tokens_per_expert, torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32))
     hidden = hidden_states[perm // top_k_index.shape[-1]]
     hidden = self._activate(self.grouped_linear(self.in_proj, hidden, *grouped))
     hidden = self.grouped_linear("down_proj", hidden, *grouped) * top_k_weights.reshape(-1)[perm, None]
+    hidden = hidden.masked_fill(~on_rank[:, None], 0.0)
     output = torch.empty_like(hidden, dtype=torch.float32)
     output[perm] = hidden  # back to the token order
     return output.view(*top_k_index.shape, -1).sum(dim=1).to(hidden_states.dtype)
@@ -305,7 +320,8 @@ def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_wei
 class NVFP4ExpertsInterface(ExpertsInterface):
     """Interface for registering custom NVFP4 experts forward functions; `eager` is `NVFP4Experts.eager_forward`."""
 
-    _global_mapping = {"grouped_mm": nvfp4_grouped_mm_experts_forward}
+    # No batched NVFP4 GEMM: `generate`'s decode-time switch to `batched_mm` keeps the grouped one
+    _global_mapping = {"grouped_mm": nvfp4_grouped_mm_experts_forward, "batched_mm": nvfp4_grouped_mm_experts_forward}
 
 
 ALL_NVFP4_EXPERTS_FUNCTIONS = NVFP4ExpertsInterface()

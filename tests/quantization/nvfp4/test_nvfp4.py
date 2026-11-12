@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from transformers import MixtralConfig, MixtralForCausalLM, NVFP4Config, Qwen3_5MoeForCausalLM, Qwen3_5MoeTextConfig
+from transformers.distributed import DistributedConfig
 from transformers.integrations.mxfp4 import FP4_VALUES
 from transformers.integrations.nvfp4 import (
     NVFP4Dequantize,
@@ -29,8 +30,11 @@ from transformers.integrations.nvfp4 import (
 )
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
+from transformers.testing_utils import is_expert_parallel_test
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
+
+from ...distributed_testing_utils import run_distributed
 
 
 if is_torch_available():
@@ -387,8 +391,45 @@ class NVFP4ExpertsTest(unittest.TestCase):
             torch.testing.assert_close(experts(hidden_states, top_k_index, top_k_weights), eager, rtol=0, atol=0)
             experts.config._experts_implementation = "grouped_mm"
             grouped = experts(hidden_states, top_k_index, top_k_weights)
+            # `generate` switches `grouped_mm` to `batched_mm` while decoding on GPU
+            experts.config._experts_implementation = "batched_mm"
+            torch.testing.assert_close(experts(hidden_states, top_k_index, top_k_weights), grouped, rtol=0, atol=0)
         # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first
         torch.testing.assert_close(grouped, eager, rtol=0.05, atol=0.05)
+
+
+def _expert_parallelism_shards_each_expert(rank, path, weight_only):
+    "Each rank holds its half of every expert tensor, swizzled scales included, and the model runs as one process's"
+    from torch.distributed.tensor import DTensor
+
+    with (
+        patch.object(NVFP4HfQuantizer, "validate_environment"),
+        patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel),
+    ):
+        model = MixtralForCausalLM.from_pretrained(path, distributed_config=DistributedConfig(tp_size=2, ep_size=2))
+        reference = MixtralForCausalLM.from_pretrained(path)
+    experts, expected = model.model.layers[0].mlp.experts, reference.model.layers[0].mlp.experts
+    assert experts.num_experts == 2
+    for name, param in experts.named_parameters():
+        local = param.to_local() if isinstance(param, DTensor) else param
+        torch.testing.assert_close(local, getattr(expected, name).chunk(2)[rank], msg=name)
+    if weight_only:  # the W4A4 GEMMs need a Blackwell GPU
+        input_ids = torch.tensor([[1, 5, 9, 2, 7, 3]])
+        with torch.no_grad():
+            torch.testing.assert_close(model(input_ids).logits, reference(input_ids).logits)
+
+
+@is_expert_parallel_test
+@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
+class NVFP4ExpertParallelTest(unittest.TestCase):
+    def test_expert_parallelism(self):
+        config, checkpoint = _mixtral_checkpoint()
+        for weight_only in (False, True):
+            with self.subTest(weight_only=weight_only), tempfile.TemporaryDirectory() as tmp:
+                config.quantization_config.weight_only = weight_only
+                config.save_pretrained(tmp)
+                save_file(checkpoint, f"{tmp}/model.safetensors", metadata={"format": "pt"})
+                run_distributed(world_size=2, backend="gloo")(_expert_parallelism_shards_each_expert)(tmp, weight_only)
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")
@@ -410,21 +451,46 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "multi-device `device_map`"):
             self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
 
-    def test_rejects_tensor_and_expert_parallelism_until_scale_metadata_is_supported(self):
-        for sizes in ({"tp_size": 2}, {"ep_size": 2}):
-            with self.subTest(**sizes):
-                model = SimpleNamespace(config=SimpleNamespace(distributed_config=SimpleNamespace(**sizes)))
-                with self.assertRaisesRegex(ValueError, "scale metadata does not have a sharding plan"):
-                    self.quantizer.update_parallel_plan(model, {})
-
-    def test_update_parallel_plan_keeps_non_parallel_configs(self):
-        configs = (
-            SimpleNamespace(),
-            SimpleNamespace(distributed_config=SimpleNamespace(tp_size=1, ep_size=1)),
+    @staticmethod
+    def _parallel_model(**distributed):
+        layer = nn.Module()
+        layer.proj = NVFP4Linear(64, 32)
+        layer.experts = NVFP4Experts(
+            SimpleNamespace(hidden_size=64, moe_intermediate_size=32, num_experts=4, hidden_act="silu")
         )
-        for config in configs:
-            with self.subTest(config=config):
-                self.quantizer.update_parallel_plan(SimpleNamespace(config=config), {})
+        model = nn.Module()
+        model.layers = nn.ModuleList([layer])
+        model.config = SimpleNamespace(distributed_config=SimpleNamespace(**distributed) if distributed else None)
+        model.tp_plan = {"layers.*.proj": "colwise", "layers.*.experts": "moe_tp_experts"}
+        model.ep_plan = {
+            "layers.*.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.experts.down_proj": "grouped_gemm",
+            "layers.*.experts": "ep_dispatch_experts",
+        }
+        return model
+
+    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
+    def test_expert_parallelism_shards_every_expert_tensor(self, _):
+        # The NVFP4 linear opted out of tensor parallelism, the experts take the EP rules
+        model = self._parallel_model(tp_size=2, ep_size=2, tp_plan={"layers.*.proj": "replicate"})
+        self.quantizer.update_parallel_plan(model, model.ep_plan)
+        self.quantizer.update_parallel_plan(model, model.tp_plan)
+        for proj in ("gate_up_proj", "down_proj"):
+            for suffix in ("", "_sf", "_scale", "_scale_2", "_input_scale"):
+                self.assertEqual(model.ep_plan[f"layers.*.experts.{proj}{suffix}"], "grouped_gemm", proj + suffix)
+
+    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
+    def test_rejects_tensor_parallelism_on_nvfp4_modules(self, _):
+        for distributed in ({"tp_size": 2, "tp_plan": None}, {"tp_size": 2, "tp_plan": {"layers.*.proj": "rowwise"}}):
+            with (
+                self.subTest(**distributed),
+                self.assertRaisesRegex(ValueError, "does not support tensor parallelism"),
+            ):
+                model = self._parallel_model(**distributed)
+                self.quantizer.update_parallel_plan(model, model.tp_plan)
+        # Not distributed, the plans are never applied
+        model = self._parallel_model()
+        self.quantizer.update_parallel_plan(model, model.tp_plan)
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)

@@ -82,12 +82,41 @@ class NVFP4HfQuantizer(HfQuantizer):
             raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
 
     def update_parallel_plan(self, model, parallel_plan):
+        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
+        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear
+
+        # The experts' scales shard like their weight, along the expert axis, the swizzled ones too
+        super().update_parallel_plan(model, parallel_plan)
+        modules = {
+            replace_layer_number_by_wildcard(name): module
+            for name, module in model.named_modules()
+            if isinstance(module, (NVFP4Linear, NVFP4Experts))
+        }
+        for key, style in list(parallel_plan.items()):
+            module_name, _, param = key.rpartition(".")
+            if isinstance(modules.get(module_name), NVFP4Experts) and hasattr(modules[module_name], f"{param}_sf"):
+                parallel_plan.setdefault(f"{key}_sf", style)
+
+        # Tensor parallelism would split the swizzled scales, which have no sharding plan yet
         distributed_config = getattr(model.config, "distributed_config", None)
-        sizes = {name: getattr(distributed_config, f"{name}_size", None) or 1 for name in ("tp", "ep")}
-        if any(size > 1 for size in sizes.values()):
+        if parallel_plan is not model.tp_plan or getattr(distributed_config, "tp_size", None) in (None, 1):
+            return
+        override = distributed_config.tp_plan
+        applied = {} if override == {} else parallel_plan | (override or {})
+        # Under expert parallelism, the experts keep their EP rules only
+        experts_split = (getattr(distributed_config, "ep_size", None) or 1) == 1
+        sharded = []
+        for key, style in applied.items():
+            module = modules.get(key, modules.get(key.rpartition(".")[0]))
+            if style == "replicate":
+                continue
+            if isinstance(module, NVFP4Linear) or (isinstance(module, NVFP4Experts) and experts_split):
+                sharded.append(key)
+        if sharded:
             raise ValueError(
-                "NVFP4 quantization does not support tensor or expert parallelism yet because its scale metadata does "
-                f"not have a sharding plan (got tp_size={sizes['tp']}, ep_size={sizes['ep']})."
+                f"NVFP4 quantization does not support tensor parallelism yet, which would shard {sharded[:3]}: its "
+                "scale metadata does not have a sharding plan. Expert parallelism shards NVFP4 experts, and "
+                '`DistributedConfig(tp_plan={...: "replicate"})` keeps the other NVFP4 layers whole on every rank.'
             )
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
@@ -111,12 +140,10 @@ class NVFP4HfQuantizer(HfQuantizer):
         if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
             # TODO: quantize experts from a full-precision checkpoint too
             has_gate = getattr(module, "has_gate", True)
-            if weight_only:  # the kernels' implementations quantize activations: eager only
-                return NVFP4Experts(module.config, has_gate=has_gate, weight_only=True)
             experts_class = use_experts_implementation(
                 experts_class=NVFP4Experts, experts_interface=ALL_NVFP4_EXPERTS_FUNCTIONS, has_gate=has_gate
             )
-            return experts_class(module.config, has_gate=has_gate)
+            return experts_class(module.config, has_gate=has_gate, weight_only=weight_only)
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
             return NVFP4Linear(module.in_features, module.out_features, weight_only=weight_only)
         return None
