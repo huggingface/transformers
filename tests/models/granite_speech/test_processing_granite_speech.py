@@ -195,6 +195,19 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         assert num_calculated_features == [90, 171]
         assert sum(num_expected_features) == num_audio_tokens
 
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
+        processor = GraniteSpeechProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
+        audio_lengths = [16000, 64000, 27250, 142100]
+        audio = [torch.rand(1, length) - 0.5 for length in audio_lengths]
+        text = [f"{processor.audio_token} Can you describe this audio?"] * len(audio)
+
+        inputs = processor(text=text, audio=audio, return_tensors="pt")
+
+        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
+        num_audio_tokens_from_call = (inputs["input_ids"] == audio_token_id).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
+
     @parameterized.expand(["cpu", "cuda"])
     @require_torch_accelerator
     def test_device_placement(self, device):
