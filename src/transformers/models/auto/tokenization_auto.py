@@ -93,6 +93,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("canine", "CanineTokenizer"),
         ("chinese_clip", "BertTokenizer" if is_tokenizers_available() else None),
         ("clap", "RobertaTokenizer"),
+        ("clap2", "GPT2Tokenizer"),
         ("clip", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("clipseg", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("clvp", "ClvpTokenizer"),
