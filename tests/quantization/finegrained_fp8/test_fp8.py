@@ -392,6 +392,12 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # deepgemm only has CUDA kernels, skip on other devices
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
+        if experts_implementation == "deepgemm":
+            from transformers.integrations.deepgemm import is_sm100
+
+            # the checkpoint's scales are plain float32, which DeepGEMM has no path for on Blackwell (UE8M0 only)
+            if is_sm100():
+                self.skipTest("DeepGEMM takes only UE8M0 scales on SM100, and this checkpoint's are float32")
 
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
