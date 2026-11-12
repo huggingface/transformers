@@ -88,7 +88,6 @@ _deps = [
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.6",
-    "kenlm",
     "kernels>=0.18.2,<0.19",
     "librosa",
     "mistral-common[image]>=1.11.7",
@@ -122,7 +121,7 @@ _deps = [
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
-    "transformers-mlinter==0.1.5",
+    "transformers-mlinter==0.1.6",
     "ty==0.0.20",
     "sacremoses",
     "safetensors>=0.8.0",
@@ -142,7 +141,6 @@ _deps = [
     "torch>=2.6",
     "torchaudio",
     "torchvision",
-    "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
     "transformers-mic[runtime]",
     "typer",
@@ -169,9 +167,7 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer")
-if PYTHON_MINOR_VERSION < 13:
-    extras["audio"] += deps_list("kenlm")
+extras["audio"] = deps_list("torchaudio", "librosa", "phonemizer")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
