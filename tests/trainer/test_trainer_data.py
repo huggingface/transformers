@@ -27,8 +27,8 @@ import warnings
 from pathlib import Path
 
 import numpy as np
-from parameterized import parameterized
 import torch
+from parameterized import parameterized
 from torch import nn
 
 from transformers import (
@@ -362,7 +362,12 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
 @require_torch
 class TrainerSmallLengthGroupedSamplerTest(unittest.TestCase):
     @parameterized.expand(
-        [(size, replicas, drop_last) for size in (0, 1, 2, 3, 7) for replicas in (1, 2, 3, 8) for drop_last in (False, True)]
+        [
+            (size, replicas, drop_last)
+            for size in (0, 1, 2, 3, 7)
+            for replicas in (1, 2, 3, 8)
+            for drop_last in (False, True)
+        ]
     )
     def test_small_dataset_shards(self, size, replicas, drop_last):
         lengths = list(range(1, size + 1))
