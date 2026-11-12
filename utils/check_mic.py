@@ -297,6 +297,27 @@ def format_summary(counts, elapsed):
     return f"MIC: {', '.join(parts) or 'nothing ran'} in {elapsed:.1f}s"
 
 
+def format_environment_warning(env_failures):
+    """End-of-run warning for failures that ran on other package versions than their baseline's.
+
+    They still fail the check; the warning says which numbers may be environment, not a regression.
+    """
+    if not env_failures:
+        return []
+    count = len(env_failures)
+    lines = [
+        f"⚠ {count} failure{'s' if count > 1 else ''} ran on an environment that differs from the baseline "
+        "(still counted as failures):"
+    ]
+    for name, differs in env_failures.items():
+        lines.append(f"    {name}: " + ", ".join(f"{k} {v}" for k, v in differs.items()))
+    lines += [
+        "  Numeric deltas may come from these versions: rerun on the pinned ones before calling them regressions.",
+        "  Outputs 'not in the baseline' or checks that differ from it are not version drift: the baseline is stale.",
+    ]
+    return lines
+
+
 HEARTBEAT_SECONDS = 15
 
 
@@ -476,9 +497,15 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     missing = []
     started = time.perf_counter()
 
+    env_failures = {}
+
     def count(record, key=None):
         key = key or record["status"]
         counts[key] = counts.get(key, 0) + 1
+        if key in ("fail", "error") and record.get("environment_differs"):
+            name = record.get("contract_name", record["contract"])
+            variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
+            env_failures[f"{name}{variant}  {record['target']}"] = record["environment_differs"]
 
     def first_pass(record, progress):
         if record.get("baseline_missing"):
@@ -520,6 +547,9 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
         # The runner failed before (or without) reporting a failing target: show what it said.
         print("Runner output:\n" + "\n".join(f"  {line}" for line in tail), flush=True)
     print(format_summary(counts, time.perf_counter() - started), flush=True)
+    warning = format_environment_warning(env_failures)
+    if warning:
+        print("\n".join(warning), flush=True)
     return 1 if failed else returncode
 
 

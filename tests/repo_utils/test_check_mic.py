@@ -157,7 +157,33 @@ class CheckMicTest(unittest.TestCase):
         self.assertIn("torch 2.14 (pinned 2.11)", lines[6])
         # A failing target explains the exit code; raw runner noise stays hidden.
         self.assertNotIn("noise", stdout.getvalue())
-        self.assertRegex(lines[-1], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+        self.assertRegex(lines[-5], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+        # The environment mismatch is repeated after the summary; the failure still fails the check.
+        self.assertEqual(
+            lines[-4],
+            "⚠ 1 failure ran on an environment that differs from the baseline (still counted as failures):",
+        )
+        self.assertEqual(lines[-3], "    CLIP [sdpa]  slim: torch 2.14 (pinned 2.11)")
+
+    def test_environment_warning_lists_only_failures(self):
+        self.assertEqual(check_mic.format_environment_warning({}), [])
+        record = {
+            "contract": "r",
+            "target": "slim",
+            "failures": [],
+            "environment_differs": {"numpy": "2.3 (pinned 1.26)"},
+        }
+        script = "".join(
+            f"print({json.dumps(json.dumps({**record, 'contract_name': name, 'status': status}))})\n"
+            for name, status in (("BERT", "pass"), ("T5", "fail"), ("CLIP", "error"))
+        )
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy()), 1)
+        output = stdout.getvalue()
+        self.assertIn("⚠ 2 failures ran on an environment", output)
+        self.assertIn("    T5  slim: numpy 2.3 (pinned 1.26)", output)
+        self.assertIn("    CLIP  slim: numpy 2.3 (pinned 1.26)", output)
+        self.assertNotIn("    BERT  slim:", output)
 
     def test_progress_counts_contracts_and_beats_while_the_runner_is_quiet(self):
         record = {"contract": "r", "contract_name": "BERT", "target": "slim", "status": "pass", "failures": []}
