@@ -327,18 +327,19 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         reference_logits = logits.detach().clone().requires_grad_()
         shifted_labels = labels[:, 1:] if shift_labels else labels
         active_count = int(shifted_labels.ne(-100).sum())
-        count = {"inferred": None, "integer": active_count * 2, "tensor": torch.tensor(active_count * 2)}[
-            count_kind
-        ]
+        count = {"inferred": None, "integer": active_count * 2, "tensor": torch.tensor(active_count * 2)}[count_kind]
         actual = LabelSmoother(epsilon)(
             {"logits": logits}, labels, shift_labels=shift_labels, num_items_in_batch=count
         )
         scores = reference_logits[:, :-1] if shift_labels else reference_logits
         log_probs = nn.functional.log_softmax(scores, dim=-1)
         denominator = active_count if count is None else count
-        expected_nll = nn.functional.nll_loss(
-            log_probs.reshape(-1, 64), shifted_labels.reshape(-1), reduction="none"
-        ).float().sum() / denominator
+        expected_nll = (
+            nn.functional.nll_loss(log_probs.reshape(-1, 64), shifted_labels.reshape(-1), reduction="none")
+            .float()
+            .sum()
+            / denominator
+        )
         expected_uniform = -log_probs.float()[shifted_labels.ne(-100)].sum() / (denominator * 64)
         expected = (1 - epsilon) * expected_nll + epsilon * expected_uniform
         self.assertTrue(torch.isfinite(actual))
@@ -363,8 +364,14 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
     def test_label_smoothing_half_model_updates(self, dtype):
         torch.manual_seed(0)
         config = GPT2Config(
-            vocab_size=64, n_positions=128, n_embd=16, n_layer=1, n_head=2,
-            resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0,
+            vocab_size=64,
+            n_positions=128,
+            n_embd=16,
+            n_layer=1,
+            n_head=2,
+            resid_pdrop=0.0,
+            embd_pdrop=0.0,
+            attn_pdrop=0.0,
         )
         model = GPT2LMHeadModel(config).to(dtype=dtype)
         reference = copy.deepcopy(model)
@@ -382,9 +389,10 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
             log_probs = nn.functional.log_softmax(reference_output.logits[:, :-1], dim=-1)
             targets = labels[:, 1:]
             count = targets.ne(-100).sum()
-            expected_nll = nn.functional.nll_loss(
-                log_probs.reshape(-1, 64), targets.reshape(-1), reduction="none"
-            ).float().sum() / count
+            expected_nll = (
+                nn.functional.nll_loss(log_probs.reshape(-1, 64), targets.reshape(-1), reduction="none").float().sum()
+                / count
+            )
             expected_uniform = -log_probs.float()[targets.ne(-100)].sum() / (count * 64)
             expected = 0.9 * expected_nll + 0.1 * expected_uniform
             self.assertTrue(torch.isfinite(actual))
