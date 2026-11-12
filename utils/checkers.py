@@ -313,7 +313,7 @@ def format_elapsed(seconds: float) -> str:
 
 
 class SlidingWindow:
-    """Displays a spinning title + sliding window of the last N output lines in a TTY."""
+    """Displays a spinning title with the elapsed time + sliding window of the last N output lines in a TTY."""
 
     def __init__(self, label, max_lines=10):
         self.label = label
@@ -322,10 +322,11 @@ class SlidingWindow:
         self.displayed = 0  # number of output lines currently on screen
         self.term_width = shutil.get_terminal_size().columns
         self._spinner = itertools.cycle(SPINNER_CHARS)
+        self._started = time.perf_counter()
         self._stop = threading.Event()
         self._lock = threading.Lock()
         # Print initial title line (will be overwritten by spinner)
-        print(f"{ORANGE}{next(self._spinner)} {label}{RESET}")
+        print(self._title())
         self._title_on_screen = True
         self._thread = threading.Thread(target=self._spin, daemon=True)
         self._thread.start()
@@ -345,13 +346,19 @@ class SlidingWindow:
             sys.stdout.write("\033[A\033[2K")
         self.displayed = 0
         # Redraw title with next spinner frame
-        print(f"{ORANGE}{next(self._spinner)} {self.label}{RESET}")
+        print(self._title())
         self._title_on_screen = True
         # Redraw output lines
         for line in self.lines:
             print(line)
         self.displayed = len(self.lines)
         sys.stdout.flush()
+
+    def _title(self):
+        """The spinner title, with whole seconds elapsed so a long quiet step visibly keeps going."""
+        minutes, seconds = divmod(int(time.perf_counter() - self._started), 60)
+        clock = f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
+        return f"{ORANGE}{next(self._spinner)} {self.label} ({clock}){RESET}"
 
     def add_line(self, line):
         with self._lock:

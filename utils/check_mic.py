@@ -415,55 +415,32 @@ def format_smoke_warning(smoke_only):
     return lines
 
 
-HEARTBEAT_SECONDS = 15
-
-
-def elapsed(seconds):
-    minutes, seconds = divmod(int(seconds), 60)
-    return f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
-
-
 BAR_ABOVE = 10
 BAR_WIDTH = 40
 
 
 class Progress:
-    """Reports the runner's results, with a heartbeat when it goes quiet.
+    """Reports the runner's results as they arrive.
 
-    The runner prints a target's record only once it has run (loading a model can take a while),
-    so without this a long run looks stuck between results. Up to BAR_ABOVE contracts, each result
-    gets a `[k/total]` line; above it, passing results only advance a progress bar redrawn in place
-    (a line starting with "\\r" replaces the previous one in the checker window), and anything else
-    is printed in full above it. Heartbeats are replaced the same way, so they never stay in the log,
-    and a blank line separates the results from the setup lines above them.
+    Up to BAR_ABOVE contracts, each result gets a `[k/total]` line; above it, passing results only
+    advance a progress bar redrawn in place (a line starting with "\\r" replaces the previous one in
+    the checker window), and anything else is printed in full above it. A blank line separates the
+    results from the setup lines above them. The checker window's title shows the elapsed time, so a
+    long wait between results needs no output here.
     """
 
     def __init__(self, total):
-        self.total, self.every = total, HEARTBEAT_SECONDS
+        self.total = total
         self.bar = bool(total) and total > BAR_ABOVE
-        self.bar_on_screen = self.beat_on_screen = self.reported = False
-        self.done, self.last = set(), None
-        self.started = self.quiet_since = time.perf_counter()
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._beat, daemon=True)
-
-    def __enter__(self):
-        self._thread.start()
-        return self
-
-    def __exit__(self, *exc):
-        self._stop.set()
-        self._thread.join()
+        self.bar_on_screen = self.reported = False
+        self.done = set()
 
     def report(self, record, lines, quiet=False):
         """Count `record`'s contract and show `lines` for it; `quiet` lines only advance the bar."""
-        name = record.get("contract_name", record["contract"])
-        self.done.add(name)
-        self.last = name
-        self.touch()
-        redraw = "\r" if self.bar_on_screen or self.beat_on_screen else ""
+        self.done.add(record.get("contract_name", record["contract"]))
+        redraw = "\r" if self.bar_on_screen else ""
         head = [] if self.reported else [""]
-        self.beat_on_screen, self.reported = False, True
+        self.reported = True
         if not self.bar:
             prefix = f"[{len(self.done)}/{self.total}] " if self.total else ""
             print(redraw + "\n".join([*head, prefix + "\n".join(lines)]), flush=True)
@@ -475,20 +452,6 @@ class Progress:
         bar = "█" * filled + "░" * (BAR_WIDTH - filled)
         print(redraw + "\n".join([*head, f"{bar} {len(self.done)}/{self.total}"]), flush=True)
         self.bar_on_screen = True
-
-    def touch(self):
-        self.quiet_since = time.perf_counter()
-
-    def _beat(self):
-        while not self._stop.wait(1):
-            now = time.perf_counter()
-            # With a bar, the checker's spinner already shows the run is alive.
-            if now - self.quiet_since >= self.every and not self.bar_on_screen:
-                done = f"{len(self.done)}/{self.total} contracts done" if self.total else f"{len(self.done)} done"
-                last = f", last: {self.last}" if self.last else ", loading the first contract"
-                redraw = "\r" if self.beat_on_screen else ""
-                print(f"{redraw}... {elapsed(now - self.started)} in, {done}{last}", flush=True)
-                self.beat_on_screen, self.quiet_since = True, now
 
 
 def stream(commands, env, fleet_name, on_record, announce=True, total=None, excuse=None):
@@ -528,22 +491,20 @@ def stream(commands, env, fleet_name, on_record, announce=True, total=None, excu
                         runners = f" in {len(commands)} parallel runners" if len(commands) > 1 else ""
                         shown = "failures print" if progress.bar else "results print as each one finishes"
                         print(f"Running {what}{runners}, {shown}...", flush=True)
-                    progress.touch()
                 elif "selection" in message:
                     print("\n".join(format_selection(message["selection"])), flush=True)
-                    progress.touch()
                 elif "status" in message and "target" in message:
                     excused = excused or bool(excuse and excuse(message))
                     on_record(message, progress)
         returncode = process.wait()
         results.append((0 if excused else returncode, tail))
 
-    with Progress(total) as progress:
-        threads = [threading.Thread(target=follow, args=(command,)) for command in commands]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+    progress = Progress(total)
+    threads = [threading.Thread(target=follow, args=(command,)) for command in commands]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
     failing = [result for result in results if result[0] != 0]
     return (failing or results or [(0, [])])[0]
 

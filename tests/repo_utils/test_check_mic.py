@@ -238,23 +238,22 @@ class CheckMicTest(unittest.TestCase):
         for failure in ("logits: max delta 0.1 over tolerance", "ids: [1, 2] != [1, 3]", "x: {1} != {2}"):
             self.assertEqual(check_mic.format_failure(failure), [f"    {failure}"])
 
-    def test_progress_counts_contracts_and_beats_while_the_runner_is_quiet(self):
+    def test_progress_counts_contracts_and_prints_nothing_while_the_runner_is_quiet(self):
         record = {"contract": "r", "contract_name": "BERT", "target": "slim", "status": "pass", "failures": []}
         script = (
             "import json, time\n"
-            "time.sleep(1.5)\n"
+            "time.sleep(1.2)\n"
             f"print(json.dumps({record!r}))\n"
             f"print(json.dumps({ {**record, 'target': 'other'}!r}))\n"
         )
-        with patch.object(check_mic, "HEARTBEAT_SECONDS", 1), patch("sys.stdout", new_callable=io.StringIO) as stdout:
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=2), 0)
         lines = stdout.getvalue().split("\n")  # not splitlines(): it splits on "\r" too
-        self.assertRegex(lines[0], r"^\.\.\. 1s in, 0/2 contracts done, loading the first contract$")
-        # The first result replaces the heartbeat ("\r") with the blank line that opens the results.
-        self.assertEqual(lines[1], "\r")
+        # The wait shows as the checker window's timer, not as lines in the log.
+        self.assertEqual(lines[0], "")
         # Both targets belong to one contract: the counter counts contracts.
-        self.assertEqual(lines[2], "[1/2] ✓ BERT  slim  pass")
-        self.assertEqual(lines[3], "[1/2] ✓ BERT  other  pass")
+        self.assertEqual(lines[1], "[1/2] ✓ BERT  slim  pass")
+        self.assertEqual(lines[2], "[1/2] ✓ BERT  other  pass")
 
     def test_contracts_are_split_over_parallel_runners(self):
         # A fake runner: announces the fleet, then passes every --contract it was given.
