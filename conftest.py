@@ -351,9 +351,10 @@ def pytest_configure(config):
     register_network_debug_plugin(config)
 
     # [Temporary] torch 2.15 CI-only CUDA graph capture failures (deepseek_v32 / whisper): debug plugin.
-    from ci_capture_debug import register_capture_debug_plugin
-
-    register_capture_debug_plugin(config)
+    # Disabled for this run: check whether the failure comes back without it (the plugin may hide the bug).
+    # from ci_capture_debug import register_capture_debug_plugin
+    #
+    # register_capture_debug_plugin(config)
 
 
 def pytest_collection_modifyitems(items):
