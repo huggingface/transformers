@@ -18,11 +18,16 @@ batch size finder, pad/concatenate, collators, and eval loop container.
 """
 
 import copy
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 
 import numpy as np
+from parameterized import parameterized
 import torch
 from torch import nn
 
@@ -51,6 +56,7 @@ from transformers.trainer_pt_utils import (
     LabelSmoother,
     LengthGroupedSampler,
     ShardSampler,
+    get_length_grouped_indices,
     get_parameter_names,
     numpy_pad_and_concatenate,
     torch_pad_and_concatenate,
@@ -351,6 +357,69 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Sampler and sharding tests
 # ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerSmallLengthGroupedSamplerTest(unittest.TestCase):
+    @parameterized.expand(
+        [(size, replicas, drop_last) for size in (0, 1, 2, 3, 7) for replicas in (1, 2, 3, 8) for drop_last in (False, True)]
+    )
+    def test_small_dataset_shards(self, size, replicas, drop_last):
+        lengths = list(range(1, size + 1))
+        for epoch in (0, 3):
+            shards = []
+            for rank in range(replicas):
+                sampler = DistributedLengthGroupedSampler(
+                    2, num_replicas=replicas, rank=rank, lengths=lengths, seed=17, drop_last=drop_last
+                )
+                sampler.set_epoch(epoch)
+                indices = list(sampler)
+                self.assertEqual(len(indices), len(sampler))
+                self.assertEqual(indices, list(sampler))
+                self.assertTrue(all(0 <= index < size for index in indices))
+                shards.append(indices)
+            self.assertEqual(len({len(shard) for shard in shards}), 1)
+            combined = [index for row in zip(*shards) for index in row]
+            generator = torch.Generator().manual_seed(17 + epoch)
+            order = get_length_grouped_indices(lengths, 2, generator=generator)
+            if drop_last:
+                self.assertEqual(combined, order[: (size // replicas) * replicas])
+            elif size:
+                self.assertEqual(combined[:size], order)
+                self.assertEqual(combined, [order[i % size] for i in range(len(combined))])
+                self.assertEqual(set(combined), set(range(size)))
+            else:
+                self.assertEqual(combined, [])
+
+    @parameterized.expand([(None,), (4,)])
+    def test_empty_length_groups(self, mega_batch_mult):
+        self.assertEqual(get_length_grouped_indices([], 2, mega_batch_mult=mega_batch_mult), [])
+        self.assertEqual(list(LengthGroupedSampler(2, lengths=[])), [])
+
+    def test_small_dataset_native_ddp_updates(self):
+        script = Path(__file__).parent / "distributed" / "scripts" / "check_length_grouped_small_dataset.py"
+        with tempfile.TemporaryDirectory() as output_dir:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "torch.distributed.run",
+                    "--standalone",
+                    "--nnodes=1",
+                    "--nproc-per-node=3",
+                    str(script),
+                    output_dir,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=180,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            for rank in range(3):
+                report = json.loads((Path(output_dir) / f"rank-{rank}.json").read_text())
+                self.assertEqual(report["steps"], 2)
+                self.assertEqual(report["indices"], [[0], [0]])
 
 
 @require_torch
