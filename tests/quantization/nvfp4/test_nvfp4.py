@@ -478,9 +478,19 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
 
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)
-    def test_rejects_multi_device_map_until_tp_metadata_is_supported(self, _, __):
+    def test_multi_device_map_only_for_pre_quantized_checkpoints(self, _, __):
+        device_map = {"model.layers.0": 0, "model.layers.1": 1}
+        # Quantizing on the fly packs every weight on one device
         with self.assertRaisesRegex(ValueError, "multi-device `device_map`"):
-            self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
+            self.quantizer.validate_environment(device_map=device_map)
+        # A pre-quantized checkpoint spreads over several, each of them Blackwell
+        quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
+        capabilities = {0: (10, 0), 1: (9, 0)}
+        with patch("torch.cuda.get_device_capability", lambda device: capabilities[device.index]):
+            with self.assertRaisesRegex(RuntimeError, "sm90 on cuda:1"):
+                quantizer.validate_environment(device_map=device_map)
+            capabilities[1] = (10, 0)
+            quantizer.validate_environment(device_map=device_map)
 
     @staticmethod
     def _parallel_model(nvfp4_linear=True, **distributed):

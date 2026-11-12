@@ -70,16 +70,19 @@ class NVFP4HfQuantizer(HfQuantizer):
         cuda_devices = {_as_cuda_device(device) for device in devices}
         if None in cuda_devices:
             raise ValueError("NVFP4 quantization does not support CPU or disk offload.")
-        if len(cuda_devices) != 1:
+        # Quantizing on the fly packs every weight on one device; a pre-quantized checkpoint can spread over several
+        if len(cuda_devices) != 1 and not self.pre_quantized:
             raise ValueError(
-                "NVFP4 quantization currently supports one CUDA device. Tensor parallelism and multi-device "
-                "`device_map` configurations are not supported yet."
+                "Quantizing to NVFP4 while loading supports one CUDA device. Load a pre-quantized NVFP4 checkpoint to "
+                "use a multi-device `device_map`."
             )
-        self.quantization_device = cuda_devices.pop()
-
-        major, minor = torch.cuda.get_device_capability(self.quantization_device)
-        if major < 10:
-            raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
+        for device in cuda_devices:
+            major, minor = torch.cuda.get_device_capability(device)
+            if major < 10:
+                raise RuntimeError(
+                    f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor} on {device}."
+                )
+        self.quantization_device = min(cuda_devices, key=lambda device: device.index or 0)
 
     def update_parallel_plan(self, model, parallel_plan):
         from ..distributed.parallel_utils import replace_layer_number_by_wildcard
