@@ -1348,8 +1348,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "cache" not in outputs:
-                self.skipTest(reason="This model doesn't return `cache`")
+            if "cache" not in outputs or all(outputs.cache.is_linear):
+                self.skipTest(reason="This model doesn't return `cache` or all the layers are linear")
 
             generate_kwargs = {
                 "pad_token_id": -1,

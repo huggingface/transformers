@@ -346,6 +346,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = sorted([*signature.parameters.keys()])
+            arg_names.remove("cache")  # rename past_key_value -> cache got the arg higher in the sorted list
 
             expected_arg_names = [
                 "attention_mask",
