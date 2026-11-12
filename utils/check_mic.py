@@ -250,10 +250,14 @@ def resolve_model(root, model):
 
 
 def match_models(root, pattern):
-    """The `models/` directories a shell-style MODEL pattern (`qwen*`, `wav2vec2_*`) matches, sorted."""
+    """The `models/` directories a MODEL pattern matches, sorted.
+
+    `+` stands for any characters (`qwen+`, `wav2vec2_+`): unlike `*`, the shell leaves it alone unquoted.
+    `*`, `?` and `[...]` work too, as in `fnmatch`.
+    """
     models = root / "src/transformers/models"
     directories = [path.name for path in models.iterdir() if path.is_dir() and not path.name.startswith("_")]
-    return sorted(fnmatch.filter(directories, pattern.lower()))
+    return sorted(fnmatch.filter(directories, pattern.lower().replace("+", "*")))
 
 
 def model_contracts(root, models, fleet_name="prototypes"):
@@ -697,9 +701,9 @@ def main():
     if model:
         usage = (
             "Use a directory name from src/transformers/models/ or a model name (MODEL=wav2vec2, MODEL=Wav2Vec2),"
-            " or a pattern for several (MODEL='qwen*', quoted so the shell does not expand it)."
+            " or a pattern for several, with + for any characters (MODEL=qwen+)."
         )
-        if any(char in model for char in "*?["):
+        if any(char in model for char in "+*?["):
             model_dirs = match_models(ROOT, model)
             if not model_dirs:
                 print(f"No model directory matches {model!r}. {usage}", file=sys.stderr)

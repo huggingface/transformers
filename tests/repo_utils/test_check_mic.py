@@ -95,20 +95,24 @@ class CheckMicTest(unittest.TestCase):
             model_contracts.assert_called_once_with(check_mic.ROOT, ["bert"], "prototypes")
 
     def test_model_pattern_selects_every_matching_directory(self):
-        self.assertIn("qwen2", check_mic.match_models(check_mic.ROOT, "qwen*"))
+        self.assertIn("qwen2", check_mic.match_models(check_mic.ROOT, "qwen+"))
+        # + is the shell-safe spelling of *.
         self.assertEqual(
-            check_mic.match_models(check_mic.ROOT, "Wav2Vec2_*")[:2], ["wav2vec2_bert", "wav2vec2_conformer"]
+            check_mic.match_models(check_mic.ROOT, "qwen*"), check_mic.match_models(check_mic.ROOT, "qwen+")
         )
-        self.assertEqual(check_mic.match_models(check_mic.ROOT, "no_such_*"), [])
+        self.assertEqual(
+            check_mic.match_models(check_mic.ROOT, "Wav2Vec2_+")[:2], ["wav2vec2_bert", "wav2vec2_conformer"]
+        )
+        self.assertEqual(check_mic.match_models(check_mic.ROOT, "no_such_+"), [])
         with (
-            patch.dict(os.environ, {"MODEL": "qwen*", "ALL": "", "FLEET": ""}),
+            patch.dict(os.environ, {"MODEL": "qwen+", "ALL": "", "FLEET": ""}),
             patch.object(check_mic.importlib.util, "find_spec", return_value=object()),
             patch.object(check_mic, "model_contracts", return_value=[]) as model_contracts,
             patch("sys.stdout", new_callable=io.StringIO),
         ):
             self.assertEqual(check_mic.main(), 0)
             models = model_contracts.call_args.args[1]
-            self.assertEqual(models, check_mic.match_models(check_mic.ROOT, "qwen*"))
+            self.assertEqual(models, check_mic.match_models(check_mic.ROOT, "qwen+"))
             self.assertTrue(len(models) > 1 and all(m.startswith("qwen") for m in models))
 
     def test_unknown_model_explains_names_and_patterns(self):
@@ -118,7 +122,7 @@ class CheckMicTest(unittest.TestCase):
         ):
             self.assertEqual(check_mic.main(), 2)
         self.assertIn("Did you mean: wav2vec2?", err.getvalue())
-        self.assertIn("MODEL='qwen*'", err.getvalue())
+        self.assertIn("MODEL=qwen+", err.getvalue())
 
     def test_model_without_contract_runs_nothing(self):
         with (
