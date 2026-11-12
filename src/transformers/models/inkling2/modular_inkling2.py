@@ -551,7 +551,6 @@ class Inkling2FullAttention(InklingAttention):
         hidden_states: torch.Tensor,
         key_hidden_states: torch.Tensor,
         value_hidden_states: torch.Tensor,
-        position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
@@ -592,7 +591,7 @@ class Inkling2FullAttention(InklingAttention):
 
         # log scaling of the queries and relative states, in fp32 as in the original
         tau = 1.0 + self.config.log_scaling_alpha * torch.log(
-            ((position_ids + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
+            ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
         )
         tau = tau[..., None, None]
 
@@ -803,7 +802,6 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
-        position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
@@ -822,7 +820,6 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
             hidden_states=self.q_input_layernorm(query_hidden_states).to(dtype),
             key_hidden_states=self.k_input_layernorm(key_hidden_states).to(dtype),
             value_hidden_states=self.v_input_layernorm(value_hidden_states).to(dtype),
-            position_ids=position_ids,
             attention_mask=attention_mask,
             conv_mask=conv_mask,
             past_key_values=past_key_values,
