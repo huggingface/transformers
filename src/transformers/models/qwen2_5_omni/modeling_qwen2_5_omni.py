@@ -2365,17 +2365,15 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         Example:
 
         ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
         >>> from transformers import AutoProcessor, Qwen2_5OmniTalkerForConditionalGeneration
+        >>> from transformers.audio_utils import load_audio
 
         >>> model = Qwen2_5OmniTalkerForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B")
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
         >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
-        >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
+        >>> audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
 

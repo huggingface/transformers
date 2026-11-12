@@ -249,6 +249,8 @@ class CohereAsrDecoderLayer(ActivationCheckpointingLayer):
 
 class CohereAsrPreTrainedModel(MoonshinePreTrainedModel):
     main_input_name = "input_features"
+    # The encoder is built with `AutoModel.from_config` and registers its own layers in `post_init`
+    _no_split_modules = ["CohereAsrDecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
 
 

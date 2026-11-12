@@ -58,9 +58,11 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
-        grid_thw = video_inputs["video_grid_thw"][video_idx]
-        grid_t = int(grid_thw[0])
-        frame_seqlen = int(grid_thw[1:].prod() // merge_length)
+        num_chunks = video_inputs["num_chunks_per_video"]
+        start = sum(num_chunks[:video_idx])
+        grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks[video_idx]]
+        grid_t = int(grid_thw[:, 0].sum())
+        frame_seqlen = int(grid_thw[0, 1:].prod() // merge_length)
         metadata = video_inputs.get("video_metadata", [None] * (video_idx + 1))[video_idx]
         temporal_patch_size = self.video_processor.temporal_patch_size
         chunk = ""
@@ -145,6 +147,10 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
+
+    @property
+    def unused_input_names(self):
+        return ["num_chunks_per_video"]
 
 
 __getattr__ = deprecate_attr(__name__, rename={"MiniMaxM3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})

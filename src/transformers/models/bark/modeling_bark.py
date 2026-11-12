@@ -189,16 +189,6 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    def _split_heads(self, tensor, num_heads, attn_head_size):
-        """
-        Splits hidden_size dim into attn_head_size and num_heads
-        """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(new_shape)
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim - (batch, seq_length, head, head_features)
-        return tensor
-
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
         Merges attn_head_size dim and num_attn_heads dim into hidden_size
@@ -232,9 +222,9 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         target_dtype = get_target_dtype(query, self)  # if the query is in float32, this is the dtype to cast to for FA
 
         attn_output = _flash_attention_forward(
-            query,
-            key,
-            value,
+            query.transpose(1, 2),
+            key.transpose(1, 2),
+            value.transpose(1, 2),
             attention_mask,
             query_len,
             dropout=self.dropout if self.training else 0.0,
