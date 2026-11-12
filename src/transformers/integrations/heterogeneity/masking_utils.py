@@ -26,6 +26,8 @@ from transformers.utils import is_torch_available, is_torch_tensor
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
+    from transformers.cache_utils import Cache
+    from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
 
 
 class AttentionMasksByLayerIdx(dict[int, Any]):
@@ -102,6 +104,33 @@ def _get_cache_geometry(*, past_key_values: Any, query_length: Any, layer_idx: i
     return query_offset, key_value_length, key_value_offset
 
 
+def layer_consumes_attention_masks(
+    *, generic_modeling_state: _GenericModelingState, layer_idx: int, past_key_values: Cache | None
+) -> bool:
+    """Returns whether a member that uses the attention masks is left in layer `layer_idx` after its skips.
+
+    Raises:
+        `ValueError`: If such a member is left and `past_key_values` is set, but the layer has no key/value cache.
+    """
+    if layer_idx in generic_modeling_state.unconsumed_attention_mask_layers:
+        # The skips replaced every attention mask consumer of this layer, so nothing left in the layer needs a mask
+        return False
+
+    if past_key_values is not None and KEY_VALUE_CACHE in (
+        generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())
+    ):
+        # An attention mask consumer remains in this layer. However, with a cache, the mask factories take the size
+        # of each layer's mask from its key/value cache, and this layer has no key/value cache.
+        raise ValueError(
+            f"Layer {layer_idx} still has an attention mask consumer, but its skips replaced every writer of its "
+            "key/value cache, so there is no cache entry to build its attention mask from. If the heterogeneous "
+            "modeling spec lists the wrong members in `attention_mask_consumers` or `cache_writers`, fix it. "
+            "Otherwise, also skip the attention mask consumers, or run without a cache."
+        )
+
+    return True
+
+
 def _create_attention_masks_by_layer_idx(
     *,
     create_mask_fn: Callable,
@@ -119,22 +148,11 @@ def _create_attention_masks_by_layer_idx(
     generic_modeling_state = heterogeneity_spec.generic_modeling_state
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
-        if layer_idx in generic_modeling_state.unconsumed_attention_mask_layers:
-            # The skips replaced every attention mask consumer of this layer, so nothing left in the layer needs it
+        if not layer_consumes_attention_masks(
+            generic_modeling_state=generic_modeling_state, layer_idx=layer_idx, past_key_values=past_key_values
+        ):
             attention_masks[layer_idx] = None
             continue
-
-        if past_key_values is not None and KEY_VALUE_CACHE in (
-            generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())
-        ):
-            # An attention mask consumer remains in this layer. However, with a cache, the mask factories take the size
-            # of each layer's mask from its key/value cache, and this layer has no key/value cache.
-            raise ValueError(
-                f"Layer {layer_idx} still has an attention mask consumer, but its skips replaced every writer of its "
-                "key/value cache, so there is no cache entry to build its attention mask from. If the heterogeneous "
-                "modeling spec lists the wrong members in `attention_mask_consumers` or `cache_writers`, fix it. "
-                "Otherwise, also skip the attention mask consumers, or run without a cache."
-            )
 
         # Building the model created every layer's config
         layer_config = heterogeneity_spec.layer_configs[layer_idx]

@@ -1388,7 +1388,7 @@ class MTPCandidateGenerator(CandidateGenerator):
         self.mtp_model = MtpModel.from_pretrained(main_model, device_map={"": self.device})
 
         # Create the mtp cache and allow it to keep its past before we crop it
-        self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
+        self.mtp_cache = MtpCache(config=self.mtp_model.config)
         self.mtp_cache.activate_past_recording()
 
         # Save those to know how to decode mtp tokens

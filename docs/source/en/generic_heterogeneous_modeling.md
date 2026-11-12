@@ -287,7 +287,6 @@ model type, add a spec factory to `MODEL_TYPE_TO_SPEC_FACTORY`.
 
 ## Known limitations
 
-- MTP layers, configured with `mtp_per_layer_config`, support per-layer attribute overrides but not `skip`.
 - Encoder-decoder models have these limitations:
   - Some styles of defining encoder-decoder models aren't supported:
     - One config for both the encoder and the decoder, as in BART, because a layer index then refers to two layers.

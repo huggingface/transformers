@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import dataclasses
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -26,6 +27,7 @@ from transformers.testing_utils import cleanup, is_torch_available, require_torc
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file, save_file
     from torch._dynamo.testing import CompileCounter
 
     from tests.heterogeneity.model_fixtures import MODEL_FIXTURES
@@ -391,7 +393,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(model.model.layers[1].mlp.gate_proj.out_features, 64)
 
     @parameterized.expand([("no_main_skips", []), ("main_layers_skipped", ["attention", "mlp"])])
-    def test_mtp_model_applies_per_layer_config(self, _, main_skips):
+    def test_mtp_model_applies_per_layer_config_and_skips(self, _, main_skips):
         config = tiny_llama_config(
             num_hidden_layers=2,
             per_layer_config={layer_idx: {"skip": main_skips} for layer_idx in range(2)} if main_skips else None,
@@ -399,7 +401,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         config.num_mtp_layers = 2
         config.mtp_per_layer_config = {
             0: {"intermediate_size": 64, "rms_norm_eps": 1e-5},
-            1: {"intermediate_size": 96},
+            1: {"intermediate_size": 96, "skip": ["attention"]},
         }
         main_model = build_model(config, LlamaForCausalLM)
 
@@ -410,18 +412,38 @@ class TestHeterogeneousModeling(unittest.TestCase):
         self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
         self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
         self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
+        self.assertEqual(list(mtp_model.layers[1].mtp_block.self_attn.parameters()), [])
         for layer in mtp_model.layers:
             for norm in (layer.enorm, layer.hnorm, layer.post_norm):
                 self.assertIsInstance(norm, LlamaRMSNorm)
 
-    def test_mtp_model_rejects_skip(self):
+    def test_mtp_drafting_with_mtp_skips(self):
         config = tiny_llama_config(num_hidden_layers=2)
         config.num_mtp_layers = 2
-        config.mtp_per_layer_config = {0: {"intermediate_size": 64}, 1: {"skip": ["attention"]}}
+        config.mtp_per_layer_config = {0: {"skip": ["mlp"]}, 1: {"skip": ["attention"]}}
         main_model = build_model(config, LlamaForCausalLM)
+        mtp_state_dict = {
+            f"mtp.{name}": weight
+            for name, weight in MtpModel(main_model, num_mtp_layers=2).state_dict().items()
+            if name not in ("embed_tokens.weight", "shared_head.weight")
+        }
+        input_ids = torch.tensor([[5, 6, 7, 8, 9, 10]])
 
-        with self.assertRaisesRegex(ValueError, r"MTP layers don't support `skip`.*layers \[1\]"):
-            MtpModel(main_model, num_mtp_layers=2)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            main_model.save_pretrained(tmp_dir)
+            weights_path = os.path.join(tmp_dir, "model.safetensors")
+            save_file({**load_file(weights_path), **mtp_state_dict}, weights_path)
+            with patch.object(LlamaForCausalLM, "_keys_to_ignore_on_load_unexpected", [r"^mtp."]):
+                model = LlamaForCausalLM.from_pretrained(tmp_dir).eval()
+                # `generate` creates its MTP model with this call, so the model checked here is identical to the one
+                # that drafts
+                mtp_model = MtpModel.from_pretrained(model)
+                self.assertEqual(list(mtp_model.layers[0].mtp_block.mlp.parameters()), [])
+                self.assertEqual(list(mtp_model.layers[1].mtp_block.self_attn.parameters()), [])
+
+                # This call must not raise. It raises if drafting creates a cache entry or an attention mask for MTP
+                # layer 1, which has no attention
+                model.generate(input_ids, use_mtp=True, do_sample=False, max_new_tokens=12, pad_token_id=0)
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = tiny_gpt_oss_config(num_hidden_layers=2, layer_types=["sliding_attention"] * 2, sliding_window=4)
@@ -588,6 +610,20 @@ class TestHeterogeneousCache(unittest.TestCase):
         # read from it
         with self.assertRaisesRegex(ValueError, "holds a key_value cache for layer 0"):
             model(dummy_input_ids(), past_key_values=DynamicCache(), use_cache=True)
+
+    def test_layer_with_mask_consumer_and_no_key_value_cache_raises(self):
+        config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
+        # With this spec, the attention skip leaves an attention mask consumer in the layer, but no cache writer
+        fixture = MODEL_FIXTURES["llama"]
+        spec = dataclasses.replace(fixture.spec_factory(), attention_mask_consumers=["self_attn", "mlp"])
+        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
+            model = build_model(config, LlamaForCausalLM)
+        input_ids = dummy_input_ids()
+
+        # The mask of layer 0 can only be built without a cache
+        model(input_ids, use_cache=False)
+        with self.assertRaisesRegex(ValueError, "Layer 0 still has an attention mask consumer"):
+            model(input_ids, use_cache=True)
 
     def test_model_with_several_layer_classes(self):
         config = _tiny_jamba_config(

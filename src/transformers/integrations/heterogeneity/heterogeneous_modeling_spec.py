@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
@@ -146,6 +147,40 @@ class HeterogeneousModelingSpec:
                 for member_key, caches in (self.cache_writers or {}).items()
             },
         )
+
+
+def _nest_member_key(member_key: MemberKey, parent_path: str) -> MemberKey:
+    if isinstance(member_key, tuple):
+        member_path, member_cls = member_key
+        return f"{parent_path}.{member_path}", member_cls
+    return f"{parent_path}.{member_key}"
+
+
+def get_wrapper_layer_spec(
+    spec: HeterogeneousModelingSpec,
+    *,
+    wrapper_cls: type[nn.Module],
+    wrapped_layer_path: str,
+    layer_idx_resolver: LayerIdxResolver,
+) -> HeterogeneousModelingSpec:
+    """Return the spec of `wrapper_cls`, a layer class that holds a layer of `spec.layer_cls` at `wrapped_layer_path`.
+
+    The returned spec is a copy of `spec` with every member path nested under `wrapped_layer_path`. For example, with
+    `wrapped_layer_path="mtp_block"`, `"self_attn"` becomes `"mtp_block.self_attn"`.
+    """
+    return dataclasses.replace(
+        spec,
+        layer_cls=wrapper_cls,
+        layer_idx_resolver=layer_idx_resolver,
+        skip_descriptors={
+            skip_type: {_nest_member_key(key, wrapped_layer_path): factory for key, factory in descriptor.items()}
+            for skip_type, descriptor in spec.skip_descriptors.items()
+        },
+        attention_mask_consumers=[_nest_member_key(key, wrapped_layer_path) for key in spec.attention_mask_consumers],
+        cache_writers={
+            _nest_member_key(key, wrapped_layer_path): caches for key, caches in spec.cache_writers.items()
+        },
+    )
 
 
 def get_heterogeneous_modeling_specs(model: PreTrainedModel) -> tuple[HeterogeneousModelingSpec, ...]:

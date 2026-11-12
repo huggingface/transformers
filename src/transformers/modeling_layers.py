@@ -32,6 +32,8 @@ from .integrations.heterogeneity import (
     LayerIdxFromArgument,
     get_heterogeneous_modeling_specs,
 )
+from .integrations.heterogeneity.heterogeneous_modeling_spec import get_wrapper_layer_spec
+from .integrations.heterogeneity.masking_utils import layer_consumes_attention_masks
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
     BaseModelOutputWithPast,
@@ -363,22 +365,20 @@ class MtpLayer(nn.Module):
         return hidden_states
 
 
-def _get_mtp_heterogeneous_modeling_spec(
-    main_model: PreTrainedModel, mtp_config: PreTrainedConfig
-) -> HeterogeneousModelingSpec | None:
-    if not get_heterogeneous_modeling_specs(main_model):
+def _get_mtp_heterogeneous_modeling_spec(main_model: PreTrainedModel) -> HeterogeneousModelingSpec | None:
+    mtp_block_cls = type(main_model.get_decoder().layers[-1])
+    main_spec = next(
+        (spec for spec in get_heterogeneous_modeling_specs(main_model) if spec.layer_cls is mtp_block_cls), None
+    )
+    if main_spec is None:
         return None
 
-    # MTP layers support per-layer attribute overrides but not `skip`, so the spec has no skip descriptors
-    skipping_layers = [
-        layer_idx for layer_idx, layer_config in enumerate(mtp_config.per_layer_config) if layer_config.skip
-    ]
-    if skipping_layers:
-        raise ValueError(
-            f"MTP layers don't support `skip`, but `mtp_per_layer_config` sets it for layers {skipping_layers}."
-        )
-
-    return HeterogeneousModelingSpec(layer_cls=MtpLayer, layer_idx_resolver=LayerIdxFromArgument("layer_idx"))
+    return get_wrapper_layer_spec(
+        main_spec,
+        wrapper_cls=MtpLayer,
+        wrapped_layer_path="mtp_block",
+        layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+    )
 
 
 class MtpModel(PreTrainedModel):
@@ -395,7 +395,7 @@ class MtpModel(PreTrainedModel):
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         mtp_config = main_model.config.get_mtp_config()
         if mtp_config.is_heterogeneous:
-            self._heterogeneous_modeling_spec = _get_mtp_heterogeneous_modeling_spec(main_model, mtp_config)
+            self._heterogeneous_modeling_spec = _get_mtp_heterogeneous_modeling_spec(main_model)
         super().__init__(mtp_config)
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"
@@ -472,6 +472,16 @@ class MtpModel(PreTrainedModel):
         Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_types` from the MTP config
         if defined, and otherwise uses full attention.
         """
+        # Support generic heterogeneous modeling: a layer left without attention mask consumers gets `None` for each mask
+        layer_consumes_masks = (
+            not self.config.generic_heterogeneous_modeling_applied
+            or layer_consumes_attention_masks(
+                generic_modeling_state=self.config._heterogeneity_spec.generic_modeling_state,
+                layer_idx=layer_idx,
+                past_key_values=mtp_cache,
+            )
+        )
+
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
         layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
@@ -492,11 +502,11 @@ class MtpModel(PreTrainedModel):
             # Some `mtp_layer_type` may point to several needed mask, e.g. `hybrid`
             if isinstance(mask_function, dict):
                 for actual_pattern, actual_function in mask_function.items():
-                    masks[actual_pattern] = actual_function(**mask_kwargs)
+                    masks[actual_pattern] = actual_function(**mask_kwargs) if layer_consumes_masks else None
             else:
-                masks[mtp_layer_type] = mask_function(**mask_kwargs)
+                masks[mtp_layer_type] = mask_function(**mask_kwargs) if layer_consumes_masks else None
         else:
-            masks["full_attention"] = create_causal_mask(**mask_kwargs)
+            masks["full_attention"] = create_causal_mask(**mask_kwargs) if layer_consumes_masks else None
 
         if len(masks) > 2:
             raise ValueError("You should have at most 2 masks, 1 for attention, and 1 for linear attention")
