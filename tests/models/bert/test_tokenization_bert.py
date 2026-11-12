@@ -15,6 +15,8 @@
 
 import unittest
 
+from tokenizers import decoders
+
 from transformers.models.bert.tokenization_bert import (
     BertTokenizer,
 )
@@ -36,7 +38,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_decode_batch_uses_tokenizer_cleanup_setting(self):
         tokenizer = self.get_tokenizer(clean_up_tokenization_spaces=True)
         token_ids = tokenizer.encode("hello , world !", add_special_tokens=False)
-        tokenizer.backend_tokenizer.decoder.cleanup = False
+        tokenizer.backend_tokenizer.decoder = decoders.WordPiece(cleanup=False)
 
         self.assertEqual(tokenizer.decode(token_ids), "hello, world!")
         self.assertEqual(tokenizer.decode([token_ids]), ["hello, world!"])
