@@ -274,6 +274,10 @@ class Inkling2RMSNorm(Olmo2RMSNorm):
     pass
 
 
+class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
+    pass
+
+
 class Inkling2L2Clip(nn.Module):
     """Scales each head vector down to `threshold` when its L2 norm is larger; shorter vectors are unchanged."""
 
@@ -445,6 +449,7 @@ class Inkling2SlidingAttention(InklingAttention):
         self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
         del self.q_norm
         del self.k_norm
 
@@ -478,7 +483,8 @@ class Inkling2SlidingAttention(InklingAttention):
 
         query_states = self.q_l2_clip(query_states.view(hidden_shape)).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
+        value_states = value_states.view(hidden_shape)
+        value_states = self.v_norm(value_states.float()).to(value_states.dtype)
         value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
 
@@ -536,6 +542,7 @@ class Inkling2FullAttention(InklingAttention):
         self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
         del self.q_norm
         del self.k_norm
 
@@ -592,7 +599,8 @@ class Inkling2FullAttention(InklingAttention):
         query_states = self.q_l2_clip(query_states.view(hidden_shape))
         query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
+        value_states = value_states.view(hidden_shape)
+        value_states = self.v_norm(value_states.float()).to(value_states.dtype)
         value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
         relative_states = (relative_states.float() * tau).to(relative_states.dtype)
@@ -690,10 +698,6 @@ class Inkling2TopKRouter(DeepseekV4TopKRouter):
 
 
 class Inkling2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
-    pass
-
-
-class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
     pass
 
 
@@ -1195,9 +1199,7 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
             cu_seqlens = F.pad((patches_per_image + 1).cumsum(0), (1, 0)).to(torch.int32)
         # sequence index of every patch, skipping the class token in front of each image
         image_ids = torch.arange(1, patch_grid_thw.shape[0] + 1)
-        patch_index = torch.arange(num_patches) + torch.repeat_interleave(
-            image_ids, patches_per_image, output_size=num_patches
-        )
+        patch_index = torch.arange(num_patches) + torch.repeat_interleave(image_ids, patches_per_image)
         patch_index = patch_index.to(device, non_blocking=True)
 
         pixel_values = pixel_values.to(self.embeddings.patch_embedding.weight.dtype)
