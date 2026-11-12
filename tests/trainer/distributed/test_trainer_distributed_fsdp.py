@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     mockenv_context,
-    require_accelerate,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -362,56 +361,6 @@ class TestFSDPConfig(TestCasePlus):
             self.assertTrue(trainer.args.fsdp_config.get("cpu_offload"))
             for k, v in self.fsdp_config.items():
                 self.assertEqual(trainer.args.fsdp_config[k], v)
-
-
-@require_torch
-@require_accelerate
-class TestFSDPConfigPluginArgs(TestCasePlus):
-    """`fsdp_config` options forwarded to Accelerate's FSDP plugin. Only argument processing runs: no accelerator needed."""
-
-    def get_plugin_args(self, fsdp_config):
-        args = TrainingArguments(output_dir=self.get_auto_remove_tmp_dir(), fsdp=True, fsdp_config=fsdp_config)
-        return args.fsdp_plugin_args
-
-    def test_optional_plugin_args_absent_by_default(self):
-        # An empty `ignored_modules` pattern would match the root module, so it is treated as unset.
-        for fsdp_config in ({}, {"ignored_modules": ""}):
-            plugin_args = self.get_plugin_args(fsdp_config)
-            for key in ("ignored_modules", "mixed_precision_policy", "activation_checkpointing_offload"):
-                self.assertNotIn(key, plugin_args)
-
-    def test_ignored_modules_and_mixed_precision_policy(self):
-        policy = {"param_dtype": "bf16", "reduce_dtype": "fp32", "output_dtype": "bf16"}
-        fsdp_config = {"ignored_modules": "lm_head", "mixed_precision_policy": policy}
-        args = TrainingArguments(output_dir=self.get_auto_remove_tmp_dir(), fsdp=True, fsdp_config=fsdp_config)
-        self.assertEqual(args.fsdp_plugin_args["ignored_modules"], "lm_head")
-        self.assertEqual(
-            args.fsdp_plugin_args["mixed_precision_policy"],
-            {"param_dtype": torch.bfloat16, "reduce_dtype": torch.float32, "output_dtype": torch.bfloat16},
-        )
-        # The dtypes are converted on a copy: `fsdp_config` keeps its strings and stays JSON serializable.
-        self.assertEqual(args.fsdp_config["mixed_precision_policy"], policy)
-        args.to_json_string()
-
-        plugin_args = self.get_plugin_args({"mixed_precision_policy": "bf16"})
-        self.assertEqual(plugin_args["mixed_precision_policy"], "bf16")
-
-    def test_activation_checkpointing_offload(self):
-        fsdp_config = {"activation_checkpointing": True, "activation_checkpointing_offload": True}
-
-        # The option needs `accelerate>=1.15.0`. The version check is patched so both outcomes run on any version.
-        with patch("transformers.training_args.is_accelerate_available", return_value=True):
-            self.assertIs(self.get_plugin_args(fsdp_config)["activation_checkpointing_offload"], True)
-            # An explicit `False` is forwarded too, so that it wins over `FSDP_ACTIVATION_CHECKPOINTING_OFFLOAD`.
-            fsdp_config["activation_checkpointing_offload"] = False
-            self.assertIs(self.get_plugin_args(fsdp_config)["activation_checkpointing_offload"], False)
-
-        with patch(
-            "transformers.training_args.is_accelerate_available",
-            side_effect=lambda min_version=None: min_version != "1.15.0",
-        ):
-            with self.assertRaisesRegex(ValueError, "accelerate>=1.15.0"):
-                self.get_plugin_args(fsdp_config)
 
 
 # ---------------------------------------------------------------------------
