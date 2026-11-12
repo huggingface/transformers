@@ -268,7 +268,6 @@ src/transformers/models/inkling/modeling_*.py linguist-generated=true
 src/transformers/models/instructblipvideo/configuration_*.py linguist-generated=true
 src/transformers/models/instructblipvideo/modeling_*.py linguist-generated=true
 src/transformers/models/internlm3/configuration_*.py linguist-generated=true
-src/transformers/models/internlm3/modeling_*.py linguist-generated=true
 src/transformers/models/internvl/modeling_*.py linguist-generated=true
 src/transformers/models/jais2/configuration_*.py linguist-generated=true
 src/transformers/models/jais2/modeling_*.py linguist-generated=true
