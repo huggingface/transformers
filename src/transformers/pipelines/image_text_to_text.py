@@ -352,8 +352,17 @@ class ImageTextToTextPipeline(Pipeline):
                 chat_template_kwargs = {
                     k: v
                     for k, v in chat_template_kwargs.items()
-                    if k != "processor_kwargs"
-                    and (k not in processing_kwargs or k in ("padding", "truncation", "max_length"))
+                    if k
+                    in (
+                        "continue_final_message",
+                        "add_generation_prompt",
+                        "tokenize",
+                        "return_dict",
+                        "return_tensors",
+                        "padding",
+                        "truncation",
+                        "max_length",
+                    )
                 }
 
             model_inputs = self.processor.apply_chat_template(
