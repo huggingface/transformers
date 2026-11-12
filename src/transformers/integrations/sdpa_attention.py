@@ -4,7 +4,7 @@ import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
 from ..utils import is_torch_mps_available, is_torch_npu_available, is_torch_xpu_available, logging
-from ..utils.import_utils import is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_greater_or_equal, is_torchdynamo_compiling
 
 
 logger = logging.get_logger(__name__)
@@ -129,7 +129,7 @@ def sdpa_attention_forward(
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
         if use_gqa_in_sdpa(attention_mask, key, value):
             sdpa_kwargs["enable_gqa"] = True
-        elif q_length == 1:
+        elif q_length == 1 and not is_torchdynamo_compiling():
             query = pack_gqa(query, module.num_key_value_groups)
             attention_mask = pack_gqa(attention_mask, module.num_key_value_groups)
             position_bias = pack_gqa(position_bias, module.num_key_value_groups)

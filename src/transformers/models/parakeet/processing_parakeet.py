@@ -19,30 +19,27 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-            "subsampling_factor": 8,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_attention_mask": True,
+        "subsampling_factor": 8,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, feature_extractor, tokenizer, blank_token="<blank>", decoder_type=None):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
@@ -76,7 +73,7 @@ class ParakeetProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[ParakeetProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -88,7 +85,6 @@ class ParakeetProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            ParakeetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -143,7 +139,6 @@ class ParakeetProcessor(ProcessorMixin):
             timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
-                ParakeetProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
@@ -197,5 +192,7 @@ class ParakeetProcessor(ProcessorMixin):
 
         return char_offsets
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ParakeetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["ParakeetProcessor"]

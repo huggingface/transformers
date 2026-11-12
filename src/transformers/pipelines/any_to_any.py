@@ -143,8 +143,6 @@ class AnyToAnyPipeline(Pipeline):
         if "image" in self.model.input_modalities or "video" in self.model.input_modalities:
             requires_backends(self, "vision")
             requires_backends(self, "torchvision")
-        if "audio" in self.model.input_modalities:
-            requires_backends(self, "librosa")
         self.check_model_type(MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES)
 
     def _sanitize_parameters(
@@ -233,6 +231,8 @@ class AnyToAnyPipeline(Pipeline):
         if skip_special_tokens is not None:
             postprocess_params["skip_special_tokens"] = skip_special_tokens
         postprocess_params["generation_mode"] = generation_mode
+        if "tools" in kwargs:
+            postprocess_params["tools"] = kwargs["tools"]
         return preprocess_params, forward_kwargs, postprocess_params
 
     @overload
@@ -439,6 +439,7 @@ class AnyToAnyPipeline(Pipeline):
         return_type=None,
         continue_final_message=None,
         skip_special_tokens=None,
+        tools=None,
         **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
@@ -514,7 +515,9 @@ class AnyToAnyPipeline(Pipeline):
                             # New-style templates need to see the prompt as `prefix`, because chat
                             # templates often pre-write part of the assistant message (e.g. an
                             # opening <think> tag), which affects parsing.
-                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                            assistant_message = self.tokenizer.parse_response(
+                                generated_text, prefix=decoded_input, tools=tools
+                            )
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
                         generated_text = list(prompt_text.messages) + [assistant_message]
