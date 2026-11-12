@@ -947,7 +947,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | MoeModelOutputWithPast:
@@ -1185,7 +1185,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1209,7 +1209,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1223,9 +1223,9 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1319,9 +1319,9 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -1420,6 +1420,9 @@ def load_balancing_loss_func(
     # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
     # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
     compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
     tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     total_rows = 0.0
@@ -1432,9 +1435,9 @@ def load_balancing_loss_func(
         routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
         _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
         if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
             )
             # Sum of routing probabilities per expert
             router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
@@ -1472,12 +1475,12 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
@@ -1485,12 +1488,12 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
@@ -1503,10 +1506,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -1606,11 +1609,14 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
 
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        # Early exit in case we are continuing generation from past kv
+        # Early exit in case we are continuing generation from past kv. The stored `rope_deltas` come from an earlier
+        # call, so if the uncached tokens hold new images or videos their 3D positions have to be computed below.
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.model.rope_deltas is not None:
+        mm_token_type_ids = model_kwargs.get("mm_token_type_ids")
+        has_new_vision_tokens = mm_token_type_ids is not None and bool(mm_token_type_ids[:, past_length:].any())
+        if past_length != 0 and self.model.rope_deltas is not None and not has_new_vision_tokens:
             position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 

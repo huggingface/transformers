@@ -242,7 +242,7 @@ def causal_conv1d_fn(
 
 # NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
 # with the GatedRMSNorm, maybe we can make that change as well.
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+def l2norm(x: torch.Tensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
     return x * inv_norm
@@ -279,11 +279,16 @@ def torch_chunk_gated_delta_rule(
         - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
+    batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
     recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
     padded_output_shape = (batch_size, num_v_heads, -1, v_head_dim)  # -1 is the padded sequence length
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if num_k_heads != num_v_heads:
+        query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, decay = [
@@ -401,9 +406,14 @@ def torch_recurrent_gated_delta_rule(
     Same args and return value as torch_chunk_gated_delta_rule, except for `chunk_size` because the sequence dim is not
     chunked."""
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
+    batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+
+    # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
+    if num_k_heads != num_v_heads:
+        query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, decay = [
@@ -570,9 +580,6 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
-            query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
-            key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
         if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
@@ -1268,7 +1275,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         if self.ple is not None:
             hidden_states = hidden_states + self.ple(
                 hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
@@ -1379,7 +1386,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         ple_input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1530,6 +1537,9 @@ def load_balancing_loss_func(
     # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
     # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
     compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
     tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     total_rows = 0.0
@@ -1542,9 +1552,9 @@ def load_balancing_loss_func(
         routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
         _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
         if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
             )
             # Sum of routing probabilities per expert
             router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
@@ -1593,7 +1603,7 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
@@ -2156,7 +2166,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -2168,7 +2178,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -2182,9 +2192,9 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -2277,9 +2287,9 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -2378,12 +2388,12 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
@@ -2391,12 +2401,12 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
@@ -2409,10 +2419,10 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -2520,11 +2530,14 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
 
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        # Early exit in case we are continuing generation from past kv
+        # Early exit in case we are continuing generation from past kv. The stored `rope_deltas` come from an earlier
+        # call, so if the uncached tokens hold new images or videos their 3D positions have to be computed below.
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.model.rope_deltas is not None:
+        mm_token_type_ids = model_kwargs.get("mm_token_type_ids")
+        has_new_vision_tokens = mm_token_type_ids is not None and bool(mm_token_type_ids[:, past_length:].any())
+        if past_length != 0 and self.model.rope_deltas is not None and not has_new_vision_tokens:
             position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 

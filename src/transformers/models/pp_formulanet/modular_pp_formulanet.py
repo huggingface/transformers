@@ -42,6 +42,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..florence2.modeling_florence2 import Florence2ForConditionalGeneration
@@ -131,10 +132,6 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
 
 
 # Don't copy default values from Nougat!
-class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 class PPFormulaNetProcessor(NougatProcessor):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
@@ -161,7 +158,7 @@ class PPFormulaNetProcessor(NougatProcessor):
     def __call__(
         self,
         images: ImageInput,
-        **kwargs: Unpack[PPFormulaNetProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -174,7 +171,6 @@ class PPFormulaNetProcessor(NougatProcessor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -325,7 +321,7 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -346,7 +342,10 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
 
 @auto_docstring
 class PPFormulaNetTextModel(MBartDecoder):
-    pass
+    config: PPFormulaNetTextConfig
+
+    def __init__(self, config: PPFormulaNetTextConfig):
+        super().__init__(config)
 
 
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
@@ -362,16 +361,16 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor
+        inputs_embeds: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
@@ -425,15 +424,15 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -520,6 +519,8 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PPFormulaNetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "PPFormulaNetProcessor",

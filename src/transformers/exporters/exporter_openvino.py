@@ -31,31 +31,40 @@ Extends [`DynamoExporter`] with the stages that turn an ``ExportedProgram`` into
 4. **Conversion**: the prepared module is decoded via ``TorchFXPythonDecoder`` and handed to
    ``openvino.convert_model`` together with the custom ``ConversionExtension``\\ s for ops
    without a built-in OV lowering. Ports are then renamed to their dotted leaf paths and
-   non-tensor inputs repaired.
+   non-tensor inputs repaired. A bf16/fp16 model is traced with f32 activations and 16-bit
+   weights (see "16-bit models" below).
 5. **Stateful transformation** (``OpenVINOConfig.stateful``, on by default): fold
    round-tripped state tensors (KV cache, SSM states, …) into internal OV variables with a
-   fused ``beam_idx`` reorder. Optionally written to disk via ``openvino.save_model`` when
-   ``OpenVINOConfig.output_path`` is set.
+   fused ``beam_idx`` reorder.
 """
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import math
 import operator
 import re
 from collections.abc import Mapping, MutableMapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..utils import logging
-from ..utils.import_utils import is_openvino_available, is_torch_available
-from .configs import OpenVINOConfig
+from ..utils.import_utils import is_openvino_available, is_openvino_greater_or_equal, is_torch_available
+from .configs import ExportFormat, OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
-from .exporter_onnx import disambiguate_io_names, patch_model_outputs
+from .metadata import ExportMetadata, record_output_structure
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    cast_leaf_tensors,
+    disambiguate_io_names,
+    drop_runtime_asserts,
     get_leaf_tensors,
+    module_device,
+    module_dtype,
+    patch_model_outputs,
+    quantize_converted_model,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -67,19 +76,22 @@ if is_torch_available():
     from torch.export import ExportedProgram
     from torch.export.decomp_utils import CustomDecompTable
 
+    from ..integrations.moe import _default_apply_gate
+    from ..integrations.sdpa_attention import repeat_kv
+    from ..modeling_utils import PreTrainedModel
+
 
 if is_openvino_available():
     import numpy as np
     import openvino
     import openvino.opset14 as ov_ops
-    from openvino._offline_transformations import apply_make_stateful_transformation
+    from openvino._offline_transformations import apply_make_stateful_transformation, compress_model_transformation
     from openvino.frontend.pytorch import ConversionExtension
     from openvino.frontend.pytorch.fx_decoder import TorchFXPythonDecoder
-    from openvino.frontend.pytorch.torchdynamo.export_decompositions import ops_to_not_decompose
 
-
-if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
+    # OpenVINO 2026.5 converts exported programs without decomposing them, and drops its decomposition table.
+    if not is_openvino_greater_or_equal("2026.5", accept_dev=True):
+        from openvino.frontend.pytorch.torchdynamo.export_decompositions import ops_to_not_decompose
 
 
 logger = logging.get_logger(__name__)
@@ -94,52 +106,81 @@ class OpenVINOExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_openvino import OpenVINOExporter, OpenVINOConfig
 
     >>> exporter = OpenVINOExporter()
-    >>> ov_model = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
-    >>> exporter.export(model, inputs, config=OpenVINOConfig(output_path="model.xml"))
+    >>> exported = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
+    >>> outputs = exported(**inputs)  # on OpenVINO
+    >>> ov_model = exported.program  # an `openvino.Model`
+    >>> exported.save_pretrained("exported")  # `openvino_model.xml` + `.bin`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.OPENVINO
+    config_class = OpenVINOConfig
+    program_suffix = ".xml"
+    program_prefix = "openvino_"
 
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
 
-    def export(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: OpenVINOConfig | dict[str, Any],
-    ) -> openvino.Model:
-        if isinstance(config, dict):
-            config = OpenVINOConfig(**config)
-        elif type(config) is not OpenVINOConfig:
-            raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
-
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
-
-        exported_program, graph_module = _fix_exported_program(exported_program)
-        ov_model = _convert_to_openvino(graph_module)
+        config: OpenVINOConfig,
+    ) -> tuple[openvino.Model, ExportMetadata]:
+        # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
+        with (
+            apply_patches("openvino"),
+            patch_16bit_model(model, sample_inputs) as sample_inputs,
+            patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
+        ):
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
+            # Converted before the model gets its dtypes back: the program's constants are its own tensors.
+            exported_program, graph_module = _fix_exported_program(exported_program)
+            ov_model = _convert_to_openvino(graph_module)
 
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
 
         # Before the state folding, so calibration feeds each sample's cache as an input instead of empty state.
-        quantizer = config.quantizer
-        if quantizer is not None and not quantizer.quantizes_fx_graph:
-            ov_model = quantizer.quantize(ov_model, sample_inputs, config.export_format)
+        ov_model = quantize_converted_model(ov_model, sample_inputs, config)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
 
-        if config.output_path is not None:
-            openvino.save_model(ov_model, config.output_path, compress_to_fp16=config.compress_to_fp16)
+        if config.compress_to_fp16:
+            compress_model_transformation(ov_model)
 
-        return ov_model
+        _record_runtime_precision(ov_model, model)
+        record_output_structure(metadata, traced_outputs[-1])
+        return ov_model, metadata
+
+    @classmethod
+    def save_program(cls, program: openvino.Model, path) -> None:
+        """Write the `.xml` graph and `.bin` weights at the precision the model already holds (`save_model` would
+        otherwise halve `float32` weights on its own)."""
+        openvino.save_model(program, str(path), compress_to_fp16=False)
+
+    @classmethod
+    def program_files(cls, filename: str) -> list[str]:
+        """The `.xml` graph and its `.bin` weights."""
+        return [filename, f"{filename.removesuffix('.xml')}.bin"]
+
+    @classmethod
+    def load_program(cls, path) -> openvino.Model:
+        return openvino.Core().read_model(str(path))
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
 # Small helpers for ``OpenVINOExporter.export`` — extracted for readability and so each stage
 # of the conversion has a single responsibility.
+
+
+def _record_runtime_precision(ov_model: openvino.Model, model: PreTrainedModel) -> None:
+    """Record the model's precision as the graph's compile options; the trace ran in float32 (`patch_16bit_model`)."""
+    precision = {torch.float16: "f16", torch.bfloat16: "bf16"}.get(module_dtype(model), "f32")
+    for option in ("INFERENCE_PRECISION_HINT", "KV_CACHE_PRECISION"):
+        ov_model.set_rt_info(precision, ["runtime_options", option])
 
 
 def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:
@@ -150,7 +191,7 @@ def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedPr
     discarding every fix applied here. Both are returned because ``_make_stateful`` reads the program
     while the port fixes read the module.
     """
-    _drop_runtime_asserts(exported_program.graph_module)
+    drop_runtime_asserts(exported_program)
     exported_program = _run_openvino_decompositions(exported_program)
     apply_fx_program_fixes("openvino", exported_program)
     graph_module = exported_program.module()
@@ -191,7 +232,26 @@ def _convert_to_openvino(graph_module) -> openvino.Model:
     decoder._input_signature = [node.name for node in graph_module.graph.nodes if node.op == "placeholder"]
     ov_model = openvino.convert_model(decoder, extension=_OV_CONVERSION_EXTENSIONS)
     _fix_non_tensor_inputs(ov_model, graph_module)
+    _use_numpy_broadcasts(ov_model)
     return ov_model
+
+
+def _use_numpy_broadcasts(ov_model: openvino.Model) -> None:
+    """Turn the frontend's bidirectional `Broadcast`s (`aten.expand`, as in `repeat_kv`) into numpy ones to the shape
+    they produce. The CPU plugin runs bidirectional ones in float32 reference code. Rank-adding expands are kept."""
+    for node in ov_model.get_ordered_ops():
+        if node.get_type_name() != "Broadcast" or node.get_attributes().get("mode") != "bidirectional":
+            continue
+        source, target = node.input_value(0), node.input_value(1)
+        rank, target_shape = source.get_partial_shape().rank, target.get_partial_shape()
+        if rank.is_dynamic or target_shape.is_dynamic or target_shape[0].get_length() != rank.get_length():
+            continue
+        source_shape = ov_ops.shape_of(source, output_type="i64")
+        shape = ov_ops.select(ov_ops.equal(source_shape, 1), ov_ops.convert(target, "i64"), source_shape)
+        broadcast = ov_ops.broadcast(source, shape, broadcast_spec="NUMPY")
+        broadcast.set_friendly_name(node.get_friendly_name())
+        node.output(0).replace(broadcast.output(0))
+    ov_model.validate_nodes_and_infer_types()
 
 
 def _lookup_by_port(port, by_name: Mapping[str, Any]):
@@ -292,6 +352,109 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
         ov_model.validate_nodes_and_infer_types()
 
 
+# ── 16-bit models ──────────────────────────────────────────────────────────
+# OV's CPU plugin fuses its kernels on f32-typed graphs and picks the inference precision itself
+# (bf16 on CPUs with AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the
+# compressed-weight matmuls of an NNCF int8/int4 graph. So, as OV's own `__make_16bit_traceable`
+# does, a bf16/fp16 model is traced with f32 activations while its linear and embedding weights stay
+# 16-bit: the patched `nn.Linear` / `nn.Embedding` / MoE experts forwards cast them to f32 inside the graph, so they
+# land in the OV model as a 16-bit constant and a `Convert`, which the plugin decompresses inside its
+# matmuls, without the weights ever being copied.
+
+
+@contextlib.contextmanager
+def patch_16bit_model(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
+    """Trace a bf16/fp16 model with f32 activations and 16-bit weights, yielding f32 copies of the inputs. The model gets
+    its dtypes back afterwards."""
+    half = (torch.bfloat16, torch.float16)
+
+    set_aside = []
+    for module in model.modules():
+        for name in _16bit_parameter_names(module):
+            parameter = getattr(module, name, None)
+            if parameter is not None and parameter.dtype in half:
+                set_aside.append((module, name, parameter))
+    set_aside_ids = {id(parameter) for _, _, parameter in set_aside}
+
+    # The other 16-bit tensors (norms, ...) are small: upcast for the trace, each slot holding an f32 copy. Not through
+    # `.data`: a view keeps its 16-bit base, which `torch.export` replays when it fakifies the parameters (a loaded
+    # checkpoint's `layer_scalar` is one). A tensor shared between modules gets one copy.
+    upcast = []
+    for module in model.modules():
+        for slots in (module._parameters, module._buffers):
+            for name, tensor in slots.items():
+                if tensor is not None and tensor.dtype in half and id(tensor) not in set_aside_ids:
+                    upcast.append((slots, name, tensor))
+
+    # The configs too: masks and caches the forward builds take their dtype from them.
+    configs = []
+    for config in _configs(model):
+        if getattr(config, "dtype", None) in half:
+            configs.append((config, config.dtype))
+
+    if not set_aside and not upcast:
+        yield sample_inputs
+        return
+
+    for module, name, parameter in set_aside:
+        module.register_parameter(f"_16bit_{name}", parameter)
+        # An f32 placeholder broadcasting a single zero: code reading `weight.dtype` sees f32, at no memory cost.
+        placeholder = torch.zeros((), device=parameter.device).expand(parameter.shape)
+        setattr(module, name, torch.nn.Parameter(placeholder, requires_grad=False))
+    copies = {}
+    for slots, name, tensor in upcast:
+        if id(tensor) not in copies:
+            upcast_tensor = tensor.detach().float()
+            if isinstance(tensor, torch.nn.Parameter):
+                upcast_tensor = torch.nn.Parameter(upcast_tensor, requires_grad=False)
+            copies[id(tensor)] = upcast_tensor
+        slots[name] = copies[id(tensor)]
+    for config, _ in configs:
+        config.dtype = torch.float32
+
+    try:
+        # A copy: casting rewrites dicts and caches in place, and the caller's inputs stay theirs.
+        yield cast_leaf_tensors(copy.deepcopy(sample_inputs), torch.float32, module_device(model))
+    finally:
+        for module, name, parameter in set_aside:
+            setattr(module, name, parameter)
+            del module._parameters[f"_16bit_{name}"]
+        for slots, name, tensor in upcast:
+            slots[name] = tensor
+        for config, dtype in configs:
+            config.dtype = dtype
+
+
+def _16bit_parameter_names(module: torch.nn.Module) -> tuple[str, ...]:
+    """The parameters of `module` that stay 16-bit through [`patch_16bit_model`]: the patched forwards cast them."""
+    if isinstance(module, (torch.nn.Linear, torch.nn.Embedding)):
+        return ("weight", "bias")
+    if hasattr(module, "has_gate") and hasattr(module, "is_transposed"):  # `@use_experts_implementation` experts
+        return ("gate_up_proj", "up_proj", "down_proj", "gate_up_proj_bias", "up_proj_bias", "down_proj_bias")
+    return ()
+
+
+def _16bit_parameter(module: torch.nn.Module, name: str) -> torch.Tensor | None:
+    """`module.<name>`, or the 16-bit parameter [`patch_16bit_model`] set aside in its place."""
+    return module._parameters.get(f"_16bit_{name}", getattr(module, name, None))
+
+
+def _configs(model: PreTrainedModel):
+    """Every config `model` holds, once: its pretrained models' (some, like T5's stacks, hold their own copy) and their
+    sub-configs (a multimodal model's text and vision ones)."""
+    pending = [module.config for module in model.modules() if isinstance(module, PreTrainedModel)]
+    seen = set()
+    while pending:
+        config = pending.pop()
+        if id(config) in seen:
+            continue
+        seen.add(id(config))
+        yield config
+        for name in getattr(config, "sub_configs", {}):
+            if getattr(config, name, None) is not None:
+                pending.append(getattr(config, name))
+
+
 # ── Stateful transformation ─────────────────────────────────────────────────
 # Folds round-tripped state tensors (KV cache, SSM conv/ssm states, …) into internal OV
 # ``ReadValue``/``Assign`` variables so the runtime carries them across ``infer()`` calls
@@ -354,7 +517,8 @@ def _state_init_dims(
     outputs_names: list[str],
 ) -> dict[str, list]:
     """Compute a per-dim init spec for every state input: ``"batch"`` (follow the main input's
-    batch at runtime), ``0`` (the growing dim — empty on first inference), or a concrete length.
+    batch at runtime), ``"grow"`` (the growing dim — empty on first inference), or a concrete length (a NoPE
+    layer's empty rotary cache keeps its ``0``).
 
     The growing dim is identified from the ``ExportedProgram``'s symbolic shapes: a state input
     dim whose SymInt expression differs from the paired output's (e.g. ``s2`` vs ``s2 + s3``)
@@ -391,7 +555,7 @@ def _state_init_dims(
             elif str(in_val.shape[axis]) == str(out_val.shape[axis]):
                 dims.append(int(sample.shape[axis]))
             else:
-                dims.append(0)
+                dims.append("grow")
         # ``apply_make_stateful_transformation`` names each variable by concatenating the input
         # and output tensor names — key the specs the same way for the ReadValue lookup.
         init_dims[f"{input_name}{output_name}"] = dims
@@ -463,7 +627,7 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
         if update_is_static:
             dims = [update_shape[axis].get_length() if d == "batch" else d for axis, d in enumerate(dims)]
         info = variables[op.get_variable_id()].get_info()
-        info.data_shape = openvino.PartialShape([-1 if d in ("batch", 0) else d for d in dims])
+        info.data_shape = openvino.PartialShape([-1 if d in ("batch", "grow") else d for d in dims])
         variables[op.get_variable_id()].update(info)
         # The growing dim's zero length is emitted as ``batch - batch`` rather than a literal
         # ``[0]``: the CPU plugin fuses single-consumer init subgraphs into
@@ -472,7 +636,7 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
         zero = ov_ops.subtract(batch, batch)
         shape = ov_ops.concat(
             [
-                batch if d == "batch" else zero if d == 0 else ov_ops.constant(np.array([d], dtype=np.int64))
+                batch if d == "batch" else zero if d == "grow" else ov_ops.constant(np.array([d], dtype=np.int64))
                 for d in dims
             ],
             axis=0,
@@ -551,13 +715,14 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
     """Reconcile each ``Assign``'s update shape with its variable's shape.
 
     The CPU plugin refuses to reorder dynamic descriptors into the state memory, so the two
-    sides must agree. When the update is fully static and the variable is not (a static trace
-    bakes the batch into the update while the variable was declared batch-dynamic), the variable
-    is pinned to the update's shape. Conversely, when shape inference leaves the update
-    under-specified against a static variable (olmo_hybrid's rolled conv state comes out
+    sides must agree. When the update fixes dims the variable leaves dynamic (a static trace bakes
+    the batch into the update, or a batch-1 sample's size-1 batch gets specialized), the variable
+    takes those dims: a Reshape between the KV-cache concat and its ``Assign`` would keep the CPU
+    plugin from fusing the cache into its attention. Conversely, when shape inference leaves the
+    update under-specified against a static variable dim (olmo_hybrid's rolled conv state comes out
     ``[?,32,2..]`` against a ``[?,32,3]`` variable), a ``special_zero`` Reshape pins the
-    statically-known dims and copies the dynamic ones from the input. Pinning a variable
-    refines shapes downstream (other updates read from it), so this iterates to a fixpoint.
+    statically-known dims and copies the dynamic ones from the input. Pinning a variable refines
+    shapes downstream (other updates read from it), so this iterates to a fixpoint.
     """
     variables = {variable.get_info().variable_id: variable for variable in ov_model.get_variables()}
     read_values = {op.get_variable_id(): op for op in ov_model.get_ordered_ops() if op.get_type_name() == "ReadValue"}
@@ -572,29 +737,31 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
             update_shape = update.get_partial_shape()
             if update_shape == variable_shape:
                 continue
-            if update_shape.is_static:
+            # Unknown or different ranks: nothing to reconcile dim by dim.
+            if variable_shape.rank.is_dynamic or update_shape.rank.is_dynamic:
+                continue
+            if len(update_shape) != len(variable_shape):
+                continue
+            dims = list(zip(variable_shape, update_shape))
+            if any(v.is_dynamic and u.is_static for v, u in dims):
                 info = variable.get_info()
-                info.data_shape = update_shape
+                info.data_shape = openvino.PartialShape([u if v.is_dynamic and u.is_static else v for v, u in dims])
                 variable.update(info)
                 # The variable's shape must relax its init expression's, so the init gets the
-                # same static shape (its dims were runtime-derived but numerically identical).
+                # same dims (they were runtime-derived but numerically identical).
                 read_value = read_values.get(op.get_variable_id())
                 if read_value is not None and read_value.get_input_size() > 0:
-                    target = np.array([dim.get_length() for dim in update_shape], dtype=np.int64)
+                    target = [dim.get_length() if dim.is_static else 0 for dim in info.data_shape]
                     pinned_init = ov_ops.reshape(
-                        read_value.input_value(0), ov_ops.constant(target), special_zero=False
+                        read_value.input_value(0), ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True
                     )
                     read_value.set_arguments([pinned_init])
                 changed = True
-                continue
-            if variable_shape.rank.is_dynamic:
-                continue
-            target = [dim.get_length() if dim.is_static else 0 for dim in variable_shape]
-            if all(t == 0 for t in target):
-                continue
-            pinned = ov_ops.reshape(update, ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True)
-            op.input(0).replace_source_output(pinned.output(0))
-            changed = True
+            elif any(v.is_static and u.is_dynamic for v, u in dims):
+                target = [dim.get_length() if dim.is_static else 0 for dim in variable_shape]
+                pinned = ov_ops.reshape(update, ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True)
+                op.input(0).replace_source_output(pinned.output(0))
+                changed = True
         if not changed:
             break
         ov_model.validate_nodes_and_infer_types()
@@ -606,38 +773,16 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
 # than letting `convert_model` decompose internally) is what makes the repairs stick.
 
 
-def _drop_runtime_asserts(graph_module) -> None:
-    """Drop ``_assert_tensor_metadata`` / ``_assert_scalar`` runtime asserts before the replay.
-
-    ``_assert_tensor_metadata`` re-checks trace-time dtypes/devices and fails the replay once
-    other stages have legitimately changed them. ``_assert_scalar`` lowers a ``torch._check``
-    on an unbacked symint (e.g. the image-token count in ``get_placeholder_mask``) into a
-    ``cast_symbool_to_symint`` + ``eq`` chain whose ``Piecewise`` result OV's ``_ModuleStackTracer``
-    cannot proxy, crashing the replay (``... is not tracked with proxy``). The range facts these
-    asserts encode survive on ``exported_program.range_constraints``, so dropping the nodes (and
-    the now-dead symint feeders via ``eliminate_dead_code``) is safe. ``_fix_drop_assert_ops``
-    still removes any that reappear post-decomposition.
-    """
-    for module in graph_module.modules():
-        if not isinstance(module, torch.fx.GraphModule):
-            continue
-        for node in list(module.graph.nodes):
-            if node.op == "call_function" and node.target in (
-                torch.ops.aten._assert_tensor_metadata.default,
-                torch.ops.aten._assert_scalar.default,
-            ):
-                module.graph.erase_node(node)
-        module.graph.eliminate_dead_code()
-        module.recompile()
-
-
 def _run_openvino_decompositions(exported_program: ExportedProgram) -> ExportedProgram:
     """Run the same decomposition pass ``TorchFXPythonDecoder.from_exported_program`` would.
 
     Decomposing up front lets the FX node fixes and the bare-name renames below operate on the
     graph OV actually decodes — ``convert_model(exported_program)`` would re-run decompositions
-    internally, regenerating node names and silently discarding those fixes.
+    internally, regenerating node names and silently discarding those fixes. Since OpenVINO 2026.5
+    the frontend converts exported programs without decomposing them, and so does this.
     """
+    if is_openvino_greater_or_equal("2026.5", accept_dev=True):
+        return exported_program
     decomp_table = CustomDecompTable()
     for op in ops_to_not_decompose():
         decomp_table.pop(op, None)
@@ -739,6 +884,25 @@ def _fix_sym_float(gm, node):
 
 
 @register_fx_node_fix("openvino")
+def _fix_mm_dtype(gm, node):
+    """Rewrite ``aten.mm.dtype`` (``torch.mm(..., out_dtype=...)``, which OV can't convert) as an ``mm`` on its
+    inputs cast to ``out_dtype``, the dtype the CUDA kernel accumulates in."""
+    if node.target is not torch.ops.aten.mm.dtype:
+        return False
+    *matrices, out_dtype = node.args
+    with gm.graph.inserting_before(node):
+        casts = [
+            gm.graph.call_function(torch.ops.aten._to_copy.default, args=(matrix,), kwargs={"dtype": out_dtype})
+            for matrix in matrices
+        ]
+        result = gm.graph.call_function(torch.ops.aten.mm.default, args=tuple(casts))
+        result.meta.update(node.meta)
+    node.replace_all_uses_with(result)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("openvino")
 def _fix_sym_min_max(gm, node):
     """Rewrite ``torch.sym_min``/``torch.sym_max`` to the built-in ``min``/``max``.
 
@@ -787,20 +951,6 @@ def _fix_to_dtype_layout_in_subgraphs(exported_program):
                 node.args = (node.args[0],)
                 node.kwargs = {"dtype": dtype} if dtype is not None else {}
         gm_or_submod.recompile()
-
-
-@register_fx_node_fix("openvino")
-def _fix_drop_assert_ops(gm, node):
-    """Erase ``aten._assert_tensor_metadata`` / ``aten._assert_scalar`` nodes.
-
-    ``torch.export`` inserts these as dead-code (num_users=0) runtime assertions, but OV's
-    frontend translates them into ``torch::None`` constants whose downstream consumers can't
-    drop them — causing ``OpConversionFailure``. They have no semantic effect on the model.
-    """
-    if node.target not in (torch.ops.aten._assert_tensor_metadata.default, torch.ops.aten._assert_scalar.default):
-        return False
-    gm.graph.erase_node(node)
-    return True
 
 
 @register_fx_node_fix("openvino")
@@ -965,9 +1115,13 @@ def _fix_empty_cat(gm, node):
         # which is always correct (the empty-cat optimisation just doesn't fire).
         return guard_or_false(val.numel() == 0)
 
-    if _is_empty(operands[0]):
+    first_empty, second_empty = _is_empty(operands[0]), _is_empty(operands[1])
+    # a NoPE layer's zero-width rotary cache: empty with the same rank on both sides, the cat still grows it
+    if first_empty and second_empty and operands[0].meta["val"].ndim == operands[1].meta["val"].ndim:
+        return False
+    if first_empty:
         keep = operands[1]
-    elif _is_empty(operands[1]):
+    elif second_empty:
         keep = operands[0]
     else:
         return False
@@ -1162,6 +1316,123 @@ def _fix_index_put_bool_mask(gm, node):
 # To add a new patch: define a `_patch_*` factory and decorate it.
 
 
+@register_patch("openvino", "torch.Tensor.__neg__", "torch.neg", "torch.Tensor.neg")
+def _patch_neg(original):
+    """Negate as a multiply by ``-1``, the form OV's CPU plugin fuses ``rotate_half`` (so RoPE) from.
+
+    The frontend lowers ``aten.neg`` to a multiply by a ``Convert``ed ``-1`` that it marks
+    ``DisableConstantFolding``, which keeps the plugin's RoPE fusion from matching until the IR is
+    serialized and read back: the model this exporter returns would run RoPE decomposed.
+    """
+
+    def patch(input):
+        return input * -1
+
+    return patch
+
+
+@register_patch("openvino", "torch.nn.Linear.forward")
+def _patch_linear_forward(original):
+    """Cast the 16-bit weight [`patch_16bit_model`] set aside to the f32 activations, inside the graph."""
+
+    def patch(self, input):
+        if "_16bit_weight" not in self._parameters:
+            return original(self, input)
+        weight = self._16bit_weight.to(input.dtype)
+        bias = _16bit_parameter(self, "bias")
+        if bias is not None:
+            bias = bias.to(input.dtype)
+        return torch.nn.functional.linear(input, weight, bias)
+
+    return patch
+
+
+@register_patch("openvino", "torch.nn.Embedding.forward")
+def _patch_embedding_forward(original):
+    """Look up the 16-bit embedding [`patch_16bit_model`] set aside, cast to f32 inside the graph.
+
+    The cast comes before the lookup, as in the linear patch: a tied `lm_head` then reads the same `Convert`, and
+    stays a compressed-weight matmul once NNCF quantizes the shared weight.
+    """
+
+    def patch(self, input):
+        if "_16bit_weight" not in self._parameters:
+            return original(self, input)
+        return torch.nn.functional.embedding(
+            input,
+            self._16bit_weight.float(),
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
+
+    return patch
+
+
+@register_patch("openvino", "transformers.integrations.moe.ExpertsInterface.get_interface")
+def _patch_experts_interface(original):
+    """Trace every `@use_experts_implementation` experts module with [`_tiled_experts_forward`]."""
+
+    def patch(self, experts_implementation, default):
+        return _tiled_experts_forward
+
+    return patch
+
+
+def _tiled_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """`batched_mm_experts_forward`, with every expert run on every token and weighted by the dense routing weights.
+
+    This is the form OV's CPU plugin turns into `GatherMatmul`s that only compute the routed experts
+    (`ConvertTiledMoeBlockTo{2,3}GatherMatmuls`): the hidden states tiled over the experts, one batched matmul per
+    projection against the stacked 16-bit expert weights (gate and up apart for the default gating), scaled by the
+    routing weights and summed over the experts. The per-token expert gather of the other forwards doesn't fuse.
+    """
+    num_tokens, hidden_dim = hidden_states.shape
+    dtype = hidden_states.dtype
+
+    def projection(name):
+        return _16bit_parameter(self, name), _16bit_parameter(self, f"{name}_bias")
+
+    def batched_linear(input, weight, bias=None):
+        # (num_experts, num_tokens, input_dim) -> (num_experts, num_tokens, output_dim)
+        weight = weight.to(dtype)
+        output = torch.bmm(input, weight if self.is_transposed else weight.transpose(1, 2))
+        return output + bias.to(dtype)[:, None] if bias is not None else output
+
+    # Every token, once per expert: (num_experts, num_tokens, hidden_dim)
+    selected_hidden_states = hidden_states.repeat(self.num_experts, 1).view(self.num_experts, num_tokens, hidden_dim)
+
+    # --- Up projection per expert (batched), then gating or activation ---
+    if not self.has_gate:
+        proj_out = self.act_fn(batched_linear(selected_hidden_states, *projection("up_proj")))
+    elif type(self)._apply_gate is _default_apply_gate and self.is_concatenated:
+        # The default gating, with gate and up projected apart: the form OV fuses.
+        gate_up_proj, gate_up_proj_bias = projection("gate_up_proj")
+        gate_proj, up_proj = gate_up_proj.chunk(2, dim=-1 if self.is_transposed else -2)
+        gate_bias, up_bias = (None, None) if gate_up_proj_bias is None else gate_up_proj_bias.chunk(2, dim=-1)
+        gate = batched_linear(selected_hidden_states, gate_proj, gate_bias)
+        up = batched_linear(selected_hidden_states, up_proj, up_bias)
+        proj_out = self.act_fn(gate) * up
+    else:
+        proj_out = self._apply_gate(batched_linear(selected_hidden_states, *projection("gate_up_proj")))
+
+    # --- Down projection per expert (batched) ---
+    proj_out = batched_linear(proj_out, *projection("down_proj"))
+    proj_out = proj_out.view(self.num_experts, num_tokens, hidden_dim)
+
+    # Apply optional post expert norm
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)
+
+    # Apply routing weights: zero for the experts a token isn't routed to
+    routing_weights = torch.zeros(num_tokens, self.num_experts, dtype=dtype, device=hidden_states.device)
+    routing_weights = routing_weights.scatter(1, top_k_index, top_k_weights.to(dtype))
+    weighted_out = proj_out * routing_weights.transpose(0, 1)[..., None]
+    return weighted_out.sum(dim=0)
+
+
 @register_patch("openvino", "torch.nn.functional.layer_norm")
 def _patch_layer_norm(original):
     """Substitute identity ``weight=ones``/``bias=zeros`` when either is ``None``.
@@ -1189,15 +1460,16 @@ def _patch_interpolate(original):
 
     OV's ``Interpolate`` silently ignores ``antialias``, returning bit-for-bit the *non*-antialiased
     result, so a model that resamples with it (siglip2's position embeddings) exports subtly wrong.
-    Antialiased resampling is linear and separable: each output sample is a normalised triangle-filter
-    average of the inputs under its footprint, widened to the downsampling ratio. The weights depend only
+    Antialiased resampling is linear and separable: each output sample is a normalised average of the
+    inputs under its footprint, weighted by torch's filter (triangle for bilinear, cubic for bicubic),
+    widened to the downsampling ratio. The weights depend only
     on the two extents, so they are built here and applied as two matmuls that OV reproduces exactly --
     a real ``interpolate`` call would instead leave an `aten._upsample_bilinear2d_aa` node OV cannot
     convert. They are built from tensor ops throughout, so an extent read out of a tensor (siglip2 takes
     its target from `spatial_shapes`) stays symbolic rather than guarding on an unbacked size.
     """
 
-    def axis_weights(size_in, size_out, dtype, device):
+    def axis_weights(size_in, size_out, mode, dtype, device):
         in_index = torch.arange(size_in, dtype=torch.float32, device=device)
         out_index = torch.arange(size_out, dtype=torch.float32, device=device)
         # The ratio is carried into the graph as a tensor: OV miscompiles a `Divide` of two reduced
@@ -1206,8 +1478,14 @@ def _patch_interpolate(original):
         scale = torch.zeros((), dtype=torch.float32, device=device) + size_in / size_out
         support = scale.clamp(min=1.0)
         center = (out_index + 0.5) * scale
-        distance = (in_index[None, :] + 0.5 - center[:, None]) / support
-        weights = (1.0 - distance.abs()).clamp(min=0.0)
+        distance = ((in_index[None, :] + 0.5 - center[:, None]) / support).abs()
+        if mode == "bicubic":
+            # torch's cubic convolution kernel, `a = -0.5`.
+            near = (1.5 * distance - 2.5) * distance * distance + 1.0
+            far = ((-0.5 * distance + 2.5) * distance - 4.0) * distance + 2.0
+            weights = torch.where(distance <= 1.0, near, torch.where(distance < 2.0, far, 0.0))
+        else:
+            weights = (1.0 - distance).clamp(min=0.0)
         return (weights / weights.sum(-1, keepdim=True)).to(dtype)
 
     def patch(input, size=None, scale_factor=None, mode="nearest", align_corners=None, **kwargs):
@@ -1218,8 +1496,10 @@ def _patch_interpolate(original):
                 input, size=size, scale_factor=scale_factor, mode=mode, align_corners=align_corners, **kwargs
             )
         height_in, width_in = input.shape[-2:]
-        resized = torch.einsum("nchw,oh->ncow", input, axis_weights(height_in, height_out, input.dtype, input.device))
-        return torch.einsum("ncow,pw->ncop", resized, axis_weights(width_in, width_out, input.dtype, input.device))
+        height_weights = axis_weights(height_in, height_out, mode, input.dtype, input.device)
+        resized = torch.einsum("nchw,oh->ncow", input, height_weights)
+        width_weights = axis_weights(width_in, width_out, mode, input.dtype, input.device)
+        return torch.einsum("ncow,pw->ncop", resized, width_weights)
 
     return patch
 
@@ -1228,12 +1508,14 @@ def _patch_interpolate(original):
 def _patch_sdpa(original):
     """Pre-expand K/V to Q's head count before calling SDPA.
 
-    Also clamps the additive mask so fully-masked rows stay finite, and zeroes those rows to match
-    the fused kernels torch runs them through.
+    Also clamps the additive mask so fully-masked rows stay finite: such a row then gets the uniform
+    average the mask describes, as transformers' eager attention gives it with a dtype-minimum mask.
 
         OV's ``opset13::ScaledDotProductAttention`` op rejects GQA shapes (e.g. Q=[B,4,T,D],
-        K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V via
-        ``repeat_interleave`` on the head axis keeps the math identical and gives OV matching shapes.
+        K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V with
+        ``repeat_kv`` (unsqueeze, expand, reshape) keeps the math identical and gives OV matching
+        shapes, in the form OV's CPU plugin fuses with a stateful KV cache: a ``repeat_interleave``
+        (a ``Gather``) between the cache and the attention leaves every attention decomposed.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
@@ -1241,11 +1523,9 @@ def _patch_sdpa(original):
         # (legit under left padding + causal), poisoning the batch entry
         # (https://github.com/openvinotoolkit/openvino/issues/31630). Pass an additive mask with a
         # finite dtype minimum instead, like optimum-intel does.
-        unattended = None
         if attn_mask is not None:
             masked_value = torch.finfo(query.dtype).min
             if attn_mask.dtype == torch.bool:
-                unattended = ~attn_mask.any(dim=-1, keepdim=True)
                 attn_mask = torch.where(
                     attn_mask,
                     torch.zeros((), dtype=query.dtype, device=attn_mask.device),
@@ -1253,12 +1533,11 @@ def _patch_sdpa(original):
                 )
             else:
                 attn_mask = attn_mask.clamp_min(masked_value)
-                unattended = attn_mask.amax(dim=-1, keepdim=True) <= masked_value
         q_heads, k_heads = query.shape[-3], key.shape[-3]
         if q_heads != k_heads and q_heads % k_heads == 0:
             reps = q_heads // k_heads
-            key = key.repeat_interleave(reps, dim=-3)
-            value = value.repeat_interleave(reps, dim=-3)
+            key = repeat_kv(key, reps)
+            value = repeat_kv(value, reps)
         # OV's SDPA op takes no `scale` from the traced graph (the aten node's scalar `scale` isn't
         # surfaced as a frontend input), so it always applies its own default ``head_dim**-0.5``. Models
         # with a non-default scale (T5-family fold ``1/sqrt(d)`` into init and pass ``scale=1.0``) would be
@@ -1268,38 +1547,7 @@ def _patch_sdpa(original):
             default_scale = query.shape[-1] ** -0.5
             if scale != default_scale:
                 query = query * (scale / default_scale)
-        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
-        # A row that masks every key has no defined value: OV returns the uniform average the mask
-        # describes, torch's fused kernels write zeros. Zero them so the export answers like eager.
-        if unattended is not None:
-            attn_output = torch.where(
-                unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
-            )
-        return attn_output
-
-    return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.integrations.sdpa_attention.repeat_kv",
-    "transformers.integrations.eager_paged.repeat_kv",
-    "transformers.integrations.flex_attention.repeat_kv",
-)
-def _patch_repeat_kv(original):
-    """Expand GQA K/V heads via ``repeat_interleave`` instead of a 5-D ``expand`` + ``reshape``.
-
-    The stock ``repeat_kv`` unsqueezes to ``[b, kv_heads, 1, kv_seq, head_dim]`` then
-    ``expand``s the new axis to ``n_rep``. OV's frontend can't keep the ``kv_seq`` axis dynamic
-    through that 5-D broadcast in stateful decode (``Broadcast Check 'input_shape[j] == 1'`` on
-    dim 3), baking it to the traced length. ``repeat_interleave`` on the head axis is the exact
-    equivalent (per ``repeat_kv``'s own docstring) and lowers to an OV op that stays dynamic.
-    """
-
-    def patch(hidden_states, n_rep):
-        if n_rep == 1:
-            return hidden_states
-        return hidden_states.repeat_interleave(n_rep, dim=1)
+        return original(query, key, value, attn_mask, *args, **kwargs)
 
     return patch
 
@@ -1635,22 +1883,6 @@ def _patch_cumsum(original):
         return original(input, *args, dtype=dtype, **kwargs)
 
     return patch
-
-
-@register_patch("openvino", "torch.cummax", "torch.Tensor.cummax")
-def _patch_cummax(original):
-    """OV has no ``aten.cummax`` lowering — reuse the ONNX triangular-mask decomposition."""
-    from .exporter_onnx import _patch_cummax_or_cummin
-
-    return _patch_cummax_or_cummin(original, mode="max")
-
-
-@register_patch("openvino", "torch.cummin", "torch.Tensor.cummin")
-def _patch_cummin(original):
-    """OV has no ``aten.cummin`` lowering — reuse the ONNX triangular-mask decomposition."""
-    from .exporter_onnx import _patch_cummax_or_cummin
-
-    return _patch_cummax_or_cummin(original, mode="min")
 
 
 @register_patch("openvino", "torch.bincount", "torch.Tensor.bincount")

@@ -32,6 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import get_max_seqlen, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
@@ -75,7 +76,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -480,10 +481,10 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -567,11 +568,11 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -658,17 +659,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
 
 
-class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Qwen2_5_VLProcessor(Qwen2VLProcessor):
+    videos_kwargs = {"return_metadata": True}
+
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)
         video_grid_thw = processed_data["video_grid_thw"]
@@ -691,6 +684,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
     def model_input_names(self):
         return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen2_5_VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Qwen2_5_VLConfig",
