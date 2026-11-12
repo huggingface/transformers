@@ -71,7 +71,7 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
-        # `head_dim` is a property only in falcon, we adjusted the initial values instead
+        # `head_dim` is a read-only property in falcon, we assume the initial values to be correct
         assert config.head_dim >= requested_dim
         return config
 
