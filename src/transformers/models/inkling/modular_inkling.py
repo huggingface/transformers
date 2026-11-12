@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
@@ -523,7 +523,7 @@ class InklingTopkRouter(nn.Module):
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
         # Keep routing in FP32 even under autocast, so distinct scores do not round to ties before top-k.
-        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+        with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
             router_logits = F.linear(flat.float(), self.weight.float())
 
             scores = router_logits.sigmoid()
