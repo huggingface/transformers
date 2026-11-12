@@ -80,6 +80,7 @@ class FbgemmFp8Test(unittest.TestCase):
             "What are we having for dinner?\nI'm having a steak and a salad",
             "What are we having for dinner? I don’t know. What are we having",
             "What are we having for dinner? I don’t know, what are you having",
+            "What are we having for dinner? I don’t know, what do you want",
         ]
     )
 

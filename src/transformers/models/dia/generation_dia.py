@@ -23,6 +23,7 @@ from ...generation.logits_process import (
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
     LogitsProcessorList,
+    RepetitionPenaltyLogitsProcessor,
     TemperatureLogitsWarper,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -84,6 +85,13 @@ class DiaGenerationMixin(GenerationMixin):
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
+
+        # Dia expand inputs and thus cannot use tensor `prompt_ignore_length` correctly
+        for processor in merged_processors:
+            if isinstance(processor, RepetitionPenaltyLogitsProcessor) and isinstance(
+                getattr(processor, "prompt_ignore_length", None), torch.Tensor
+            ):
+                processor.prompt_ignore_length = None
 
         # Custom processors we need at specific positions
         if original_guidance_scale is not None and original_guidance_scale != 1:

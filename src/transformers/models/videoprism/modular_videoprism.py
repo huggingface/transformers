@@ -28,6 +28,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..codegen.modeling_codegen import create_sinusoidal_positions
@@ -173,24 +174,21 @@ class VideoPrismTokenizer(T5Tokenizer):
         del self._tokenizer.post_processor
 
 
-class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-        "video_kwargs": {
-            "size": {"height": 288, "width": 288},
-            "do_normalize": False,
-            "do_sample_frames": True,
-        },
-    }
-
-
 @auto_docstring
 class VideoPrismProcessor(ProcessorMixin):
-    valid_processor_kwargs = VideoPrismProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+    }
+    video_kwargs = {
+        "size": {
+            "height": 288,
+            "width": 288,
+        },
+        "do_normalize": False,
+        "do_sample_frames": True,
+    }
 
     def __init__(self, video_processor=None, tokenizer=None):
         super().__init__(video_processor, tokenizer)
@@ -200,16 +198,16 @@ class VideoPrismProcessor(ProcessorMixin):
 @dataclass
 class BaseModelOutputWithSpatialAndTemporalStates(BaseModelOutput):
     r"""
-    last_temporal_hidden_state (`torch.FloatTensor`, *optional*):
+    last_temporal_hidden_state (`torch.Tensor`, *optional*):
         The last hidden state of the temporal encoder, typically of shape
         `(batch_size * num_patches, num_frames, hidden_size)`.
-    last_spatial_hidden_state (`torch.FloatTensor`, *optional*):
+    last_spatial_hidden_state (`torch.Tensor`, *optional*):
         The last hidden state of the spatial encoder, typically of shape
         `(batch_size * num_frames, num_patches, hidden_size)`.
     """
 
-    last_temporal_hidden_state: torch.FloatTensor | None = None
-    last_spatial_hidden_state: torch.FloatTensor | None = None
+    last_temporal_hidden_state: torch.Tensor | None = None
+    last_spatial_hidden_state: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -218,31 +216,31 @@ class BaseModelOutputWithSpatialAndTemporalStates(BaseModelOutput):
 @dataclass
 class VideoPrismClipOutput(ModelOutput):
     r"""
-    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+    logits_per_video (`torch.Tensor` of shape `(video_batch_size, text_batch_size)`):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, video_batch_size)`):
         The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+    video_embeds (`torch.Tensor` of shape `(batch_size, output_dim)`):
         The video embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim)`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
     video_model_output (`BaseModelOutputWithPooling`):
         The output of [`VideoPrismVideoModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`VideoPrismTextModel`].
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
     """
 
-    logits_per_video: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
+    logits_per_video: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
     video_model_output: BaseModelOutputWithPooling = None
     text_model_output: BaseModelOutputWithPooling = None
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
@@ -424,7 +422,7 @@ class VideoPrismTextEmbeddings(nn.Module):
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
@@ -578,7 +576,7 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
@@ -626,10 +624,10 @@ class VideoPrismMultiheadAttentionPoolingHead(VivitAttention):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -747,7 +745,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -816,7 +814,7 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -843,7 +841,7 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool | None = False,
@@ -929,7 +927,7 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -951,6 +949,8 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
             attentions=vision_model_outputs.attentions,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoPrismProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "VideoPrismVisionConfig",

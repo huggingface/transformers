@@ -34,10 +34,17 @@ from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
     get_cpu_ram_total_gib,
+    install_ci_source_deps_tracker,
     is_torch_available,
     patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
+    record_ci_source_deps_by_file,
+    record_ci_source_deps_chains,
+    scan_preloaded_test_module_deps,
+    set_ci_collecting_file,
+    set_ci_deps_phase,
+    write_ci_module_graph,
 )
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
@@ -384,10 +391,49 @@ def pytest_terminal_summary(terminalreporter):
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
 
 
+def pytest_sessionstart(session):
+    install_ci_source_deps_tracker()
+
+
+def pytest_collection(session):
+    set_ci_deps_phase("collection")
+
+
+def pytest_collectstart(collector):
+    if isinstance(collector, pytest.Module):
+        # collector.nodeid is already repo-relative (e.g. "tests/models/clip/test_processing_clip.py")
+        set_ci_collecting_file(collector.nodeid)
+        # If the module was pre-loaded as a side-effect of another test file's module-level
+        # import (e.g. test_modeling_auto imports test_modeling_bert at the top level), its
+        # body already ran under a different collecting_file context. Scan its __dict__ now
+        # that the correct context is set, so we still capture its transformers deps.
+        scan_preloaded_test_module_deps(collector.nodeid)
+
+
+def pytest_collection_finish(session):
+    set_ci_deps_phase("post_collection")
+    set_ci_collecting_file(None)
+
+
+def pytest_runtest_setup(item):
+    set_ci_deps_phase("setup", item.nodeid)
+
+
+def pytest_runtest_call(item):
+    set_ci_deps_phase("test", item.nodeid)
+
+
+def pytest_runtest_teardown(item):
+    set_ci_deps_phase("teardown", item.nodeid)
+
+
 def pytest_sessionfinish(session, exitstatus):
     # If no tests are collected, pytest exists with code 5, which makes the CI fail.
     if exitstatus == 5:
         session.exitstatus = 0
+    record_ci_source_deps_by_file()
+    record_ci_source_deps_chains()
+    write_ci_module_graph()
 
 
 # Doctest custom flag to ignore output.

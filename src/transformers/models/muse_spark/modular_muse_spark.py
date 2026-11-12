@@ -278,11 +278,11 @@ class MuseSparkProcessor(MuseGlimmerProcessor):
 
 
 class MuseSparkModelOutputWithPast(MuseGlimmerModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class MuseSparkCausalLMOutputWithPast(MuseGlimmerCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class MuseSparkRMSNorm(MuseGlimmerRMSNorm):
@@ -540,7 +540,7 @@ class MuseSparkTextModel(MuseGlimmerTextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -596,7 +596,7 @@ class MuseSparkTextModel(MuseGlimmerTextModel):
 class MuseSparkVisionPatchEmbedder(MuseGlimmerVisionPatchEmbedder):
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -821,7 +821,7 @@ class MuseSparkModel(MuseGlimmerModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -958,16 +958,16 @@ class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         input_values: torch.Tensor | None = None,
         input_values_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

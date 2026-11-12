@@ -318,7 +318,8 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": LongcatFlashDecoderLayer,
+        # Each decoder layer holds two attention sublayers, so `num_hidden_layers` is `2 * num_layers`
+        "hidden_states": OutputRecorder(LongcatFlashDecoderLayer, num_hidden_layers_key="num_layers"),
         "attentions": LongcatFlashMLA,
         "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
     }
@@ -359,7 +360,7 @@ class LongcatFlashModel(DeepseekV3Model):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):

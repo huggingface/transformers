@@ -74,6 +74,10 @@ from transformers.utils import is_executorch_available
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
+        "HunYuanVLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HunYuanVLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -230,11 +234,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "onnx.exactness": {
         "Wav2Vec2ForPreTraining": (
-            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
-            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
-            "with itself either."
+            "The quantizer picks codes with `argmax`; on near-tied logits ORT's rounding can pick another "
+            "code, and `codevector_perplexity` jumps far over the tolerance. See PR #50575."
         ),
-        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechSatForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "Wav2Vec2ConformerForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
         "PatchTSTForPretraining": (
             "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
             "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
@@ -447,8 +452,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+        "TimesFmModelForPrediction": (
+            "The left-padding patches attend to no key: OpenVINO gives them the uniform average, torch's fused "
+            "kernels zeros. The real patches and the predictions match."
+        ),
     },
     # OpenVINO, generate path only.
     "openvino.generate": {},
@@ -682,16 +692,25 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
+def _run_onnx_program(onnx_model, inputs) -> dict:
+    """Run an ONNX graph (an `onnx_ir.Model`) as an `ONNXProgram` and return outputs as a `{name: torch.Tensor}` dict.
+    A loaded graph runs from its saved file (`meta["path"]`), whose weights `onnx_ir` can't read through symlinks.
 
-    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
-    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
+    Outputs come back on CPU whatever device eager ran on, so callers compare them the same way across backends (with
+    `check_device=False`).
     """
+    import onnxruntime as ort
+    from torch.onnx import ONNXProgram
+
+    onnx_program = ONNXProgram(onnx_model, None)
+    if (path := onnx_model.meta.get("path")) is not None:
+        # The providers `ONNXProgram` picks for a fresh graph, so a loaded one runs where it would.
+        available = ort.get_available_providers()
+        providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+        onnx_program.initialize_inference_session(lambda _: ort.InferenceSession(path, providers=providers))
     set_seed(1234)
-    onnx_inputs = get_leaf_tensors(inputs)
-    onnx_outputs = onnx_program(**onnx_inputs)
-    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
+    onnx_outputs = onnx_program(**get_leaf_tensors(inputs))
+    onnx_names = (re.sub(r"^output\.", "", value.name) for value in onnx_model.graph.outputs)
     return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
 
 
@@ -724,11 +743,12 @@ def _run_openvino_model(ov_model, inputs) -> dict:
 
     results = request.infer(feed)
     outputs = {}
+    declared = {name for output in ov_model.outputs for name in output.get_names()}
     for port in compiled.outputs:
-        # Compilation may merge a named output tensor with an intermediate that kept its
-        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
+        # Compilation may merge an output's tensor names with the ones of the intermediates it fused (a numeric id,
+        # `add_4:0`): take the name the exported model gave it.
         names = sorted(port.get_names())
-        name = next((n for n in names if not n.isdigit()), names[0])
+        name = next((n for n in names if n in declared), names[0])
         outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
 
     # Folded state tensors are outputs too — read them back so the returned dict covers the
@@ -989,6 +1009,12 @@ class ExportTesterMixin:
         attend to -- so each runtime fills it differently and no caller reads it; comparing those
         positions measures nothing.
         """
+        # exports keep a full cache on sliding-window layers, eager only the window: skip them
+        sliding = tuple(
+            key.removesuffix("_sliding_window_tensor") for key in expected if key.endswith("._sliding_window_tensor")
+        )
+        actual = {key: value for key, value in actual.items() if not key.startswith(sliding)}
+        expected = {key: value for key, value in expected.items() if not key.startswith(sliding)}
         # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
         # only a plain 2D `(batch, seq)` tensor maps onto output positions. NaViT-style vision models
         # (siglip2) mark their valid patches with `pixel_attention_mask` instead.
@@ -1033,7 +1059,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    exported_program = exporter.export(model, inputs, config=config).program
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -1070,7 +1096,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_program = exporter.export(model, inputs, config=config).program
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1102,7 +1128,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1142,7 +1168,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config).program
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
@@ -1231,15 +1257,19 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 cache = inputs.get("past_key_values")
                 # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
                 # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
-                if cache is not None and any(
-                    hasattr(layer, "is_initialized")
-                    and not layer.is_initialized
-                    and hasattr(layer, "cumulative_length")
-                    for layer in cache.layers
+                if (
+                    cache is not None
+                    and hasattr(cache, "layers")
+                    and any(
+                        hasattr(layer, "is_initialized")
+                        and not layer.is_initialized
+                        and hasattr(layer, "cumulative_length")
+                        for layer in cache.layers
+                    )
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    exported_program = exporter.export(model, inputs, config=config).program
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -1288,7 +1318,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_program = exporter.export(model, inputs, config=config).program
                     set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
@@ -1321,7 +1351,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1360,7 +1390,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config).program
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
