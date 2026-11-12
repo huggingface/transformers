@@ -56,6 +56,9 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 # Tensor value stats (`.item()`) and `cudaMemGetInfo` force device syncs. With them on, whisper passed 10/10 in CI (bug
 # hidden?); without the plugin it failed again. Off by default so the plugin never syncs the device by itself.
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
+# "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
+# the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "repeat_only")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -737,11 +740,16 @@ class CaptureDebugPlugin:
         out_dir = os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR") or os.environ.get("CAPDBG_DIR") or "/tmp"
         os.makedirs(out_dir, exist_ok=True)
         S.fh = open(os.path.join(out_dir, f"capture_debug_{os.getpid()}.log"), "w", encoding="utf-8")
-        faulthandler.enable(file=sys.stderr, all_threads=True)
         log(
-            f"ci_capture_debug plugin active: targets={TARGETS} repeat={REPEAT} reset={RESET_BETWEEN_REPEATS} "
-            f"log_file={S.fh.name}"
+            f"ci_capture_debug plugin active: mode={PLUGIN_MODE} targets={TARGETS} repeat={REPEAT} "
+            f"reset={RESET_BETWEEN_REPEATS} log_file={S.fh.name}"
         )
+        self.heavy_patched = False
+        if PLUGIN_MODE == "repeat_only":
+            # Bisect step: no patch, no GC callback, no faulthandler, no ctypes — only duplicate the targets and dump on
+            # failure. Even the MINIMAL (pure-Python) patches seemed to hide the whisper failure.
+            return
+        faulthandler.enable(file=sys.stderr, all_threads=True)
         try:
             import torch
 
@@ -757,7 +765,6 @@ class CaptureDebugPlugin:
             log(f"torch patches failed: {e!r}", stack=True)
         # ORT / transformers patches import onnxruntime and transformers.exporters. Importing them at configure time
         # changes library load order vs a plain run, which may hide the bug: apply them lazily at the first FULL repeat.
-        self.heavy_patched = False
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):
@@ -781,7 +788,7 @@ class CaptureDebugPlugin:
         S.test = item.nodeid
         S.is_target = _is_target(item.nodeid)
         S.repeat_index = getattr(item, "_capdbg_repeat", 0)
-        S.full = S.is_target and S.repeat_index % 2 == 1
+        S.full = PLUGIN_MODE != "repeat_only" and S.is_target and S.repeat_index % 2 == 1
         if S.is_target:
             S.trace.clear()
             if S.full and not self.heavy_patched:
