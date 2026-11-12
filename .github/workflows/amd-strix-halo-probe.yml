@@ -46,20 +46,46 @@ permissions:
 
 env:
   ARCH: ${{ inputs.arch || 'gfx1151' }}
-  # Integration tests whose checkpoint (over ~60 GB) neither GPU can hold. They
-  # do not fail cleanly: the load is killed, and the next GPU wait in the
-  # replacement xdist worker never returns, so the job sits until its timeout
-  # and the host is lost to the pool for hours (phimoe 84 GB and exaone4 64 GB
-  # did this on gfx1151, whose GPU may map 62 GiB; gfx1201 has 32 GB). Classes
-  # from per-folder checkpoint sizes; the *Small*/*Tiny*/*Processor*
-  # integration classes use small models and still run.
+  # Integration tests whose checkpoint gfx1151 cannot load in useful time.
+  # The host exposes 100 GiB of GPU-mappable memory (ttm.pages_limit) on 124 GB
+  # of RAM; above that, device_map="auto" spills to CPU and disk and a test
+  # crawls for hours (cohere2_moe ran 2+ h and filled 1.3 TB of disk). Below
+  # it, a class can still fail when it loads a second copy while the first is
+  # held (aria, qwen3_vl_moe, ernie4_5_vl_moe), or fit only by spilling past
+  # the per-test timeout (seed_oss). Measured on gfx1151, one test at a time.
+  # Skipped, not left to fail: a killed load leaves the replacement xdist
+  # worker waiting on the GPU forever, and the host is lost for hours.
+  # Glm4MoeIntegrationTest stays out for glm4_moe (GLM-4.5) although
+  # glm4_moe_lite, which shares the class name, fits. The *Small*/*Tiny*/
+  # *Processor* integration classes use small models and still run.
   BIG_MODEL_SKIP: >-
-    and not Exaone4IntegrationTest and not Exaone4_5_IntegrationTest
-    and not Glm4MoeIntegrationTest and not HyperCLOVAXVisionV2IntegrationTest
-    and not KimiLinearIntegrationTest and not NemotronH_Omni_Reasoning_V3IntegrationTest
+    and not AriaForConditionalGenerationIntegrationTest
+    and not Cohere2IntegrationTest and not Cohere2MoeIntegrationTest
+    and not DeepseekV32IntegrationTest and not DeepseekV4IntegrationTest
+    and not DeepseekV4FlashIntegrationTest and not DeepseekV4FlashBaseIntegrationTest
+    and not Ernie4_5_VLMoeIntegrationTest and not Exaone4_5_IntegrationTest
+    and not Glm4MoeIntegrationTest and not Glm4vMoeIntegrationTest
+    and not HunYuanMoEV1IntegrationTest and not HyperCLOVAXVisionV2IntegrationTest
+    and not KimiLinearIntegrationTest and not Llama4IntegrationTest
+    and not LongcatFlashIntegrationTest and not MiniMaxM3VLIntegrationTest
+    and not Mistral4IntegrationTest and not NemotronH_Omni_Reasoning_V3IntegrationTest
     and not PhimoeIntegrationTest and not Qwen3MoeIntegrationTest
     and not Qwen3OmniModelIntegrationTest and not Qwen3VLMoeIntegrationTest
-    and not SeedOssIntegrationTest
+    and not SeedOssIntegrationTest and not test_cwm_sliding_window_long_sequence
+  # gfx1201 only, measured on an R9700 (32 GB card, 32 GB RAM): the card is the
+  # limit. These run out of card memory, offload to disk or hit the 20 min
+  # timeout. -k matches substrings, so test-level skips name their class, and
+  # VideoLlava/VipLlava are kept out of Llava's.
+  BIG_MODEL_SKIP_GFX1201: >-
+    and not DeepseekV2IntegrationTest and not DiffusionGemmaIntegrationTest
+    and not Exaone4IntegrationTest
+    and not (LlavaForConditionalGenerationIntegrationTest and not VideoLlava and not VipLlava)
+    and not Mistral3IntegrationTest and not MuseGlimmerIntegrationTest
+    and not (GemmaIntegrationTest and test_model_7b_fp16)
+    and not (Gemma2IntegrationTest and (test_model_9b_fp16 or test_model_9b_pipeline_bf16))
+    and not ((Glm4vIntegrationTest or Glm46VIntegrationTest) and (test_small_model_integration_test_batch_wo_image or test_small_model_integration_test_expand))
+    and not (Mamba2IntegrationTest and test_simple_generate)
+    and not (Qwen2MoeIntegrationTest and test_speculative_generation)
   # gfx1201 only: torch.compile(mode="reduce-overhead") hits hipErrorIllegalState
   # ("CUDA driver error: 401") during HIP graph warmup; passes on gfx1151 with the
   # same image. A ROCm issue, skipped so the lane can go green.
@@ -99,7 +125,7 @@ jobs:
           PY
           # The -k expression for this GPU, computed once for all three groups.
           skip="not test_flex_attention_with_grads ${BIG_MODEL_SKIP}"
-          [ "$ARCH" = gfx1201 ] && skip="${skip} ${KNOWN_FAIL_GFX1201}"
+          [ "$ARCH" = gfx1201 ] && skip="${skip} ${BIG_MODEL_SKIP_GFX1201} ${KNOWN_FAIL_GFX1201}"
           echo "skip=${skip}" >> "$GITHUB_OUTPUT"
 
   # One job per model. Three near-identical job groups, one per slice, so each
