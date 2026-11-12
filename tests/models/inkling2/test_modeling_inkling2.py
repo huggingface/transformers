@@ -223,7 +223,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 10): [0.4882381558418274, 0.7693625688552856, 1.342852234840393, 0.3105357885360718, 0.5194793343544006],
+                ("cuda", 10): [0.49409592151641846, 0.7420361638069153, 1.3116633892059326, 0.27733585238456726, 0.47066453099250793],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -231,7 +231,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_COMPLETION = Expectations(
             {
-                ("cuda", 10): "Susie積臧臧臧臧臧臧芃Susie積臧臧臧臧芃SusieWdwasiduncan",
+                ("cuda", 10): "Susie積臧臧臧臧芃Susie積臧臧臧芃Susie積臧臧臧芃Susie",
             }
         )  # fmt: skip
         self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
@@ -252,7 +252,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 10): [0.8552370071411133, 0.5858630537986755, 1.27267324924469, -0.173826202750206, 0.628814160823822],
+                ("cuda", 10): [0.8747519850730896, 0.5780534744262695, 1.27267324924469, -0.16992005705833435, 0.6171004772186279],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -260,7 +260,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_COMPLETION = Expectations(
             {
-                ("cuda", 10): "audreyانہAdelaide盅природ瑮YanYanYanYanYanYanYanYanYanYanYanYanYanYan",
+                ("cuda", 10): " Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb",
             }
         )  # fmt: skip
         self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
@@ -323,7 +323,7 @@ class Inkling2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 10): [-16.20023536682129, -15.387210845947266, -17.97154998779297, -13.765021324157715, -17.400745391845703],
+                ("cuda", 10): [-16.551239013671875, -15.015604972839355, -17.647777557373047, -13.765021324157715, -17.565834045410156],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -354,7 +354,7 @@ class Inkling2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 10): [-17.81046485900879, -17.483488082885742, -12.295145034790039, -14.302041053771973, -13.014372825622559],
+                ("cuda", 10): [-17.81046485900879, -17.400745391845703, -12.554040908813477, -14.590080261230469, -13.467277526855469],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)

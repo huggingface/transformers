@@ -761,21 +761,17 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_convolution(
             hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
         )
-        residual = hidden_states
 
+        residual = hidden_states = hidden_states.float()
         if self.is_block_boundary:
             block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
         else:
-            hidden_states = block_residual.float() + hidden_states.float()
+            residual = hidden_states = block_residual.float() + hidden_states
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
-
-        if not self.is_block_boundary:
-            residual = block_residual + residual
-        hidden_states = residual + hidden_states
-        return hidden_states
+        return (residual + hidden_states).to(dtype)
 
 
 class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
@@ -831,21 +827,17 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_convolution(
             hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
         )
-        residual = hidden_states
 
+        residual = hidden_states = hidden_states.float()
         if self.is_block_boundary:
             block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
         else:
-            hidden_states = block_residual.float() + hidden_states.float()
+            residual = hidden_states = block_residual.float() + hidden_states
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
-
-        if not self.is_block_boundary:
-            residual = block_residual + residual
-        hidden_states = residual + hidden_states
-        return hidden_states
+        return (residual + hidden_states).to(dtype)
 
 
 class Inkling2VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
