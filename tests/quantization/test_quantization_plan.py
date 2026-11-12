@@ -230,6 +230,14 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertIsNone(plan["lm_head"])
         self.assertEqual(repr(plan["*"]), repr(NVFP4Config()))
 
+    def test_modelopt_warns_on_what_it_does_not_run_as_saved(self):
+        # W4A16 NVFP4 runs with FP4 activations, and the KV cache quantization is dropped: neither is silent
+        saved = {"quant_method": "modelopt", "quant_algo": "W4A16_NVFP4", "kv_cache_quant_algo": "FP8"}
+        with self.assertLogs("transformers.quantizers.schema_readers", level="WARNING") as logs:
+            self.plan_from_config(saved)
+        self.assertTrue(any("weight-only (W4A16)" in line for line in logs.output))
+        self.assertTrue(any("kv_cache_quant_algo=FP8" in line for line in logs.output))
+
     def test_modelopt_checkpoint_names(self):
         hf_quantizer, config = self.plan_from_config(self.DEEPSEEK)
         with torch.device("meta"):

@@ -18,7 +18,11 @@ Readers of a checkpoint's own quantization scheme (ModelOpt's per-layer `quantiz
 A new scheme gets its own function here, added to `SCHEMA_READERS`.
 """
 
+from ..utils import logging
 from ..utils.quantization_config import FineGrainedFP8Config, Mxfp4Config, NVFP4Config
+
+
+logger = logging.get_logger(__name__)
 
 
 # ModelOpt `quant_algo` -> its config. W4A16 NVFP4 loads with the W4A4 config, which quantizes activations
@@ -49,6 +53,18 @@ def modelopt_plan(config: dict) -> dict | None:
     base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
     plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
     plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in layers.items()}
+    algos = {layer["quant_algo"] for layer in layers.values()}
+    if "W4A16_NVFP4" in algos:
+        logger.warning(
+            "This checkpoint is NVFP4 weight-only (W4A16), but NVFP4 layers quantize their activations to FP4 beyond "
+            "single-token decoding, which changes the numerics. Pass `quantization_config=NVFP4Config(dequantize=True)` "
+            "to run them in full precision instead."
+        )
+    if config.get("kv_cache_quant_algo"):
+        logger.warning(
+            f"The checkpoint's `kv_cache_quant_algo={config['kv_cache_quant_algo']}` is not supported: the KV cache "
+            "stays in the model's dtype."
+        )
     return plan | {"*": base} if base else plan
 
 
