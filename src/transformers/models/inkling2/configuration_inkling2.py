@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2TextConfig(PreTrainedConfig):
     r"""
@@ -134,7 +134,7 @@ class Inkling2TextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2VisionConfig(PreTrainedConfig):
     r"""
@@ -189,7 +189,7 @@ INKLING2_QUANTIZATION_CONFIG = {
 }
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2Config(PreTrainedConfig):
     r"""

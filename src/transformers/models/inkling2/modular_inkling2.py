@@ -67,7 +67,7 @@ from ..step3p7.modeling_step3p7 import Step3p7VisionEncoderLayer
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionAttention
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2TextConfig(InklingTextConfig):
     r"""
@@ -177,7 +177,7 @@ class Inkling2TextConfig(InklingTextConfig):
         raise AttributeError("Not needed for Inkling2")
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2VisionConfig(Step3p7VisionConfig):
     r"""
@@ -227,7 +227,7 @@ INKLING2_QUANTIZATION_CONFIG = {
 }
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2Config(InklingConfig):
     r"""
@@ -1112,9 +1112,9 @@ class Inkling2ForCausalLM(InklingForCausalLM):
         >>> import torch
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small-MXFP8")
         >>> model = Inkling2ForCausalLM.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
@@ -1269,9 +1269,9 @@ class Inkling2Model(InklingModel):
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2Model
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small-MXFP8")
         >>> model = Inkling2Model.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [
@@ -1379,9 +1379,9 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2ForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small-MXFP8")
         >>> model = Inkling2ForConditionalGeneration.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [

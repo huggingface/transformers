@@ -1356,9 +1356,9 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
         >>> import torch
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small-MXFP8")
         >>> model = Inkling2ForCausalLM.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
@@ -1545,9 +1545,9 @@ class Inkling2Model(Inkling2PreTrainedModel):
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2Model
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small-MXFP8")
         >>> model = Inkling2Model.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [
@@ -1671,9 +1671,9 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2ForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small-MXFP8")
         >>> model = Inkling2ForConditionalGeneration.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [

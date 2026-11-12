@@ -20,13 +20,17 @@ limitations under the License.
 
 # Inkling 2 Small
 
-[Inkling 2 Small](https://huggingface.co/thinkingmachines/Inkling-2-Small) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is intended for use in English and other languages, and across multiple coding languages. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. The language backbone consists of 48 mixture-of-experts decoder layers, each routing tokens to 8 of 384 experts. The model has 594B total and 17B active parameters. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch. 
+[Inkling 2 Small](https://huggingface.co/thinkingmachines/Inkling-2-Small-MXFP8) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is intended for use in English and other languages, and across multiple coding languages. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. The language backbone consists of 48 mixture-of-experts decoder layers, each routing tokens to 8 of 384 experts. The model has 594B total and 17B active parameters. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch. 
 
-TODO: quantization info
+The model is released with two checkpoints:
+- [`thinkingmachines/Inkling-2-Small`](https://huggingface.co/thinkingmachines/Inkling-2-Small)
+- [`thinkingmachines/Inkling-2-Small-MXFP8`](https://huggingface.co/thinkingmachines/Inkling-2-Small-MXFP8)
+
+Both checkpoints contain quantized layers. `Inkling-2-Small` has both NVFP4 and MXFP8 quantized decoder layers. `Inkling-2-Small-MXFP8` contains only MXFP8 quantized layers. Currently only the `Inkling-2-Small-MXFP8` checkpoint is supported.
+
 
 ## Resources
 
-- [Hugging Face Model](https://huggingface.co/thinkingmachines/Inkling-2-Small)
 - [Thinking Machines Blog](https://thinkingmachines.ai/news/inkling-2-small/)
 - [Hugging Face Blog](https://huggingface.co/blog/thinkingmachines-inkling)
 
@@ -40,7 +44,7 @@ import torch
 from transformers import pipeline
 
 pipe = pipeline(
-    "image-text-to-text", model="thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+    "image-text-to-text", model="thinkingmachines/Inkling-2-Small-MXFP8", dtype=torch.bfloat16, device_map="auto"
 )
 
 messages = [
@@ -71,7 +75,7 @@ import torch
 
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "thinkingmachines/Inkling-2-Small"
+model_id = "thinkingmachines/Inkling-2-Small-MXFP8"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
@@ -109,7 +113,6 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 
 ## Notes
 
-- The checkpoint stores routed experts in NVFP4 and MXFP8. They are dequantized to the model dtype when loading.
 - Attention runs in eager mode only, because every layer adds a relative position bias and a sink.
 
 ## Inkling2Config

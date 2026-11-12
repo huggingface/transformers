@@ -283,7 +283,7 @@ class Inkling2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         RUN_SLOW=1 pytest tests/models/inkling2/test_modeling_inkling2.py::Inkling2IntegrationTest -s
     """
 
-    model_id = "thinkingmachines/Inkling-2-Small"
+    model_id = "thinkingmachines/Inkling-2-Small-MXFP8"
 
     MAX_NEW_TOKENS = 30
 
