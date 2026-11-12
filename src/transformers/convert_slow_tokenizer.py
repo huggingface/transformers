@@ -161,10 +161,11 @@ class SentencePieceExtractor:
             m.ParseFromString(f.read())
         self.proto = m
 
-    def extract(self, model_type, **kwargs) -> tuple[dict[str, int], list[tuple]]:
+    def extract(self, model_type, generate_merges=True, **kwargs) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
-        order the merges with respect to the piece scores instead.
+        order the merges with respect to the piece scores instead. With `generate_merges=False`, BPE merges are left
+        for the caller to build.
         """
         self.proto.trainer_spec.unk_id
         if model_type is None:
@@ -177,12 +178,12 @@ class SentencePieceExtractor:
             kwargs["unk_id"] = self.proto.trainer_spec.unk_id
             kwargs["vocab"] = vocab
         else:
-            from .tokenization_utils_base import generate_merges
+            from .tokenization_utils_base import generate_merges as generate_merges_from_vocab
 
             vocab = {word: i for i, (word, score) in enumerate(vocab)}
-            merges = generate_merges(vocab)
             kwargs["vocab"] = vocab
-            kwargs["merges"] = merges
+            if generate_merges:
+                kwargs["merges"] = generate_merges_from_vocab(vocab)
 
         # control tokens are special
         # user defined symbols are not

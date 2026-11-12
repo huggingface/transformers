@@ -307,17 +307,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @classmethod
     def _convert_from_sentencepiece(cls, vocab_file: str, local_kwargs: dict[str, Any]) -> dict[str, Any]:
-        from .convert_slow_tokenizer import SentencePieceExtractor
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, SentencePieceExtractor
+
+        converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
+        has_converter = (converter_class is not None and hasattr(converter_class, "convert_from_spm")) or hasattr(
+            cls, "convert_from_spm_model"
+        )
+        # Non-model specific tokenizers rebuild merges from the piece scores in step 3, so skip them in step 1
+        builds_from_proto = (cls is TokenizersBackend or "__init__" not in cls.__dict__) and not has_converter
 
         # 1. Extract vocab, merges, and spm_precompiled from the .model proto
         extractor = SentencePieceExtractor(vocab_file)
-        local_kwargs = extractor.extract(cls.model, **local_kwargs)
+        local_kwargs = extractor.extract(cls.model, generate_merges=not builds_from_proto, **local_kwargs)
 
         # 2. If a model-specific converter exists, use it.
         try:
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-
-            converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
             if converter_class is not None and hasattr(converter_class, "convert_from_spm"):
                 local_kwargs = converter_class.convert_from_spm(**local_kwargs)
         except Exception as e:
