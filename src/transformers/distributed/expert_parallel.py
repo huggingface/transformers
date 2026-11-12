@@ -416,7 +416,6 @@ class MegaMoeEP(EPImplementation):
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
         rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
 
-        # the kernel's symmetric buffers are per EP group, shared by every layer (`destroy_megamoe_buffers` frees them)
         local_output = self.experts_forward(
             hidden_states[rows], top_k_index[rows], top_k_weights[rows], process_group=ep_group
         )

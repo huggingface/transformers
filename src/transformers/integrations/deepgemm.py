@@ -849,8 +849,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
-# The Mega MoE kernel's symmetric-memory buffers, by EP group name, then by shape. Allocating one is a collective
-# rendezvous and slow, so every layer of an EP group shares them, as the layers run one after another.
+# By EP group, then shape: allocating one is a slow collective, so every layer of a group shares it.
 _SYMM_BUFFERS: dict[str, dict] = {}
 
 
@@ -874,9 +873,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    The `deepgemm_megamoe` expert-parallel implementation passes `process_group`, the EP group: its symmetric
-    buffers are allocated with a rendezvous over it and shared by every layer of the group (`destroy_megamoe_buffers`
-    frees them).
+    `process_group` is the EP group, passed by the `deepgemm_megamoe` expert-parallel implementation.
     `top_k_index` holds global expert ids, with `-1` for skipped slots.
 
     Caller-managed `self` attributes:

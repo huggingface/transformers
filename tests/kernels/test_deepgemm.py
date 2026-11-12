@@ -622,7 +622,6 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertTrue(cast["use_ue8m0"] and cast["use_packed_ue8m0"])
         self.assertEqual(cast["gran_k"], 32)
         buf = captured["symm_buffer"]
-        # cached per EP group, for every layer of the group
         self.assertEqual(list(dg._SYMM_BUFFERS["ep"].values()), [buf])
         self.assertTrue(torch.equal(buf.topk_idx[:num_tokens], top_k_index))
         self.assertTrue(torch.allclose(buf.topk_weights[:num_tokens], top_k_weights))
