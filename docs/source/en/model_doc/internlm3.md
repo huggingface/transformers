@@ -23,9 +23,7 @@ rendered properly in your Markdown viewer.
 
 # InternLM3
 
-[InternLM3](https://huggingface.co/internlm/internlm3-8b-instruct) is an 8B instruction-tuned language model developed by [Shanghai AI Laboratory](https://huggingface.co/internlm). Its architecture is the same as [Llama](./llama). Its config names the biases of the query, key and value projections `qkv_bias` and those of the attention output projection and MLP layers `bias`; [`InternLM3Config`] loads them as `attention_bias` and `mlp_bias`, and requires them to be equal, as they are in the released checkpoints.
-
-The auto classes load it with the Llama implementation ([`LlamaModel`] and [`LlamaForCausalLM`]), so only [`InternLM3Config`] is specific to InternLM3.
+[InternLM3](https://huggingface.co/internlm/internlm3-8b-instruct) is an 8B instruction-tuned language model developed by [Shanghai AI Laboratory](https://huggingface.co/internlm). Its architecture is the same as [Llama](./llama), except that the biases of the query, key and value projections are set by `qkv_bias` and those of the attention output projection and MLP layers by `bias`.
 
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
@@ -45,3 +43,13 @@ print(tokenizer.decode(output[0][inputs["input_ids"].shape[1] :], skip_special_t
 ## InternLM3Config
 
 [[autodoc]] InternLM3Config
+
+## InternLM3Model
+
+[[autodoc]] InternLM3Model
+    - forward
+
+## InternLM3ForCausalLM
+
+[[autodoc]] InternLM3ForCausalLM
+    - forward
