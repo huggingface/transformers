@@ -360,13 +360,14 @@ class Progress:
     so without this a long run looks stuck between results. Up to BAR_ABOVE contracts, each result
     gets a `[k/total]` line; above it, passing results only advance a progress bar redrawn in place
     (a line starting with "\\r" replaces the previous one in the checker window), and anything else
-    is printed in full above it.
+    is printed in full above it. Heartbeats are replaced the same way, so they never stay in the log,
+    and a blank line separates the results from the setup lines above them.
     """
 
     def __init__(self, total):
         self.total, self.every = total, HEARTBEAT_SECONDS
         self.bar = bool(total) and total > BAR_ABOVE
-        self.bar_on_screen = False
+        self.bar_on_screen = self.beat_on_screen = self.reported = False
         self.done, self.last = set(), None
         self.started = self.quiet_since = time.perf_counter()
         self._stop = threading.Event()
@@ -386,17 +387,19 @@ class Progress:
         self.done.add(name)
         self.last = name
         self.touch()
+        redraw = "\r" if self.bar_on_screen or self.beat_on_screen else ""
+        head = [] if self.reported else [""]
+        self.beat_on_screen, self.reported = False, True
         if not self.bar:
             prefix = f"[{len(self.done)}/{self.total}] " if self.total else ""
-            print(prefix + "\n".join(lines), flush=True)
+            print(redraw + "\n".join([*head, prefix + "\n".join(lines)]), flush=True)
             return
         if not quiet:
-            print(("\r" if self.bar_on_screen else "") + "\n".join(lines), flush=True)
-            self.bar_on_screen = False
+            print(redraw + "\n".join([*head, *lines]), flush=True)
+            redraw, head, self.bar_on_screen = "", [], False
         filled = BAR_WIDTH * len(self.done) // self.total
         bar = "█" * filled + "░" * (BAR_WIDTH - filled)
-        redraw = "\r" if self.bar_on_screen else ""
-        print(f"{redraw}{bar} {len(self.done)}/{self.total}", flush=True)
+        print(redraw + "\n".join([*head, f"{bar} {len(self.done)}/{self.total}"]), flush=True)
         self.bar_on_screen = True
 
     def touch(self):
@@ -409,8 +412,9 @@ class Progress:
             if now - self.quiet_since >= self.every and not self.bar_on_screen:
                 done = f"{len(self.done)}/{self.total} contracts done" if self.total else f"{len(self.done)} done"
                 last = f", last: {self.last}" if self.last else ", loading the first contract"
-                print(f"... {elapsed(now - self.started)} in, {done}{last}", flush=True)
-                self.quiet_since = now
+                redraw = "\r" if self.beat_on_screen else ""
+                print(f"{redraw}... {elapsed(now - self.started)} in, {done}{last}", flush=True)
+                self.beat_on_screen, self.quiet_since = True, now
 
 
 def stream(commands, env, fleet_name, on_record, announce=True, total=None, excuse=None):
@@ -569,7 +573,7 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     if returncode != 0 and not failed and tail:
         # The runner failed before (or without) reporting a failing target: show what it said.
         print("Runner output:\n" + "\n".join(f"  {line}" for line in tail), flush=True)
-    print(format_summary(counts, time.perf_counter() - started), flush=True)
+    print("\n" + format_summary(counts, time.perf_counter() - started), flush=True)
     warning = format_environment_warning(env_failures)
     if warning:
         print("\n".join(warning), flush=True)

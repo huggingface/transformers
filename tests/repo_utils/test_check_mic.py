@@ -151,21 +151,24 @@ class CheckMicTest(unittest.TestCase):
         # The runner reports a contract only when it finishes, so the wait is announced.
         self.assertEqual(lines[1], "Running the selected contracts, results print as each one finishes...")
         self.assertEqual(lines[2], "Selected BERT: models/bert (src/transformers/models/bert/modeling_bert.py)")
-        self.assertEqual(lines[3], "✓ BERT  slim  pass  1.6s")
-        self.assertEqual(lines[4], "✗ CLIP [sdpa]  slim  fail  2.0s")
-        self.assertEqual(lines[5], "    logits differ")
-        self.assertEqual(lines[6], "    environment differs from the baseline:")
-        self.assertEqual(lines[7], "      torch 2.14 (pinned 2.11)")
+        # Blank lines set the results apart from the setup lines above and the summary below.
+        self.assertEqual(lines[3], "")
+        self.assertEqual(lines[4], "✓ BERT  slim  pass  1.6s")
+        self.assertEqual(lines[5], "✗ CLIP [sdpa]  slim  fail  2.0s")
+        self.assertEqual(lines[6], "    logits differ")
+        self.assertEqual(lines[7], "    environment differs from the baseline:")
+        self.assertEqual(lines[8], "      torch 2.14 (pinned 2.11)")
         # A failing target explains the exit code; raw runner noise stays hidden.
         self.assertNotIn("noise", stdout.getvalue())
-        self.assertRegex(lines[8], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
-        # After the summary, the warning names the target; the versions are only listed above.
         self.assertEqual(lines[9], "")
+        self.assertRegex(lines[10], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+        # After the summary, the warning names the target; the versions are only listed above.
+        self.assertEqual(lines[11], "")
         self.assertEqual(
-            lines[10],
+            lines[12],
             "⚠ 1 failure ran on package versions other than the baseline's (listed above, still counted as failures):",
         )
-        self.assertEqual(lines[11], "    CLIP [sdpa]  slim")
+        self.assertEqual(lines[13], "    CLIP [sdpa]  slim")
 
     def test_environment_warning_lists_only_failures(self):
         self.assertEqual(check_mic.format_environment_warning({}), [])
@@ -215,11 +218,13 @@ class CheckMicTest(unittest.TestCase):
         )
         with patch.object(check_mic, "HEARTBEAT_SECONDS", 1), patch("sys.stdout", new_callable=io.StringIO) as stdout:
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=2), 0)
-        lines = stdout.getvalue().splitlines()
+        lines = stdout.getvalue().split("\n")  # not splitlines(): it splits on "\r" too
         self.assertRegex(lines[0], r"^\.\.\. 1s in, 0/2 contracts done, loading the first contract$")
+        # The first result replaces the heartbeat ("\r") with the blank line that opens the results.
+        self.assertEqual(lines[1], "\r")
         # Both targets belong to one contract: the counter counts contracts.
-        self.assertEqual(lines[1], "[1/2] ✓ BERT  slim  pass")
-        self.assertEqual(lines[2], "[1/2] ✓ BERT  other  pass")
+        self.assertEqual(lines[2], "[1/2] ✓ BERT  slim  pass")
+        self.assertEqual(lines[3], "[1/2] ✓ BERT  other  pass")
 
     def test_contracts_are_split_over_parallel_runners(self):
         # A fake runner: announces the fleet, then passes every --contract it was given.
@@ -256,12 +261,14 @@ class CheckMicTest(unittest.TestCase):
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=12), 1)
         lines = stdout.getvalue().rstrip("\n").split("\n")  # not splitlines(): it splits on "\r" too
         # Every line after the first bar redraws it, except the failure (printed in full) and the bar after it.
-        self.assertEqual(lines[0], "███" + "░" * 37 + " 1/12")
-        self.assertEqual(lines[5], "\r✗ C5  t  fail")
-        self.assertEqual(lines[6], "    logits differ")
-        self.assertEqual(lines[7], "████████████████████" + "░" * 20 + " 6/12")
-        self.assertEqual(lines[8], "\r" + "███████████████████████" + "░" * 17 + " 7/12")
-        self.assertEqual(lines[-2], "\r" + "█" * 40 + " 12/12")
+        self.assertEqual(lines[0], "")
+        self.assertEqual(lines[1], "███" + "░" * 37 + " 1/12")
+        self.assertEqual(lines[6], "\r✗ C5  t  fail")
+        self.assertEqual(lines[7], "    logits differ")
+        self.assertEqual(lines[8], "████████████████████" + "░" * 20 + " 6/12")
+        self.assertEqual(lines[9], "\r" + "███████████████████████" + "░" * 17 + " 7/12")
+        self.assertEqual(lines[-3], "\r" + "█" * 40 + " 12/12")
+        self.assertEqual(lines[-2], "")
         self.assertNotIn("C0", stdout.getvalue())
         self.assertRegex(lines[-1], r"^MIC: 11 passed, 1 failed in [0-9.]+s$")
 
