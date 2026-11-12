@@ -30,7 +30,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available, logging, requires_backends
+from ...utils import auto_docstring, is_tokenizers_v1_available, is_torch_available, logging, requires_backends
 from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
@@ -202,9 +202,14 @@ class FuyuProcessor(ProcessorMixin):
         Override for BC. Fuyu uses TokenizersBackend and requires token_type_ids to be removed from model_input_names
         because Fuyu uses mm_token_type_ids instead for multimodal token identification.    `
         """
-        from ...tokenization_utils_tokenizers import TokenizersBackend
+        if is_tokenizers_v1_available():  # `AutoTokenizer` ignores `tokenizer_class` with tokenizers>=1
+            tokenizer = super()._load_tokenizer_from_pretrained(
+                sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+            )
+        else:
+            from ...tokenization_utils_tokenizers import TokenizersBackend
 
-        tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
         # Remove token_type_ids as Fuyu uses mm_token_type_ids instead
         if "token_type_ids" in tokenizer.model_input_names:
             tokenizer.model_input_names.remove("token_type_ids")

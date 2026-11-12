@@ -67,11 +67,20 @@ class TokenizersV1Backend(PreTrainedTokenizerBase):
         )
 
     @property
+    def is_fast(self) -> bool:
+        # Callers read `is_fast` as "offsets are available", which tokenizers>=1 doesn't expose yet
+        return False
+
+    @property
     def vocab_size(self) -> int:
         return self._tokenizer.get_vocab_size(with_added_tokens=False)
 
     def get_vocab(self) -> dict[str, int]:
         return self._tokenizer.get_vocab(with_added_tokens=True)
+
+    @property
+    def vocab(self) -> dict[str, int]:
+        return self.get_vocab()
 
     def __len__(self) -> int:
         return self._tokenizer.get_vocab_size(with_added_tokens=True)
