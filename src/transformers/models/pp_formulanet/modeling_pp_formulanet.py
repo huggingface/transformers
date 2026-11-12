@@ -51,7 +51,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_pp_formulanet import PPFormulaNetConfig, PPFormulaNetVisionConfig
+from .configuration_pp_formulanet import PPFormulaNetConfig, PPFormulaNetTextConfig, PPFormulaNetVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -783,8 +783,9 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
         "attentions": OutputRecorder(PPFormulaNetAttention, index=1, layer_name="self_attn"),
         "cross_attentions": OutputRecorder(PPFormulaNetAttention, index=1, layer_name="encoder_attn"),
     }
+    config: PPFormulaNetTextConfig
 
-    def __init__(self, config: PPFormulaNetConfig):
+    def __init__(self, config: PPFormulaNetTextConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -919,7 +920,7 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
