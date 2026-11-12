@@ -453,3 +453,45 @@ class PatchMistralRegexHubCallTests(unittest.TestCase):
                 "not-a-real/hub-id",
             )
         self.assertIsNotNone(result)
+
+
+@require_tokenizers
+class TokenizerClassMismatchTests(unittest.TestCase):
+    BYTELEVEL = {"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True, "use_regex": True}
+
+    def _load(self, **json_overrides):
+        tokenizer_json = {
+            "version": "1.0",
+            "truncation": None,
+            "padding": None,
+            "added_tokens": [],
+            "normalizer": None,
+            "pre_tokenizer": self.BYTELEVEL,
+            "post_processor": None,
+            "decoder": self.BYTELEVEL,
+            "model": {"type": "BPE", "vocab": {"a": 0, "b": 1, "ab": 2}, "merges": ["a b"]},
+            **json_overrides,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "tokenizer.json"), "w", encoding="utf-8") as f:
+                json.dump(tokenizer_json, f)
+            with open(os.path.join(tmpdir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"tokenizer_class": "LlamaTokenizerFast"}, f)
+            with self.assertLogs("transformers.tokenization_utils_tokenizers", level="WARNING") as cm:
+                tokenizer = AutoTokenizer.from_pretrained(tmpdir)
+        return tokenizer, "\n".join(cm.output)
+
+    def test_bytelevel_pipeline_mismatch(self):
+        tokenizer, logs = self._load()
+        self.assertIn("decoder is", logs)
+        self.assertIn("pre_tokenizer is", logs)
+        self.assertIsInstance(tokenizer._tokenizer.decoder, decoders.ByteLevel)
+        self.assertIsInstance(tokenizer._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel)
+
+    def test_only_pre_tokenizer_mismatch_names_pre_tokenizer(self):
+        tokenizer, logs = self._load(decoder={"type": "Fuse"})
+        self.assertIn("pre_tokenizer is", logs)
+        self.assertNotIn("decoder is", logs)
+        # the pipeline is loaded as a unit, so the decoder also comes from tokenizer.json
+        self.assertIsInstance(tokenizer._tokenizer.decoder, decoders.Fuse)
+        self.assertIsInstance(tokenizer._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel)
