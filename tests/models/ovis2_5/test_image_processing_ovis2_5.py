@@ -73,19 +73,15 @@ class Ovis2_5ImageProcessingTester(ImageProcessingTester):
 class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = Ovis2_5ImageProcessingTester
 
-    def _check_input_type(self, image_inputs, **kwargs):
+    def _check_input_type(self, image_inputs):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-
-            output = image_processor(image_inputs[0], return_tensors="pt", **kwargs)
-            expected_shape, expected_grid = self.image_processor_tester.expected_output([image_inputs[0]])
-            self.assertEqual(tuple(output.pixel_values.shape), expected_shape)
-            self.assertEqual(output.image_grid_thw.tolist(), expected_grid)
-
-            output = image_processor(image_inputs, return_tensors="pt", **kwargs)
-            expected_shape, expected_grid = self.image_processor_tester.expected_output(image_inputs)
-            self.assertEqual(tuple(output.pixel_values.shape), expected_shape)
-            self.assertEqual(output.image_grid_thw.tolist(), expected_grid)
+            for inputs in (image_inputs[:1], image_inputs):
+                with self.subTest(image_processor=image_processing_class.__name__, batch_size=len(inputs)):
+                    output = image_processor(inputs[0] if len(inputs) == 1 else inputs, return_tensors="pt")
+                    expected_shape, expected_grid = self.image_processor_tester.expected_output(inputs)
+                    self.assertEqual(tuple(output.pixel_values.shape), expected_shape)
+                    self.assertEqual(output.image_grid_thw.tolist(), expected_grid)
 
     def test_call_pil(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)

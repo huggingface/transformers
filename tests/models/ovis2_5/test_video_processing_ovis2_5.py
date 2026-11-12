@@ -78,10 +78,10 @@ class Ovis2_5VideoProcessingTester:
             return_tensors=return_tensors,
         )
 
-    def expected_output(self, videos, num_frames=None, num_channels=3):
+    def expected_output(self, videos):
         grids = []
         for video in videos:
-            frames = len(video) if num_frames is None else num_frames
+            frames = len(video)
             if isinstance(video, list) and isinstance(video[0], Image.Image):
                 width, height = video[0].size
             elif isinstance(video, list):
@@ -106,7 +106,7 @@ class Ovis2_5VideoProcessingTester:
             )
 
         num_patches = sum(np.prod(grid) for grid in grids)
-        patch_dim = num_channels * self.temporal_patch_size * self.patch_size**2
+        patch_dim = 3 * self.temporal_patch_size * self.patch_size**2
         return (num_patches, patch_dim), grids
 
     def expected_output_video_shape(self, videos):
@@ -118,7 +118,6 @@ class Ovis2_5VideoProcessingTester:
 @require_torchvision
 class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     fast_video_processing_class = Ovis2_5VideoProcessor if is_torchvision_available() else None
-    input_name = "pixel_values_videos"
 
     def setUp(self):
         super().setUp()
@@ -146,16 +145,12 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     def _check_input_type(self, video_inputs, **kwargs):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
-
-            output = video_processor(video_inputs[0], return_tensors="pt", **kwargs)
-            expected_shape, expected_grid = self.video_processor_tester.expected_output([video_inputs[0]])
-            self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
-            self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
-
-            output = video_processor(video_inputs, return_tensors="pt", **kwargs)
-            expected_shape, expected_grid = self.video_processor_tester.expected_output(video_inputs)
-            self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
-            self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
+            for inputs in (video_inputs[:1], video_inputs):
+                with self.subTest(video_processor=video_processing_class.__name__, batch_size=len(inputs)):
+                    output = video_processor(inputs[0] if len(inputs) == 1 else inputs, return_tensors="pt", **kwargs)
+                    expected_shape, expected_grid = self.video_processor_tester.expected_output(inputs)
+                    self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
+                    self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
 
     def test_call_numpy_4_channels(self):
         self.video_processor_tester.num_channels = 4

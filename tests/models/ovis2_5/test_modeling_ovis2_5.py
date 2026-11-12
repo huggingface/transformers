@@ -49,12 +49,10 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("seq_length", 8)
         kwargs.setdefault("vocab_size", 32)
         kwargs.setdefault("hidden_size", 16)
         kwargs.setdefault("num_hidden_layers", 1)
         kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("head_dim", 4)
         kwargs.setdefault("max_position_embeddings", 32)
         kwargs.setdefault("attention_dropout", 0.0)
         kwargs.setdefault("hidden_act", "silu")
@@ -125,41 +123,6 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
             )
         }
 
-    def prepare_video_inputs(self):
-        num_frames = 2
-        input_ids = torch.tensor(
-            [
-                [
-                    self.bos_token_id,
-                    self.video_start_token_id,
-                    self.video_token_id,
-                    self.video_token_id,
-                    self.video_end_token_id,
-                    self._safe_token_id(),
-                    self.eos_token_id,
-                ]
-            ]
-            * self.batch_size,
-            dtype=torch.long,
-            device=torch_device,
-        )
-        grid_size = self.image_size // self.patch_size
-        patches_per_video = num_frames * grid_size**2
-        return {
-            "input_ids": input_ids,
-            "attention_mask": torch.ones_like(input_ids),
-            "pixel_values_videos": torch.randn(
-                self.batch_size * patches_per_video,
-                self.num_channels * self.patch_size**2,
-                device=torch_device,
-            ),
-            "video_grid_thw": torch.tensor(
-                [[num_frames, grid_size, grid_size]] * self.batch_size,
-                dtype=torch.long,
-                device=torch_device,
-            ),
-        }
-
 
 @require_torch
 class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
@@ -172,9 +135,20 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
     def test_video_forward(self):
-        config = self.model_tester.get_config()
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
-        inputs = self.model_tester.prepare_video_inputs()
+        num_frames = 2
+        inputs["input_ids"][:, :4] = torch.tensor(
+            [config.video_start_token_id, config.video_token_id, config.video_token_id, config.video_end_token_id],
+            device=torch_device,
+        )
+        inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
+        inputs.pop("pixel_values")
+        inputs["pixel_values_videos"] = self.model_tester.create_pixel_values(
+            batch_size=self.model_tester.batch_size * num_frames
+        )
+        inputs["video_grid_thw"] = inputs.pop("image_grid_thw")
+        inputs["video_grid_thw"][:, 0] = num_frames
 
         with torch.no_grad():
             outputs = model(**inputs)

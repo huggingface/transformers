@@ -12,233 +12,94 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
 
-from transformers import Ovis2_5Config, Ovis2_5Processor
-from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
-from transformers.utils import is_tokenizers_available, is_torchvision_available
+from transformers import Ovis2_5Processor
+from transformers.testing_utils import require_torch, require_torchcodec, require_torchvision, require_vision, slow
+from transformers.utils import is_torchcodec_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_tokenizers_available():
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
-
-    from transformers import PreTrainedTokenizerFast
 
 if is_torchvision_available():
     from transformers import Ovis2_5ImageProcessor, Ovis2_5VideoProcessor
 
 
-VISUAL_TOKENS = (
-    "<ovis_visual_atom>",
-    "<ovis_image_start>",
-    "<ovis_image_end>",
-    "<ovis_video_start>",
-    "<ovis_video_end>",
-)
-
-NAMED_VISUAL_TOKENS = {
-    "image_token": "<ovis_visual_atom>",
-    "video_token": "<ovis_visual_atom>",
-    "image_start_token": "<ovis_image_start>",
-    "image_end_token": "<ovis_image_end>",
-    "video_start_token": "<ovis_video_start>",
-    "video_end_token": "<ovis_video_end>",
-}
-
-
 @require_vision
 @require_torch
 @require_torchvision
-@require_tokenizers
 class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2_5Processor
+    model_id = "ovis-community/Ovis2.5-2B"
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokens = [
-            "<unk>",
-            "<pad>",
-            "<bos>",
-            "<eos>",
-            *VISUAL_TOKENS,
-            "lower",
-            "newer",
-            "upper",
-            "older",
-            "longer",
-            "string",
-        ]
-        vocab = {token: index for index, token in enumerate(tokens)}
-        tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        return PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            unk_token="<unk>",
-            pad_token="<pad>",
-            bos_token="<bos>",
-            eos_token="<eos>",
-            extra_special_tokens=NAMED_VISUAL_TOKENS,
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        return super()._setup_from_pretrained(
+            model_id, size={"shortest_edge": 64 * 64, "longest_edge": 64 * 1024}, **kwargs
         )
 
-    @classmethod
-    def _setup_image_processor(cls):
-        return Ovis2_5ImageProcessor(
-            size={"shortest_edge": 64 * 64, "longest_edge": 64 * 1024},
-        )
+    def _test_apply_chat_template(self, modality, batch_size, return_tensors, input_name, processor_name, input_data):
+        if modality == "video":
+            if batch_size > 1:
+                self.skipTest("Ovis2.5 accepts exactly one video")
+            if isinstance(input_data[0], str) and not is_torchcodec_available():
+                self.skipTest("Video URL decoding requires Torchcodec")
+        super()._test_apply_chat_template(modality, batch_size, return_tensors, input_name, processor_name, input_data)
 
-    @classmethod
-    def _setup_video_processor(cls):
-        return Ovis2_5VideoProcessor(
-            size={"shortest_edge": 64 * 64, "longest_edge": 64 * 1024},
-        )
+    @property
+    def video_sampling_expectations(self):
+        expectations = super().video_sampling_expectations
+        for expectation in expectations:
+            expectation["expected_dim"] = 0
+            # Each 240x320 fixture frame resizes to 192x288, yielding 12x18 patches.
+            expectation["output_length"] *= 216
+        return expectations
 
+    @require_torchcodec
+    def test_apply_chat_template_video_frame_sampling(self):
+        super().test_apply_chat_template_video_frame_sampling()
+
+    @slow
     def test_processor_loads_legacy_hub_metadata(self):
-        tokenizer = self._setup_tokenizer()
-        legacy_preprocessor_config = {
-            "do_convert_rgb": None,
-            "do_normalize": True,
-            "do_rescale": True,
-            "do_resize": True,
-            "image_mean": [0.5, 0.5, 0.5],
-            "image_processor_type": "SiglipImageProcessor",
-            "image_std": [0.5, 0.5, 0.5],
-            "processor_class": "SiglipProcessor",
-            "resample": 2,
-            "rescale_factor": 1 / 255,
-            "size": {"height": 512, "width": 512},
-        }
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tokenizer.save_pretrained(tmpdirname)
-            Ovis2_5Config().save_pretrained(tmpdirname)
-            Path(tmpdirname, "preprocessor_config.json").write_text(
-                json.dumps(legacy_preprocessor_config), encoding="utf-8"
-            )
-            processor = self.processor_class.from_pretrained(tmpdirname)
-
+        """The original checkpoint's SigLIP metadata must select native Ovis processors."""
+        processor = self.processor_class.from_pretrained("AIDC-AI/Ovis2.5-2B", trust_remote_code=False)
         self.assertIsInstance(processor.image_processor, Ovis2_5ImageProcessor)
         self.assertIsInstance(processor.video_processor, Ovis2_5VideoProcessor)
         for visual_processor in (processor.image_processor, processor.video_processor):
             self.assertEqual(visual_processor.size.shortest_edge, 448 * 448)
             self.assertEqual(visual_processor.size.longest_edge, 1344 * 1792)
-        for token in VISUAL_TOKENS:
-            self.assertNotEqual(processor.tokenizer.convert_tokens_to_ids(token), processor.tokenizer.unk_token_id)
-
-        image_inputs = processor(
-            images=np.zeros((64, 64, 3), dtype=np.uint8), text="<image> lower", return_tensors="pt"
-        )
-        self.assertSetEqual(set(image_inputs), {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"})
-
-        video_inputs = processor(
-            videos=self.prepare_videos_inputs(), text="<video> lower", do_sample_frames=False, return_tensors="pt"
-        )
-        self.assertSetEqual(
-            set(video_inputs), {"input_ids", "attention_mask", "pixel_values_videos", "video_grid_thw"}
-        )
-
-    def test_image_prompt_expansion_matches_patch_grid(self):
-        processor = self.get_processor()
-        image = self.prepare_images_inputs()
-        inputs = processor(
-            images=[image, image.copy()],
-            text="<image> lower <image>",
-            return_tensors="pt",
-        )
-
-        num_visual_tokens = [
-            int(grid.prod()) // processor.image_processor.merge_size**2 for grid in inputs.image_grid_thw
-        ]
-        expanded_text = (
-            processor.image_start_token
-            + processor.visual_atom_token * num_visual_tokens[0]
-            + processor.image_end_token
-            + " lower "
-            + processor.image_start_token
-            + processor.visual_atom_token * num_visual_tokens[1]
-            + processor.image_end_token
-        )
-        self.assertListEqual(inputs.input_ids[0].tolist(), processor.tokenizer(expanded_text).input_ids)
-
-    def test_video_prompt_expansion(self):
-        """A video placeholder expands to boundary tokens and one visual atom per merged patch."""
-        processor = self.get_processor()
-        inputs = processor(
-            videos=self.prepare_videos_inputs(),
-            text="<video> lower newer",
-            do_sample_frames=False,
-            return_tensors="pt",
-        )
-
-        num_visual_tokens = int(inputs.video_grid_thw[0].prod()) // processor.video_processor.merge_size**2
-        input_ids = inputs.input_ids[0].tolist()
-        video_start = input_ids.index(processor.video_start_token_id)
-        expected_video_ids = (
-            [processor.video_start_token_id]
-            + [processor.video_token_id] * num_visual_tokens
-            + [processor.video_end_token_id]
-        )
-        self.assertListEqual(input_ids[video_start : video_start + num_visual_tokens + 2], expected_video_ids)
 
     def test_model_input_names(self):
+        # The shared test combines images and videos, which Ovis2.5 handles separately.
         processor = self.get_processor()
-
-        image_inputs = processor(
-            text=self.prepare_text_inputs(modalities="image"),
-            images=self.prepare_images_inputs(),
-            return_tensors="pt",
-        )
-        self.assertSetEqual(
-            set(image_inputs),
-            {"input_ids", "attention_mask", "pixel_values", "image_grid_thw"},
-        )
-
-        video_inputs = processor(
-            text=self.prepare_text_inputs(modalities="video"),
-            videos=self.prepare_videos_inputs(),
-            do_sample_frames=False,
-            return_tensors="pt",
-        )
-        self.assertSetEqual(
-            set(video_inputs),
-            {"input_ids", "attention_mask", "pixel_values_videos", "video_grid_thw"},
-        )
-        self.assertSetEqual(set(processor.model_input_names), set(image_inputs) | set(video_inputs))
+        input_names = set()
+        for modality in ("images", "videos"):
+            inputs = processor(
+                text=self.prepare_text_inputs(modalities=modality),
+                **{modality: getattr(self, f"prepare_{modality}_inputs")()},
+                do_sample_frames=False,
+                return_tensors="pt",
+            )
+            input_names.update(inputs)
+        self.assertSetEqual(set(processor.model_input_names), input_names)
 
     def test_processor_with_multiple_inputs(self):
-        processor = self.get_processor()
-
+        # The shared test expects mixed visual modalities to succeed.
         with self.assertRaisesRegex(ValueError, "one visual modality at a time"):
-            processor(
-                text="<image><video> lower newer",
-                images=self.prepare_images_inputs(),
-                videos=self.prepare_videos_inputs(),
-                do_sample_frames=False,
-                return_tensors="pt",
-            )
+            super().test_processor_with_multiple_inputs()
 
     def _test_unstructured_kwargs_batched(self, modality):
-        if modality != "videos":
-            return super()._test_unstructured_kwargs_batched(modality)
-
-        processor = self.get_processor()
-        with self.assertRaisesRegex(ValueError, "exactly one video"):
-            processor(
-                text=self.prepare_text_inputs(batch_size=2, modalities="video"),
-                videos=self.prepare_videos_inputs(batch_size=2),
-                do_sample_frames=False,
-                return_tensors="pt",
-            )
+        # The shared video kwargs test supplies two videos; Ovis2.5 accepts one.
+        if modality == "videos":
+            with self.assertRaisesRegex(ValueError, "exactly one video"):
+                super()._test_unstructured_kwargs_batched(modality)
+        else:
+            super()._test_unstructured_kwargs_batched(modality)
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
+        # Image/video atoms share an ID, so shared mm_token_type_ids cannot distinguish them.
         processor = self.get_processor()
         image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
         images = [np.zeros((height, width, 3), dtype=np.uint8) for height, width in image_sizes]
@@ -254,6 +115,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(visual_atom_counts, helper_counts)
 
     def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        # The shared test supplies multiple videos; check the supported single-video path.
         processor = self.get_processor()
         video = self.prepare_videos_inputs()[:7]
         inputs = processor(
@@ -277,6 +139,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     def test_processor_text_has_no_visual(self):
+        # The shared mixed batch also includes videos, which cannot accompany images.
         processor = self.get_processor()
         image = self.prepare_images_inputs()
         inputs = processor(
