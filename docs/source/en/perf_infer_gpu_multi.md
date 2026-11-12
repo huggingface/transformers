@@ -142,7 +142,6 @@ The table below describes each strategy.
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 | `LocalParamsParallel` | Runs a module's forward with its own sharded parameters as local tensors. Use it on the owner of a bare `nn.Parameter`, such as attention sinks, that its own plan entry shards. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
-| `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 
 ### Packed strategies
 

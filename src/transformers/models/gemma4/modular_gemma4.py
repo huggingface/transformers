@@ -48,7 +48,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import (
@@ -1575,6 +1575,9 @@ class Gemma4TextModel(Gemma3TextModel):
             can_optimize = False
         # Flex cannot slice mask
         elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
+            can_optimize = False
+        # Flash cannot slice mask
+        elif is_flash_attention_requested(self.config):
             can_optimize = False
         # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
         elif (
