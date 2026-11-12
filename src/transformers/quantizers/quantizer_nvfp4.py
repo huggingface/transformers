@@ -95,6 +95,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             for name, module in model.named_modules()
             if isinstance(module, (NVFP4Linear, NVFP4Experts))
         }
+
         for key, style in list(parallel_plan.items()):
             module_name, _, param = key.rpartition(".")
             if isinstance(modules.get(module_name), NVFP4Experts) and hasattr(modules[module_name], f"{param}_sf"):
@@ -103,11 +104,12 @@ class NVFP4HfQuantizer(HfQuantizer):
         # Tensor parallelism would split the swizzled scales, which have no sharding plan yet. Expert parallelism takes
         # the experts' rules, and shards them whole
         distributed_config = getattr(model.config, "distributed_config", None)
-        if (getattr(distributed_config, "tp_size", None) or 1) == 1:
+        tp_size = getattr(distributed_config, "tp_size", None) or 1
+        ep_size = getattr(distributed_config, "ep_size", None) or 1
+        if tp_size == 1:
             return
-        tp_sharded = (
-            (NVFP4Linear,) if (getattr(distributed_config, "ep_size", None) or 1) > 1 else (NVFP4Linear, NVFP4Experts)
-        )
+
+        tp_sharded = (NVFP4Linear,) if ep_size > 1 else (NVFP4Linear, NVFP4Experts)
         if any(isinstance(module, tp_sharded) for module in modules.values()):
             raise ValueError(
                 "NVFP4 quantization does not support tensor parallelism yet: its scale metadata does not have a "

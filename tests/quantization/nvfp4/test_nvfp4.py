@@ -16,6 +16,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from parameterized import parameterized
+
 from transformers import MixtralConfig, MixtralForCausalLM, NVFP4Config, Qwen3_5MoeForCausalLM, Qwen3_5MoeTextConfig
 from transformers.distributed import DistributedConfig
 from transformers.integrations.mxfp4 import FP4_VALUES
@@ -27,10 +29,11 @@ from transformers.integrations.nvfp4 import (
     NVFP4Quantize,
     load_nvfp4_kernel,
     swizzle_sf,
+    swizzled_sf_shape,
 )
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
-from transformers.testing_utils import is_expert_parallel_test
+from transformers.testing_utils import is_expert_parallel_test, require_torch
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
 
@@ -44,26 +47,22 @@ if is_torch_available():
     from torch.nn.functional import ScalingType
 
 
-def _padded_sf_shape(rows, columns):
-    return -(-rows // 128) * 128, -(-columns // 64)  # 128 x 4 tiles of fp8 scales, four per int32
-
-
 def _unswizzle(sf, rows, columns):
-    "Inverse of `swizzle_sf`: the row-major `(rows, columns)` block scales"
+    """Inverse of `swizzle_sf`: the row-major `(rows, columns)` block scales"""
     row_tiles, col_tiles = -(-rows // 128), -(-columns // 4)
     tiles = sf.reshape(-1).view(torch.uint8).view(row_tiles, col_tiles, 32, 4, 4).transpose(2, 3)
     return tiles.reshape(row_tiles, col_tiles, 128, 4).transpose(1, 2).reshape(row_tiles * 128, -1)[:rows, :columns]
 
 
 def _dequantize(packed, sf_rowmajor):
-    "e2m1 values times their fp8 block scales"
+    """e2m1 values times their fp8 block scales"""
     values = torch.tensor(FP4_VALUES)[torch.stack([packed & 0xF, packed >> 4], -1).int()].flatten(-2)
     scales = sf_rowmajor.view(torch.float8_e4m3fn).float().repeat_interleave(16, -1)
     return values * scales
 
 
 def _quantize(input, global_scale):
-    "NVFP4 activations: `input * global_scale` as e2m1 values and row-major fp8 block scales"
+    """NVFP4 activations: `input * global_scale` as e2m1 values and row-major fp8 block scales"""
     blocks = (input.float() * global_scale).view(input.shape[0], -1, 16)
     sf = (blocks.abs().amax(-1) / 6).to(torch.float8_e4m3fn)
     scaled = blocks / sf.float().clamp(min=1e-12).unsqueeze(-1)
@@ -72,20 +71,20 @@ def _quantize(input, global_scale):
 
 
 def _fake_kernel():
-    "The NVFP4 kernel's entry points, computing in float32 from the dequantized operands"
+    """The NVFP4 kernel's entry points, computing in float32 from the dequantized operands"""
 
     def pack(weight, device):
         out_features, in_features = weight.shape
         return SimpleNamespace(
             qweight=torch.empty(out_features, in_features // 2, dtype=torch.uint8, device=device),
-            sf=torch.empty(_padded_sf_shape(out_features, in_features), dtype=torch.int32, device=device),
+            sf=torch.empty(swizzled_sf_shape(out_features, in_features), dtype=torch.int32, device=device),
             sf_rowmajor=torch.empty(out_features, in_features // 16, dtype=torch.uint8, device=device),
             global_scale=torch.ones(1, dtype=torch.float32, device=device),
         )
 
     def scaled_fp4_quant(input, global_scale, swizzled):
         qinput, sf = _quantize(input, global_scale)
-        return qinput, swizzle_sf(sf).view(torch.int32).view(_padded_sf_shape(*input.shape)) if swizzled else sf
+        return qinput, swizzle_sf(sf).view(torch.int32).view(swizzled_sf_shape(*input.shape)) if swizzled else sf
 
     def cutlass_scaled_fp4_mm(qinput, weight, input_sf, weight_sf, alpha):
         (rows, k), out_features = qinput.shape, weight.shape[0]
@@ -101,7 +100,6 @@ def _fake_kernel():
         PackedWeight=SimpleNamespace,
         gemm=gemm,
         pack=pack,
-        swizzled_sf_shape=_padded_sf_shape,
         scaled_fp4_quant=scaled_fp4_quant,
         cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm,
     )
@@ -126,7 +124,7 @@ def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, 
 
 
 def _modelopt_quantize(weight):
-    "ModelOpt's NVFP4 (`NVFP4QTensor.quantize`): `weight ~= fp4 * weight_scale * weight_scale_2`"
+    """ModelOpt's NVFP4 (`NVFP4QTensor.quantize`): `weight ~= fp4 * weight_scale * weight_scale_2`"""
     weight_scale_2 = weight.abs().amax().float() / (6 * 448)
     packed, weight_scale = _quantize(weight, 1 / weight_scale_2)
     return packed, weight_scale.view(torch.float8_e4m3fn), weight_scale_2
@@ -172,7 +170,6 @@ class NVFP4IntegrationTest(unittest.TestCase):
             PackedWeight=kernel.PackedWeight,
             gemm=kernel.gemm,
             pack=kernel.pack,
-            swizzled_sf_shape=kernel.swizzled_sf_shape,
             _ops=SimpleNamespace(ops=SimpleNamespace(scaled_fp4_quant=kernel.scaled_fp4_quant)),
         )
         with (
@@ -287,7 +284,7 @@ def _modelopt_experts_checkpoint(model, names, rename):
 
 
 def _dequantized_expert(checkpoint, prefix, names, expert):
-    "The dense `gate_up_proj` and `down_proj` of one expert, from its ModelOpt tensors"
+    """The dense `gate_up_proj` and `down_proj` of one expert, from its ModelOpt tensors"""
     projections = []
     for name in names:
         name = f"{prefix}.{expert}.{name}"
@@ -451,16 +448,17 @@ def _expert_parallelism_shards_each_expert(rank, path, weight_only):
 
 
 @is_expert_parallel_test
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
+@require_torch
 class NVFP4ExpertParallelTest(unittest.TestCase):
-    def test_expert_parallelism(self):
+    @parameterized.expand([("w4a4", False), ("weight_only", True)])
+    def test_expert_parallelism(self, _, weight_only):
         config, checkpoint = _mixtral_checkpoint()
-        for weight_only in (False, True):
-            with self.subTest(weight_only=weight_only), tempfile.TemporaryDirectory() as tmp:
-                config.quantization_config.weight_only = weight_only
-                config.save_pretrained(tmp)
-                save_file(checkpoint, f"{tmp}/model.safetensors", metadata={"format": "pt"})
-                run_distributed(world_size=2, backend="gloo")(_expert_parallelism_shards_each_expert)(tmp, weight_only)
+        config.quantization_config.weight_only = weight_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config.save_pretrained(tmp)
+            save_file(checkpoint, f"{tmp}/model.safetensors", metadata={"format": "pt"})
+            run_distributed(world_size=2, backend="gloo")(_expert_parallelism_shards_each_expert)(tmp, weight_only)
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")

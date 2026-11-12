@@ -372,9 +372,6 @@ def _apply_if_grad(function, direct, input, *args):
 
 
 class FP8Linear(nn.Linear):
-    # Tensor parallelism runs its forward on local tensors
-    _hf_quantized_needs_local_tp = True
-
     def __init__(
         self,
         in_features: int,
@@ -698,9 +695,6 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    # Tensor parallelism runs its forward on local tensors
-    _hf_quantized_needs_local_tp = True
-
     def __init__(
         self,
         config,
@@ -922,7 +916,7 @@ class Fp8Quantize(ConversionOps):
 
 
 class Fp8Deserialize(ConversionOps):
-    "Loads an FP8 linear's tensors as its params: 4-D ModelOpt scales flattened, each cast to its param's dtype"
+    """Loads an FP8 linear's tensors as its params: 4-D ModelOpt scales flattened, each cast to its param's dtype"""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
