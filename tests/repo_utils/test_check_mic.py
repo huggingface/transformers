@@ -272,6 +272,35 @@ class CheckMicTest(unittest.TestCase):
         self.assertNotIn("C0", stdout.getvalue())
         self.assertRegex(lines[-1], r"^MIC: 11 passed, 1 failed in [0-9.]+s$")
 
+    def test_model_resolves_by_directory_or_model_name(self):
+        root = check_mic.ROOT
+        self.assertEqual(check_mic.resolve_model(root, "wav2vec2"), ("wav2vec2", []))
+        # Case and punctuation are ignored, for directories, model types and config class names.
+        for name in ("Wav2Vec2", "wav2vec-2", "WAV2VEC2"):
+            self.assertEqual(check_mic.resolve_model(root, name), ("wav2vec2", []))
+        self.assertEqual(check_mic.resolve_model(root, "gpt-sw3"), ("gpt_sw3", []))
+        # A typo or a prefix is only suggested: close names often belong to sibling models.
+        self.assertEqual(check_mic.resolve_model(root, "wave2vec"), (None, ["wav2vec2"]))
+        directory, suggestions = check_mic.resolve_model(root, "wav2vec")
+        self.assertIsNone(directory)
+        self.assertEqual(suggestions[:2], ["wav2vec2", "wav2vec2_bert"])
+        self.assertEqual(check_mic.resolve_model(root, "no_such_model_xyz"), (None, []))
+
+    def test_command_is_shown_as_a_tmic_line(self):
+        command = [sys.executable, "-m", "transformers_mic.cli", "check", "--fleet", "prototypes"]
+        command += ["--contract", "AudioFlamingo3", "--contract", "Gemma 3", "--variant", "bfloat16"]
+        env = {"HF_HUB_OFFLINE": "1", "OMP_NUM_THREADS": "2"}
+        self.assertEqual(
+            check_mic.format_command(command, env),
+            "OMP_NUM_THREADS=2 HF_HUB_OFFLINE=1 PYTHONPATH=src tmic check --fleet prototypes"
+            " --contract AudioFlamingo3 --contract 'Gemma 3' --variant bfloat16",
+        )
+        # ALL=1 shows --run-all rather than every contract of the fleet.
+        self.assertEqual(
+            check_mic.format_command(command, {}, run_all=True),
+            "OMP_NUM_THREADS=4 PYTHONPATH=src tmic check --fleet prototypes --variant bfloat16 --run-all",
+        )
+
     def test_install_hints_name_what_is_missing(self):
         import builtins
 

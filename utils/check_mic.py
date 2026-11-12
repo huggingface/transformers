@@ -9,10 +9,12 @@ Usage (see "Run Model Integration Contracts locally" in the testing guide):
 """
 
 import ast
+import difflib
 import importlib.util
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -199,6 +201,51 @@ def download_fixtures(contracts, names):
             flush=True,
         )
         snapshot_download(repo, revision=revision)
+
+
+def normalize_model_name(name):
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def resolve_model(root, model):
+    """The `models/` directory MODEL names, as `(directory, [])`, else `(None, directories to suggest)`.
+
+    MODEL is a directory name, or anything that names one once case and punctuation are ignored:
+    a directory, a model type or a config class without "Config" (`Wav2Vec2`, `wav2vec-2`). A typo
+    is never resolved, only suggested: close names often belong to sibling models.
+    """
+    models = root / "src/transformers/models"
+    # Listed, not `is_dir()`: on a case-insensitive filesystem `models/Bert` would pass as a directory.
+    directories = {path.name for path in models.iterdir() if path.is_dir() and not path.name.startswith("_")}
+    if model in directories:
+        return model, []
+    if Path(model).name != model:
+        return None, []  # a path, not a name
+    use_local_source(root)
+    from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES, model_type_to_module_name
+
+    aliases = {}
+    names = [(directory, directory) for directory in directories]
+    for model_type, config in CONFIG_MAPPING_NAMES.items():
+        directory = model_type_to_module_name(model_type)
+        names += [(model_type, directory), (config.removesuffix("Config"), directory)]
+    for name, directory in names:
+        if directory in directories:
+            aliases.setdefault(normalize_model_name(name), set()).add(directory)
+    wanted = normalize_model_name(model)
+    found = aliases.get(wanted, set())
+    if len(found) == 1:
+        return found.pop(), []
+    if found:
+        return None, sorted(found)
+    close = difflib.get_close_matches(wanted, aliases, n=10, cutoff=0.75)
+    close += sorted(alias for alias in aliases if wanted and alias.startswith(wanted))
+    suggestions = []
+    for alias in close:
+        for directory in sorted(aliases[alias]):
+            if directory not in suggestions:
+                suggestions.append(directory)
+    return None, suggestions[:6]
 
 
 def model_contracts(root, model, fleet_name="prototypes"):
@@ -474,6 +521,19 @@ def stream(commands, env, fleet_name, on_record, announce=True, total=None, excu
     return (failing or results or [(0, [])])[0]
 
 
+def format_command(command, env, run_all=False):
+    """`command` as one line to copy into a shell from the checkout root: `tmic` with the env it runs with."""
+    args = command[3:] if command[1:3] == ["-m", "transformers_mic.cli"] else command
+    if run_all:
+        args = [*without_selection(args), "--run-all"]
+    settings = {
+        "OMP_NUM_THREADS": runner_env(env)["OMP_NUM_THREADS"],
+        "HF_HUB_OFFLINE": env.get("HF_HUB_OFFLINE"),
+        "PYTHONPATH": "src",
+    }
+    return shlex.join([*(f"{k}={v}" for k, v in settings.items() if v), "tmic", *args])
+
+
 def shard(command, jobs):
     """Split `command`'s `--contract` selection round-robin over `jobs` runner commands.
 
@@ -609,9 +669,17 @@ def main():
         print("Use MODEL=<model_directory> or ALL=1, not both.", file=sys.stderr)
         return 2
     if model:
-        if Path(model).name != model or not (ROOT / "src/transformers/models" / model).is_dir():
-            print(f"Unknown model directory: {model!r}. Use a name from src/transformers/models/.", file=sys.stderr)
+        resolved, suggestions = resolve_model(ROOT, model)
+        if resolved is None:
+            hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            print(
+                f"Unknown model: {model!r}.{hint} Use a directory name from src/transformers/models/ or a model name.",
+                file=sys.stderr,
+            )
             return 2
+        if resolved != model:
+            print(f"MODEL={model} is models/{resolved}", flush=True)
+            model = resolved
     elif all_fixtures != "1":
         try:
             paths = changed_files(ROOT, base)
@@ -670,6 +738,7 @@ def main():
     for variant in variants:
         if len(variants) > 1:
             print(f"Variant {variant}:", flush=True)
+        print(f"$ {format_command([*command, '--variant', variant], env, run_all=all_fixtures == '1')}", flush=True)
         code = run([*command, "--variant", variant], env, fleet_name, total=len(names), jobs=jobs)
         returncode = returncode or code
     return returncode
