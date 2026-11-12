@@ -322,6 +322,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "PPChart2TableVisionConfig": True,
     "GlmgaConfig": ["vision_config"],
     # Use the Llama implementation, which the auto mappings point to
+    "InternLM3Config": True,
     "IQuestCoderConfig": True,
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer

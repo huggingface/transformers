@@ -183,9 +183,8 @@ class ColwiseParallel(TensorParallelLayer):
         # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
         # input-gradient contributions explicitly.
         if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
-            if torch.is_grad_enabled() and x.requires_grad:
-                process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-                x = _AllReduceBackward.apply(x, process_group)
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            x = _AllReduceBackward.apply(x, process_group)
             return (x,) + args[1:], kwargs
 
         # DTensor path: handle regular training and layout redistribution.
@@ -720,9 +719,7 @@ def gather_state_dict_for_save(
 _MOVED_TO_EXPERT_PARALLEL = (
     "MoEParamShard",
     "EpRouterParallel",
-    "RouterParallelMegaMoe",
     "EpDispatchExpertsParallel",
-    "MoeTensorParalellMegaMoeExperts",
     "apply_expert_parallelism",
 )
 

@@ -243,6 +243,7 @@ if TYPE_CHECKING:
     from .inkling import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internlm3 import *
     from .internvl import *
     from .iquestcoder import *
     from .jais2 import *
@@ -269,6 +270,7 @@ if TYPE_CHECKING:
     from .lfm2_moe import *
     from .lfm2_vl import *
     from .lfm3 import *
+    from .lfm3_vl import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *

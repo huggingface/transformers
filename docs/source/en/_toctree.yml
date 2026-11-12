@@ -745,6 +745,8 @@
         title: HYV4
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/internlm3
+        title: InternLM3
       - local: model_doc/iquestcoder
         title: IQuestCoder
       - local: model_doc/jais2
@@ -1447,6 +1449,8 @@
         title: LayoutXLM
       - local: model_doc/lfm2_vl
         title: LFM2-VL
+      - local: model_doc/lfm3_vl
+        title: LFM3-VL
       - local: model_doc/lighton_ocr
         title: LightOnOcr
       - local: model_doc/lilt
