@@ -213,16 +213,21 @@ class AutoHfQuantizer:
         """
         if not is_quantization_plan(loading):
             loading = dict.fromkeys(plan, loading)
+
         quantizers, shared = {}, {}
         for pattern, config in plan.items():
             if config is None:
                 quantizers[pattern] = None
                 continue
+
+            # The config, from the saved dict: AutoRound's own when it loads the checkpoint
             attributes = loading.get(pattern) if pre_quantized else None
             if isinstance(config, dict) and isinstance(attributes, AutoRoundConfig):
                 config = AutoRoundConfig.from_dict(config)  # AutoRound loads GPTQ and AWQ checkpoints
             elif isinstance(config, dict):
                 config = AutoQuantizationConfig.from_dict(config)
+
+            # The loading attributes passed to `from_pretrained`, on top of it
             if isinstance(attributes, QuantizationConfigMixin):
                 if type(attributes).__name__ != type(config).__name__:
                     raise ValueError(
@@ -239,6 +244,8 @@ class AutoHfQuantizer:
             if isinstance(attributes, dict):
                 for key, value in attributes.items():
                     setattr(config, key, value)
+
+            # One quantizer per distinct config
             if (key := repr(config)) not in shared:
                 if not pre_quantized and getattr(config, "dequantize", False):
                     logger.warning(
@@ -246,6 +253,7 @@ class AutoHfQuantizer:
                     )
                 shared[key] = cls.from_config(config, pre_quantized=pre_quantized)
             quantizers[pattern] = shared[key]
+
         return QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
 
     @classmethod
@@ -619,6 +627,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         """
         for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
+
         dequantized = {
             quantizer
             for quantizer in self.all_quantizers
@@ -626,9 +635,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         }
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
         self.patterns = [(glob, None if q in dequantized else q) for glob, q in self.patterns]
+
         if not self.all_quantizers:
             self.remove_quantization_config(model)
             return model
+
         model.config.quantization_config = self.quantization_config
         _assign_is_quantized(model)
         return model
@@ -701,12 +712,14 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     quantization_params_from_config = getattr(config, "quantization_config", None) or getattr(
         config.get_text_config(decoder=True), "quantization_config", None
     )
+
     checkpoint_names = False
     if isinstance(quantization_params_from_config, dict) and not is_quantization_plan(quantization_params_from_config):
         # Saved formats quantizing per module, as a plan of checkpoint module names, see `schema_readers`
         plan = read_quantization_schema(quantization_params_from_config)
         if plan is not None:
             quantization_params_from_config, checkpoint_names = plan, True
+
     pre_quantized = quantization_params_from_config is not None
     plan_from_config = is_quantization_plan(quantization_params_from_config)
     if (
@@ -720,6 +733,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     user_plan = quantization_config if is_quantization_plan(quantization_config) else None
     if user_plan is not None and saved_plan is None:
         pre_quantized = False  # the passed plan quantizes the model, a saved single config is ignored
+
     # A single config is the plan `{"*": config}`: the saved one, else the passed one
     single_config = quantization_params_from_config if pre_quantized else quantization_config
     plan = saved_plan or user_plan

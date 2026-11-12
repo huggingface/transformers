@@ -571,18 +571,22 @@ def fp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weigh
     """W4A8 on the finegrained-fp8 Triton kernel, the (token, expert) pairs grouped by expert"""
     kernel = load_finegrained_fp8_kernel()
     num_tokens, num_top_k = top_k_index.shape
+
     expert_ids, perm = torch.sort(top_k_index.reshape(-1))
     # histc, not bincount (cuda graphs): CPU wants a float input, CUDA an int one (deterministic mode)
     histc_input = expert_ids.float() if hidden_states.device.type == "cpu" else expert_ids.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+
     matmul = partial(
         kernel.grouped_matmul, offsets=offsets, tokens_per_expert=tokens_per_expert, block_size=MXFP4_BLOCK_SIZE
     )
     proj_out = _w4a8_experts(self, hidden_states[perm // num_top_k], matmul)
+
     weighted_out = proj_out * top_k_weights.reshape(-1)[perm, None].to(proj_out.dtype)
     if self._is_expert_parallel:  # other ranks' experts sort last, past `offsets[-1]`: uninitialized
         weighted_out.masked_fill_((expert_ids >= self.num_experts).unsqueeze(-1), 0.0)
+
     unsorted = torch.empty_like(weighted_out)
     unsorted[perm] = weighted_out
     return unsorted.view(num_tokens, num_top_k, -1).sum(dim=1).to(hidden_states.dtype)

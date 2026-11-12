@@ -294,7 +294,7 @@ class classproperty(property):
 
 
 def _quantization_config_to_dict(quantization_config):
-    "A quantization config, or a plan mapping glob patterns to configs"
+    """A quantization config, or a plan mapping glob patterns to configs"""
     if isinstance(quantization_config, dict):
         return {key: getattr(value, "to_dict", lambda: value)() for key, value in quantization_config.items()}
     return quantization_config.to_dict() if quantization_config is not None else None

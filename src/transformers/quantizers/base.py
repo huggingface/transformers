@@ -223,6 +223,7 @@ class HfQuantizer(ABC):
                 continue
             if not module._parameters:  # containers are never swapped
                 continue
+
             quantizer = self.get_quantizer(f"{name}.")
             if quantizer is None or not quantizer.replaces_modules:
                 continue
@@ -230,9 +231,11 @@ class HfQuantizer(ABC):
                 new_module = quantizer.quantized_module(name, module)
             if new_module is None:
                 continue
+
             model.set_submodule(name, new_module)
             replaced.add(quantizer)
             swapped += (f"{name}.",)
+
         for quantizer in self.all_quantizers:
             if quantizer.replaces_modules and quantizer not in replaced:
                 logger.warning(

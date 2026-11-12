@@ -697,7 +697,7 @@ _DEEPGEMM_DEVICE = None
 
 
 def deepgemm_allowed(device: torch.device) -> bool:
-    "DeepGEMM's cached kernels are bound to the CUDA context they first ran in: other devices take the Triton path"
+    """DeepGEMM's cached kernels are bound to the CUDA context they first ran in: other devices take the Triton path"""
     global _DEEPGEMM_DEVICE
     if _DEEPGEMM_DEVICE is None:
         _DEEPGEMM_DEVICE = device

@@ -113,6 +113,7 @@ def nvfp4_linear(
     )
     if input_scale is None or input.numel() <= 2 * in_features:
         return kernel.gemm(packed_weight, input)  # dynamic activation scale, or the W4A16 decode GEMV
+
     # The kernel's W4A4 GEMM, with the static activation global scale instead of one from the input's amax
     qinput, input_sf = kernel.scaled_fp4_quant(
         input.reshape(-1, in_features).to(torch.bfloat16).contiguous(), 1 / input_scale, True
@@ -186,24 +187,29 @@ class NVFP4Experts(nn.Module):
         super().__init__()
         if has_bias:
             raise ValueError("NVFP4Experts does not support bias")
+
         self.config = config
         self.has_gate = has_gate
         # Weight-only (W4A16): each hit expert's weights are dequantized in its forward, the activations stay in full
         # precision
         self.weight_only = weight_only
+
         self.act_fn = ACT2FN[getattr(config, "hidden_activation", None) or config.hidden_act]
         self.limit = getattr(config, "swiglu_limit", None)
         self.num_experts = getattr(config, "num_local_experts", None) or config.num_experts
+
         hidden = config.hidden_size
         intermediate = getattr(config, "moe_intermediate_size", None) or config.intermediate_size
         self.in_proj = "gate_up_proj" if has_gate else "up_proj"
         in_proj_shape = (self.num_experts, 2 * intermediate if has_gate else intermediate, hidden)
         self.projections = {self.in_proj: in_proj_shape, "down_proj": (self.num_experts, hidden, intermediate)}
+
         # Parameters, not buffers: expert parallelism shards them along their first axis, the experts'
         for name, (num_experts, out_features, in_features) in self.projections.items():
             self.register_parameter(name, _frozen(num_experts, out_features, in_features // 2, dtype=torch.uint8))
             sf_shape = swizzled_sf_shape(out_features, in_features)
             self.register_parameter(f"{name}_sf", _frozen(num_experts, *sf_shape, dtype=torch.int32))
+
             block_scales = _frozen(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
             self.register_parameter(f"{name}_scale", block_scales)
             scales_shape = (num_experts, 2) if name == "gate_up_proj" else (num_experts,)
@@ -255,12 +261,14 @@ class NVFP4Experts(nn.Module):
             torch.ones(1, device=input.device),
             False,
         )
+
         # The grouped GEMM wants each expert's block scales on a new 128-row tile; static size, so no host sync
         input_sf = input_sf.view(torch.uint8)
         padding = -tokens_per_expert % 128
         rows = torch.arange(input_sf.shape[0], device=input.device) + (torch.cumsum(padding, 0) - padding)[expert_ids]
         grouped_sf = input_sf.new_zeros(input_sf.shape[0] + 127 * self.num_experts, input_sf.shape[1])
         grouped_sf[rows] = input_sf
+
         fp4 = torch.float4_e2m1fn_x2
         # torch's NVFP4 grouped GEMM takes a global scale per operand too: ones, the global scales scale the output
         ones = torch.ones(self.num_experts, device=input.device)
@@ -276,6 +284,7 @@ class NVFP4Experts(nn.Module):
             offs=offsets,
             output_dtype=torch.bfloat16,
         )
+
         return _scale_halves(output, input_scale[:, None] * scale_2).to(input.dtype)
 
     def eager_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:

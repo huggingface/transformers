@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
+> [!WARNING]
+> NVFP4 support is limited: Blackwell GPUs only, no tensor parallelism, no CPU or disk offload, no saving or training,
+> and MoE experts only from pre-quantized checkpoints. See [Current limitations](#current-limitations).
+
 NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
 loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
 the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are

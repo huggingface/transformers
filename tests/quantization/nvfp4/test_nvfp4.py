@@ -56,7 +56,9 @@ def _unswizzle(sf, rows, columns):
 
 def _dequantize(packed, sf_rowmajor):
     """e2m1 values times their fp8 block scales"""
-    values = torch.tensor(FP4_VALUES)[torch.stack([packed & 0xF, packed >> 4], -1).int()].flatten(-2)
+    values = torch.tensor(FP4_VALUES, device=packed.device)[
+        torch.stack([packed & 0xF, packed >> 4], -1).int()
+    ].flatten(-2)
     scales = sf_rowmajor.view(torch.float8_e4m3fn).float().repeat_interleave(16, -1)
     return values * scales
 
@@ -66,7 +68,7 @@ def _quantize(input, global_scale):
     blocks = (input.float() * global_scale).view(input.shape[0], -1, 16)
     sf = (blocks.abs().amax(-1) / 6).to(torch.float8_e4m3fn)
     scaled = blocks / sf.float().clamp(min=1e-12).unsqueeze(-1)
-    codes = (scaled.unsqueeze(-1) - torch.tensor(FP4_VALUES)).abs().argmin(-1).flatten(1)
+    codes = (scaled.unsqueeze(-1) - torch.tensor(FP4_VALUES, device=input.device)).abs().argmin(-1).flatten(1)
     return (codes[:, 0::2] | codes[:, 1::2] << 4).to(torch.uint8), sf.view(torch.uint8)
 
 
@@ -432,14 +434,14 @@ def _expert_parallelism_shards_each_expert(rank, path, weight_only):
         patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm),
     ):
         model = MixtralForCausalLM.from_pretrained(path, distributed_config=DistributedConfig(tp_size=2, ep_size=2))
-        reference = MixtralForCausalLM.from_pretrained(path)
+        reference = MixtralForCausalLM.from_pretrained(path).to(model.device)
         experts, expected = model.model.layers[0].mlp.experts, reference.model.layers[0].mlp.experts
         assert experts.num_experts == 2
         for name, param in experts.named_parameters():
             local = param.to_local() if isinstance(param, DTensor) else param
             torch.testing.assert_close(local, getattr(expected, name).chunk(2)[rank], msg=name)
 
-        input_ids = torch.tensor([[1, 5, 9, 2, 7, 3]])
+        input_ids = torch.tensor([[1, 5, 9, 2, 7, 3]], device=model.device)
         for implementation in ("eager", "grouped_mm"):
             model.set_experts_implementation(implementation)
             reference.set_experts_implementation(implementation)
@@ -458,7 +460,7 @@ class NVFP4ExpertParallelTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config.save_pretrained(tmp)
             save_file(checkpoint, f"{tmp}/model.safetensors", metadata={"format": "pt"})
-            run_distributed(world_size=2, backend="gloo")(_expert_parallelism_shards_each_expert)(tmp, weight_only)
+            run_distributed(world_size=2)(_expert_parallelism_shards_each_expert)(tmp, weight_only)
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")

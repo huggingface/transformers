@@ -78,6 +78,7 @@ class BitNetHfQuantizer(HfQuantizer):
 
         if not isinstance(module, torch.nn.Linear):
             return None
+
         config = self.quantization_config
         if config.linear_class == "autobitlinear":
             new_module = AutoBitLinear(
@@ -93,6 +94,7 @@ class BitNetHfQuantizer(HfQuantizer):
             if config.quantization_mode == "offline":
                 new_module.requires_grad_(False)
             return new_module
+
         new_module = BitLinear(
             in_features=module.in_features,
             out_features=module.out_features,

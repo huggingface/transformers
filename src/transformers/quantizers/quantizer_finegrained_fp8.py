@@ -135,11 +135,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         config = self.quantization_config
         if config.dequantize:
             return None
+
         kwargs = {
             "block_size": config.weight_block_size,
             "activation_scheme": config.activation_scheme,
             "scale_fmt": config.scale_fmt,
         }
+
         modules_to_convert = config.modules_to_convert if self.pre_quantized else None
         if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
             new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
@@ -161,6 +163,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             )
         else:
             return None
+
         new_module._hf_quantized_needs_local_tp = True  # ty: ignore[unresolved-attribute]
         return new_module
 

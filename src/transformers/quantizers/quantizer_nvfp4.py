@@ -53,14 +53,17 @@ class NVFP4HfQuantizer(HfQuantizer):
     def validate_environment(self, device_map, **kwargs):
         if self.quantization_config.weight_only and not self.pre_quantized:
             raise ValueError("`NVFP4Config(weight_only=True)` loads a pre-quantized weight-only (W4A16) checkpoint.")
+
         if self.pre_quantized and (self.quantization_config.dequantize or self.quantization_config.weight_only):
             return  # the `dequantize` load operation and the weight-only forward are pure torch
+
         if not is_kernels_available():
             raise ImportError(
                 "NVFP4 quantization requires the `kernels` package. "
                 f"Install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
                 f"for example with `pip install kernels=={KERNELS_MIN_VERSION}`."
             )
+
         if not torch.cuda.is_available():
             raise RuntimeError("NVFP4 quantization requires a CUDA GPU.")
 
@@ -70,12 +73,14 @@ class NVFP4HfQuantizer(HfQuantizer):
         cuda_devices = {_as_cuda_device(device) for device in devices}
         if None in cuda_devices:
             raise ValueError("NVFP4 quantization does not support CPU or disk offload.")
+
         # Quantizing on the fly packs every weight on one device; a pre-quantized checkpoint can spread over several
         if len(cuda_devices) != 1 and not self.pre_quantized:
             raise ValueError(
                 "Quantizing to NVFP4 while loading supports one CUDA device. Load a pre-quantized NVFP4 checkpoint to "
                 "use a multi-device `device_map`."
             )
+
         for device in cuda_devices:
             major, minor = torch.cuda.get_device_capability(device)
             if major < 10:
