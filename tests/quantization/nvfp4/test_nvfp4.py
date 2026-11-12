@@ -107,11 +107,13 @@ def _fake_kernel():
 
 
 def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, swizzle_a, swizzle_b, offs, **_):
-    "`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile"
+    """`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile. Rows past
+    the last group are left unwritten, NaN here."""
     a, b = mat_a.view(torch.uint8), mat_b.transpose(-2, -1).view(torch.uint8)  # (rows, k / 2), (groups, n, k / 2)
     k_blocks = a.shape[1] // 8
     a_sf = _unswizzle(scale_a, scale_a.numel() // (-(-k_blocks // 4) * 4), k_blocks)
-    output, start, padded_start = a.new_zeros(a.shape[0], b.shape[1], dtype=torch.float32), 0, 0
+    output = a.new_full((a.shape[0], b.shape[1]), float("nan"), dtype=torch.float32)
+    start, padded_start = 0, 0
     for group, end in enumerate(offs.tolist()):
         input = _dequantize(a[start:end], a_sf[padded_start : padded_start + end - start])
         output[start:end] = input @ _dequantize(b[group], _unswizzle(scale_b[group], b.shape[1], k_blocks)).T
@@ -399,24 +401,29 @@ class NVFP4ExpertsTest(unittest.TestCase):
 
 
 def _expert_parallelism_shards_each_expert(rank, path, weight_only):
-    "Each rank holds its half of every expert tensor, swizzled scales included, and the model runs as one process's"
+    """Each rank holds its half of every expert tensor, swizzled scales included, and the model runs as one process's,
+    through both experts implementations. The W4A4 GEMMs run on the fake kernel, from the dequantized operands."""
     from torch.distributed.tensor import DTensor
 
     with (
         patch.object(NVFP4HfQuantizer, "validate_environment"),
         patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel),
+        patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm),
     ):
         model = MixtralForCausalLM.from_pretrained(path, distributed_config=DistributedConfig(tp_size=2, ep_size=2))
         reference = MixtralForCausalLM.from_pretrained(path)
-    experts, expected = model.model.layers[0].mlp.experts, reference.model.layers[0].mlp.experts
-    assert experts.num_experts == 2
-    for name, param in experts.named_parameters():
-        local = param.to_local() if isinstance(param, DTensor) else param
-        torch.testing.assert_close(local, getattr(expected, name).chunk(2)[rank], msg=name)
-    if weight_only:  # the W4A4 GEMMs need a Blackwell GPU
+        experts, expected = model.model.layers[0].mlp.experts, reference.model.layers[0].mlp.experts
+        assert experts.num_experts == 2
+        for name, param in experts.named_parameters():
+            local = param.to_local() if isinstance(param, DTensor) else param
+            torch.testing.assert_close(local, getattr(expected, name).chunk(2)[rank], msg=name)
+
         input_ids = torch.tensor([[1, 5, 9, 2, 7, 3]])
-        with torch.no_grad():
-            torch.testing.assert_close(model(input_ids).logits, reference(input_ids).logits)
+        for implementation in ("eager", "grouped_mm"):
+            model.set_experts_implementation(implementation)
+            reference.set_experts_implementation(implementation)
+            with torch.no_grad():
+                torch.testing.assert_close(model(input_ids).logits, reference(input_ids).logits, msg=implementation)
 
 
 @is_expert_parallel_test
