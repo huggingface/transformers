@@ -136,9 +136,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
+        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device, _get_ue8m0_dtype
 
         _disable_deepgemm_on_multi_device(model)
+        # MXFP8 checkpoints (e.g. Inkling2) save their ue8m0 scales as bytes
+        if self.pre_quantized and self.quantization_config.scale_fmt == "ue8m0":
+            for module in model.modules():
+                for name, param in module.named_parameters(recurse=False):
+                    if name.endswith("scale_inv") and param.dtype == torch.uint8:
+                        scales = torch.nn.Parameter(param.data.view(_get_ue8m0_dtype()), requires_grad=False)
+                        setattr(module, name, scales)
         return model
 
     def update_parallel_plan(self, model, plan):
@@ -184,4 +191,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
             WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
         ]
+        # Inkling2 has params ending with `.scale` which should not be renamed (e.g. `q_l2_clip.scale`)
+        if any(name.endswith("_l2_clip.scale") for name, _ in model.named_parameters()):
+            scale_renames = scale_renames[1:]
         return scale_renames + super().update_weight_conversions(weight_conversions, model)

@@ -653,7 +653,7 @@ class Inkling2SoftcappedSwiGLU(nn.Module):
         return (self.gate_softcap(gate) * torch.sigmoid(gate) * self.up_softcap(up)).to(input_dtype)
 
 
-@use_experts_implementation(is_concatenated=False)
+@use_experts_implementation
 class Inkling2Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -689,7 +689,7 @@ class Inkling2Experts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
+        gate, up = gate_up.chunk(2, dim=-1)
         return self.act_fn(gate, up)
 
 

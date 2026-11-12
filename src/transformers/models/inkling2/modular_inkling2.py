@@ -218,11 +218,12 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-# Missing from the hub config
+# Missing from the hub config: the routed experts are MXFP8 (e4m3, a ue8m0 scale per row and 32 values), the rest bf16
 INKLING2_QUANTIZATION_CONFIG = {
-    "*.layers.4[0-7].mlp.experts.*": {"quant_method": "fp8", "weight_block_size": [1, 32], "dequantize": True},
-    "*.layers.[0-9].mlp.experts.*": {"quant_method": "nvfp4", "dequantize": True},
-    "*.layers.[1-3][0-9].mlp.experts.*": {"quant_method": "nvfp4", "dequantize": True},
+    "quant_method": "fp8",
+    "weight_block_size": [1, 32],
+    "scale_fmt": "ue8m0",
+    "modules_to_not_convert": ["lm_head", "model.vision_tower", "model.language_model.layers.*.self_attn"],
 }
 
 
@@ -247,8 +248,8 @@ class Inkling2Config(InklingConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs):
-        # Quantization config is missing from the hub config. We cannot set it in `__post_init__` because the model
-        # dequantizes on load and the config must not have a quantization config after that.
+        # Quantization config is missing from the hub config: only added to an original checkpoint's config, not to
+        # one saved by Transformers (which has its own, or none once dequantized)
         if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
             config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
         return PreTrainedConfig.from_dict(config_dict, **kwargs)
@@ -656,14 +657,14 @@ class Inkling2SoftcappedSwiGLU(nn.Module):
         return (self.gate_softcap(gate) * torch.sigmoid(gate) * self.up_softcap(up)).to(input_dtype)
 
 
-@use_experts_implementation(is_concatenated=False)
+@use_experts_implementation
 class Inkling2Experts(InklingExperts):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
         self.act_fn = Inkling2SoftcappedSwiGLU(config)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
+        gate, up = gate_up.chunk(2, dim=-1)
         return self.act_fn(gate, up)
 
     def forward(

@@ -306,11 +306,20 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),
-            # also renames the quantization companions, e.g. `w13_weight_scale`, loaded by the plan's quantizers
-            WeightRenaming(source_patterns=r"mlp\.experts\.w13_weight", target_patterns=r"mlp.experts.gate_up_proj"),
-            WeightRenaming(source_patterns=r"mlp\.experts\.w13_weight_", target_patterns=r"mlp.experts.gate_up_proj_"),
+            WeightConverter(
+                source_patterns=r"mlp\.experts\.w13_weight",
+                target_patterns=r"mlp.experts.gate_up_proj",
+                operations=[Interleave(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"mlp\.experts\.w13_weight_scale",
+                target_patterns=r"mlp.experts.gate_up_proj_scale_inv",
+                operations=[Interleave(dim=1)],
+            ),
             WeightRenaming(source_patterns=r"mlp\.experts\.w2_weight", target_patterns=r"mlp.experts.down_proj"),
-            WeightRenaming(source_patterns=r"mlp\.experts\.w2_weight_", target_patterns=r"mlp.experts.down_proj_"),
+            WeightRenaming(
+                source_patterns=r"mlp\.experts\.w2_weight_scale", target_patterns=r"mlp.experts.down_proj_scale_inv"
+            ),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
             WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
             WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),

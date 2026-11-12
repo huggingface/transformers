@@ -750,6 +750,8 @@ class FP8Experts(nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
+        self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
+        self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
         # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
         # `expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
@@ -795,6 +797,13 @@ class FP8Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
+        if self.gate_softcap is not None:
+            # Softcapped SwiGLU (e.g. Inkling2, same math as the model's non-quantized experts)
+            input_dtype = gate.dtype
+            gate, up = gate.float(), up.float()
+            gate_factor = torch.tanh(gate / self.gate_softcap) * self.gate_softcap
+            up = torch.tanh(up / self.up_softcap) * self.up_softcap
+            return (gate_factor * torch.sigmoid(gate) * up).to(input_dtype)
         if self.swiglu_alpha is not None:
             # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
             gate = gate.clamp(max=self.swiglu_limit)
