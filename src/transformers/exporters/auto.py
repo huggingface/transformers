@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
 
 from ..utils import logging
@@ -29,6 +28,8 @@ from .configs import (
     OnnxConfig,
     OpenVINOConfig,
 )
+from .runners.base import ModelRunner
+from .utils import import_dotted_path
 
 
 logger = logging.get_logger(__name__)
@@ -36,30 +37,39 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ExportBackend:
-    """One export format's config and exporter. The built-in exporters are `"module.ClassName"` paths in this
-    package, imported on first use so only the backend in use loads its dependencies."""
+    """One export format's config, exporter, and runner (`None` for a format that exports but can't run). The
+    built-in exporters and runners are `"module.ClassName"` paths in this package, imported on first use so only the
+    backend in use loads its dependencies."""
 
     config: type[ExportConfigMixin]
     exporter: type[HfExporter] | str
+    runner: type[ModelRunner] | str | None = None
 
 
 EXPORT_BACKENDS: dict[str, ExportBackend] = {
-    "executorch": ExportBackend(ExecutorchConfig, "exporter_executorch.ExecutorchExporter"),
-    "openvino": ExportBackend(OpenVINOConfig, "exporter_openvino.OpenVINOExporter"),
-    "dynamo": ExportBackend(DynamoConfig, "exporter_dynamo.DynamoExporter"),
-    "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter"),
+    "executorch": ExportBackend(
+        ExecutorchConfig, "exporter_executorch.ExecutorchExporter", "runners.runner_executorch.ExecutorchModelRunner"
+    ),
+    "openvino": ExportBackend(
+        OpenVINOConfig, "exporter_openvino.OpenVINOExporter", "runners.runner_openvino.OpenVINOModelRunner"
+    ),
+    "dynamo": ExportBackend(DynamoConfig, "exporter_dynamo.DynamoExporter", "runners.runner_dynamo.DynamoModelRunner"),
+    "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter", "runners.runner_onnx.OnnxModelRunner"),
 }
 
 
-def register_backend(exporter: type[HfExporter]) -> None:
-    """Register an exporter, with its `config_class`, under its `export_format`, so the auto classes find them."""
+def register_backend(exporter: type[HfExporter], runner: type[ModelRunner] | None = None) -> None:
+    """Register an exporter, with its `config_class`, under its `export_format`, and the runner that runs its exports,
+    so the auto classes find them."""
     if not (isinstance(exporter, type) and issubclass(exporter, HfExporter)):
         raise TypeError(f"The exporter must extend HfExporter, got {exporter!r}.")
     if not (isinstance(exporter.config_class, type) and issubclass(exporter.config_class, ExportConfigMixin)):
         raise TypeError(f"The exporter's `config_class` must extend ExportConfigMixin, got {exporter.config_class!r}.")
+    if runner is not None and not (isinstance(runner, type) and issubclass(runner, ModelRunner)):
+        raise TypeError(f"The runner must extend ModelRunner, got {runner!r}.")
     if exporter.export_format in EXPORT_BACKENDS:
         logger.warning(f"Export backend '{exporter.export_format}' is already registered and will be overwritten.")
-    EXPORT_BACKENDS[exporter.export_format] = ExportBackend(exporter.config_class, exporter)
+    EXPORT_BACKENDS[exporter.export_format] = ExportBackend(exporter.config_class, exporter, runner)
 
 
 def _backend_for(export_format: ExportFormat | str | None) -> ExportBackend:
@@ -70,13 +80,22 @@ def _backend_for(export_format: ExportFormat | str | None) -> ExportBackend:
     return EXPORT_BACKENDS[export_format]
 
 
+def _resolve_class(value: type | str) -> type:
+    """A registered exporter or runner: the class itself, or imported from its `"module.ClassName"` path."""
+    return import_dotted_path(f"{__package__}.{value}") if isinstance(value, str) else value
+
+
 def get_exporter_class(export_format: ExportFormat | str | None) -> type[HfExporter]:
     """The exporter class registered for a format, imported on first use."""
+    return _resolve_class(_backend_for(export_format).exporter)
+
+
+def get_runner_class(export_format: ExportFormat | str | None) -> type[ModelRunner]:
+    """The runner class registered for a format, imported on first use."""
     backend = _backend_for(export_format)
-    if isinstance(backend.exporter, str):
-        module_name, class_name = backend.exporter.rsplit(".", 1)
-        backend.exporter = getattr(importlib.import_module(f".{module_name}", __package__), class_name)
-    return backend.exporter
+    if backend.runner is None:
+        raise ValueError(f"Export format '{export_format}' has no runner registered, so its exports can't run.")
+    return _resolve_class(backend.runner)
 
 
 class AutoExportConfig:
@@ -98,5 +117,6 @@ class AutoHfExporter:
 
     @classmethod
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
-        export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
-        return get_exporter_class(export_config_dict.get("export_format"))(**kwargs)
+        if isinstance(export_config, ExportConfigMixin):
+            return get_exporter_class(export_config.export_format)(**kwargs)
+        return get_exporter_class(export_config.get("export_format"))(**kwargs)

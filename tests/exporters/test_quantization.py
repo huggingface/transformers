@@ -29,14 +29,13 @@ from parameterized import parameterized
 
 from tests.exporters.test_export import (
     _run_executorch_program,
-    _run_onnx_program,
     _run_openvino_model,
     disable_hub_kernels,
 )
 from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.quantizers.utils import capture_calibration_inputs
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.utils import decompose_for_generation, get_leaf_tensors
 from transformers.testing_utils import (
     require_executorch,
     require_nncf,
@@ -443,18 +442,14 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         model, inputs = self._quantization_target(family)
-        program = (
-            OnnxExporter()
-            .export(
-                model,
-                copy.deepcopy(inputs),
-                OnnxConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
-            )
-            .program
+        exported = OnnxExporter().export(
+            model,
+            copy.deepcopy(inputs),
+            OnnxConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
         )
-        self.assertTrue(_has_onnx_quantize_ops(program))
+        self.assertTrue(_has_onnx_quantize_ops(exported.program))
         # quantization error rules out an eager-parity check, so check it runs to finite outputs
-        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
@@ -471,23 +466,19 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeDynamicConfig, OnnxRuntimeQuantizer
 
         model, inputs = self._quantization_target(family)
-        program = (
-            OnnxExporter()
-            .export(
-                model,
-                copy.deepcopy(inputs),
-                OnnxConfig(
-                    dynamic=False,
-                    quantizer=OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
-                    if dynamic
-                    else OnnxRuntimeQuantizer(calibration_dataset=[copy.deepcopy(inputs)]),
-                ),
-            )
-            .program
+        exported = OnnxExporter().export(
+            model,
+            copy.deepcopy(inputs),
+            OnnxConfig(
+                dynamic=False,
+                quantizer=OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
+                if dynamic
+                else OnnxRuntimeQuantizer(calibration_dataset=[copy.deepcopy(inputs)]),
+            ),
         )
         quantize_op = "DynamicQuantizeLinear" if dynamic else "QuantizeLinear"
-        self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
-        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(any(node.op_type == quantize_op for node in exported.program.graph))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
@@ -526,12 +517,10 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             quantizer = NNCFOnnxQuantizer(
                 NNCFQuantizationConfig(subset_size=1), calibration_dataset=[copy.deepcopy(inputs)]
             )
-        program = (
-            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
-        )
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
         quantize_op = "DequantizeLinear" if weights_only else "QuantizeLinear"
-        self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
-        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(any(node.op_type == quantize_op for node in exported.program.graph))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
@@ -549,12 +538,10 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         model = self._dense_model(hidden_size=64, num_hidden_layers=1, vocab_size=1000, tie_word_embeddings=True)
         inputs = {"input_ids": torch.randint(0, 1000, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
         quantizer = self._nncf_quantizer(inputs, weights_only, NNCFOnnxQuantizer)
-        program = (
-            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
-        )
-        lm_head = [node for node in program.graph if node.op_type == "MatMul"][-1]
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        lm_head = [node for node in exported.program.graph if node.op_type == "MatMul"][-1]
         self.assertEqual(lm_head.inputs[1].producer().op_type, "DequantizeLinear")
-        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
     @parameterized.expand(
@@ -592,11 +579,9 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             quantizer = OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
         else:
             quantizer = self._nncf_quantizer(inputs, recipe == "nncf_weight_compression", NNCFOnnxQuantizer)
-        program = (
-            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
-        )
-        self.assertTrue(any(node.op_type == quantize_op for node in program.graph))
-        logits = next(iter(_run_onnx_program(program, copy.deepcopy(inputs)).values()))
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        self.assertTrue(any(node.op_type == quantize_op for node in exported.program.graph))
+        logits = next(iter(get_leaf_tensors(exported(**copy.deepcopy(inputs))).values()))
         self.assertTrue(torch.isfinite(logits).all())
 
     @parameterized.expand(
@@ -621,13 +606,13 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         # The optimizer would constant-fold the dequantization of these tiny weights (under its 8192-element input
         # limit) back into float initializers; real models' weights are far above it.
         config = OnnxConfig(dynamic=False, optimize=not weights_only, quantizer=quantizer)
-        program = OnnxExporter().export(model, copy.deepcopy(inputs), config).program
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), config)
         if weights_only:
-            initializers = program.graph.initializers.values()
+            initializers = exported.program.graph.initializers.values()
             self.assertTrue(any(value.dtype == onnx_ir.DataType.INT8 for value in initializers))
         else:
-            self.assertTrue(_has_onnx_quantize_ops(program))
-        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+            self.assertTrue(_has_onnx_quantize_ops(exported.program))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
@@ -745,11 +730,11 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 @require_torch
 @require_torchao
 class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
-    def _assert_executorch_program_runs(self, program, inputs):
+    def _assert_executorch_program_runs(self, exported, inputs):
         """The `.pte` runs to finite outputs, unless ExecuTorch's runtime can't service it (`None`: an XNNPACK
         delegate it refuses to compile, a missing portable kernel), which is a runtime limitation rather than an export
         defect."""
-        outputs = _run_executorch_program(program, copy.deepcopy(inputs))
+        outputs = _run_executorch_program(exported, copy.deepcopy(inputs))
         if outputs is not None:
             self.assertTrue(all(o.isfinite().all() for o in outputs if o.is_floating_point()))
 
@@ -773,21 +758,17 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 
         model, inputs = self._quantization_target(family)
         with patch.object(PT2EQuantizer, "quantize", record_quantized):
-            program = (
-                ExecutorchExporter()
-                .export(
-                    model,
-                    copy.deepcopy(inputs),
-                    ExecutorchConfig(
-                        backend="xnnpack",
-                        dynamic=False,
-                        quantizer=self._pt2e_quantizer("xnnpack", [copy.deepcopy(inputs)]),
-                    ),
-                )
-                .program
+            exported = ExecutorchExporter().export(
+                model,
+                copy.deepcopy(inputs),
+                ExecutorchConfig(
+                    backend="xnnpack",
+                    dynamic=False,
+                    quantizer=self._pt2e_quantizer("xnnpack", [copy.deepcopy(inputs)]),
+                ),
             )
         self.assertTrue(_has_quantize_ops(quantized[0]))
-        self._assert_executorch_program_runs(program, inputs)
+        self._assert_executorch_program_runs(exported, inputs)
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_executorch
@@ -801,11 +782,7 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 
         model, inputs = self._quantization_target(family)
         quantizer = self._nncf_quantizer(inputs, weights_only=True)
-        program = (
-            ExecutorchExporter()
-            .export(
-                model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
-            )
-            .program
+        exported = ExecutorchExporter().export(
+            model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
         )
-        self._assert_executorch_program_runs(program, inputs)
+        self._assert_executorch_program_runs(exported, inputs)

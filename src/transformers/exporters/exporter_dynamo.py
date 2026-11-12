@@ -40,7 +40,6 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
-import importlib
 import inspect
 import sys
 import types
@@ -53,7 +52,7 @@ from ..utils.import_utils import is_detectron2_available, is_torch_available, to
 from .base import HfExporter
 from .configs import DynamoConfig, ExportFormat
 from .metadata import ExportMetadata, build_export_metadata
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .utils import apply_patches, import_dotted_path, patch_attributes, prepare_for_export, register_patch
 
 
 if is_torch_available():
@@ -77,7 +76,7 @@ class DynamoExporter(HfExporter):
 
     >>> exporter = DynamoExporter()
     >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.program.module()(**inputs)
+    >>> outputs = exported(**inputs)
     >>> exported.save_pretrained("exported")  # `model.pt2`, its metadata and the model config
     ```
     """
@@ -158,11 +157,9 @@ class DynamoExporter(HfExporter):
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
 # Replaces `model.forward` with a flat explicit signature derived from the
 # inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
-# `patch_model_config` lives here too — it strips output flags from the inputs
-# and applies them onto `model.config` for the duration of the trace.
+# `patch_model_config` applies the output flags to `model.config` for the trace.
 
 
-# Output flags stripped from inputs and applied onto `model.config` for the trace.
 @contextmanager
 def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     """Reversibly tweak `model.config` for the trace:
@@ -477,11 +474,7 @@ def _class_to_path(cls: type) -> str:
 
 
 def _path_to_class(path: str) -> type:
-    module_name, qualname = path.split(":", 1)
-    obj = importlib.import_module(module_name)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
-    return obj
+    return import_dotted_path(path.replace(":", "."))
 
 
 def _maybe_sym_constant(sym: Any) -> Any:
@@ -504,7 +497,11 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if type(obj) is list:
         return [_flatten_to_context(i, tensors) for i in obj]
     if type(obj) is dict:
-        return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
+        if all(type(k) is str for k in obj):
+            return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
+        # As pairs: JSON keys are strings, so a saved program would read `EncoderDecoderCache.is_updated`'s int keys
+        # back as strings, and its input spec would no longer match the cache it is called with.
+        return {"_t": "items", "v": [[k, _flatten_to_context(v, tensors)] for k, v in obj.items()]}
 
     # --- Torch objects ---
     if isinstance(obj, torch.Tensor):
@@ -590,6 +587,9 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
         return torch.Size(ctx["v"])
     if t == "sym":
         return tensors[ctx["i"]]
+
+    if t == "items":
+        return {k: _unflatten_from_context(v, tensors) for k, v in ctx["v"]}
 
     # --- Python types ---
     if t == "type":

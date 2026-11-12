@@ -20,8 +20,7 @@ from typing import Any
 
 from ...utils.import_utils import is_torch_available, is_torchao_available
 from ..configs import ExportFormat
-from .base import CalibrationSet, ExportQuantizer
-from .utils import traced_inputs
+from .base import ExportQuantizer
 
 
 if is_torch_available():
@@ -75,10 +74,7 @@ class PT2EQuantizer(ExportQuantizer):
     def quantize(
         self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> torch.fx.GraphModule:
-        traced_names = list(sample_inputs)
-        calibration = CalibrationSet(
-            self.calibration_dataset, sample_inputs, lambda sample: traced_inputs(sample, traced_names)
-        )
+        calibration = self.traced_calibration(sample_inputs)
         prepared = prepare_pt2e(model, self.quantizer)
         with torch.no_grad():
             for inputs in calibration:

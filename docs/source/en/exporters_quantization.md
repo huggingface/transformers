@@ -52,12 +52,8 @@ inputs = tokenizer("An absolute delight from start to finish.", return_tensors="
 
 config = OnnxConfig(dynamic=True, quantizer=OnnxRuntimeQuantizer(calibration_dataset=calibration_dataset))
 exported = OnnxExporter().export(model, inputs, config)
-exported.save_pretrained("distilbert-sst2-int8-onnx")
 
-import onnxruntime as ort
-
-session = ort.InferenceSession("distilbert-sst2-int8-onnx/model.onnx")
-logits = session.run(None, {name: tensor.numpy() for name, tensor in inputs.items()})[0]
+logits = exported(**inputs).logits
 print(model.config.id2label[int(logits.argmax())])  # POSITIVE
 ```
 
@@ -211,13 +207,13 @@ Quantizers live in `transformers.exporters.quantizers`, one class per toolchain 
 Then implement `quantize(model, sample_inputs, export_format)`. `model` is the FX graph or the backend model, and
 `sample_inputs` are the export's own inputs. Calibrate on a [`~exporters.quantizers.CalibrationSet`]: it reads the
 quantizer's `calibration_dataset` (or `sample_inputs` when there is none) and maps each sample to the model's own
-inputs with a feed from `transformers.exporters.quantizers.utils` (`traced_inputs` for the FX graph, `onnx_feed` for ONNX,
-`openvino_feed` for OpenVINO).
+inputs with a feed: `traced_inputs` from `transformers.exporters.quantizers.utils` for the FX graph, `onnx_feed` or
+`openvino_feed` from `transformers.exporters.utils` for ONNX or OpenVINO.
 
 ```python
 from transformers.exporters import ExportFormat
 from transformers.exporters.quantizers import CalibrationSet, ExportQuantizer
-from transformers.exporters.quantizers.utils import onnx_feed
+from transformers.exporters.utils import onnx_feed
 
 
 class MyOnnxQuantizer(ExportQuantizer):
