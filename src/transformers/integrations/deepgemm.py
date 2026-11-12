@@ -860,6 +860,28 @@ def destroy_megamoe_buffers():
     _SYMM_BUFFERS.clear()
 
 
+def _fill_megamoe_buffer(
+    symm_buffer, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+) -> None:
+    """Stage a call's inputs in the Mega MoE symmetric buffer: the tokens as FP8 with packed UE8M0 group-32 scales
+    (DeepGEMM's `per_token_cast_to_fp8(..., use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)` bit for bit, without its
+    padded copy, its fp32 temporaries and the host sync of `pack_ue8m0_to_int`'s check, so the forward stays
+    capturable in a CUDA graph), and their top-k ids and weights."""
+    num_tokens, hidden_dim = hidden_states.shape
+    groups = hidden_states.view(num_tokens, hidden_dim // 32, 32)
+    amax = groups.abs().amax(dim=-1).float().clamp(min=1e-4)
+    # the power of two at or above amax / 448 (`ceil_to_ue8m0`), as its biased exponent
+    bits = (amax / 448.0).view(torch.int32)
+    exponent = (((bits >> 23) & 0xFF) + (bits & 0x7FFFFF).bool().int()).clamp(1, 254)
+    scale = (exponent << 23).view(torch.float32)
+    fp8 = (groups * (1.0 / scale).unsqueeze(-1)).to(torch.float8_e4m3fn)
+    symm_buffer.x[:num_tokens].copy_(fp8.view(num_tokens, hidden_dim))
+    # four UE8M0 bytes per int32, in K order
+    symm_buffer.x_sf[:num_tokens].copy_(exponent.to(torch.uint8).view(torch.int32))
+    symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
+    symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
+
+
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -923,27 +945,28 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     intermediate_hidden = self.gate_up_proj.size(1) // 2
     num_global_experts = num_local_experts * process_group.size()
 
-    # Lazily (re)allocate the symmetric buffer for this shape when the cached one is too small. It is sized to the next
-    # power of two of the batch, so a growing batch reallocates (and rendezvouses) a few times rather than on every size.
+    # Allocate the symmetric buffer for this shape on first use, and again only for a larger batch, at that batch's size
+    # (DeepGEMM aligns it up to its token block): it is a collective and costs about 1 MiB per token per rank at
+    # DeepSeek-V4 sizes, so warming up once at the largest batch allocates it once. The old buffer goes first, once no
+    # rank still reads it, so its memory is reused instead of stacking up.
     symm_buffers = _SYMM_BUFFERS[process_group.group_name]
     buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
     if buffer_key not in symm_buffers or symm_buffers[buffer_key].num_max_tokens_per_rank < num_tokens:
+        if buffer_key in symm_buffers:
+            torch.cuda.synchronize()
+            torch.distributed.barrier(group=process_group)
+            symm_buffers.pop(buffer_key).destroy()
         symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
             num_experts=num_global_experts,
-            num_max_tokens_per_rank=1 << (num_tokens - 1).bit_length(),
+            num_max_tokens_per_rank=num_tokens,
             intermediate_hidden=intermediate_hidden,
         )
 
-    x_fp8, x_sf = deepgemm.per_token_cast_to_fp8(hidden_states, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
-
     symm_buffer = symm_buffers[buffer_key]
-    symm_buffer.x[:num_tokens].copy_(x_fp8)
-    symm_buffer.x_sf[:num_tokens].copy_(x_sf)
-    symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
-    symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
+    _fill_megamoe_buffer(symm_buffer, hidden_states, top_k_index, top_k_weights)
 
     # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
     # fused SwiGLU sees the same value range the model was calibrated for.

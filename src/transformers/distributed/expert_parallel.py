@@ -418,18 +418,18 @@ class MegaMoeEP(EPImplementation):
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
         num_tokens = hidden_states.size(0)
-        # equal slices, the last one padded with skipped slots (expert id -1, weight 0), so the outputs gather evenly
+        # equal slices so the outputs gather evenly; a slice running past the batch is padded with skipped slots
+        # (expert id -1, weight 0), only on the ranks it reaches
         rows_per_rank = max(1, -(-num_tokens // ep_size))
-        padding = rows_per_rank * ep_size - num_tokens
+        rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
+        hidden_states, top_k_index, top_k_weights = hidden_states[rows], top_k_index[rows], top_k_weights[rows]
+        padding = rows_per_rank - hidden_states.size(0)
         if padding:
             hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, padding))
             top_k_index = torch.nn.functional.pad(top_k_index, (0, 0, 0, padding), value=-1)
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
-        rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
 
-        local_output = self.experts_forward(
-            hidden_states[rows], top_k_index[rows], top_k_weights[rows], process_group=ep_group
-        )
+        local_output = self.experts_forward(hidden_states, top_k_index, top_k_weights, process_group=ep_group)
         output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
         all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
         return output[:num_tokens].to(hidden_states.dtype)

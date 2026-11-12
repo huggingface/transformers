@@ -318,7 +318,8 @@ def _make_bundle(captured):
         buf = types.SimpleNamespace(
             num_max_tokens_per_rank=num_max_tokens_per_rank,
             x=torch.zeros(num_max_tokens_per_rank, hidden, dtype=torch.float8_e4m3fn, device=torch_device),
-            x_sf=torch.zeros(num_max_tokens_per_rank, -(-hidden // 32), dtype=torch.float32, device=torch_device),
+            # four UE8M0 group-32 scales packed per int32, as the real buffer lays them out
+            x_sf=torch.zeros(num_max_tokens_per_rank, hidden // 128, dtype=torch.int32, device=torch_device),
             topk_idx=torch.zeros(num_max_tokens_per_rank, num_topk, dtype=torch.long, device=torch_device),
             topk_weights=torch.zeros(num_max_tokens_per_rank, num_topk, dtype=torch.float32, device=torch_device),
         )
@@ -585,9 +586,9 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
     def test_megamoe_transforms_weights_and_marshals_symm_buffer(self):
-        module = self._make_megamoe(num_experts=4, hidden_dim=64, inter=32, swiglu_limit=7.0)
+        module = self._make_megamoe(num_experts=4, hidden_dim=128, inter=32, swiglu_limit=7.0)
         num_tokens, num_top_k = 3, 2
-        hidden_states = torch.randn(num_tokens, 64, dtype=torch.bfloat16, device=torch_device)
+        hidden_states = torch.randn(num_tokens, 128, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (num_tokens, num_top_k), dtype=torch.long, device=torch_device)
         top_k_weights = torch.rand(num_tokens, num_top_k, dtype=torch.float32, device=torch_device)
         pg = types.SimpleNamespace(size=lambda: 2, group_name="ep")
@@ -601,10 +602,10 @@ class DeepGemmForwardTest(unittest.TestCase):
         # setup_megamoe_weights: SFs transformed with the UTCCP recipe (1, 32) at the right dims.
         gate_up_sf_call, down_sf_call = captured["transform_sf"]
         self.assertEqual(gate_up_sf_call["dim_a"], 2 * 32)  # 2 * intermediate
-        self.assertEqual(gate_up_sf_call["dim_b"], 64)  # hidden_dim
+        self.assertEqual(gate_up_sf_call["dim_b"], 128)  # hidden_dim
         self.assertEqual(gate_up_sf_call["recipe"], (1, 32))
         self.assertEqual(gate_up_sf_call["num_groups"], 4)  # num_local_experts
-        self.assertEqual(down_sf_call["dim_a"], 64)
+        self.assertEqual(down_sf_call["dim_a"], 128)
         self.assertEqual(down_sf_call["dim_b"], 32)
 
         # The module weights were overwritten in place with the transform_weights_for_mega_moe output,
@@ -614,14 +615,19 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertTrue(torch.equal(module.down_proj.data, new_down))
         self.assertTrue(self._megamoe_flag_set(module))
 
-        # Symm buffer sized from global expert count (num_local * process_group.size()).
+        # Symm buffer sized from global expert count (num_local * process_group.size()), and to this batch.
         self.assertEqual(captured["symm_buffer_kwargs"]["num_experts"], 4 * 2)
+        self.assertEqual(captured["symm_buffer_kwargs"]["num_max_tokens_per_rank"], num_tokens)
 
-        # Hidden states cast FP8/UE8M0 (gran_k=32 packed) and staged into the symm buffer.
-        cast = captured["per_token_cast"][0]
-        self.assertTrue(cast["use_ue8m0"] and cast["use_packed_ue8m0"])
-        self.assertEqual(cast["gran_k"], 32)
+        # Hidden states staged as FP8 with packed UE8M0 group-32 scales: each scale is the smallest power of two at or
+        # above its group's amax / 448, and the values times their scales give the hidden states back to FP8 precision.
         buf = captured["symm_buffer"]
+        exponents = buf.x_sf[:num_tokens].view(torch.uint8).view(num_tokens, 128 // 32).int()
+        scales = torch.exp2(exponents.float() - 127)
+        amax = hidden_states.float().view(num_tokens, -1, 32).abs().amax(-1)
+        self.assertTrue((scales >= amax / 448).all() and (scales / 2 < amax.clamp(min=1e-4) / 448).all())
+        staged = buf.x[:num_tokens].float().view(num_tokens, -1, 32) * scales.unsqueeze(-1)
+        torch.testing.assert_close(staged.view(num_tokens, 128), hidden_states.float(), rtol=0.07, atol=0)
         self.assertEqual(list(dg._SYMM_BUFFERS["ep"].values()), [buf])
         self.assertTrue(torch.equal(buf.topk_idx[:num_tokens], top_k_index))
         self.assertTrue(torch.allclose(buf.topk_weights[:num_tokens], top_k_weights))
