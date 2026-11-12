@@ -669,6 +669,7 @@ class FP8ModelOptLoadingTest(unittest.TestCase):
             reloaded = AutoModelForCausalLM.from_pretrained(tmp, quantization_config={"dequantize": True})
         self.assertEqual(saved["model.layers.0.self_attn.q_proj.weight"].dtype, torch.float8_e4m3fn)
         self.assertIn("model.layers.0.self_attn.q_proj.weight_scale_inv", saved)
+        self.assertFalse(model.config.quantization_config.dequantize)  # the saved checkpoint loads quantized
         torch.testing.assert_close(reloaded.state_dict(), model.state_dict(), atol=1e-2, rtol=0.1)
 
     @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)

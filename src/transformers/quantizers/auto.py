@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import re
 import warnings
 from typing import TypeGuard
@@ -636,6 +637,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         The patterns loaded with `dequantize=True` become unquantized (`None`, so a broader pattern like `"*"` can't
         claim their modules): with none quantized left, the model is plain unquantized.
         """
+        from ..core_model_loading import _IdentityOp
+
         for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
         dequantized = {
@@ -643,7 +646,13 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             for quantizer in self.all_quantizers
             if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
         }
-        if self.quantizer is not None:  # a single format saves back in its format
+        # A single format whose dequantization reverses (FP8 quantizes back) saves in its format, loaded as is
+        quantizer = self.quantizer
+        if quantizer in dequantized and not isinstance(
+            quantizer.get_load_operation()(quantizer).reverse_op, _IdentityOp
+        ):
+            quantizer.quantization_config = copy.copy(quantizer.quantization_config)
+            quantizer.quantization_config.dequantize = False
             dequantized = set()
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
         self.patterns = [(glob, None if q in dequantized else q) for glob, q in self.patterns]
