@@ -372,6 +372,9 @@ def _apply_if_grad(function, direct, input, *args):
 
 
 class FP8Linear(nn.Linear):
+    # Tensor parallelism runs its forward on local tensors
+    _hf_quantized_needs_local_tp = True
+
     def __init__(
         self,
         in_features: int,
@@ -695,6 +698,9 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
+    # Tensor parallelism runs its forward on local tensors
+    _hf_quantized_needs_local_tp = True
+
     def __init__(
         self,
         config,

@@ -210,9 +210,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             has_bias=has_bias,
             has_gate=has_gate,
         )
-        new_module = experts_class(getattr(module, "config", self.text_config), has_bias=has_bias, has_gate=has_gate)
-        new_module._hf_quantized_needs_local_tp = True
-        return new_module
+        return experts_class(getattr(module, "config", self.text_config), has_bias=has_bias, has_gate=has_gate)
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize

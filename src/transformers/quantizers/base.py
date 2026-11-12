@@ -230,7 +230,6 @@ class HfQuantizer(ABC):
                 new_module = quantizer.quantized_module(name, module)
             if new_module is None:
                 continue
-            new_module.source_cls = type(module)
             model.set_submodule(name, new_module)
             replaced.add(quantizer)
             swapped += (f"{name}.",)

@@ -482,6 +482,9 @@ class Mxfp4Experts(nn.Module):
     dequantizes each routed expert; the `ALL_FP4_EXPERTS_FUNCTIONS` run them W4A8 on the GPU.
     """
 
+    # Tensor parallelism runs its forward on local tensors
+    _hf_quantized_needs_local_tp = True
+
     def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
         super().__init__()
         if has_bias:

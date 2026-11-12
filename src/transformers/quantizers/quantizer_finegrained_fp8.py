@@ -161,7 +161,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             )
         else:
             return None
-        new_module._hf_quantized_needs_local_tp = True
         return new_module
 
     def update_parallel_plan(self, model, parallel_plan):

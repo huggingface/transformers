@@ -102,7 +102,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         distributed_config = getattr(model.config, "distributed_config", None)
         if (getattr(distributed_config, "tp_size", None) or 1) == 1:
             return
-        tp_sharded = (NVFP4Linear,) if (distributed_config.ep_size or 1) > 1 else (NVFP4Linear, NVFP4Experts)
+        tp_sharded = (
+            (NVFP4Linear,) if (getattr(distributed_config, "ep_size", None) or 1) > 1 else (NVFP4Linear, NVFP4Experts)
+        )
         if any(isinstance(module, tp_sharded) for module in modules.values()):
             raise ValueError(
                 "NVFP4 quantization does not support tensor parallelism yet: its scale metadata does not have a "
