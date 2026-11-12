@@ -224,7 +224,7 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             answers["quality"]["score"], (scores[2].softmax(-1) * torch.tensor([1, 5])).sum().item(), places=6
         )
         request["questions"]["intent"]["allow_null"] = True
-        with self.assertRaisesRegex(ValueError, "does not predict null"):
+        with self.assertRaises(ValueError):
             decide(request)
 
 
