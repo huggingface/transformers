@@ -398,6 +398,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Without a dummy prefix, user-defined pieces are matched on the normalized text, as SentencePiece
                 # does. A config may mark them `normalized=False` (Gemma's "▁▁", "▁▁▁", ...), which would match them
                 # against raw spaces instead of "▁", and merges can't build them because they aren't normal pieces.
+                # Special tokens stay matched on the raw text, so that they take priority over overlapping pieces
+                # (InternLM3's "'<" would otherwise split "'<|im_start|>").
                 local_kwargs["added_tokens_decoder"] = {
                     token_id: AddedToken(
                         token.content,
@@ -407,7 +409,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         normalized=True,
                         special=token.special,
                     )
-                    if isinstance(token, AddedToken) and token.content in user_defined
+                    if isinstance(token, AddedToken) and not token.special and token.content in user_defined
                     else token
                     for token_id, token in added_tokens_decoder.items()
                 }
