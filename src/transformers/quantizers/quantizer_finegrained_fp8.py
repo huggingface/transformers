@@ -166,7 +166,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def update_parallel_plan(self, model, parallel_plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
-        from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, parallel_plan)
         # Per-tensor scales and the experts' per-expert `activation_scale`s are replicated
@@ -174,9 +173,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             name = replace_layer_number_by_wildcard(name)
             if (param.ndim == 0 or name.endswith("activation_scale")) and _get_parameter_plan(name, parallel_plan):
                 parallel_plan[name] = "replicate"
-        # The experts' kernel may shard its own way
-        overrides = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        parallel_plan.update({key: overrides.get(style, style) for key, style in parallel_plan.items()})
 
     def is_serializable(self):
         return True

@@ -20,6 +20,7 @@ import types
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from datetime import datetime
+from enum import Enum
 from functools import lru_cache, partial
 from inspect import isfunction
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
@@ -59,14 +60,14 @@ BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 # Extracts the Args: block from the docstring
-args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+args_re = re.compile(r"\n\s*Args:\n(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
 # Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
 (?:^|\n)  # Match the start of the args block, or a newline
-\s*(\w+):\s*  # Capture the argument name and strip spacing
+([ \t]*)(\w+):\s*  # Capture the indentation and the argument name
 (.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
-(?=\n\s*\w+:|\Z)  # Stop when you hit the next argument or the end of the block
+(?=\n(?!\1[ \t])[ \t]*\w+:|\Z)  # Stop at the next "name:" that is not indented deeper, or the end of the block
 """,
     re.DOTALL | re.VERBOSE,
 )
@@ -82,7 +83,12 @@ class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
 
 
-def _get_json_schema_type(param_type: type) -> dict[str, str]:
+# The Python types that can be written directly as a JSON value, and so can appear in a schema "enum",
+# mapped to the name of their JSON schema type
+JSON_SCALAR_TYPES = {int: "integer", float: "number", str: "string", bool: "boolean", type(None): "null"}
+
+
+def _get_json_schema_type(param_type: type) -> dict[str, str] | None:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -100,20 +106,47 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
         import torch
 
         type_mapping[torch.Tensor] = {"type": "audio"}
-    return type_mapping.get(param_type, {"type": "object"})
+    return type_mapping.get(param_type)
+
+
+def _enum_values_to_json_schema(values: list) -> dict:
+    # The "type" lists each JSON type that appears in the values once, in the order they first appear
+    value_types = list(dict.fromkeys(JSON_SCALAR_TYPES[type(value)] for value in values))
+    return {"type": value_types[0] if len(value_types) == 1 else value_types, "enum": values}
 
 
 def _parse_type_hint(hint: str) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
-    if origin is None:
-        try:
-            return _get_json_schema_type(hint)
-        except KeyError:
+    if origin is None and isinstance(hint, type) and issubclass(hint, Enum):
+        # An Enum class becomes a JSON "enum" of its member values, since those are what the model has to generate
+        values = [member.value for member in hint]
+        if not values:
             raise TypeHintParsingException(
-                "Couldn't parse this type hint, likely due to a custom class or object: ", hint
+                f"The Enum {hint.__name__} has no members, so no value could ever match it."
             )
+        if any(type(value) not in JSON_SCALAR_TYPES for value in values):
+            raise TypeHintParsingException(
+                f"The Enum {hint.__name__} has member values that cannot be written as JSON scalars.\n"
+                f"Values: {values}\n"
+                "Enum member values must be int, float, str, bool or None to be converted to a JSON schema."
+            )
+        return _enum_values_to_json_schema(values)
+
+    elif origin is None:
+        # Any other bare type is either one of the basic types we know how to map, or a custom class.
+        # We can't know what JSON a custom class expects, so we raise instead of guessing
+        json_schema_type = _get_json_schema_type(hint)
+        if json_schema_type is None:
+            raise TypeHintParsingException(
+                f"Couldn't convert the type hint {hint!r} to a JSON schema, likely because it is a custom class "
+                "or object. Supported type hints are basic types like int, float, str and bool, Enum classes, "
+                "typing.Literal, and list, tuple, dict and Union types containing those. If you need a more complex "
+                "schema than that, you can write the JSON schema for your tool by hand and pass that instead "
+                "of the function."
+            )
+        return json_schema_type
 
     elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
@@ -135,18 +168,9 @@ def _parse_type_hint(hint: str) -> dict:
         return return_dict
 
     elif origin is Literal and len(args) > 0:
-        LITERAL_TYPES = (int, float, str, bool, type(None))
-        args_types = []
-        for arg in args:
-            if type(arg) not in LITERAL_TYPES:
-                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
-            arg_type = _get_json_schema_type(type(arg)).get("type")
-            if arg_type is not None and arg_type not in args_types:
-                args_types.append(arg_type)
-        return {
-            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
-            "enum": list(args),
-        }
+        if any(type(arg) not in JSON_SCALAR_TYPES for arg in args):
+            raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+        return _enum_values_to_json_schema(list(args))
 
     elif origin is list:
         if not args:
@@ -212,7 +236,15 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     for param_name, param_type in type_hints.items():
         if param_name == implicit_arg_name:
             continue
-        properties[param_name] = _parse_type_hint(param_type)
+        if param_name == "return":
+            # The model never generates the return value, so a return hint we can't convert shouldn't stop the
+            # tool from being used. We leave the return out of the schema rather than describing it wrongly.
+            try:
+                properties[param_name] = _parse_type_hint(param_type)
+            except TypeHintParsingException:
+                pass
+        else:
+            properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
     if required:
@@ -240,14 +272,14 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
 
     # Clean and store the sections
     description = description_match.group(1).strip() if description_match else None
-    docstring_args = args_match.group(1).strip() if args_match else None
+    docstring_args = args_match.group(1) if args_match else None
     returns = returns_match.group(1).strip() if returns_match else None
 
     # Parsing the arguments into a dictionary
     if docstring_args is not None:
         docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
         matches = args_split_re.findall(docstring_args)
-        args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
+        args_dict = {match[1]: re.sub(r"\s*\n+\s*", " ", match[2].strip()) for match in matches}
     else:
         args_dict = {}
 
@@ -750,6 +782,8 @@ def render_jinja_template(
                 raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
         chat = _alias_reasoning_fields(chat)
         if continue_final_message:
+            if not chat:
+                raise ValueError("continue_final_message is set but the conversation is empty!")
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
 
             if (final_message := chat[-1].get(continue_final_message)) is None:
