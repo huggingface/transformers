@@ -738,8 +738,10 @@ def main():
     for variant in variants:
         if len(variants) > 1:
             print(f"Variant {variant}:", flush=True)
-        print(f"$ {format_command([*command, '--variant', variant], env, run_all=all_fixtures == '1')}", flush=True)
         code = run([*command, "--variant", variant], env, fleet_name, total=len(names), jobs=jobs)
+        if code:
+            rerun = format_command([*command, "--variant", variant], env, run_all=all_fixtures == "1")
+            print(f"\nTo rerun from the checkout root:\n  {rerun}", flush=True)
         returncode = returncode or code
     return returncode
 
