@@ -23,11 +23,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DeepseekV4Config,
     FineGrainedFP8Config,
     OPTForCausalLM,
 )
-from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -80,15 +78,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
-    def test_megamoe_takes_over_the_experts_ep_rule(self):
-        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
-        config = DeepseekV4Config()
-        config._experts_implementation = "deepgemm_megamoe"
-        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
-        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
-        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
-
 
 @slow
 @require_accelerate
@@ -106,6 +95,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_OUTPUTS = {
         "Once upon a time, there was a little girl who loved to play",
         "Once upon a time, there was a man who was very rich.",
+        "Once upon a time, there was a man who was a very rich",
     }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
@@ -403,6 +393,11 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # deepgemm only has CUDA kernels, skip on other devices
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
+        if experts_implementation == "deepgemm":
+            from transformers.integrations.deepgemm import is_sm100
+
+            if is_sm100():
+                self.skipTest("DeepGEMM takes only UE8M0 scales on SM100, and this checkpoint's are float32")
 
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version

@@ -68,6 +68,7 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Lfm2MoeModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)

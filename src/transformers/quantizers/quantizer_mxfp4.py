@@ -214,21 +214,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         new_module._hf_quantized_needs_local_tp = True
         return new_module
 
-    def update_parallel_plan(self, model, parallel_plan):
-        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
-        from ..integrations.mxfp4 import Mxfp4Experts
-
-        super().update_parallel_plan(model, parallel_plan)
-        # The style of the experts' kernel (e.g. MegaMoE's), on the `Mxfp4Experts` only
-        implementation = getattr(model.config, "_experts_implementation", None)
-        overwrite = Mxfp4Experts._impl_tp_layer_overrides.get(implementation, {})
-        experts = {
-            replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, Mxfp4Experts)
-        }
-        for key, style in parallel_plan.items():
-            if key.rpartition(".")[0] in experts:
-                parallel_plan[key] = overwrite.get(style, style)
-
     def get_state_dict_and_metadata(self, model):
         from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize
 

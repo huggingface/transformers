@@ -23,7 +23,6 @@ if is_torch_available():
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps, _IdentityOp
-from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 from .deepgemm import (
     _assert_sm100_requirements,
@@ -371,7 +370,16 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
 
-    def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        """Run the routes to this module's experts, the ids in `[0, num_experts)`. Expert parallelism marks other
+        ranks' routes with ids outside that range, and they are skipped."""
+        with on_device(hidden_states.device):
+            routing_data, gather_idx, scatter_idx = routing_from_top_k(top_k_index, top_k_weights, self.num_experts)
+        return self.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
+
+    def forward_routed(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         FnSpecs, FusedActivation, matmul_ogs = (
             triton_kernels_hub.matmul_ogs.FnSpecs,
             triton_kernels_hub.matmul_ogs.FusedActivation,
@@ -407,72 +415,36 @@ class Mxfp4GptOssExperts(nn.Module):
 
 # Adapted from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
-def routing_torch_dist(
-    logits,
-    n_expts_act,
-):
-    import os
-
+def routing_from_top_k(top_k_index, top_k_weights, num_experts):
+    """Build the Triton routing metadata of `num_experts` experts from selected routes. Ids outside
+    `[0, num_experts)` are skipped."""
     GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch = (
         triton_kernels_hub.routing.GatherIndx,
         triton_kernels_hub.routing.RoutingData,
         triton_kernels_hub.routing.ScatterIndx,
         triton_kernels_hub.routing.compute_expt_data_torch,
     )
+    replace_value = -1
+    num_tokens, num_top_k = top_k_index.shape
 
-    with on_device(logits.device):
-        world_size = torch.distributed.get_world_size()
-        rank = int(os.environ.get("LOCAL_RANK", "0"))
-        replace_value = -1
+    expt_indx, sort_indices = torch.sort(top_k_index.to(torch.int32), dim=1)
+    expt_scal = torch.gather(top_k_weights, 1, sort_indices).reshape(-1)
+    # out-of-range ids fall outside the histogram's bins, so only this module's experts are counted
+    hist = torch.histc(expt_indx, bins=num_experts, min=0, max=num_experts - 1)
 
-        n_tokens = logits.shape[0]
-        n_expts_tot = logits.shape[1]
+    expt_indx = expt_indx.view(-1)
+    local = (expt_indx >= 0) & (expt_indx < num_experts)
+    # the skipped routes sort after every expert's
+    topk_indx = torch.argsort(torch.where(local, expt_indx, num_experts), stable=True).to(torch.int32)
+    gate_indx = torch.argsort(topk_indx).to(torch.int32)
+    gate_indx = torch.where(local, gate_indx, replace_value)
+    gate_scal = expt_scal[topk_indx]
+    topk_indx = torch.where(gate_indx[topk_indx] == replace_value, replace_value, topk_indx)
 
-        n_local_experts = n_expts_tot // world_size
-        local_expert_start = rank * n_local_experts
-        local_expert_end = (rank + 1) * n_local_experts
-
-        n_gates_pad = n_tokens * n_expts_act
-
-        def topk(vals, k):
-            tk_indx = torch.argsort(-vals, dim=1, stable=True)[:, :k]
-            tk_indx = tk_indx.long()
-            tk_val = torch.take_along_dim(vals, tk_indx, dim=1)
-            return tk_val, tk_indx.int()
-
-        expt_scal, expt_indx = topk(logits, n_expts_act)
-        expt_scal = torch.softmax(expt_scal, dim=-1)
-        expt_indx, sort_indices = torch.sort(expt_indx, dim=1)
-        expt_scal = torch.gather(expt_scal, 1, sort_indices)
-
-        # Flatten and mask for local experts
-        expt_scal = expt_scal.reshape(-1)
-
-        hist = torch.histc(expt_indx, bins=n_expts_tot, max=n_expts_tot - 1)[local_expert_start:local_expert_end]
-
-        expt_indx = expt_indx.view(-1).to(torch.int32)
-
-        # we use a large value to replace the indices that are not in the local expert range
-        var = 1000
-        expt_indx = torch.where(expt_indx < local_expert_start, var, expt_indx)
-        topk_indx = torch.argsort(expt_indx, stable=True).to(torch.int32)
-        gate_indx = torch.argsort(topk_indx).to(torch.int32)
-        expt_indx = torch.where(expt_indx < local_expert_end, expt_indx, replace_value)
-        expt_indx = torch.where(local_expert_start <= expt_indx, expt_indx, replace_value)
-
-        gate_indx = torch.where(expt_indx == replace_value, replace_value, gate_indx)
-        gate_scal = expt_scal[topk_indx]
-
-        topk_indx = torch.where(gate_indx[topk_indx] == replace_value, replace_value, topk_indx)
-
-        # # Routing metadata for local expert computation
-        gather_indx = GatherIndx(src_indx=topk_indx.int(), dst_indx=gate_indx.int())
-        scatter_indx = ScatterIndx(src_indx=gate_indx.int(), dst_indx=topk_indx.int())
-
-        expt_data = compute_expt_data_torch(hist, n_local_experts, n_gates_pad)
-
-        hit_experts = n_expts_act
-    return RoutingData(gate_scal, hist, n_local_experts, hit_experts, expt_data), gather_indx, scatter_indx
+    gather_indx = GatherIndx(src_indx=topk_indx.int(), dst_indx=gate_indx.int())
+    scatter_indx = ScatterIndx(src_indx=gate_indx.int(), dst_indx=topk_indx.int())
+    expt_data = compute_expt_data_torch(hist, num_experts, num_tokens * num_top_k)
+    return RoutingData(gate_scal, hist, num_experts, num_top_k, expt_data), gather_indx, scatter_indx
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
@@ -483,19 +455,19 @@ class Mxfp4GptOssMLP(nn.Module):
         self.experts = experts
 
     def forward(self, hidden_states):
-        if _is_torch_distributed_initialized() and hasattr(self, "_is_hooked"):
-            routing = routing_torch_dist
-        else:
-            routing = triton_kernels_hub.routing.routing
-
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
-        router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-
-        with on_device(router_logits.device):
-            routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
-
-        routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx=scatter_idx)
+        if getattr(self.experts, "_is_hooked", False):
+            # the expert-parallel forward brings the experts the routes they own
+            router_logits, router_scores, router_indices = self.router(hidden_states)
+            routed_out = self.experts(hidden_states, router_indices, router_scores)
+        else:
+            router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
+            with on_device(router_logits.device):
+                routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(
+                    router_logits, self.router.top_k
+                )
+            routed_out = self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
         routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
         return routed_out, router_logits
 
@@ -509,15 +481,6 @@ class Mxfp4Experts(nn.Module):
     MXFP4 experts (e.g. DeepSeek-V4's): e2m1 pairs packed in `int8`, a ue8m0 scale per 32 values. The default forward
     dequantizes each routed expert; the `ALL_FP4_EXPERTS_FUNCTIONS` run them W4A8 on the GPU.
     """
-
-    # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer
-    _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
-        "deepgemm_megamoe": {
-            "ep_dispatch_experts": "megamoe_experts",
-            "moe_tp_experts": "megamoe_experts",
-            "ep_router": "megamoe_router",
-        },
-    }
 
     def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
         super().__init__()
