@@ -14,6 +14,7 @@
 import copy
 import functools
 import inspect
+import types
 import unittest
 from unittest import mock
 
@@ -38,6 +39,7 @@ from transformers.distributed.context_parallel import (
     SplitSequenceParallel,
     UlyssesAttention,
     apply_context_parallelism,
+    context_parallel_loss,
 )
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.loss.loss_utils import ForCausalLMLoss
@@ -218,7 +220,7 @@ def _test_context_parallel_loss(rank, cp_size):
     full_logits = _same_on_every_rank(batch, seq, vocab_size)
     labels = torch.randint(0, vocab_size, (batch, seq), generator=torch.Generator().manual_seed(1))
     labels[:, -2:] = -100
-    loss_function = functools.partial(ModelContextParallel().loss, ForCausalLMLoss, mesh)
+    loss_function = functools.partial(context_parallel_loss, ForCausalLMLoss, mesh)
 
     # this rank holds its slice of the logits, and the labels of the whole sequence
     local_logits = full_logits.chunk(cp_size, dim=1)[rank].detach().clone().requires_grad_(True)
@@ -252,23 +254,27 @@ def _install_default_plan(model, cp_mesh):
     return apply_context_parallelism(model, cp_mesh, plan)
 
 
-def _test_model_matches_unsharded(rank, cp_size):
+def _test_model_matches_unsharded(rank, cp_size, seq_len=8):
     """A model with the plan installed, against the same weights on the full sequences."""
     mesh = _init_cp_mesh("cpu")
     torch.manual_seed(0)
     reference = LlamaForCausalLM(_tiny_config())
     model = _install_default_plan(copy.deepcopy(reference), mesh)
 
-    input_ids = torch.randint(0, model.config.vocab_size, (2, 8), generator=torch.Generator().manual_seed(1))
+    input_ids = torch.randint(0, model.config.vocab_size, (2, seq_len), generator=torch.Generator().manual_seed(1))
     labels = input_ids.clone()
     reference_output = reference(input_ids=input_ids, labels=labels, use_cache=False)
     output = model(input_ids=input_ids, labels=labels)
     output.loss.backward()
     reference_output.loss.backward()
 
-    # this rank computed the loss of the whole sequences, and its own slice of the logits
+    # this rank computed the loss of the whole sequences, and its own slice of the logits of the padded sequence: the
+    # real positions of the slice match the unsharded run, the padding at its end has no counterpart there
+    local_seq = output.logits.shape[1]
+    start = rank * local_seq
+    real = max(0, min(local_seq, seq_len - start))
     torch.testing.assert_close(
-        output.logits, reference_output.logits.chunk(cp_size, dim=1)[rank], rtol=1e-5, atol=1e-5
+        output.logits[:, :real], reference_output.logits[:, start : start + real], rtol=1e-5, atol=1e-5
     )
     torch.testing.assert_close(output.loss, reference_output.loss, rtol=1e-5, atol=1e-5)
     assert output.past_key_values is None
@@ -284,15 +290,13 @@ def _test_model_matches_unsharded(rank, cp_size):
 
 
 def _test_forward_refusals(rank, cp_size):
-    """A cache and a sequence the ranks cannot split raise instead of being silently recomputed wrong."""
+    """A cache raises instead of being silently recomputed wrong."""
     mesh = _init_cp_mesh("cpu")
     model = _install_default_plan(LlamaForCausalLM(_tiny_config()), mesh)
 
     input_ids = torch.randint(0, model.config.vocab_size, (2, 8), generator=torch.Generator().manual_seed(1))
     with pytest.raises(ValueError, match="`past_key_values` are not allowed"):
         model(input_ids=input_ids, past_key_values=DynamicCache())
-    with pytest.raises(ValueError, match="must be divisible by `cp_size`"):
-        model(input_ids=input_ids[:, :-1])
 
 
 @is_fsdp_test
@@ -325,6 +329,10 @@ class TestApplyContextParallelism(unittest.TestCase):
 
     def test_model_matches_unsharded(self):
         run_distributed(world_size=2, backend="gloo")(_test_model_matches_unsharded)(2)
+
+    def test_model_matches_unsharded_with_padding(self):
+        # 7 tokens over 2 ranks: the model pads to 8, and the last rank holds 3 real positions
+        run_distributed(world_size=2, backend="gloo")(_test_model_matches_unsharded)(2, 7)
 
     def test_forward_refusals(self):
         run_distributed(world_size=2, backend="gloo")(_test_forward_refusals)(2)
@@ -465,13 +473,57 @@ class TestModelContextParallel(unittest.TestCase):
         self.assertNotIn("args", parameters)
 
 
+class TestContextParallelPadding(unittest.TestCase):
+    """`ModelContextParallel` pads every sequence-shaped input to a multiple of `cp_size`."""
+
+    def _prepare(self, module, args=(), **kwargs):
+        return ModelContextParallel().transform_inputs_pre_forward(module, args, kwargs, _MeshStub(2))
+
+    def _module(self, pad_token_id=7):
+        return types.SimpleNamespace(config=types.SimpleNamespace(pad_token_id=pad_token_id))
+
+    def test_pads_input_ids_labels_and_the_mask(self):
+        input_ids = torch.tensor([[1, 2, 3, 4, 5]])
+        kwargs = {
+            "input_ids": input_ids,
+            "position_ids": torch.tensor([[0, 1, 2, 0, 1]]),
+            "labels": input_ids.clone(),
+            "attention_mask": torch.ones_like(input_ids),
+        }
+        _, padded = self._prepare(self._module(), **kwargs)
+
+        # the id of the padding is the pad token, and the positions continue those of the last document
+        torch.testing.assert_close(padded["input_ids"], torch.tensor([[1, 2, 3, 4, 5, 7]]))
+        torch.testing.assert_close(padded["position_ids"], torch.tensor([[0, 1, 2, 0, 1, 2]]))
+        torch.testing.assert_close(padded["attention_mask"], torch.tensor([[1, 1, 1, 1, 1, 0]]))
+        torch.testing.assert_close(padded["labels"], torch.tensor([[1, 2, 3, 4, 5, -100]]))
+        assert padded["use_cache"] is False
+
+    def test_pads_positionally_and_without_a_pad_token(self):
+        input_ids = torch.tensor([[1, 2, 3, 4, 5]])
+        args, padded = self._prepare(self._module(pad_token_id=None), (input_ids,), labels=input_ids.clone())
+
+        # no `pad_token_id` on the config: the padding token is 0, and a positional input stays positional
+        torch.testing.assert_close(args[0], torch.tensor([[1, 2, 3, 4, 5, 0]]))
+        torch.testing.assert_close(padded["labels"], torch.tensor([[1, 2, 3, 4, 5, -100]]))
+
+    def test_leaves_a_divisible_sequence_alone(self):
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]])
+        _, padded = self._prepare(self._module(), input_ids=input_ids, labels=input_ids.clone())
+        torch.testing.assert_close(padded["input_ids"], input_ids)
+        assert "position_ids" not in padded
+
+
 class TestContextParallelChecks(unittest.TestCase):
     def test_accepts_causal_lms(self):
         config = _tiny_config()
         config.layer_types = ["full_attention", "sliding_attention"]
-        ModelContextParallel().check(LlamaForCausalLM(config))
+        _install_default_plan(LlamaForCausalLM(config), _MeshStub(2))
         # a base model computes no loss of its own, so the caller's loss is theirs to shard
-        ModelContextParallel().check(LlamaModel(_tiny_config()))
+        model, plan = LlamaModel(_tiny_config()), {}
+        for layer in range(model.config.num_hidden_layers):
+            plan[f"layers.{layer}"], plan[f"layers.{layer}.self_attn"] = "cp_split_sequence", "cp_ulysses"
+        apply_context_parallelism(model, _MeshStub(2), plan)
 
     def test_refusals(self):
         class LlamaWithOwnAttention(LlamaForCausalLM):
@@ -484,8 +536,9 @@ class TestContextParallelChecks(unittest.TestCase):
             (LlamaWithOwnAttention(_tiny_config()), "`_supports_attention_backend`"),
             (LlamaForCausalLM(mixed_config), r"does not support the \['linear_attention'\] layers"),
         ):
+            # refused before anything is installed: the plan is not even read
             with self.subTest(type(model).__name__), self.assertRaisesRegex(ValueError, message):
-                ModelContextParallel().check(model)
+                apply_context_parallelism(model, _MeshStub(2), {})
 
 
 class TestContextParallelStyles(unittest.TestCase):

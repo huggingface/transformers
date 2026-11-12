@@ -22,9 +22,9 @@ A context parallel plan pairs two kinds of styles:
   `num_heads / cp_size` heads, runs the model's own attention function with the model's own mask, and all-to-alls the
   output back. Another algorithm is a [`ContextParallelAttention`] subclass added to `ALL_CP_STYLES`.
 
-`apply_context_parallelism` installs such a plan on a model, and [`ModelContextParallel`] on the model itself: the
-model checks, a forward that refuses a cache, and a `loss_function` that reports the loss of the whole sequences on
-every rank. The styles share [`ContextParallelLayer`], which has the `install_forward` contract of the tensor and
+`apply_context_parallelism` checks the model, then installs such a plan on it, [`ModelContextParallel`] on the model
+itself (a forward that refuses a cache and pads the sequences to a multiple of `cp_size`), and `context_parallel_loss`
+as its `loss_function`, which reports the loss of the whole sequences on every rank. The styles share [`ContextParallelLayer`], which has the `install_forward` contract of the tensor and
 expert parallel styles.
 """
 
@@ -195,39 +195,18 @@ ALL_CP_STYLES: dict[str, ContextParallelLayer] = {
 }
 
 
+def pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
+    """`tensor` with `pad_len` copies of `value` appended along its sequence dimension 1."""
+    padding = tensor.new_full((tensor.shape[0], pad_len, *tensor.shape[2:]), value)
+    return torch.cat([tensor, padding], dim=1)
+
+
 class ModelContextParallel(ContextParallelLayer):
     """
-    The model itself, outside the plan since no plan key names the root module: `check` refuses what context
-    parallelism would silently get wrong, the forward refuses a cache, which context parallelism does not split, and
-    `loss_function` reports the loss of the whole sequences on every rank.
+    The model itself, outside the plan since no plan key names the root module: its forward refuses a cache, which
+    context parallelism does not split, and pads every sequence at the end to a multiple of `cp_size`, before the
+    model builds its masks from them.
     """
-
-    def check(self, model: nn.Module) -> None:
-        """Raise a `ValueError` if context parallelism would silently change the logits or the loss of `model`."""
-        if not model._supports_attention_backend:
-            raise ValueError(
-                f"Context parallelism routes attention through `ALL_ATTENTION_FUNCTIONS`, but {model.__class__.__name__} "
-                "does not declare that all its attention layers go through it with the model's kwargs "
-                "(`_supports_attention_backend`), so they could run on this rank's slice only. Use another model, or "
-                "disable context parallelism."
-            )
-
-        # every other layer type (recurrent, convolutional, sparse-indexer, ...) mixes tokens outside attention
-        layer_types = set(getattr(model.config.get_text_config(), "layer_types", None) or ())
-        if unsupported := layer_types - {"full_attention", "sliding_attention", "chunked_attention"}:
-            raise ValueError(
-                f"Context parallelism does not support the {sorted(unsupported)} layers of {model.__class__.__name__}: "
-                "they mix tokens outside softmax attention, so they would run on this rank's slice only and be silently "
-                "cut at the slice boundaries. Use another model, or disable context parallelism."
-            )
-
-        # `loss_type=None` (base models, and heads whose name maps to no loss) falls back to the causal LM loss
-        if model.loss_type is not None and LOSS_MAPPING.get(model.loss_type) is not ForCausalLMLoss:
-            raise ValueError(
-                f"Context parallelism only supports the causal language modeling loss, but {model.__class__.__name__} "
-                f"uses `loss_type={model.loss_type}`. Its loss would be computed from this rank's slice of the shifted "
-                "labels while the logits stay sharded. Use a `*ForCausalLM` model, or disable context parallelism."
-            )
 
     def transform_inputs_pre_forward(self, module: nn.Module, args: tuple, kwargs: dict, cp_mesh: DeviceMesh):
         if kwargs.get("past_key_values") is not None:
@@ -236,48 +215,97 @@ class ModelContextParallel(ContextParallelLayer):
                 "sequences without a cache, or disable context parallelism."
             )
         kwargs["use_cache"] = False
+
+        tokens = args[0] if args else kwargs.get("input_ids")
+        if tokens is None:
+            tokens = kwargs["inputs_embeds"]
+        pad_len = -tokens.shape[1] % cp_mesh.size()
+        if pad_len == 0:
+            return args, kwargs
+
+        pad_token_id = getattr(module.config, "pad_token_id", None) or 0
+        if args:
+            args = (pad_sequence(args[0], pad_len, pad_token_id),) + args[1:]
+        padding_values = {
+            "input_ids": pad_token_id,
+            "inputs_embeds": 0,
+            "attention_mask": 0,
+            "labels": -100,
+            "shift_labels": -100,
+        }
+        for name, value in padding_values.items():
+            if kwargs.get(name) is not None:
+                kwargs[name] = pad_sequence(kwargs[name], pad_len, value)
+        if kwargs.get("position_ids") is not None:
+            # the padding continues the positions of the last document of every row
+            position_ids = kwargs["position_ids"]
+            steps = torch.arange(1, pad_len + 1, device=position_ids.device)
+            kwargs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
         return args, kwargs
 
-    def loss(
-        self,
-        loss_function: Callable,
-        cp_mesh: DeviceMesh,
-        logits: torch.Tensor,
-        labels: torch.Tensor,
-        vocab_size: int,
-        num_items_in_batch: torch.Tensor | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        The loss of the whole sequences, which every rank reports, from this rank's slice of the logits and its slice of
-        the shifted labels. Its gradient stays this rank's, multiplied by `cp_size`, so that FSDP2's average over the cp
-        ranks gives the gradient of the full-sequence loss.
-        """
-        shift_labels = kwargs.pop("shift_labels", None)
-        if shift_labels is None:
-            shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
-        if num_items_in_batch is None:
-            num_items_in_batch = (shift_labels != -100).sum()
-        kwargs["shift_labels"] = split_sequence(shift_labels, 1, cp_mesh)
-        loss = loss_function(logits, labels, vocab_size, num_items_in_batch=num_items_in_batch, **kwargs)
 
-        total = loss.detach().clone()
-        dist.all_reduce(total, group=cp_mesh.get_group())
-        return total + (loss - loss.detach()) * cp_mesh.size()
+def context_parallel_loss(
+    loss_function: Callable,
+    cp_mesh: DeviceMesh,
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    vocab_size: int,
+    num_items_in_batch: torch.Tensor | None = None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    The loss of the whole sequences, which every rank reports, from this rank's slice of the logits and its slice of
+    the shifted labels. Its gradient stays this rank's, multiplied by `cp_size`, so that FSDP2's average over the cp
+    ranks gives the gradient of the full-sequence loss.
+    """
+    shift_labels = kwargs.pop("shift_labels", None)
+    if shift_labels is None:
+        shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
+    if num_items_in_batch is None:
+        num_items_in_batch = (shift_labels != -100).sum()
+    kwargs["shift_labels"] = split_sequence(shift_labels, 1, cp_mesh)
+    loss = loss_function(logits, labels, vocab_size, num_items_in_batch=num_items_in_batch, **kwargs)
 
-    def install_forward(self, model: nn.Module, cp_mesh: DeviceMesh):
-        self.check(model)
-        model.loss_function = partial(self.loss, model.loss_function, cp_mesh)
-        return super().install_forward(model, cp_mesh)
+    total = loss.detach().clone()
+    dist.all_reduce(total, group=cp_mesh.get_group())
+    return total + (loss - loss.detach()) * cp_mesh.size()
 
 
 def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: dict[str, str]) -> nn.Module:
     """
-    Let the ranks of `cp_mesh` split every sequence: `ModelContextParallel` on the model, then the plan, whose
-    `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention modules run their attention over
-    the whole sequence.
+    Let the ranks of `cp_mesh` split every sequence: `ModelContextParallel` on the model and `context_parallel_loss`
+    as its loss, then the plan, whose `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention
+    modules run their attention over the whole sequence. The model's own forward refuses a cache and pads the sequences
+    to a multiple of `cp_size`. Raises a `ValueError` if context parallelism would silently change the logits or the
+    loss of `model`.
     """
+    if not model._supports_attention_backend:
+        raise ValueError(
+            f"Context parallelism routes attention through `ALL_ATTENTION_FUNCTIONS`, but {model.__class__.__name__} "
+            "does not declare that all its attention layers go through it with the model's kwargs "
+            "(`_supports_attention_backend`), so they could run on this rank's slice only. Use another model, or "
+            "disable context parallelism."
+        )
+
+    # every other layer type (recurrent, convolutional, sparse-indexer, ...) mixes tokens outside attention
+    layer_types = set(getattr(model.config.get_text_config(), "layer_types", None) or ())
+    if unsupported := layer_types - {"full_attention", "sliding_attention", "chunked_attention"}:
+        raise ValueError(
+            f"Context parallelism does not support the {sorted(unsupported)} layers of {model.__class__.__name__}: "
+            "they mix tokens outside softmax attention, so they would run on this rank's slice only and be silently "
+            "cut at the slice boundaries. Use another model, or disable context parallelism."
+        )
+
+    # `loss_type=None` (base models, and heads whose name maps to no loss) falls back to the causal LM loss
+    if model.loss_type is not None and LOSS_MAPPING.get(model.loss_type) is not ForCausalLMLoss:
+        raise ValueError(
+            f"Context parallelism only supports the causal language modeling loss, but {model.__class__.__name__} "
+            f"uses `loss_type={model.loss_type}`. Its loss would be computed from this rank's slice of the shifted "
+            "labels while the logits stay sharded. Use a `*ForCausalLM` model, or disable context parallelism."
+        )
+
     ModelContextParallel().install_forward(model, cp_mesh)
+    model.loss_function = partial(context_parallel_loss, model.loss_function, cp_mesh)
     modules = dict(model.named_modules())
     # the first decoder layer still gets the whole sequence: it is the one that cuts it
     first_layer = next(name for name, style in cp_plan.items() if style == "cp_split_sequence")
