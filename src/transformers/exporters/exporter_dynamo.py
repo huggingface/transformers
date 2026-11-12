@@ -423,6 +423,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v.modeling_glm4v.Glm4vVisionAttention.forward",
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
+    "transformers.models.dots3_note.modeling_dots3_note.Dots3NoteVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
     # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
