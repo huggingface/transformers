@@ -18,14 +18,15 @@ from __future__ import annotations
 import os
 import tempfile
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from ...utils.import_utils import is_modelopt_available, is_onnxscript_available
 from ..configs import ExportFormat
+from ..utils import onnx_feed
 from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
 from .quantizer_onnxruntime import _FeedReader
-from .utils import onnx_feed
 
 
 if is_onnxscript_available():
@@ -33,6 +34,35 @@ if is_onnxscript_available():
 
 if is_modelopt_available():
     from modelopt.onnx.quantization import quantize as modelopt_quantize
+
+
+@contextmanager
+def _restored_onnxruntime_quantization():
+    """ModelOpt patches ONNX Runtime's calibrators and QDQ quantizer in place for its own calibration
+    (`modelopt.onnx.quantization.ort_patches`) and leaves them patched, which breaks a later `OnnxRuntimeQuantizer` in
+    the same process. Put back every attribute it adds or replaces on them."""
+    from onnxruntime.quantization import base_quantizer, calibrate, qdq_quantizer
+
+    owners = (
+        calibrate,
+        qdq_quantizer,
+        calibrate.CalibraterBase,
+        calibrate.MinMaxCalibrater,
+        calibrate.HistogramCalibrater,
+        calibrate.HistogramCollector,
+        qdq_quantizer.QDQQuantizer,
+        base_quantizer.BaseQuantizer,
+    )
+    snapshots = [(owner, dict(vars(owner))) for owner in owners]
+    try:
+        yield
+    finally:
+        for owner, attributes in snapshots:
+            for name in set(vars(owner)) - set(attributes):
+                delattr(owner, name)
+            for name, value in attributes.items():
+                if vars(owner).get(name) is not value:
+                    setattr(owner, name, value)
 
 
 @dataclass
@@ -96,13 +126,14 @@ class ModelOptOnnxQuantizer(ExportQuantizer):
             path = os.path.join(tmp, "model.onnx")
             quantized_path = os.path.join(tmp, "quantized.onnx")
             onnx_ir.save(model, path, external_data="model.onnx.data")
-            modelopt_quantize(
-                path,
-                calibration_data_reader=_FeedReader(calibration),
-                output_path=quantized_path,
-                use_external_data_format=True,
-                **self.config.to_kwargs(),
-            )
+            with _restored_onnxruntime_quantization():
+                modelopt_quantize(
+                    path,
+                    calibration_data_reader=_FeedReader(calibration),
+                    output_path=quantized_path,
+                    use_external_data_format=True,
+                    **self.config.to_kwargs(),
+                )
             # Load the weights into memory before the temporary directory goes away
             quantized = onnx_ir.load(quantized_path)
             onnx_ir.external_data.load_to_model(quantized)

@@ -542,11 +542,9 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             ModelOptOnnxConfig(calibration_eps=["cpu"], high_precision_dtype="fp32"),
             calibration_dataset=[copy.deepcopy(inputs)],
         )
-        program = (
-            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
-        )
-        self.assertTrue(_has_onnx_quantize_ops(program))
-        outputs = _run_onnx_program(program, copy.deepcopy(inputs))
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        self.assertTrue(any(node.op_type == "QuantizeLinear" for node in exported.program.graph))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
