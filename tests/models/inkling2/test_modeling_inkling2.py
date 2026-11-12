@@ -223,6 +223,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
+                ("cuda", 8): [0.4901907444000244, 0.7303244471549988, 1.3194607496261597, 0.2734299600124359, 0.4550432562828064],
                 ("cuda", 10): [0.49409592151641846, 0.7420361638069153, 1.3116633892059326, 0.27733585238456726, 0.47066453099250793],
             }
         )  # fmt: skip
@@ -252,6 +253,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
+                ("cuda", 8): [0.8591400384902954, 0.5780534744262695, 1.2648746967315674, -0.16796699166297913, 0.6171004772186279],
                 ("cuda", 10): [0.8747519850730896, 0.5780534744262695, 1.27267324924469, -0.16992005705833435, 0.6171004772186279],
             }
         )  # fmt: skip
@@ -260,6 +262,7 @@ class Inkling2SmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_COMPLETION = Expectations(
             {
+                ("cuda", 8): "audreyانہAdelaide盅природ瑮YanYanYanYanYanYanYanYanYanYanYanYanYanYan",
                 ("cuda", 10): " Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb Emb",
             }
         )  # fmt: skip
