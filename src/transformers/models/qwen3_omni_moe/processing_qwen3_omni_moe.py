@@ -489,6 +489,17 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             )
         )
 
+    def _merge_kwargs(
+        self,
+        ModelProcessorKwargs: ProcessingKwargs | None = None,
+        tokenizer_init_kwargs: dict | None = None,
+        **kwargs,
+    ) -> dict[str, dict]:
+        output_kwargs = super()._merge_kwargs(ModelProcessorKwargs, tokenizer_init_kwargs, **kwargs)
+        # Token estimation enters here directly and must use the same window as audio processing.
+        output_kwargs["audio_kwargs"].setdefault("n_window", output_kwargs.get("n_window", self.n_window))
+        return output_kwargs
+
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 

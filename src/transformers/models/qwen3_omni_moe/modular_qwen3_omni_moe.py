@@ -42,7 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import OmniModalProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import OmniModalProcessorMixin, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr
@@ -2845,6 +2845,17 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
         kwargs["audio_kwargs"] = audio_kwargs
         return super().__call__(text=text, images=images, videos=videos, audio=audio, **kwargs)
+
+    def _merge_kwargs(
+        self,
+        ModelProcessorKwargs: ProcessingKwargs | None = None,
+        tokenizer_init_kwargs: dict | None = None,
+        **kwargs,
+    ) -> dict[str, dict]:
+        output_kwargs = super()._merge_kwargs(ModelProcessorKwargs, tokenizer_init_kwargs, **kwargs)
+        # Token estimation enters here directly and must use the same window as audio processing.
+        output_kwargs["audio_kwargs"].setdefault("n_window", output_kwargs.get("n_window", self.n_window))
+        return output_kwargs
 
     def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:
         """
