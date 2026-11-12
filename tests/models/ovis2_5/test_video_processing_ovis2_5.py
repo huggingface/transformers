@@ -17,16 +17,10 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torchvision_available
+from transformers.video_utils import get_video_size
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
-
-
-if is_torch_available():
-    import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 if is_torchvision_available():
@@ -37,7 +31,6 @@ if is_torchvision_available():
 class Ovis2_5VideoProcessingTester:
     def __init__(
         self,
-        parent,
         batch_size=3,
         num_frames=4,
         num_channels=3,
@@ -48,7 +41,6 @@ class Ovis2_5VideoProcessingTester:
         temporal_patch_size=1,
         merge_size=2,
     ):
-        self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
         self.num_channels = num_channels
@@ -81,15 +73,7 @@ class Ovis2_5VideoProcessingTester:
     def expected_output(self, videos):
         grids = []
         for video in videos:
-            frames = len(video)
-            if isinstance(video, list) and isinstance(video[0], Image.Image):
-                width, height = video[0].size
-            elif isinstance(video, list):
-                height, width = video[0].shape[-3:-1]
-            elif isinstance(video, torch.Tensor):
-                height, width = video.shape[-2:]
-            else:
-                height, width = video.shape[-3:-1]
+            height, width = get_video_size(np.asarray(video))
             height, width = smart_resize(
                 height,
                 width,
@@ -99,7 +83,7 @@ class Ovis2_5VideoProcessingTester:
             )
             grids.append(
                 [
-                    frames // self.temporal_patch_size,
+                    len(video) // self.temporal_patch_size,
                     height // self.patch_size,
                     width // self.patch_size,
                 ]
@@ -121,7 +105,7 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = Ovis2_5VideoProcessingTester(self)
+        self.video_processor_tester = Ovis2_5VideoProcessingTester()
 
     @property
     def video_processor_dict(self):
@@ -132,9 +116,6 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
     def test_video_processor_from_dict_with_kwargs(self):
-        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, self.video_processor_tester.size)
-
         overridden_size = {"shortest_edge": 64 * 64, "longest_edge": 128 * 128}
         video_processor = self.fast_video_processing_class.from_dict(
             self.video_processor_dict,
@@ -167,13 +148,7 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             equal_resolution=False,
             return_tensors="torch",
         )
-        for video_processing_class in self.video_processor_list:
-            video_processor = video_processing_class(**self.video_processor_dict)
-
-            output = video_processor(video_inputs, num_frames=2, return_tensors="pt")
-            expected_shape, expected_grid = self.video_processor_tester.expected_output(video_inputs)
-            self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
-            self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
+        self._check_input_type(video_inputs, num_frames=2)
 
     def test_temporal_patch_padding(self):
         video = np.zeros((3, 64, 96, 3), dtype=np.uint8)

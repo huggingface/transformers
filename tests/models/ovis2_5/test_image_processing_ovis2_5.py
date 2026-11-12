@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import get_image_size, to_numpy_array
 from transformers.models.ovis2_5.image_processing_pil_ovis2_5 import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -45,12 +46,7 @@ class Ovis2_5ImageProcessingTester(ImageProcessingTester):
     def expected_output(self, images):
         grids = []
         for image in images:
-            if isinstance(image, Image.Image):
-                width, height = image.size
-            elif isinstance(image, torch.Tensor):
-                height, width = image.shape[-2:]
-            else:
-                height, width = image.shape[-3:-1]
+            height, width = get_image_size(to_numpy_array(image))
             height, width = smart_resize(
                 height,
                 width,
@@ -63,9 +59,6 @@ class Ovis2_5ImageProcessingTester(ImageProcessingTester):
         num_patches = sum(np.prod(grid) for grid in grids)
         patch_dim = self.num_channels * self.temporal_patch_size * self.patch_size**2
         return (num_patches, patch_dim), grids
-
-    def expected_output_image_shape(self, images):
-        return self.expected_output(images)[0]
 
 
 @require_torch

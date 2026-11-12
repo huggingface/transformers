@@ -15,6 +15,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     Ovis2_5Config,
     Ovis2_5ForConditionalGeneration,
@@ -80,20 +82,12 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         }
 
     def get_vision_config(self):
-        return Ovis2_5VisionConfig(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            spatial_merge_size=2,
-            window_size=self.image_size,
-            attention_dropout=self.attention_dropout,
-            vocab_size=self.visual_vocab_size,
-            num_visual_indicator_tokens=4,
-        )
+        config = super().get_vision_config()
+        config.vocab_size = self.visual_vocab_size
+        config.window_size = self.image_size
+        config.hidden_act = self.vision_config_class.hidden_act
+        config.max_position_embeddings = self.vision_config_class.max_position_embeddings
+        return config
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -105,8 +99,6 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
 
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
-        for token_id in self._special_token_ids:
-            input_ids[input_ids == token_id] = self._safe_token_id()
         input_ids[:, 0] = config.image_start_token_id
         input_ids[:, 1] = config.image_token_id
         input_ids[:, 2] = config.image_end_token_id
@@ -165,7 +157,9 @@ class Ovis2_5IntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.processor = Ovis2_5Processor.from_pretrained(cls.model_id)
+        cls.processor = Ovis2_5Processor.from_pretrained(
+            cls.model_id, size={"shortest_edge": cls.smoke_pixels, "longest_edge": cls.smoke_pixels}
+        )
         cls.model, cls.loading_info = Ovis2_5ForConditionalGeneration.from_pretrained(
             cls.model_id,
             dtype="auto",
@@ -179,24 +173,31 @@ class Ovis2_5IntegrationTest(unittest.TestCase):
         del cls.processor
         cleanup(torch_device, gc_collect=True)
 
-    def test_image_generation(self):
+    @parameterized.expand(
+        [
+            ("image", 1, "What animals are visible? Answer in one short sentence.", "Two cats"),
+            (
+                "video",
+                4,
+                "What remains visible throughout all four frames? Answer in one short sentence.",
+                "The two remote controls remain visible throughout all four frames.",
+            ),
+        ]
+    )
+    def test_generation(self, modality, num_frames, prompt, expected_text):
         image = load_coco_image("000000039769.jpg").convert("RGB")
+        visual_input = image if modality == "image" else [image.copy() for _ in range(num_frames)]
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image},
-                    {
-                        "type": "text",
-                        "text": "What animals are visible? Answer in one short sentence.",
-                    },
+                    {"type": modality, modality: visual_input},
+                    {"type": "text", "text": prompt},
                 ],
             }
         ]
-        self.assertFalse(self.loading_info["missing_keys"])
-        self.assertFalse(self.loading_info["unexpected_keys"])
-        self.assertFalse(self.loading_info["mismatched_keys"])
-        self.assertFalse(self.loading_info["error_msgs"])
+        for key in ("missing_keys", "unexpected_keys", "mismatched_keys", "error_msgs"):
+            self.assertFalse(self.loading_info[key])
         inputs = self.processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -204,62 +205,14 @@ class Ovis2_5IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             enable_thinking=False,
-            processor_kwargs={
-                "images_kwargs": {
-                    "size": {
-                        "shortest_edge": self.smoke_pixels,
-                        "longest_edge": self.smoke_pixels,
-                    }
-                }
-            },
+            processor_kwargs={"videos_kwargs": {"do_sample_frames": False}},
         ).to(torch_device, dtype=self.model.dtype)
 
-        self.assertEqual(inputs.image_grid_thw.tolist(), [[1, 24, 32]])
+        self.assertEqual(getattr(inputs, f"{modality}_grid_thw").tolist(), [[num_frames, 24, 32]])
         output = self.model.generate(**inputs, max_new_tokens=16, do_sample=False)
         generated_text = self.processor.decode(
             output[0, inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         ).strip()
-        self.assertEqual(generated_text, "Two cats")
-
-    def test_video_generation(self):
-        image = load_coco_image("000000039769.jpg").convert("RGB")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video", "video": [image.copy() for _ in range(4)]},
-                    {
-                        "type": "text",
-                        "text": "What remains visible throughout all four frames? Answer in one short sentence.",
-                    },
-                ],
-            }
-        ]
-        inputs = self.processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            enable_thinking=False,
-            processor_kwargs={
-                "videos_kwargs": {
-                    "size": {
-                        "shortest_edge": self.smoke_pixels,
-                        "longest_edge": self.smoke_pixels,
-                    },
-                    "do_sample_frames": False,
-                }
-            },
-        ).to(torch_device, dtype=self.model.dtype)
-
-        self.assertEqual(inputs.video_grid_thw.tolist(), [[4, 24, 32]])
-        output = self.model.generate(**inputs, max_new_tokens=16, do_sample=False)
-        generated_text = self.processor.decode(
-            output[0, inputs.input_ids.shape[1] :],
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        ).strip()
-        self.assertEqual(generated_text, "The two remote controls remain visible throughout all four frames.")
+        self.assertEqual(generated_text, expected_text)
