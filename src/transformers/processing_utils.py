@@ -1951,6 +1951,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
         keys_to_remove = set({"return_unused_kwargs"})
+        processor_sig = list(inspect.signature(cls.__init__).parameters)
 
         # get attributes from processor init signature
         sub_processors = cls.get_attributes()
@@ -1984,7 +1985,7 @@ class ProcessorMixin(PushToHubMixin):
                     processor_config=sub_processor_config,
                     **{**kwargs, "return_unused_kwargs": True},
                 )
-                keys_to_remove.update({k for k in kwargs if k not in unused_kwargs})
+                keys_to_remove.update({k for k in kwargs if k not in unused_kwargs and k not in processor_sig})
                 processor_dict[sub_processor_type] = sub_processor
 
         for k in keys_to_remove:
