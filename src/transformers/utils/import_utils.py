@@ -1096,8 +1096,9 @@ def is_modelopt_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
-def is_onnxruntime_available() -> bool:
-    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+def is_onnxruntime_available(min_version: str | None = None) -> bool:
+    available, onnxruntime_version = _is_package_available("onnxruntime", return_version=True)
+    return available and (min_version is None or version.parse(onnxruntime_version) >= version.parse(min_version))
 
 
 @lru_cache
