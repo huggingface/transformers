@@ -601,6 +601,8 @@ class DataCollatorForSeq2Seq:
             if return_tensors == "pt":
                 import torch
 
+                if isinstance(batch["labels"][0], np.ndarray):
+                    batch["labels"] = np.array(batch["labels"], dtype=np.int64)
                 batch["labels"] = torch.tensor(batch["labels"], dtype=torch.int64)
             else:
                 batch["labels"] = np.array(batch["labels"], dtype=np.int64)
