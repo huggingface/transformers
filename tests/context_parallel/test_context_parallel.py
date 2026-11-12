@@ -214,7 +214,7 @@ def _test_attention_kwargs(rank, cp_size):
 def _test_context_parallel_loss(rank, cp_size):
     """Every rank reports the loss of the whole sequences, with the gradient of its own slice times `cp_size`."""
     mesh = _init_cp_mesh("cpu")
-    style, module = ModelContextParallel(), types.SimpleNamespace(config=types.SimpleNamespace(pad_token_id=0))
+    style, module = ALL_CP_STYLES["cp_model"], types.SimpleNamespace(config=types.SimpleNamespace(pad_token_id=0))
     batch, seq, vocab_size, num_items_in_batch = 2, 8, 11, 7
     full_logits = _same_on_every_rank(batch, seq, vocab_size)
     labels = torch.randint(0, vocab_size, (batch, seq), generator=torch.Generator().manual_seed(1))
@@ -463,7 +463,7 @@ class TestUlyssesCheck(unittest.TestCase):
 class TestModelContextParallel(unittest.TestCase):
     def test_refuses_a_cache_and_turns_it_off(self):
         model = LlamaForCausalLM(_tiny_config())
-        style, input_ids = ModelContextParallel(), torch.tensor([[1, 2, 3, 4]])
+        style, input_ids = ALL_CP_STYLES["cp_model"], torch.tensor([[1, 2, 3, 4]])
         with self.assertRaisesRegex(ValueError, "`past_key_values` are not allowed"):
             style.transform_inputs_pre_forward(
                 model, (), {"input_ids": input_ids, "past_key_values": DynamicCache()}, _MeshStub(2)
@@ -475,7 +475,7 @@ class TestModelContextParallel(unittest.TestCase):
 
     def test_gives_the_loss_this_ranks_shifted_labels(self):
         model, labels = LlamaForCausalLM(_tiny_config()), torch.tensor([[1, 2, 3, 4]])
-        _, kwargs = ModelContextParallel().transform_inputs_pre_forward(
+        _, kwargs = ALL_CP_STYLES["cp_model"].transform_inputs_pre_forward(
             model, (), {"input_ids": labels, "labels": labels}, _MeshStub(2, rank=1)
         )
         # the labels stay whole, the loss gets the second half of their shift and the count of the whole sequence
@@ -484,7 +484,7 @@ class TestModelContextParallel(unittest.TestCase):
         self.assertEqual(kwargs["num_items_in_batch"], 3)
 
         # a caller's shifted labels and token count are kept: the shift is only sliced
-        _, kwargs = ModelContextParallel().transform_inputs_pre_forward(
+        _, kwargs = ALL_CP_STYLES["cp_model"].transform_inputs_pre_forward(
             model,
             (),
             {
@@ -511,7 +511,7 @@ class TestContextParallelPadding(unittest.TestCase):
     """`ModelContextParallel` pads every sequence-shaped input to a multiple of `cp_size`."""
 
     def _prepare(self, module, args=(), **kwargs):
-        return ModelContextParallel().transform_inputs_pre_forward(module, args, kwargs, _MeshStub(2))
+        return ALL_CP_STYLES["cp_model"].transform_inputs_pre_forward(module, args, kwargs, _MeshStub(2))
 
     def _module(self, pad_token_id=7):
         """A model stand-in: the config the padding reads, and the signature the positional inputs bind to."""
@@ -583,5 +583,6 @@ class TestContextParallelChecks(unittest.TestCase):
 
 class TestContextParallelStyles(unittest.TestCase):
     def test_styles_are_registered(self):
+        self.assertIsInstance(ALL_CP_STYLES["cp_model"], ModelContextParallel)
         self.assertIsInstance(ALL_CP_STYLES["cp_split_sequence"], SplitSequenceParallel)
         self.assertIsInstance(ALL_CP_STYLES["cp_ulysses"], UlyssesAttention)

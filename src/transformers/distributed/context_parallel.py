@@ -22,8 +22,8 @@ A context parallel plan pairs two kinds of styles:
   `num_heads / cp_size` heads, runs the model's own attention function with the model's own mask, and all-to-alls the
   output back. Another algorithm is a [`ContextParallelAttention`] subclass added to `ALL_CP_STYLES`.
 
-`apply_context_parallelism` checks the model, then installs such a plan on it, and [`ModelContextParallel`] on the
-model itself: it refuses a cache, pads the sequences to a multiple of `cp_size`, gives the loss this rank's slice of
+`apply_context_parallelism` checks the model, then installs such a plan on it, and `"cp_model"`
+([`ModelContextParallel`]) on the model itself: it refuses a cache, pads the sequences to a multiple of `cp_size`, gives the loss this rank's slice of
 the shifted labels, and reports the loss of the whole sequences on every rank. The styles share [`ContextParallelLayer`], which has the `install_forward` contract of the tensor and
 expert parallel styles.
 """
@@ -193,12 +193,6 @@ class UlyssesAttention(ContextParallelAttention):
         return _all_to_all(output), attn_weights
 
 
-ALL_CP_STYLES: dict[str, ContextParallelLayer] = {
-    "cp_split_sequence": SplitSequenceParallel(),
-    "cp_ulysses": UlyssesAttention(),
-}
-
-
 def pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
     """`tensor` with `pad_len` copies of `value` appended along its sequence dimension 1."""
     padding = tensor.new_full((tensor.shape[0], pad_len, *tensor.shape[2:]), value)
@@ -207,7 +201,8 @@ def pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
 
 class ModelContextParallel(ContextParallelLayer):
     """
-    The model itself, outside the plan since no plan key names the root module. Its inputs lose the cache, which
+    The model itself, `"cp_model"`, which `apply_context_parallelism` installs since no plan key names the root
+    module. Its inputs lose the cache, which
     context parallelism does not split, are padded at the end to a multiple of `cp_size` before the model builds its
     masks from them, and carry this rank's slice of the shifted labels with the token count of the whole sequences.
     Its loss is the one of the whole sequences, which every rank reports.
@@ -263,9 +258,16 @@ class ModelContextParallel(ContextParallelLayer):
         return output
 
 
+ALL_CP_STYLES: dict[str, ContextParallelLayer] = {
+    "cp_model": ModelContextParallel(),
+    "cp_split_sequence": SplitSequenceParallel(),
+    "cp_ulysses": UlyssesAttention(),
+}
+
+
 def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: dict[str, str]) -> nn.Module:
     """
-    Let the ranks of `cp_mesh` split every sequence: `ModelContextParallel` on the model, then the plan, whose
+    Let the ranks of `cp_mesh` split every sequence: `"cp_model"` on the model itself, then the plan, whose
     `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention modules run their attention over
     the whole sequence. Raises a `ValueError` if context parallelism would silently change the logits or the loss of
     `model`.
@@ -295,11 +297,11 @@ def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: di
             "labels while the logits stay sharded. Use a `*ForCausalLM` model, or disable context parallelism."
         )
 
-    ModelContextParallel().install_forward(model, cp_mesh)
     modules = dict(model.named_modules())
     # the first decoder layer still gets the whole sequence: it is the one that cuts it
     first_layer = next(name for name, style in cp_plan.items() if style == "cp_split_sequence")
-    for name, style in cp_plan.items():
+    # the model itself comes first, under the name `named_modules` gives it
+    for name, style in {"": "cp_model", **cp_plan}.items():
         options = {"split_hidden_states": name == first_layer} if style == "cp_split_sequence" else {}
         ALL_CP_STYLES[style].install_forward(modules[name], cp_mesh, **options)
     return model
