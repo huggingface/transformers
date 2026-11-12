@@ -154,16 +154,18 @@ class CheckMicTest(unittest.TestCase):
         self.assertEqual(lines[3], "✓ BERT  slim  pass  1.6s")
         self.assertEqual(lines[4], "✗ CLIP [sdpa]  slim  fail  2.0s")
         self.assertEqual(lines[5], "    logits differ")
-        self.assertIn("torch 2.14 (pinned 2.11)", lines[6])
+        self.assertEqual(lines[6], "    environment differs from the baseline:")
+        self.assertEqual(lines[7], "      torch 2.14 (pinned 2.11)")
         # A failing target explains the exit code; raw runner noise stays hidden.
         self.assertNotIn("noise", stdout.getvalue())
-        self.assertRegex(lines[-5], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
-        # The environment mismatch is repeated after the summary; the failure still fails the check.
+        self.assertRegex(lines[8], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+        # After the summary, the warning names the target; the versions are only listed above.
+        self.assertEqual(lines[9], "")
         self.assertEqual(
-            lines[-4],
-            "⚠ 1 failure ran on an environment that differs from the baseline (still counted as failures):",
+            lines[10],
+            "⚠ 1 failure ran on package versions other than the baseline's (listed above, still counted as failures):",
         )
-        self.assertEqual(lines[-3], "    CLIP [sdpa]  slim: torch 2.14 (pinned 2.11)")
+        self.assertEqual(lines[11], "    CLIP [sdpa]  slim")
 
     def test_environment_warning_lists_only_failures(self):
         self.assertEqual(check_mic.format_environment_warning({}), [])
@@ -180,10 +182,28 @@ class CheckMicTest(unittest.TestCase):
         with patch("sys.stdout", new_callable=io.StringIO) as stdout:
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy()), 1)
         output = stdout.getvalue()
-        self.assertIn("⚠ 2 failures ran on an environment", output)
-        self.assertIn("    T5  slim: numpy 2.3 (pinned 1.26)", output)
-        self.assertIn("    CLIP  slim: numpy 2.3 (pinned 1.26)", output)
-        self.assertNotIn("    BERT  slim:", output)
+        self.assertIn("⚠ 2 failures ran on package versions other than the baseline's", output)
+        warning = output.split("⚠", 1)[1].splitlines()
+        self.assertEqual(warning[1:3], ["    T5  slim", "    CLIP  slim"])
+        self.assertNotIn("    BERT  slim", warning)
+
+    def test_dict_mismatch_lists_only_differing_keys(self):
+        failure = (
+            "runtime: {'device': 'cpu', 'dtype': 'bfloat16', 'attn_implementations': {'audio_config': 'sdpa'}}"
+            " != {'device': 'cpu', 'dtype': 'float32', 'seed': 0}"
+        )
+        self.assertEqual(
+            check_mic.format_failure(failure),
+            [
+                "    runtime differs from the baseline:",
+                "      dtype: 'bfloat16'  (baseline: 'float32')",
+                "      seed: missing  (baseline: 0)",
+                "      attn_implementations: {'audio_config': 'sdpa'}  (not in the baseline)",
+            ],
+        )
+        # Anything that is not a pair of dicts is printed as the runner wrote it.
+        for failure in ("logits: max delta 0.1 over tolerance", "ids: [1, 2] != [1, 3]", "x: {1} != {2}"):
+            self.assertEqual(check_mic.format_failure(failure), [f"    {failure}"])
 
     def test_progress_counts_contracts_and_beats_while_the_runner_is_quiet(self):
         record = {"contract": "r", "contract_name": "BERT", "target": "slim", "status": "pass", "failures": []}

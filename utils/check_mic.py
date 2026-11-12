@@ -8,9 +8,11 @@ Usage (see "Run Model Integration Contracts locally" in the testing guide):
     make run-mic FLEET=control  # the control fleet instead of the default prototypes fleet
 """
 
+import ast
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -279,10 +281,34 @@ def format_record(record, note=""):
     lines = [f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {label}{seconds}"]
     if status == "xfail":
         lines.append(f"    known failure: {record.get('known_failure', '?')}")
-    lines += [f"    {failure}" for failure in record.get("failures", [])]
+    for failure in record.get("failures", []):
+        lines += format_failure(failure)
     if status in ("fail", "error") and record.get("environment_differs"):
-        differs = ", ".join(f"{k} {v}" for k, v in record["environment_differs"].items())
-        lines.append(f"    environment differs from the baseline: {differs}")
+        lines.append("    environment differs from the baseline:")
+        lines += [f"      {k} {v}" for k, v in record["environment_differs"].items()]
+    return lines
+
+
+DICT_MISMATCH = re.compile(r"(?P<name>[^:]+): (?P<got>\{.*\}) != (?P<want>\{.*\})")
+
+
+def format_failure(failure):
+    """A failure line; the runner's `name: {got} != {want}` dict mismatch becomes one line per differing key."""
+    match = DICT_MISMATCH.fullmatch(failure)
+    try:
+        got, want = ast.literal_eval(match["got"]), ast.literal_eval(match["want"])
+    except (TypeError, ValueError, SyntaxError):
+        return [f"    {failure}"]
+    if not isinstance(got, dict) or not isinstance(want, dict):
+        return [f"    {failure}"]
+    lines = [f"    {match['name']} differs from the baseline:"]
+    for key in [*want, *(k for k in got if k not in want)]:
+        if key not in want:
+            lines.append(f"      {key}: {got[key]!r}  (not in the baseline)")
+        elif key not in got:
+            lines.append(f"      {key}: missing  (baseline: {want[key]!r})")
+        elif got[key] != want[key]:
+            lines.append(f"      {key}: {got[key]!r}  (baseline: {want[key]!r})")
     return lines
 
 
@@ -305,17 +331,14 @@ def format_environment_warning(env_failures):
     if not env_failures:
         return []
     count = len(env_failures)
-    lines = [
-        f"⚠ {count} failure{'s' if count > 1 else ''} ran on an environment that differs from the baseline "
-        "(still counted as failures):"
+    return [
+        "",
+        f"⚠ {count} failure{'s' if count > 1 else ''} ran on package versions other than the baseline's"
+        " (listed above, still counted as failures):",
+        *(f"    {name}" for name in env_failures),
+        "  Numeric deltas may be version drift: rerun on the pinned versions before calling them regressions.",
+        "  Outputs 'not in the baseline' are not version drift: the baseline is stale.",
     ]
-    for name, differs in env_failures.items():
-        lines.append(f"    {name}: " + ", ".join(f"{k} {v}" for k, v in differs.items()))
-    lines += [
-        "  Numeric deltas may come from these versions: rerun on the pinned ones before calling them regressions.",
-        "  Outputs 'not in the baseline' or checks that differ from it are not version drift: the baseline is stale.",
-    ]
-    return lines
 
 
 HEARTBEAT_SECONDS = 15
@@ -497,7 +520,7 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     missing = []
     started = time.perf_counter()
 
-    env_failures = {}
+    env_failures = []
 
     def count(record, key=None):
         key = key or record["status"]
@@ -505,7 +528,7 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
         if key in ("fail", "error") and record.get("environment_differs"):
             name = record.get("contract_name", record["contract"])
             variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
-            env_failures[f"{name}{variant}  {record['target']}"] = record["environment_differs"]
+            env_failures.append(f"{name}{variant}  {record['target']}")
 
     def first_pass(record, progress):
         if record.get("baseline_missing"):
