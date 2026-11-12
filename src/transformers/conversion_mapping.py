@@ -2216,6 +2216,56 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
+    # Keyed on `internvl_chat` so that native `internvl` checkpoints keep the plain `llava` mapping
+    mapping["internvl_chat"] = [
+        WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+        WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+        WeightRenaming(source_patterns=r"^mlp1\.0\.", target_patterns="model.multi_modal_projector.layer_norm."),
+        WeightRenaming(source_patterns=r"^mlp1\.1\.", target_patterns="model.multi_modal_projector.linear_1."),
+        WeightRenaming(source_patterns=r"^mlp1\.3\.", target_patterns="model.multi_modal_projector.linear_2."),
+        WeightRenaming(
+            source_patterns=r"^vision_model\.embeddings\.class_embedding",
+            target_patterns="model.vision_tower.embeddings.cls_token",
+        ),
+        WeightRenaming(
+            source_patterns=r"^vision_model\.embeddings\.position_embedding",
+            target_patterns="model.vision_tower.embeddings.position_embeddings",
+        ),
+        WeightRenaming(
+            source_patterns=r"^vision_model\.embeddings\.patch_embedding\.",
+            target_patterns="model.vision_tower.embeddings.patch_embeddings.projection.",
+        ),
+        WeightRenaming(
+            source_patterns=r"^vision_model\.encoder\.layers\.",
+            target_patterns="model.vision_tower.encoder.layer.",
+        ),
+        WeightRenaming(source_patterns=r"\.attn\.proj\.", target_patterns=".attention.projection_layer."),
+        WeightRenaming(source_patterns=r"\.attn\.qkv\.", target_patterns=".attention.qkv."),
+        WeightRenaming(source_patterns=r"\.attn\.q_norm\.", target_patterns=".attention.q_norm."),
+        WeightRenaming(source_patterns=r"\.attn\.k_norm\.", target_patterns=".attention.k_norm."),
+        WeightRenaming(source_patterns=r"\.norm1\.", target_patterns=".layernorm_before."),
+        WeightRenaming(source_patterns=r"\.norm2\.", target_patterns=".layernorm_after."),
+        WeightRenaming(source_patterns=r"\.ls1$", target_patterns=".lambda_1"),
+        WeightRenaming(source_patterns=r"\.ls2$", target_patterns=".lambda_2"),
+        WeightConverter(
+            source_patterns="attention.qkv.weight",
+            target_patterns=[
+                "attention.q_proj.weight",
+                "attention.k_proj.weight",
+                "attention.v_proj.weight",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            source_patterns="attention.qkv.bias",
+            target_patterns=[
+                "attention.q_proj.bias",
+                "attention.k_proj.bias",
+                "attention.v_proj.bias",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+    ] + mapping["llava"].copy()
 
     # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
     mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
