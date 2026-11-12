@@ -96,7 +96,7 @@ class PPDocLayoutV2ImageProcessor(TorchvisionBackend):
         and determines the order sequences by ranking the votes derived from the scores.
 
         Args:
-            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+            order_logits (`torch.Tensor` of shape `(batch_size, num_queries, num_queries)`):
                 Stacked order logits.
 
         Returns:

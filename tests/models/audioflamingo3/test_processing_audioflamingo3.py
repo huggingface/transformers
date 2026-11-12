@@ -21,7 +21,6 @@ from parameterized import parameterized
 
 from transformers import (
     AudioFlamingo3Processor,
-    AutoProcessor,
     AutoTokenizer,
     WhisperFeatureExtractor,
 )
@@ -37,25 +36,6 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     checkpoint = "nvidia/audio-flamingo-3-hf"
 
     audio_unstructured_max_length = 201
-
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = AudioFlamingo3Processor.from_pretrained(cls.tiny_model_id)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_audio_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):

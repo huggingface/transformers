@@ -19,12 +19,7 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class MiniMaxM3VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "videos_kwargs": {"do_resize": False, "return_metadata": True},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
@@ -37,7 +32,10 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     `]<]{seconds} seconds[>[` timestamp marker per frame when metadata is available.
     """
 
-    valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
+    videos_kwargs = {
+        "do_resize": False,
+        "return_metadata": True,
+    }
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["
@@ -60,9 +58,11 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
-        grid_thw = video_inputs["video_grid_thw"][video_idx]
-        grid_t = int(grid_thw[0])
-        frame_seqlen = int(grid_thw[1:].prod() // merge_length)
+        num_chunks = video_inputs["num_chunks_per_video"]
+        start = sum(num_chunks[:video_idx])
+        grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks[video_idx]]
+        grid_t = int(grid_thw[:, 0].sum())
+        frame_seqlen = int(grid_thw[0, 1:].prod() // merge_length)
         metadata = video_inputs.get("video_metadata", [None] * (video_idx + 1))[video_idx]
         temporal_patch_size = self.video_processor.temporal_patch_size
         chunk = ""
@@ -93,10 +93,10 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = MiniMaxM3VLProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs.get("images_kwargs", {})
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -107,8 +107,7 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = MiniMaxM3VLProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
@@ -149,5 +148,11 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+    @property
+    def unused_input_names(self):
+        return ["num_chunks_per_video"]
+
+
+__getattr__ = deprecate_attr(__name__, rename={"MiniMaxM3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MiniMaxM3VLProcessor"]

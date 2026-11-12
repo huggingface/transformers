@@ -24,24 +24,15 @@ import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 @auto_docstring
 class Kimi_K25Processor(ProcessorMixin):
-    valid_processor_kwargs = Kimi_K25ProcessorKwargs
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(
         self,
@@ -115,10 +106,10 @@ class Kimi_K25Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Kimi_K25ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -129,8 +120,7 @@ class Kimi_K25Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Kimi_K25ProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             temporal_patch_size = (
                 videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
@@ -188,5 +178,7 @@ class Kimi_K25Processor(ProcessorMixin):
     def unused_input_names(self):
         return ["num_chunks_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Kimi_K25ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Kimi_K25Processor"]
