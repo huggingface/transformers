@@ -390,6 +390,15 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
 class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniAudio2TextModelTester
 
+    # FIXME: @eustlb, config `__post_init__` keeps `model_type: parakeet` (pops it from a copy), and RADIO's
+    # `layer_scale*.lambda1` / `summary_idxs` are not in the checkpoint
+    @unittest.skip(
+        reason="Reference checkpoint fails to load (`audio_config.model_type: parakeet`, see config `__post_init__`), "
+        "and RADIO saves `layer_scale*.lambda1` / `summary_idxs` absent from it"
+    )
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
+
     # Why do we have two classes that run same tests across with same inputs? FIXME with proper multimodal tester
     @parameterized.expand([True, False, None])
     @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")

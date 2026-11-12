@@ -200,6 +200,7 @@ class MultiModalModelTester:
 
     def _build_sub_config(self, config_cls, prefix):
         sig = list(signature(config_cls.__init__).parameters.keys())
+        sig += ["per_layer_config"]  # always pass even if not in fields
         # not all text config define special tokens in signature - allow anyway
         if "text" in prefix:
             sig += ["bos_token_id", "eos_token_id", "pad_token_id"]
