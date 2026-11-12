@@ -13,6 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch A.X-K1 model."""
 
+import os
+import tempfile
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
@@ -33,8 +35,11 @@ if is_torch_available():
 
     torch.set_float32_matmul_precision("highest")
 
+    from safetensors.torch import load_file, save_file
+
     from transformers import (
         AXK1Config,
+        AXK1ForCausalLM,
         AXK1Model,
     )
 
@@ -90,6 +95,29 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
         # See https://github.com/huggingface/transformers/pull/49518
         config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
         self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
+
+    def test_released_checkpoint_layout_loads_cleanly(self):
+        # The released checkpoints store `post_mlp_layernorm` for dense layers too, where it is unused,
+        # and have no `e_score_correction_bias`
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = AXK1ForCausalLM(config)
+        # Distinguishable from the norm's initialization, to check that it is still loaded
+        torch.nn.init.normal_(model.model.layers[1].mlp.post_mlp_layernorm.weight)
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            path = os.path.join(tmp, "model.safetensors")
+            state_dict = load_file(path)
+            state_dict["model.layers.0.post_mlp_layernorm.weight"] = torch.ones(config.hidden_size)
+            del state_dict["model.layers.1.mlp.gate.e_score_correction_bias"]
+            save_file(state_dict, path, metadata={"format": "pt"})
+
+            reloaded, info = AXK1ForCausalLM.from_pretrained(tmp, output_loading_info=True)
+
+        self.assertEqual(info["unexpected_keys"], set())
+        self.assertEqual(info["missing_keys"], set())
+        torch.testing.assert_close(
+            reloaded.model.layers[1].mlp.post_mlp_layernorm.weight, model.model.layers[1].mlp.post_mlp_layernorm.weight
+        )
 
 
 @slow
