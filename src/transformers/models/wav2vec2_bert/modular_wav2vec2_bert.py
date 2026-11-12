@@ -924,34 +924,6 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         )
 
 
-class TDNNLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
-        self.out_conv_dim = config.tdnn_dim[layer_id]
-        self.kernel_size = config.tdnn_kernel[layer_id]
-        self.dilation = config.tdnn_dilation[layer_id]
-
-        self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
-        self.activation = nn.ReLU()
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # `self.kernel` has to be called as a module (rather than using its weights in `F.conv1d`), otherwise
-        # hooks registered on it are bypassed, e.g. accelerate's offloading hooks that load the weights
-        hidden_states = hidden_states.unsqueeze(1)
-        hidden_states = nn.functional.unfold(
-            hidden_states,
-            (self.kernel_size, self.in_conv_dim),
-            stride=(1, self.in_conv_dim),
-            dilation=(self.dilation, 1),
-        )
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.kernel(hidden_states)
-
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
 class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
     def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
