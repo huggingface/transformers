@@ -436,6 +436,7 @@ class UltrabertPredictionHead(nn.Module):
 )
 class UltrabertForMaskedLM(UltrabertPreTrainedModel):
     _tied_weights_keys = {"head.decoder.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"head.decoder": "colwise_gather_output"}
 
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
