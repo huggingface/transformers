@@ -849,13 +849,23 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
+# The Mega MoE kernel's symmetric-memory buffers, by EP group name, then by shape. Allocating one is a collective
+# rendezvous and slow, so every layer of an EP group shares them, as the layers run one after another.
+_SYMM_BUFFERS: dict[str, dict] = {}
+
+
+def destroy_megamoe_buffers():
+    """Free the Mega MoE symmetric buffers of every EP group. Call it on every rank, before the process groups are
+    destroyed."""
+    _SYMM_BUFFERS.clear()
+
+
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
     process_group: torch.distributed.ProcessGroup | None = None,
-    symm_buffers: dict | None = None,
 ) -> torch.Tensor:
     """FP8 acts × FP4 weights Mega MoE forward (SM100+).
 
@@ -864,8 +874,9 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    The `deepgemm_megamoe` expert-parallel implementation passes `process_group` and `symm_buffers`. Every layer of an
-    EP group shares the symmetric buffers, and the group is needed for their rendezvous on the first forward.
+    The `deepgemm_megamoe` expert-parallel implementation passes `process_group`, the EP group: its symmetric
+    buffers are allocated with a rendezvous over it and shared by every layer of the group (`destroy_megamoe_buffers`
+    frees them).
     `top_k_index` holds global expert ids, with `-1` for skipped slots.
 
     Caller-managed `self` attributes:
@@ -886,10 +897,10 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             f"`{self.gate_up_proj.dtype}`. Use the 'deepgemm' dispatch for FP8 experts."
         )
 
-    if process_group is None or symm_buffers is None:
+    if process_group is None:
         raise ValueError(
-            "DeepGEMM Mega MoE requires a `process_group` for the EP group and a `symm_buffers` cache for its "
-            "symmetric buffers. The `deepgemm_megamoe` expert-parallel implementation supplies both; pass them explicitly otherwise."
+            "DeepGEMM Mega MoE requires a `process_group`, the EP group its symmetric buffers rendezvous over. The "
+            "`deepgemm_megamoe` expert-parallel implementation supplies it; pass it explicitly otherwise."
         )
 
     deepgemm = load_deepgemm_kernel()
@@ -911,6 +922,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     # Lazily (re)allocate the symmetric buffer for this shape when the cached one is too small. It is sized to the next
     # power of two of the batch, so a growing batch reallocates (and rendezvouses) a few times rather than on every size.
+    symm_buffers = _SYMM_BUFFERS.setdefault(process_group.group_name, {})
     buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
     if buffer_key not in symm_buffers or symm_buffers[buffer_key].num_max_tokens_per_rank < num_tokens:
         symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(

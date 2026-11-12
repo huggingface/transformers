@@ -223,8 +223,8 @@ class _MegaMoeExperts(torch.nn.Module):
 
     num_experts = 2
 
-    def forward(self, hidden_states, top_k_index, top_k_weights, process_group, symm_buffers):
-        self.received = (hidden_states, top_k_index, top_k_weights, process_group, symm_buffers)
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
         return hidden_states * (torch.distributed.get_rank() + 1)
 
 
@@ -242,7 +242,7 @@ def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
     top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5]])
     outputs = [layer(hidden_states, top_k_index, top_k_weights) for layer in layers]
 
-    received_hidden, received_index, received_weights, process_group, symm_buffers = layers[0].received
+    received_hidden, received_index, received_weights, process_group = layers[0].received
     rows = slice(2 * rank, 2 * rank + 2)
     padded_index = torch.cat([top_k_index, top_k_index.new_full((1, 2), -1)])
     padded_weights = torch.cat([top_k_weights, top_k_weights.new_zeros(1, 2)])
@@ -250,7 +250,5 @@ def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
     torch.testing.assert_close(received_weights, padded_weights[rows])
     torch.testing.assert_close(received_hidden[: 3 - 2 * rank], hidden_states[rows])
     assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
-    # every layer of the EP group shares the same buffers
-    assert layers[1].received[4] is symm_buffers
     for output in outputs:
         torch.testing.assert_close(output, hidden_states * torch.tensor([[1.0], [1.0], [2.0]]))

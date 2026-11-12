@@ -403,13 +403,6 @@ class MegaMoeEP(EPImplementation):
     # TODO: Mega MoE is built for ranks holding different batches (data-parallel attention + EP), where neither the
     # slicing nor the gather is needed. Until inference supports data parallelism, it runs on the shared batch.
     needs_shared_batch = True
-    # The kernel's symmetric-memory buffers, by EP group. They are slow to allocate, so every layer of a group shares
-    # them, as the layers run one after another. `MegaMoeEP.symm_buffers.clear()` frees them.
-    symm_buffers: dict[str, dict] = {}
-
-    def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh | None = None):
-        super().__init__(experts, ep_mesh, tp_mesh)
-        self.group_symm_buffers = self.symm_buffers.setdefault(ep_mesh.get_group().group_name, {})
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
@@ -423,8 +416,9 @@ class MegaMoeEP(EPImplementation):
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
         rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
 
+        # the kernel's symmetric buffers are per EP group, shared by every layer (`destroy_megamoe_buffers` frees them)
         local_output = self.experts_forward(
-            hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, self.group_symm_buffers
+            hidden_states[rows], top_k_index[rows], top_k_weights[rows], process_group=ep_group
         )
         output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
         all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
