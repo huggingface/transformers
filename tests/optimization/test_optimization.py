@@ -13,9 +13,12 @@
 # limitations under the License.
 
 
+import copy
 import os
 import tempfile
 import unittest
+
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch
@@ -36,6 +39,10 @@ if is_torch_available():
         get_polynomial_decay_schedule_with_warmup,
         get_scheduler,
         get_wsd_schedule,
+    )
+    from transformers.optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup,
+        get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
 
 
@@ -215,6 +222,100 @@ class ScheduleInitTest(unittest.TestCase):
 
         for param in test_params:
             self.assertTrue(get_scheduler(**param), msg=f"failed for {param['name']} in get_scheduler")
+
+
+@require_torch
+class AbsoluteLearningRateScheduleTest(unittest.TestCase):
+    def _optimizer(self, learning_rates, default_lr=1e-3):
+        return torch.optim.SGD(
+            [{"params": [nn.Parameter(torch.ones(()))], "lr": lr} for lr in learning_rates], lr=default_lr
+        )
+
+    def _scheduler(self, name, optimizer, last_epoch=-1):
+        factories = {
+            "polynomial": (get_polynomial_decay_schedule_with_warmup, {"lr_end": 1e-6, "power": 2.0}),
+            "cosine": (get_cosine_with_min_lr_schedule_with_warmup, {"min_lr": 1e-6}),
+            "cosine_warmup": (get_cosine_with_min_lr_schedule_with_warmup_lr_rate, {"min_lr": 1e-6}),
+        }
+        factory, kwargs = factories[name]
+        return factory(optimizer, num_warmup_steps=2, num_training_steps=10, last_epoch=last_epoch, **kwargs)
+
+    @parameterized.expand(
+        [(name, rates) for name in ("polynomial", "cosine", "cosine_warmup") for rates in ([5e-5], [3e-5, 5e-5, 0.0])]
+    )
+    def test_parameter_groups_match_independent_schedules(self, name, learning_rates):
+        optimizer = self._optimizer(learning_rates)
+        scheduler = self._scheduler(name, optimizer)
+        references = []
+        for lr in learning_rates:
+            if lr:
+                reference_optimizer = self._optimizer([lr], default_lr=lr)
+                references.append((reference_optimizer, self._scheduler(name, reference_optimizer)))
+        last_step = 9 if name == "cosine_warmup" else 10
+        for _ in range(last_step + 1):
+            expected = [reference.get_last_lr()[0] for _, reference in references]
+            if 0.0 in learning_rates:
+                expected.append(0.0)
+            torch.testing.assert_close(scheduler.get_last_lr(), expected, rtol=1e-12, atol=1e-15)
+            if scheduler.last_epoch == last_step:
+                torch.testing.assert_close(expected, [1e-6 if lr else 0.0 for lr in learning_rates])
+                break
+            optimizer.step()
+            scheduler.step()
+            for reference_optimizer, reference in references:
+                reference_optimizer.step()
+                reference.step()
+
+    @parameterized.expand(["polynomial", "cosine", "cosine_warmup"])
+    def test_resuming_uses_each_initial_learning_rate(self, name):
+        optimizer = self._optimizer([3e-5, 5e-5])
+        scheduler = self._scheduler(name, optimizer)
+        for _ in range(5):
+            optimizer.step()
+            scheduler.step()
+        optimizer_state = copy.deepcopy(optimizer.state_dict())
+        scheduler_state = copy.deepcopy(scheduler.state_dict())
+        for resume_from_state in (False, True):
+            with self.subTest(resume_from_state=resume_from_state):
+                resumed_optimizer = self._optimizer([3e-5, 5e-5], default_lr=1e-2)
+                resumed_optimizer.load_state_dict(optimizer_state)
+                last_epoch = -1 if resume_from_state else scheduler_state["last_epoch"] - 1
+                resumed_scheduler = self._scheduler(name, resumed_optimizer, last_epoch=last_epoch)
+                if resume_from_state:
+                    resumed_scheduler.load_state_dict(scheduler_state)
+                    resumed_optimizer.load_state_dict(optimizer_state)
+                reference_optimizer = self._optimizer([3e-5, 5e-5])
+                reference_scheduler = self._scheduler(name, reference_optimizer)
+                reference_scheduler.load_state_dict(scheduler_state)
+                reference_optimizer.load_state_dict(optimizer_state)
+                for _ in range(5):
+                    torch.testing.assert_close(
+                        resumed_scheduler.get_last_lr(), reference_scheduler.get_last_lr(), rtol=1e-12, atol=1e-15
+                    )
+                    resumed_optimizer.step()
+                    resumed_scheduler.step()
+                    reference_optimizer.step()
+                    reference_scheduler.step()
+
+    @parameterized.expand(["cosine", "cosine_warmup"])
+    def test_relative_minimum_still_scales_each_group(self, name):
+        learning_rates = [3e-5, 5e-5, 0.0]
+        optimizer = self._optimizer(learning_rates)
+        factory = (
+            get_cosine_with_min_lr_schedule_with_warmup
+            if name == "cosine"
+            else get_cosine_with_min_lr_schedule_with_warmup_lr_rate
+        )
+        scheduler = factory(optimizer, num_warmup_steps=2, num_training_steps=10, min_lr_rate=0.1)
+        for _ in range(9 if name == "cosine_warmup" else 10):
+            optimizer.step()
+            scheduler.step()
+        torch.testing.assert_close(scheduler.get_last_lr(), [lr * 0.1 for lr in learning_rates])
+
+    def test_polynomial_validates_each_positive_initial_rate(self):
+        optimizer = self._optimizer([3e-5, 5e-7])
+        with self.assertRaisesRegex(ValueError, "lr_end .* must be smaller than initial lr"):
+            self._scheduler("polynomial", optimizer)
 
 
 class LambdaScheduleWrapper:
