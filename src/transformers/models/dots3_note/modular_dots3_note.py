@@ -67,7 +67,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
 from ..diffusion_gemma.modeling_diffusion_gemma import DiffusionGemmaTextRotaryEmbedding
 from ..evolla.modeling_evolla import EvollaFeedForward
 from ..glm_image.modeling_glm_image import GlmImageVisionPatchEmbed
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, apply_rotary_pos_emb_interleave
 from ..glm_ocr.modeling_glm_ocr import GlmOcrVisionAttention, GlmOcrVisionRotaryEmbedding
 from ..glmasr.configuration_glmasr import GlmAsrEncoderConfig
 from ..hy_v3.modeling_hy_v3 import HYV3TopKRouter
@@ -474,23 +474,6 @@ class Dots3NoteTextMoE(DeepseekV32MoE):
         )
 
 
-def rotate_half_text(x):
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
-
-
-def apply_rotary_pos_emb_text(q, k, cos, sin):
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1).unsqueeze(1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1).unsqueeze(1)
-    q_embed = q * cos + rotate_half_text(q) * sin
-    k_embed = k * cos + rotate_half_text(k) * sin
-    # Dots stores the rotated coordinates in half-split order.
-    q_embed = q_embed.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
-    k_embed = k_embed.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
-    return q_embed.to(q.dtype), k_embed.to(k.dtype)
-
-
 class Dots3NoteTextAttention(DeepseekV3Attention):
     def __init__(self, config: Dots3NoteTextConfig, layer_idx: int):
         model_config = config
@@ -538,7 +521,9 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
         k_rot = self.k_rope_only_layernorm(k_rot)
 
         cos, sin = position_embeddings
-        q_rot, k_rot = apply_rotary_pos_emb_text(q_rot, k_rot, cos, sin)
+        q_dtype, k_dtype = q_rot.dtype, k_rot.dtype
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+        q_rot, k_rot = q_rot.to(q_dtype), k_rot.to(k_dtype)
 
         if past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
