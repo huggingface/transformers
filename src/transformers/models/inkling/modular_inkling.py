@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
@@ -522,22 +522,24 @@ class InklingTopkRouter(nn.Module):
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(flat, self.weight)
+        # Keep routing in FP32 even under autocast, so distinct scores do not round to ties before top-k.
+        with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
+            router_logits = F.linear(flat.float(), self.weight.float())
 
-        # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
-        scores = router_logits.sigmoid()
-        routed_scores = scores[..., : -self.n_shared_experts]
-        scores_for_choice = routed_scores + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+            scores = router_logits.sigmoid()
+            routed_scores = scores[..., : -self.n_shared_experts]
+            scores_for_choice = routed_scores + self.e_score_correction_bias.float()
+            topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
 
-        routed_logits = router_logits[..., : -self.n_shared_experts]
-        shared_logits = router_logits[..., -self.n_shared_experts :]
-        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-        topk_log_probs = F.logsigmoid(topk_logits)
-        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
+            routed_logits = router_logits[..., : -self.n_shared_experts]
+            shared_logits = router_logits[..., -self.n_shared_experts :]
+            topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
+            topk_log_probs = F.logsigmoid(topk_logits)
+            topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
 
-        topk_weights = topk_weights * self.route_scale * self.global_scale
+            topk_weights = topk_weights * self.route_scale * self.global_scale.float()
 
+        topk_weights = topk_weights.to(hidden_states.dtype)
         shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
         topk_weights = topk_weights[..., : self.top_k].contiguous()
 
@@ -727,7 +729,14 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
-    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv"]
+    _keep_in_fp32_modules_strict = [
+        "attn_sconv",
+        "mlp_sconv",
+        "k_sconv",
+        "v_sconv",
+        "e_score_correction_bias",
+        "gate.global_scale",
+    ]
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
