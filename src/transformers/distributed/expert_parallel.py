@@ -373,9 +373,10 @@ class AutoEP(EPImplementation):
     """
     The default. It runs, in order:
 
-    - `MegaMoeEP` for Mega MoE experts, which only run through it.
-    - `AllReduceEP` at inference (gradients disabled) when the EP group shares one batch. It never reads split sizes
-      back to the host, so decode captures in a CUDA graph.
+    - `MegaMoeEP` for DeepGEMM Mega MoE experts (`experts_implementation="deepgemm_megamoe"`), which only run
+      through it.
+    - `AllReduceEP` at inference (no gradients through the inputs) when the EP group shares one batch. It never reads
+      split sizes back to the host, so decode captures in a CUDA graph.
     - `AllToAllEP` otherwise: in training, and wherever the ranks hold different batches.
     """
 
@@ -388,7 +389,7 @@ class AutoEP(EPImplementation):
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         if self.megamoe is not None:
             return self.megamoe(hidden_states, top_k_index, top_k_weights)
-        if self.all_reduce is not None and not torch.is_grad_enabled():
+        if self.all_reduce is not None and not (torch.is_grad_enabled() and hidden_states.requires_grad):
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 

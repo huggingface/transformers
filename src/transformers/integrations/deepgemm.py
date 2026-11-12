@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shutil
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -850,7 +851,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
 
 
 # By EP group, then shape: allocating one is a slow collective, so every layer of a group shares it.
-_SYMM_BUFFERS: dict[str, dict] = {}
+_SYMM_BUFFERS: defaultdict[str, dict] = defaultdict(dict)
 
 
 def destroy_megamoe_buffers():
@@ -888,6 +889,11 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.
     _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
 
+    if torch.is_grad_enabled() and hidden_states.requires_grad:
+        raise NotImplementedError(
+            "DeepGEMM Mega MoE has no backward: run it under `torch.no_grad()` or `torch.inference_mode()`."
+        )
+
     if self.gate_up_proj.dtype != torch.int8:
         raise NotImplementedError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
@@ -919,7 +925,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     # Lazily (re)allocate the symmetric buffer for this shape when the cached one is too small. It is sized to the next
     # power of two of the batch, so a growing batch reallocates (and rendezvouses) a few times rather than on every size.
-    symm_buffers = _SYMM_BUFFERS.setdefault(process_group.group_name, {})
+    symm_buffers = _SYMM_BUFFERS[process_group.group_name]
     buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
     if buffer_key not in symm_buffers or symm_buffers[buffer_key].num_max_tokens_per_rank < num_tokens:
         symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(

@@ -634,7 +634,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(mega["activation_clamp"], 7.0)
 
     @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
-    def test_megamoe_requires_fp4_weights_and_process_group(self):
+    def test_megamoe_rejects_unsupported_inputs(self):
         hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.float32, device=torch_device)
@@ -657,6 +657,17 @@ class DeepGemmForwardTest(unittest.TestCase):
         with self._bundle(is_sm100=True):
             with self.assertRaisesRegex(ValueError, "requires a .process_group."):
                 deepgemm_fp8_fp4_megamoe_experts_forward(module2, hidden_states, top_k_index, top_k_weights)
+
+        # The kernel has no backward, so inputs that need gradients are rejected.
+        with self._bundle(is_sm100=True):
+            with self.assertRaisesRegex(NotImplementedError, "no backward"):
+                deepgemm_fp8_fp4_megamoe_experts_forward(
+                    self._make_megamoe(),
+                    hidden_states.clone().requires_grad_(),
+                    top_k_index,
+                    top_k_weights,
+                    process_group=types.SimpleNamespace(size=lambda: 1, group_name="ep"),
+                )
 
     @staticmethod
     def _megamoe_flag_set(module):

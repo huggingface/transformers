@@ -167,14 +167,22 @@ def _install_forward_checks_ep_implementation(rank):
 def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
     mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
     ep_mesh, single = mesh["ep"], mesh["tp"]
-    for tp_mesh, grad, all_reduce in ((ep_mesh, False, True), (ep_mesh, True, False), (single, False, False)):
+    cases = (
+        (ep_mesh, False, True, True),
+        (ep_mesh, True, False, True),
+        (ep_mesh, True, True, False),
+        (single, False, False, False),
+    )
+    for tp_mesh, grad_enabled, requires_grad, all_reduce in cases:
+        hidden_states = torch.zeros(2, 4, requires_grad=requires_grad)
         with (
             patch.object(AllReduceEP, "__call__") as all_reduce_call,
             patch.object(AllToAllEP, "__call__") as all_to_all_call,
-            torch.set_grad_enabled(grad),
+            torch.set_grad_enabled(grad_enabled),
         ):
-            AutoEP(_DummyExperts(), ep_mesh, tp_mesh)(None, None, None)
-        assert (all_reduce_call.called, all_to_all_call.called) == (all_reduce, not all_reduce), (tp_mesh, grad)
+            AutoEP(_DummyExperts(), ep_mesh, tp_mesh)(hidden_states, None, None)
+        called = (all_reduce_call.called, all_to_all_call.called)
+        assert called == (all_reduce, not all_reduce), (tp_mesh, grad_enabled, requires_grad)
 
 
 def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
