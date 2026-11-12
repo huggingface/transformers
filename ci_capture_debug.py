@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "repeat_only")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -449,6 +449,71 @@ _capture_trace_modes = []
 
 
 # ───────────────────────────── patches ─────────────────────────────
+
+
+def _summarize_garbage(objs, top=40):
+    by_type = collections.Counter(f"{type(o).__module__}.{type(o).__qualname__}" for o in objs)
+    interesting = [
+        f"{t} x{n}"
+        for t, n in by_type.most_common()
+        if any(k in t.lower() for k in ("onnx", "ort", "inference", "session", "cuda", "torch.onnx", "triton"))
+    ]
+    return (
+        f"{len(objs)} objects, {len(by_type)} types\n"
+        f"    ORT/ONNX/CUDA-related types: {interesting[:top]}\n"
+        f"    most common types: {by_type.most_common(top)}"
+    )
+
+
+_force_gc_state = {"done": False}
+
+
+def _patch_force_gc_in_capture():
+    """Deterministic test of the root-cause hypothesis.
+
+    Hypothesis (from the CUDA driver log of run 43288869427): an automatic GC pass inside the capture destroys cyclic
+    garbage that owns ONNX Runtime CUDA resources (cuMemFree / cuMemFreeHost / cuCtxSynchronize on the capturing thread),
+    which invalidates the capture. torch 2.15 no longer gc.collect()s before a capture (force_cudagraph_gc=False).
+
+    At the first capture of each target's ORIGINAL run, right after `capture_begin`: collect with DEBUG_SAVEALL (so the
+    cyclic garbage is kept, not freed), log what it is, then release it — i.e. free it inside the capture. If the
+    hypothesis is right, the capture fails every time with the same driver errors.
+    """
+    import torch
+
+    G = torch.cuda.CUDAGraph
+    orig_begin = G.capture_begin
+
+    def capture_begin(self, *args, **kwargs):
+        out = orig_begin(self, *args, **kwargs)
+        if S.is_target and S.repeat_index == 0 and not _force_gc_state["done"]:
+            _force_gc_state["done"] = True
+            gc.set_debug(gc.DEBUG_SAVEALL)
+            try:
+                n = gc.collect()
+            finally:
+                gc.set_debug(0)
+            garbage = list(gc.garbage)
+            gc.garbage.clear()
+            log(
+                f"force_gc_in_capture [{S.test}]: inside capture, gc.collect() found {n} unreachable; cyclic garbage: "
+                + _summarize_garbage(garbage)
+            )
+            ort_objs = [o for o in garbage if "onnxruntime" in type(o).__module__ or "onnx" in type(o).__module__]
+            for o in ort_objs[:10]:
+                try:
+                    log(f"    ORT/ONNX garbage object: {type(o).__module__}.{type(o).__qualname__} {o!r:.200}")
+                except Exception as e:
+                    log(f"    ORT/ONNX garbage object: {type(o)} (repr failed: {e!r})")
+            log("force_gc_in_capture: releasing the cyclic garbage NOW (inside the capture)")
+            del garbage, ort_objs  # frees everything (DEBUG_SAVEALL kept it alive) -> destructors run inside capture
+            log("force_gc_in_capture: garbage released; capture continues")
+        return out
+
+    G.capture_begin = capture_begin
+    log(
+        "force_gc_in_capture: CUDAGraph.capture_begin patched (forced GC inside the first capture of each target original)"
+    )
 
 
 def _patch_cuda_graph():
@@ -873,6 +938,9 @@ class CaptureDebugPlugin:
             # `CachingAutotuner.run` (no CUDA call: S.full is never set in this mode).
             _patch_triton_launch()
             log("triton_wrapper_only: CachingAutotuner.run wrapped (pass-through)")
+            return
+        if PLUGIN_MODE == "force_gc_in_capture":
+            _patch_force_gc_in_capture()
             return
         faulthandler.enable(file=sys.stderr, all_threads=True)
         try:
