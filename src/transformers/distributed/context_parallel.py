@@ -17,8 +17,8 @@ A context parallel plan pairs two kinds of styles:
 
 - `"cp_split_sequence"` on the decoder layers, which run on this rank's slice. The model built the attention mask and
   the position embeddings for the whole sequence before the first layer.
-- An attention style, `"cp_ulysses"`, on their attention modules, whose attention function then runs over the whole
-  sequence. [`UlyssesAttention`] all-to-alls the query, key and value, so that every rank holds the whole sequence for
+- An attention style, `"cp_ulysses"`, on their attention modules, whose attention function runs over the whole
+  sequence while the module runs. [`UlyssesAttention`] all-to-alls the query, key and value, so that every rank holds the whole sequence for
   `num_heads / cp_size` heads, runs the model's own attention function with the model's own mask, and all-to-alls the
   output back. Another algorithm is a [`ContextParallelAttention`] subclass registered in `ALL_PARALLEL_STYLES`.
 
@@ -30,6 +30,7 @@ expert parallel styles.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from functools import partial, wraps
 from typing import TYPE_CHECKING
@@ -63,36 +64,19 @@ def split_sequence(tensor: torch.Tensor, dim: int, cp_mesh: DeviceMesh) -> torch
     return tensor.chunk(cp_size, dim=dim)[cp_mesh.get_local_rank()].contiguous()
 
 
-def wrap_attention_function(attn_implementation: str) -> None:
-    """
-    Wrap the `ALL_ATTENTION_FUNCTIONS` entry of `attn_implementation`, so that the modules an attention style gave a
-    `cp_attention` run it through it. A no-op if the entry is wrapped already: call it again after registering another
-    function under that key, as loading a hub kernel does.
-    """
-    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
-
-    attention_function = ALL_ATTENTION_FUNCTIONS[attn_implementation]
-    if getattr(attention_function, "is_context_parallel", False):
-        return
-
-    def context_parallel_attention(module, *args, **kwargs):
-        if hasattr(module, "cp_attention"):
-            return module.cp_attention(attention_function, module, *args, **kwargs)
-        return attention_function(module, *args, **kwargs)
-
-    context_parallel_attention.is_context_parallel = True
-    ALL_ATTENTION_FUNCTIONS.register(attn_implementation, context_parallel_attention)
-
-
 class ContextParallelLayer:
     """
-    Base class of the context parallel styles, with the `install_forward` contract of `TensorParallelLayer`: replace
-    `module.forward` by one that runs `transform_inputs_pre_forward` first. The styles shard no parameter, so the
-    parameter hooks of the other parallelisms have no counterpart here.
+    Base class of the context parallel styles, with the hooks of `TensorParallelLayer`: `install_forward` replaces
+    `module.forward` by one that runs `transform_inputs_pre_forward` first, then the original forward inside
+    `context_around_forward`. The styles shard no parameter, so the parameter hooks of the other parallelisms have no
+    counterpart here.
     """
 
     def transform_inputs_pre_forward(self, module: nn.Module, args: tuple, kwargs: dict, cp_mesh: DeviceMesh):
         return args, kwargs
+
+    def context_around_forward(self, module: nn.Module, cp_mesh: DeviceMesh):
+        return contextlib.nullcontext()
 
     def install_forward(self, module: nn.Module, cp_mesh: DeviceMesh, **options):
         """Replace `module.forward`; the keyword `options` go to `transform_inputs_pre_forward`."""
@@ -101,7 +85,8 @@ class ContextParallelLayer:
         @wraps(original_forward)
         def cp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, cp_mesh, **options)
-            return original_forward(*args, **kwargs)
+            with self.context_around_forward(module, cp_mesh):
+                return original_forward(*args, **kwargs)
 
         module.forward = cp_forward
         return module
@@ -133,9 +118,9 @@ class SplitSequenceParallel(ContextParallelLayer):
 class ContextParallelAttention(ContextParallelLayer):
     """
     Attention module: run its attention function over the whole sequence, when each rank of `cp_mesh` holds a slice
-    of it. `install_forward` checks the module, gives it `attention` as its `cp_attention`, and wraps the model's entry
-    in `ALL_ATTENTION_FUNCTIONS` so that the attention call of that module runs through it; the forward stays as is.
-    A subclass is an algorithm, registered in `ALL_PARALLEL_STYLES` and named in the plan like any style.
+    of it. While the module runs, its entry in `ALL_ATTENTION_FUNCTIONS` is `attention` around the registered
+    function, and it is restored after; the module's forward itself stays as is. A subclass is an algorithm,
+    registered in `ALL_PARALLEL_STYLES` and named in the plan like any style.
     """
 
     def check(self, module: nn.Module, cp_mesh: DeviceMesh) -> None:
@@ -144,11 +129,22 @@ class ContextParallelAttention(ContextParallelLayer):
     def attention(self, cp_mesh: DeviceMesh, attention_function, module, query, key, value, attention_mask, **kwargs):
         raise NotImplementedError
 
+    @contextlib.contextmanager
+    def context_around_forward(self, module: nn.Module, cp_mesh: DeviceMesh):
+        from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+        attn_implementation = module.config._attn_implementation
+        # the function registered now, so that a hub kernel loaded since the model was built is the one run
+        attention_function = ALL_ATTENTION_FUNCTIONS[attn_implementation]
+        ALL_ATTENTION_FUNCTIONS.register(attn_implementation, partial(self.attention, cp_mesh, attention_function))
+        try:
+            yield
+        finally:
+            ALL_ATTENTION_FUNCTIONS.register(attn_implementation, attention_function)
+
     def install_forward(self, module: nn.Module, cp_mesh: DeviceMesh):
         self.check(module, cp_mesh)
-        module.cp_attention = partial(self.attention, cp_mesh)
-        wrap_attention_function(module.config._attn_implementation)
-        return module
+        return super().install_forward(module, cp_mesh)
 
 
 class UlyssesAttention(ContextParallelAttention):
@@ -249,8 +245,6 @@ class ModelContextParallel(ContextParallelLayer):
                 "sequences without a cache, or disable context parallelism."
             )
         kwargs["use_cache"] = False
-        # a hub kernel loaded since may have registered another function under the attention key
-        wrap_attention_function(module.config._attn_implementation)
         return args, kwargs
 
     def loss(

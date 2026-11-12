@@ -63,7 +63,7 @@ class _MeshStub:
 
 
 class _StandInAttention(torch.nn.Module):
-    """The attributes the attention functions read from a model's attention module."""
+    """The attributes the attention functions read from a model's attention module, and the call a model's makes."""
 
     def __init__(self, attn_implementation="sdpa", num_key_value_groups=1):
         super().__init__()
@@ -71,6 +71,10 @@ class _StandInAttention(torch.nn.Module):
         self.is_causal = True
         self.num_key_value_groups = num_key_value_groups
         self.layer_idx = 0
+
+    def forward(self, query, key, value, attention_mask=None, **kwargs):
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, None)
+        return attention_interface(self, query, key, value, attention_mask, **kwargs)
 
 
 class _StandInLayer(torch.nn.Module):
@@ -335,27 +339,37 @@ class TestContextParallelAttentionRouting(unittest.TestCase):
     def test_installed_modules_are_routed(self):
         spy, routed, plain = _SpyAttention(), _StandInAttention(), _StandInAttention()
         spy.install_forward(routed, _MeshStub(2))
-        attention = ALL_ATTENTION_FUNCTIONS["sdpa"]
         query, key, value = (torch.randn(2, 4, 8, 4) for _ in range(3))
 
-        output, _ = attention(routed, query, key, value, None)
+        output, _ = routed(query, key, value)
         self.assertEqual(spy.modules_seen, [routed])
         torch.testing.assert_close(output, self.original(routed, query, key, value, None)[0])
-        # a module the style was not installed on keeps plain attention
-        torch.testing.assert_close(
-            attention(plain, query, key, value, None)[0], self.original(plain, query, key, value, None)[0]
-        )
+        # the entry is only replaced while the module runs: a module the style was not installed on keeps plain attention
+        self.assertIs(ALL_ATTENTION_FUNCTIONS["sdpa"], self.original)
+        torch.testing.assert_close(plain(query, key, value)[0], self.original(plain, query, key, value, None)[0])
+        self.assertEqual(spy.modules_seen, [routed])
 
-        # installing again keeps the wrapper, and a function registered since under the key (a hub kernel, for one) is
-        # wrapped in turn
-        spy.install_forward(_StandInAttention(), _MeshStub(2))
-        self.assertIs(ALL_ATTENTION_FUNCTIONS["sdpa"], attention)
+    def test_runs_the_function_registered_at_call_time(self):
+        # a hub kernel loaded after the model was built registers another function under the key
+        spy, routed = _SpyAttention(), _StandInAttention()
+        spy.install_forward(routed, _MeshStub(2))
         replacement = mock.Mock(wraps=self.original)
         ALL_ATTENTION_FUNCTIONS.register("sdpa", replacement)
-        spy.install_forward(_StandInAttention(), _MeshStub(2))
-        ALL_ATTENTION_FUNCTIONS["sdpa"](routed, query, key, value, None)
+        query, key, value = (torch.randn(2, 4, 8, 4) for _ in range(3))
+
+        routed(query, key, value)
         self.assertEqual(replacement.call_count, 1)
-        self.assertEqual(spy.modules_seen, [routed, routed])
+        self.assertEqual(spy.modules_seen, [routed])
+        self.assertIs(ALL_ATTENTION_FUNCTIONS["sdpa"], replacement)
+
+    def test_restores_the_entry_when_the_attention_raises(self):
+        spy, routed = _SpyAttention(), _StandInAttention()
+        spy.install_forward(routed, _MeshStub(2))
+        failing = mock.Mock(side_effect=RuntimeError("kernel"))
+        ALL_ATTENTION_FUNCTIONS.register("sdpa", failing)
+        with self.assertRaisesRegex(RuntimeError, "kernel"):
+            routed(torch.randn(2, 4, 8, 4), torch.randn(2, 4, 8, 4), torch.randn(2, 4, 8, 4))
+        self.assertIs(ALL_ATTENTION_FUNCTIONS["sdpa"], failing)
 
 
 class TestSplitSequenceParallel(unittest.TestCase):
@@ -432,9 +446,6 @@ class TestUlyssesCheck(unittest.TestCase):
 
 
 class TestModelContextParallel(unittest.TestCase):
-    def setUp(self):
-        self.addCleanup(ALL_ATTENTION_FUNCTIONS.register, "sdpa", ALL_ATTENTION_FUNCTIONS["sdpa"])
-
     def test_refuses_a_cache_and_turns_it_off(self):
         model = LlamaForCausalLM(_tiny_config())
         style, input_ids = ModelContextParallel(), torch.tensor([[1, 2, 3, 4]])
