@@ -45,11 +45,81 @@ from .tokenization_utils_base import (
     TruncationStrategy,
     generate_merges,
 )
-from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
+from .utils import PaddingStrategy, add_end_docstrings, hf_api, is_tokenizers_v1_available, logging
 from .utils.chat_template_utils import encode_marked_chat
 
 
+if is_tokenizers_v1_available():
+    from .tokenization_utils_tokenizers_v1 import V0TokenizerFacade
+
+
 logger = logging.get_logger(__name__)
+
+
+def _with_v0_api(tokenizer):
+    """tokenizers>=1 splits the 0.x `Tokenizer` in two, which `V0TokenizerFacade` puts back together."""
+    if is_tokenizers_v1_available() and isinstance(tokenizer, TokenizerFast):
+        return V0TokenizerFacade(tokenizer)
+    return tokenizer
+
+
+# The smallest 0.x `tokenizer.json` to load one component from
+_EMPTY_TOKENIZER_JSON = {
+    "version": "1.0",
+    "truncation": None,
+    "padding": None,
+    "added_tokens": [],
+    "normalizer": None,
+    "pre_tokenizer": None,
+    "post_processor": None,
+    "decoder": None,
+    "model": {"type": "WordLevel", "vocab": {}, "unk_token": "<unk>"},
+}
+
+
+def with_components(tokenizer, **components):
+    """
+    Sets `components` on `tokenizer`, each given as its 0.x `tokenizer.json` entry, for instance
+    `pre_tokenizer={"type": "ByteLevel", ...}`, and returns the tokenizer to use from then on.
+
+    tokenizers>=1 reorganized some components (a ByteLevel pre-tokenizer becomes a `Split` pre-tokenizer plus a
+    byte-level flag on the model), and migrates 0.x entries only when loading a whole `tokenizer.json`, so it reloads
+    the tokenizer. 0.x sets each component in place.
+    """
+    if is_tokenizers_v1_available():
+        tokenizer_json = json.loads(tokenizer.to_str())
+        tokenizer_json.update(components)
+        return TokenizerFast.from_str(json.dumps(tokenizer_json))
+    for name, component in components.items():
+        holder = TokenizerFast.from_str(json.dumps({**_EMPTY_TOKENIZER_JSON, name: component}))
+        setattr(tokenizer, name, getattr(holder, name))
+    return tokenizer
+
+
+def template_processing(single, pair, special_tokens) -> processors.TemplateProcessing:
+    """
+    `processors.TemplateProcessing` from its 0.x arguments, e.g. `single="[CLS]:0 $A:0 [SEP]:0"` and
+    `special_tokens=[("[CLS]", 101), ("[SEP]", 102)]`. tokenizers>=1 templates hold token ids instead of tokens.
+    """
+    if not is_tokenizers_v1_available():
+        return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
+
+    ids = dict(special_tokens)
+
+    def pieces(template):
+        result = []
+        for piece in template.split() if isinstance(template, str) else template:
+            content, separator, type_id = piece.rpartition(":")
+            if not (separator and type_id.isdigit()):
+                content, type_id = piece, "0"
+            if content.startswith("$"):
+                result.append({"seq": content[1:] or "A", "type_id": int(type_id)})
+            else:
+                result.append({"ids": [ids[content]], "type_id": int(type_id)})
+        return result
+
+    return processors.TemplateProcessing(single=pieces(single), pair=pieces(pair))
+
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
@@ -91,7 +161,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model = None
-    _tokenizer = None
+
+    @property
+    def _tokenizer(self):
+        return self.__dict__.get("_backend")
+
+    @_tokenizer.setter
+    def _tokenizer(self, tokenizer):
+        # Model tokenizers assign a fresh `tokenizers.Tokenizer` here, before and after `__init__`
+        self.__dict__["_backend"] = _with_v0_api(tokenizer)
 
     @classmethod
     def convert_to_native_format(cls, trust_remote_code=False, **kwargs):
@@ -139,6 +217,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tok_from_file = TokenizerFast.from_str(json.dumps(minimal_tokenizer_json))
             else:
                 tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
+            tok_from_file = _with_v0_api(tok_from_file)
 
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
@@ -490,7 +569,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 elif isinstance(token, AddedToken):
                     # Ensure the special flag is set correctly for special tokens
                     if not token.special and str(token) in all_named_tokens:
-                        token.special = True
+                        token = self._mark_special(token)
                 tokens.append(token)
             if tokens:
                 # These tokens are from the special tokens map
@@ -518,9 +597,32 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._should_update_post_processor:
             self.update_post_processor()
 
+    def _mark_special(self, token: AddedToken) -> AddedToken:
+        if not is_tokenizers_v1_available():
+            # In place: the token is shared with the special tokens map and `init_kwargs`, and a 0.x token whose
+            # `normalized` was never set follows `special`, which a copy can't reproduce
+            token.special = True
+            return token
+        # tokenizers>=1 tokens are immutable: swap a special copy in where the token is shared
+        special = AddedToken(
+            token.content,
+            single_word=token.single_word,
+            lstrip=token.lstrip,
+            rstrip=token.rstrip,
+            normalized=token.normalized,
+            special=True,
+        )
+        for mapping in (self._special_tokens_map, self.init_kwargs):
+            for key, value in mapping.items():
+                if value is token:
+                    mapping[key] = special
+        self._extra_special_tokens = [special if extra is token else extra for extra in self._extra_special_tokens]
+        return special
+
     @property
     def is_fast(self) -> bool:
-        return True
+        # Callers read `is_fast` as "offsets are available", which tokenizers>=1 doesn't expose yet
+        return not is_tokenizers_v1_available()
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
@@ -639,9 +741,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             special_tokens.append((bos, bos_token_id))
         if self.add_eos_token:
             special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
-        )
+        self._tokenizer.post_processor = template_processing(single=single, pair=pair, special_tokens=special_tokens)
 
     @property
     def add_eos_token(self):
@@ -878,6 +978,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return self._encode_plus(text=text, text_pair=pair, add_special_tokens=add_special_tokens, **kwargs).tokens()
 
     def _encode_without_added_tokens(self, text: str) -> list[int]:
+        if is_tokenizers_v1_available():  # its components can't run on their own
+            return super()._encode_without_added_tokens(text)
         # `split_special_tokens` only skips special tokens here, so run the backend's pipeline without its added tokens
         if self._tokenizer.normalizer is not None:
             text = self._tokenizer.normalizer.normalize_str(text)
@@ -1063,8 +1165,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             self._tokenizer.encode_special_tokens = split_special_tokens
 
         if kwargs.get("sanitize_control_tokens"):  # marked by `mark_control_tokens`, see `apply_chat_template`
-            post_processor = self._tokenizer.post_processor
-            if add_special_tokens and post_processor is not None and post_processor.num_special_tokens_to_add(False):
+            if add_special_tokens and self._tokenizer.num_special_tokens_to_add(False):
                 raise NotImplementedError("`sanitize_control_tokens=True` needs a template that writes special tokens")
             input_ids = [encode_marked_chat(self, chat) for chat in batch_text_or_text_pairs]
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
@@ -1133,6 +1234,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return batched_output
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
+        if is_tokenizers_v1_available():  # its decoder can't run on its own
+            return self._tokenizer.decode(self.convert_tokens_to_ids(tokens), skip_special_tokens=False)
         return (
             self.backend_tokenizer.decoder.decode(tokens)
             if self.backend_tokenizer.decoder is not None
@@ -1233,6 +1336,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             `text_iterator`.
 
         """
+        if is_tokenizers_v1_available():
+            raise NotImplementedError("Training is not supported with tokenizers>=1 yet.")
         tokenizer_json = json.loads(self._tokenizer.to_str())
         # Remove added tokens for now (uses IDs of tokens)
         added_tokens = tokenizer_json.pop("added_tokens")

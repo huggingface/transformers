@@ -1557,15 +1557,14 @@ def is_optimum_neuron_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_tokenizers_available() -> bool:
-    is_available, tokenizers_version = _is_package_available("tokenizers", return_version=True)
-    return is_available and version.parse(tokenizers_version).major < 1
+    return _is_package_available("tokenizers")[0]
 
 
 @lru_cache
 @_make_compile_constant
 def is_tokenizers_v1_available() -> bool:
-    # tokenizers 1.x moves encoding and vocab access from `Tokenizer` to `CompiledTokenizer` and drops `trainers`, so
-    # the `TokenizersBackend`, built on the 0.x `Tokenizer`, can't run on it. `TokenizersV1Backend` serves it instead.
+    # tokenizers 1.x moves encoding and vocab access from `Tokenizer` to `CompiledTokenizer` and drops `trainers`.
+    # `TokenizersBackend` keeps using the 0.x API, served from 1.x by `V0TokenizerFacade`.
     is_available, tokenizers_version = _is_package_available("tokenizers", return_version=True)
     return is_available and version.parse(tokenizers_version).major >= 1
 

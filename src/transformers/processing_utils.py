@@ -62,7 +62,6 @@ from .utils import (
     copy_func,
     direct_transformers_import,
     hf_api,
-    is_tokenizers_v1_available,
     is_torch_available,
     is_torchcodec_greater_or_equal,
     is_torchcodec_usable,
@@ -1971,8 +1970,7 @@ class ProcessorMixin(PushToHubMixin):
                 "tokenizer" in sub_processor_type
             ):  # This is only necessary for the checkpoint in test_processing_mistral3.py which has no config.json and
                 # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
-                # With tokenizers>=1, `AutoTokenizer` ignores `tokenizer_class`, so the default path is right.
-                if "PixtralProcessor" in cls.__name__ and not is_tokenizers_v1_available():
+                if "PixtralProcessor" in cls.__name__:
                     from .tokenization_utils_tokenizers import TokenizersBackend
 
                     tokenizer = TokenizersBackend.from_pretrained(

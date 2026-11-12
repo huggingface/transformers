@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+`TokenizersBackend` on tokenizers 0.x and 1.x. The `TokenizersBackendTest` cases run on both: on 0.x they pin the
+expected values, on 1.x they check that `V0TokenizerFacade` reproduces them.
+"""
 
 import copy
 import json
@@ -21,15 +25,8 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer
-from transformers.testing_utils import require_tokenizers_v1, require_torchvision
-from transformers.utils import is_tokenizers_available, is_tokenizers_v1_available
-
-from ..test_tokenization_common import TokenizerTesterMixin
-
-
-if is_tokenizers_v1_available():
-    from transformers.tokenization_utils_tokenizers_v1 import TokenizersV1Backend
+from transformers import AutoTokenizer, TokenizersBackend
+from transformers.testing_utils import require_tokenizers, require_tokenizers_v1, require_torchvision
 
 
 VOCAB = {"[UNK]": 0, "[CLS]": 1, "[SEP]": 2, "[PAD]": 3, "hello": 4, "world": 5, "how": 6, "are": 7, "you": 8}
@@ -79,8 +76,7 @@ TOKENIZER_CONFIG = {
 }
 
 
-@require_tokenizers_v1
-class TokenizersV1BackendTest(unittest.TestCase):
+class _TokenizerJsonTestCase(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         with open(os.path.join(self.tmpdir.name, "tokenizer.json"), "w", encoding="utf-8") as f:
@@ -92,10 +88,11 @@ class TokenizersV1BackendTest(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_v0_backend_is_disabled(self):
-        self.assertTrue(is_tokenizers_v1_available())
-        self.assertFalse(is_tokenizers_available())
-        self.assertEqual(type(self.tokenizer).__name__, "TokenizersV1Backend")
+
+@require_tokenizers
+class TokenizersBackendTest(_TokenizerJsonTestCase):
+    def test_loads_tokenizers_backend(self):
+        self.assertIsInstance(self.tokenizer, TokenizersBackend)
 
     def test_encode_single(self):
         encoding = self.tokenizer("Hello world")
@@ -151,6 +148,60 @@ class TokenizersV1BackendTest(unittest.TestCase):
         encoding = self.tokenizer("hello world", "how are you", truncation="only_second", max_length=7)
 
         self.assertEqual(encoding["input_ids"], [1, 4, 5, 2, 6, 7, 2])
+
+    def test_special_tokens_mask_marks_template_and_padding(self):
+        encoding = self.tokenizer(["hello", "hello world"], padding=True, return_special_tokens_mask=True)
+
+        self.assertEqual(encoding["special_tokens_mask"], [[1, 0, 1, 1], [1, 0, 0, 1]])
+
+    def test_sequence_ids(self):
+        self.assertEqual(self.tokenizer("hello", "you how").sequence_ids(), [None, 0, None, 1, 1, None])
+
+    def test_overflowing_tokens_with_stride(self):
+        encoding = self.tokenizer(
+            "hello world how are you", truncation=True, max_length=5, stride=1, return_overflowing_tokens=True
+        )
+
+        self.assertEqual(encoding["input_ids"], [[1, 4, 5, 6, 2], [1, 6, 7, 8, 2]])
+        self.assertEqual(encoding["overflow_to_sample_mapping"], [0, 0])
+
+    def test_overflowing_tokens_left(self):
+        self.tokenizer.truncation_side = "left"
+
+        encoding = self.tokenizer(
+            "hello world how are you", truncation=True, max_length=4, stride=1, return_overflowing_tokens=True
+        )
+
+        self.assertEqual(encoding["input_ids"], [[1, 7, 8, 2], [1, 6, 7, 2], [1, 5, 6, 2], [1, 4, 5, 2]])
+
+    def test_overflowing_tokens_of_pair_second_sequence(self):
+        encoding = self.tokenizer(
+            ["hello", "you"],
+            ["how are you world", "hello"],
+            truncation="only_second",
+            max_length=6,
+            padding=True,
+            return_overflowing_tokens=True,
+        )
+
+        self.assertEqual(encoding["input_ids"], [[1, 4, 2, 6, 7, 2], [1, 4, 2, 8, 5, 2], [1, 8, 2, 4, 2, 3]])
+        self.assertEqual(encoding["overflow_to_sample_mapping"], [0, 0, 1])
+
+    def test_split_into_words_keeps_two_words_a_single_sequence(self):
+        encoding = self.tokenizer(["Hello", "world"], is_split_into_words=True)
+
+        self.assertEqual(encoding["input_ids"], [1, 4, 5, 2])
+        self.assertEqual(encoding["token_type_ids"], [0, 0, 0, 0])
+        self.assertEqual(encoding.word_ids(), [None, 0, 1, None])
+
+    def test_split_into_words_pairs_batch(self):
+        encoding = self.tokenizer(
+            [["hello"], ["how", "are", "you"]], [["world"], ["hello"]], is_split_into_words=True, padding=True
+        )
+
+        self.assertEqual(encoding["input_ids"], [[1, 4, 2, 5, 2, 3, 3], [1, 6, 7, 8, 2, 4, 2]])
+        self.assertEqual(encoding.word_ids(1), [None, 0, 1, 2, None, 0, None])
+        self.assertEqual(encoding.word_to_tokens(1, 2, sequence_index=0), (3, 4))
 
     def test_return_tensors(self):
         encoding = self.tokenizer(["hello", "hello world"], padding=True, return_tensors="np")
@@ -248,29 +299,8 @@ class TokenizersV1BackendTest(unittest.TestCase):
         for clone in (pickle.loads(pickle.dumps(self.tokenizer)), copy.deepcopy(self.tokenizer)):
             self.assertEqual(clone("hello world")["input_ids"], [1, 4, 5, 2])
 
-    def test_unsupported_features_raise(self):
-        for kwargs in (
-            {"return_offsets_mapping": True},
-            {"return_overflowing_tokens": True, "truncation": True, "max_length": 3},
-            {"stride": 1, "truncation": True, "max_length": 3},
-            {"return_special_tokens_mask": True},
-        ):
-            with self.subTest(**kwargs), self.assertRaises(NotImplementedError):
-                self.tokenizer("hello world", **kwargs)
-
-        with self.assertRaises(NotImplementedError):
-            self.tokenizer([["hello", "world"]], is_split_into_words=True)
-
-    def test_training_raises(self):
-        with self.assertRaises(NotImplementedError):
-            self.tokenizer.train_new_from_iterator([["hello world"]], vocab_size=10)
-
-    def test_is_not_fast_without_offsets(self):
-        # `is_fast` gates the offset-based paths (token classification pipeline, whole word masking)
-        self.assertFalse(self.tokenizer.is_fast)
-
     @require_torchvision
-    def test_processors_with_hardcoded_tokenizer_class_load_v1_backend(self):
+    def test_processors_with_hardcoded_tokenizer_class_load_tokenizers_backend(self):
         from transformers import FuyuImageProcessorPil, FuyuProcessor, PixtralImageProcessor, PixtralProcessor
 
         for processor_class, image_processor in (
@@ -282,22 +312,25 @@ class TokenizersV1BackendTest(unittest.TestCase):
                 self.tokenizer.save_pretrained(self.tmpdir.name)
                 image_processor.save_pretrained(self.tmpdir.name)
                 processor = processor_class.from_pretrained(self.tmpdir.name)
-                self.assertIsInstance(processor.tokenizer, TokenizersV1Backend)
+                self.assertIsInstance(processor.tokenizer, TokenizersBackend)
 
 
 @require_tokenizers_v1
-class TokenizersV1BackendBertCommonTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = TokenizersV1Backend if is_tokenizers_v1_available() else None
-    from_pretrained_id = "google-bert/bert-base-uncased"
+class TokenizersV1GapsTest(_TokenizerJsonTestCase):
+    def test_offsets_raise(self):
+        with self.assertRaises(NotImplementedError):
+            self.tokenizer("hello world", return_offsets_mapping=True)
+        with self.assertRaises(NotImplementedError):
+            self.tokenizer("hello world").char_to_token(0)
 
+    def test_word_ids_of_raw_text_raise(self):
+        with self.assertRaises(NotImplementedError):
+            self.tokenizer("hello world").word_ids()
 
-@require_tokenizers_v1
-class TokenizersV1BackendGPT2CommonTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = TokenizersV1Backend if is_tokenizers_v1_available() else None
-    from_pretrained_id = "openai-community/gpt2"
+    def test_training_raises(self):
+        with self.assertRaises(NotImplementedError):
+            self.tokenizer.train_new_from_iterator([["hello world"]], vocab_size=10)
 
-
-@require_tokenizers_v1
-class TokenizersV1BackendT5CommonTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = TokenizersV1Backend if is_tokenizers_v1_available() else None
-    from_pretrained_id = "google-t5/t5-base"
+    def test_is_not_fast_without_offsets(self):
+        # `is_fast` gates the offset-based paths (token classification pipeline, whole word masking)
+        self.assertFalse(self.tokenizer.is_fast)
