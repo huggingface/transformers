@@ -195,16 +195,17 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         if token is not None:
             kwargs["token"] = token
 
-        original_loading_kwargs = kwargs.copy()
+        original_kwargs = kwargs.copy()
 
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls._resolve_subprocessors(
-            pretrained_model_name_or_path, processor_dict, load_kwargs=original_loading_kwargs, **kwargs
+            pretrained_model_name_or_path, processor_dict, **original_kwargs
         )
-        if "video_processor" not in original_loading_kwargs:
+        if "video_processor" not in original_kwargs:
+            # XVideoProcessor.from_dict() doesn't work for this model!
             processor_dict["video_processor"] = AutoVideoProcessor.from_pretrained(
-                pretrained_model_name_or_path, **original_loading_kwargs
+                pretrained_model_name_or_path, **original_kwargs
             )
         return cls.from_dict(processor_dict, **kwargs)
 
