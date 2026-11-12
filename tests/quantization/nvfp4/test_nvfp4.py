@@ -41,6 +41,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file
     from torch import nn
+    from torch.nn.functional import ScalingType
 
 
 def _padded_sf_shape(rows, columns):
@@ -108,7 +109,10 @@ def _fake_kernel():
 
 def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, swizzle_a, swizzle_b, offs, **_):
     """`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile. Rows past
-    the last group are left unwritten, NaN here."""
+    the last group are left unwritten, NaN here. Like torch's, it needs each operand's global scale too (ones here)."""
+    if recipe_a != [ScalingType.BlockWise1x16, ScalingType.TensorWise] or recipe_b != recipe_a:
+        raise ValueError("No gemm implementation was found")
+    (scale_a, _), (scale_b, _) = scale_a, scale_b
     a, b = mat_a.view(torch.uint8), mat_b.transpose(-2, -1).view(torch.uint8)  # (rows, k / 2), (groups, n, k / 2)
     k_blocks = a.shape[1] // 8
     a_sf = _unswizzle(scale_a, scale_a.numel() // (-(-k_blocks // 4) * 4), k_blocks)

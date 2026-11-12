@@ -264,13 +264,15 @@ class NVFP4Experts(nn.Module):
         grouped_sf = input_sf.new_zeros(input_sf.shape[0] + 127 * self.num_experts, input_sf.shape[1])
         grouped_sf[rows] = input_sf
         fp4 = torch.float4_e2m1fn_x2
+        # torch's NVFP4 grouped GEMM takes a global scale per operand too: ones, the global scales scale the output
+        ones = torch.ones(self.num_experts, device=input.device)
         output = scaled_grouped_mm(
             qinput.view(fp4),
             getattr(self, name).view(fp4).transpose(-2, -1),
-            swizzle_sf(grouped_sf).view(-1, -(-input_sf.shape[1] // 4) * 4).view(_FP8_DTYPE),
-            ScalingType.BlockWise1x16,
-            getattr(self, f"{name}_sf").view(self.num_experts, -1).view(_FP8_DTYPE),
-            ScalingType.BlockWise1x16,
+            [swizzle_sf(grouped_sf).view(-1, -(-input_sf.shape[1] // 4) * 4).view(_FP8_DTYPE), ones[:1]],
+            [ScalingType.BlockWise1x16, ScalingType.TensorWise],
+            [getattr(self, f"{name}_sf").view(self.num_experts, -1).view(_FP8_DTYPE), ones],
+            [ScalingType.BlockWise1x16, ScalingType.TensorWise],
             swizzle_a=SwizzleType.SWIZZLE_32_4_4,
             swizzle_b=SwizzleType.SWIZZLE_32_4_4,
             offs=offsets,
