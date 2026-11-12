@@ -31,6 +31,8 @@ class HunYuanDenseV1Config(PreTrainedConfig):
     """
 
     model_type = "hunyuan_v1_dense"
+    # Only the embedding is sharded for now, on the vocab like the `lm_head` that can be tied to it
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 290943

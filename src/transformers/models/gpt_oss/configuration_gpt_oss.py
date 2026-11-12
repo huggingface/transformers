@@ -30,6 +30,8 @@ class GptOssConfig(PreTrainedConfig):
     """
 
     model_type = "gpt_oss"
+    # Only the embedding is sharded for now, on the vocab like the `lm_head` that can be tied to it
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     attribute_map = {
         "num_experts": "num_local_experts",
     }
