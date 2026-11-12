@@ -24,16 +24,17 @@ from pathlib import Path
 
 import pytest
 
-from tests.exporters.test_export import _run_onnx_program
 from tests.exporters.test_runtime import _decompose_static_decode, _tiny_model
 from transformers import LlamaConfig, LlamaForCausalLM
 from transformers.exporters import ExportedModel
+from transformers.exporters.utils import get_leaf_tensors
 from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
     require_onnxscript,
     require_openvino,
     require_torch,
+    require_torch_gpu,
     slow,
 )
 from transformers.utils import is_torch_available
@@ -78,8 +79,8 @@ class DynamoSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
 @require_onnxruntime
 @pytest.mark.onnx_export_test
 class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
-    def test_saved_metadata_names_match_model(self):
-        """The saved metadata names the inputs and outputs of the saved `.onnx` file, cache pairs included."""
+    def test_saved_graph_prefixes_mutated_inputs(self):
+        """The saved `.onnx` file names a mutated cache's inputs with an `input.` prefix."""
         import onnxruntime as ort
 
         from transformers.exporters import OnnxConfig, OnnxExporter
@@ -87,9 +88,7 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, _ = self._save_and_load_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
             session = ort.InferenceSession(str(Path(directory) / entry["file"]), providers=["CPUExecutionProvider"])
-            self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
-            self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
-        self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
+        self.assertTrue(any(node.name.startswith("input.") for node in session.get_inputs()))
 
     def test_saved_program_runs(self):
         """A loaded `.onnx` runs like the exported program, ONNX Runtime reading its weights from
@@ -98,11 +97,11 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
 
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         exported = OnnxExporter().export(_tiny_model(), copy.deepcopy(inputs), OnnxConfig())
-        expected = _run_onnx_program(exported.program, inputs)
+        expected = get_leaf_tensors(exported(**inputs))
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             loaded = ExportedModel.from_pretrained(directory)
-            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
+            torch.testing.assert_close(get_leaf_tensors(loaded(**inputs)), expected)
 
     def test_loaded_through_symlinks_runs_and_saves(self):
         """Loaded as from the Hub cache, whose snapshot links each file to a blob outside it, an ONNX program runs and
@@ -111,7 +110,7 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
 
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         exported = OnnxExporter().export(_tiny_model(), copy.deepcopy(inputs), OnnxConfig())
-        expected = _run_onnx_program(exported.program, inputs)
+        expected = get_leaf_tensors(exported(**inputs))
         with tempfile.TemporaryDirectory() as directory:
             blobs, snapshot = Path(directory, "blobs"), Path(directory, "snapshots", "main")
             exported.save_pretrained(blobs / "saved")
@@ -120,13 +119,15 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
                 blob = file.rename(blobs / f"blob-{file.name}")
                 (snapshot / file.name).symlink_to(Path("..", "..", "blobs", blob.name))
             loaded = ExportedModel.from_pretrained(snapshot)
-            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
+            torch.testing.assert_close(get_leaf_tensors(loaded(**inputs)), expected)
             loaded.save_pretrained(Path(directory, "resaved"))
             resaved = ExportedModel.from_pretrained(Path(directory, "resaved"))
-            torch.testing.assert_close(_run_onnx_program(resaved.program, inputs), expected)
+            torch.testing.assert_close(get_leaf_tensors(resaved(**inputs)), expected)
 
+    @require_torch_gpu
     def test_bfloat16_saves_and_loads(self):
-        """A bfloat16 export runs in bfloat16, close to eager, and its saved graph runs like the exported one."""
+        """A bfloat16 export runs in bfloat16, close to eager, and its saved graph runs like the exported one. On CUDA:
+        ONNX Runtime's CPU provider has no bfloat16 kernels."""
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         model = _tiny_model().to(torch.bfloat16)
@@ -134,13 +135,26 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         with torch.no_grad():
             expected = model(**inputs).logits
         exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig())
-        outputs = _run_onnx_program(exported.program, inputs)
+        outputs = get_leaf_tensors(exported(**inputs))
         self.assertEqual(outputs["logits"].dtype, torch.bfloat16)
-        torch.testing.assert_close(outputs["logits"], expected, atol=1.6e-2, rtol=1.6e-2)
+        torch.testing.assert_close(outputs["logits"].cpu(), expected, atol=1e-2, rtol=1e-2)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             loaded = ExportedModel.from_pretrained(directory)
-            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), outputs)
+            torch.testing.assert_close(get_leaf_tensors(loaded(**inputs)), outputs)
+
+    def test_quantized_saves_and_loads(self):
+        """A graph ONNX Runtime's quantizer rewrote saves and loads: its large `Constant` values (a static mask's
+        indices, 8 x 32 int64) come back in memory, not pointing at the quantizer's deleted temporary file."""
+        from transformers.exporters import OnnxConfig, OnnxExporter, OnnxRuntimeDynamicConfig, OnnxRuntimeQuantizer
+
+        inputs = {"input_ids": torch.randint(0, 64, (8, 32)), "attention_mask": torch.ones(8, 32, dtype=torch.long)}
+        quantizer = OnnxRuntimeQuantizer(OnnxRuntimeDynamicConfig(op_types_to_quantize=["MatMul", "Gemm"]))
+        exported = OnnxExporter().export(_tiny_model(), copy.deepcopy(inputs), OnnxConfig(quantizer=quantizer))
+        expected = get_leaf_tensors(exported(**inputs))
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            torch.testing.assert_close(get_leaf_tensors(ExportedModel.from_pretrained(directory)(**inputs)), expected)
 
     def test_past_2gb_saves_and_loads(self):
         """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, loads, and runs like the
@@ -159,13 +173,13 @@ class OnnxSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         self.assertGreater(sum(p.numel() * p.element_size() for p in model.parameters()), 2**31)
         inputs = {"input_ids": torch.randint(0, 64, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
         exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig())
-        expected = _run_onnx_program(exported.program, inputs)
+        expected = get_leaf_tensors(exported(**inputs))
 
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             self.assertLess((Path(directory) / "model.onnx").stat().st_size, 2**31)
             self.assertGreater((Path(directory) / "model.onnx.data").stat().st_size, 2**31)
-            outputs = _run_onnx_program(ExportedModel.from_pretrained(directory).program, inputs)
+            outputs = get_leaf_tensors(ExportedModel.from_pretrained(directory)(**inputs))
         torch.testing.assert_close(outputs, expected, atol=0, rtol=0)
 
 
@@ -182,6 +196,8 @@ class ExecutorchSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
+            self.assertIsNotNone(entry["metadata"]["in_spec"])
+            self.assertIsNotNone(entry["metadata"]["out_spec"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
             saved = Path(directory, "model.pte").read_bytes()
@@ -198,9 +214,8 @@ class ExecutorchSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
 @require_openvino
 @pytest.mark.openvino_export_test
 class OpenVINOSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
-    def test_saved_metadata_names_match_model(self):
-        """The saved metadata names the ports of the saved `.xml` model: with `stateful`, no cache ports and a
-        `beam_idx` input."""
+    def test_saved_model_is_stateful(self):
+        """The saved `.xml` model, `stateful`, has no cache ports but a `beam_idx` input."""
         import openvino
 
         from transformers.exporters import OpenVINOConfig, OpenVINOExporter
@@ -209,9 +224,7 @@ class OpenVINOSaveLoadTest(SaveLoadTesterMixin, unittest.TestCase):
             entry, _ = self._save_and_load_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
             self.assertEqual(entry["file"], "openvino_model.xml")
             ov_model = openvino.Core().read_model(str(Path(directory) / entry["file"]))
-            self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
-            self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
-        self.assertIn("beam_idx", entry["metadata"]["input_names"])
+        self.assertIn("beam_idx", [port.get_any_name() for port in ov_model.inputs])
 
     def test_loaded_model_saves_in_place(self):
         """A loaded model saves back into the directory it was read from, whose weights OpenVINO still maps."""

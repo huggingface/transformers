@@ -176,6 +176,8 @@ class MyExporter(DynamoExporter):
 register_backend(MyExporter)
 ```
 
+To call its exports, register a [`ModelRunner`] with it: `register_backend(MyExporter, MyRunner)`.
+
 The auto classes then dispatch `"my_format"` to them, and [`ExportedModel.from_pretrained`] loads its saved exports:
 
 ```python

@@ -20,12 +20,12 @@ from unittest import mock
 
 from huggingface_hub import HfApi
 
-from tests.exporters.test_export import _run_onnx_program
 from tests.exporters.test_utils import _StubExporter
 from transformers import BertConfig, GenerationConfig
 from transformers.exporters import ExportedComponent, ExportedModel, register_backend
 from transformers.exporters.auto import EXPORT_BACKENDS
 from transformers.exporters.metadata import ExportMetadata
+from transformers.exporters.utils import get_leaf_tensors
 from transformers.testing_utils import (
     TOKEN,
     TemporaryHubRepo,
@@ -106,10 +106,7 @@ class ExportedModelPushToHubTester(unittest.TestCase):
     def _assert_loads_same(self, loaded, exported, inputs):
         self.assertEqual(loaded.components["model"].metadata, exported.components["model"].metadata)
         self.assertEqual(loaded.config.hidden_size, exported.config.hidden_size)
-        torch.testing.assert_close(
-            _run_onnx_program(loaded.program, inputs),
-            _run_onnx_program(exported.program, inputs),
-        )
+        torch.testing.assert_close(get_leaf_tensors(loaded(**inputs)), get_leaf_tensors(exported(**inputs)))
 
     def test_push_to_hub(self):
         exported, inputs = self._export()
