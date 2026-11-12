@@ -1150,7 +1150,7 @@ class GroupWeightRename(WeightRenaming):
         return result
 
 
-class IndexOffsetWeightRename(WeightRenaming):
+class Inkling2IndexOffsetWeightRename(WeightRenaming):
     """
     Special case of WeightRenaming that also shifts the captured index by `offset`. Use this when a checkpoint stores
     per-layer weights in a list that does not start at layer 0, e.g. `attn_queries.{i}` belonging to `layers.{i + 1}`.
@@ -1177,7 +1177,7 @@ class IndexOffsetWeightRename(WeightRenaming):
             renamed_key = prefix_dot + renamed_key
         return renamed_key, self.source_patterns[int(matching_group_name[1:])]
 
-    def reverse_transform(self) -> IndexOffsetWeightRename:
+    def reverse_transform(self) -> Inkling2IndexOffsetWeightRename:
         return self.copy(self._original_target_patterns, self._original_source_patterns, offset=-self.offset)
 
 
