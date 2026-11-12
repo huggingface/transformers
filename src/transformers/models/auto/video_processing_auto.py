@@ -32,6 +32,7 @@ from ...utils import (
     resolve_revision,
     safe_load_json_file,
 )
+from ...utils.hub import hf_api
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -258,6 +259,19 @@ def get_video_processor_config(
     if resolved_video_processor_file is not None and video_processor_dict is None:
         video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
+    if video_processor_dict:
+        if not os.path.isdir(pretrained_model_name_or_path):
+            video_processor_dict["_path_to_repo"] = hf_api().snapshot_download(
+                pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+            )
+        else:
+            video_processor_dict["_path_to_repo"] = pretrained_model_name_or_path
     return video_processor_dict or {}
 
 

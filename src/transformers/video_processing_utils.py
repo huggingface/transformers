@@ -494,6 +494,7 @@ class VideoProcessorMixin(BaseImageProcessor):
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         filtered_dict = super().to_dict()
+        filtered_dict.pop("_path_to_repo", None)
         filtered_dict.pop("image_processor_type", None)
         filtered_dict["video_processor_type"] = self.__class__.__name__
 
