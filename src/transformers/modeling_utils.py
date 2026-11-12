@@ -1087,6 +1087,19 @@ class PreTrainedModel(
         - **can_record_outputs** (dict):
     """
 
+    def __call__(self, *args, **kwargs):
+        if self.training and getattr(self, "_use_reentrant_gradient_checkpointing", False):
+            output_router_logits = kwargs.get("output_router_logits")
+            if output_router_logits is None:
+                output_router_logits = getattr(self.config.get_text_config(), "output_router_logits", False)
+            if output_router_logits:
+                raise ValueError(
+                    "Reentrant gradient checkpointing is incompatible with `output_router_logits=True` because "
+                    "the router auxiliary loss does not receive gradients from the checkpoint recomputation. Use "
+                    "`use_reentrant=False` instead."
+                )
+        return super().__call__(*args, **kwargs)
+
     # General model properties
     config_class: type[PreTrainedConfig] | None = None
     generation_config_class: type[GenerationConfig] = GenerationConfig  # default, used with `GenerationMixin`
@@ -3147,6 +3160,7 @@ class PreTrainedModel(
 
         if activation_checkpointing_kwargs is None:
             activation_checkpointing_kwargs = {"use_reentrant": False}
+        self._use_reentrant_gradient_checkpointing = activation_checkpointing_kwargs.get("use_reentrant", False)
 
         if offload:
             # `get_current_accelerator()` is None when no accelerator is available, in which case the
@@ -3257,6 +3271,7 @@ class PreTrainedModel(
             self._activation_checkpointing_disable()
 
     def _activation_checkpointing_disable(self):
+        self._use_reentrant_gradient_checkpointing = False
         if self.supports_gradient_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
             # we will fall back to the overwritten `_set_gradient_checkpointing` method
