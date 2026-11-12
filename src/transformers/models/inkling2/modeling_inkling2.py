@@ -1353,10 +1353,13 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
-        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/Inkling-2-Small", device_map="auto")
+        >>> model = Inkling2ForCausalLM.from_pretrained(
+        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ... )
 
         >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
         >>> inputs = tokenizer.apply_chat_template(
@@ -1368,8 +1371,8 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
         ... ).to(model.device)
         >>> input_len = inputs["input_ids"].shape[-1]
 
-        >>> outputs = model.generate(**inputs, max_new_tokens=256)
-        >>> print(tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True))
+        >>> outputs = model.generate(**inputs, max_new_tokens=1024)
+        >>> print(tokenizer.decode(outputs[0][input_len:], skip_special_tokens=False))
         ```"""
         outputs = self.model(
             input_ids=input_ids,
@@ -1539,10 +1542,13 @@ class Inkling2Model(Inkling2PreTrainedModel):
         Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, Inkling2Model
 
         >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
-        >>> model = Inkling2Model.from_pretrained("thinkingmachines/Inkling-2-Small", device_map="auto")
+        >>> model = Inkling2Model.from_pretrained(
+        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+        ... )
 
         >>> messages = [
         ...     {
@@ -1662,11 +1668,12 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, Inkling2ForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
         >>> model = Inkling2ForConditionalGeneration.from_pretrained(
-        ...     "thinkingmachines/Inkling-2-Small", device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [
@@ -1691,8 +1698,8 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         ... ).to(model.device)
         >>> input_len = inputs["input_ids"].shape[-1]
 
-        >>> outputs = model.generate(**inputs, max_new_tokens=256)
-        >>> print(processor.decode(outputs[0][input_len:], skip_special_tokens=True))
+        >>> outputs = model.generate(**inputs, max_new_tokens=1024)
+        >>> print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
         ```
         """
         outputs = self.model(

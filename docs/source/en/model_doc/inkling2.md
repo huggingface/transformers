@@ -35,9 +35,13 @@ TODO: quantization info
 <hfoption id="Pipeline">
 
 ```python
+import torch
+
 from transformers import pipeline
 
-pipe = pipeline("image-text-to-text", model="thinkingmachines/Inkling-2-Small", device_map="auto")
+pipe = pipeline(
+    "image-text-to-text", model="thinkingmachines/Inkling-2-Small", dtype=torch.bfloat16, device_map="auto"
+)
 
 messages = [
     {
@@ -52,19 +56,24 @@ messages = [
     },
 ]
 
-output = pipe(messages, max_new_tokens=256, return_full_text=False)
+output = pipe(messages, max_new_tokens=1024, return_full_text=False, skip_special_tokens=False)
 print(output[0]["generated_text"])
+# <|message_model|><|content_thinking|>The user is asking to identify the animal and location in the image. Need answer based on visible content. The animal looks like a Pallas's cat (Otocolobus manul), also called manul:
+# ...
+# <|end_message|><|message_model|><|content_text|>The animal is a **Pallas’s cat** (also called a **manul**). It’s walking through **snow** in front of birch logs, likely in a **zoo or enclosed habitat**. The exact geographic location can’t be determined from the image alone; in the wild they’re native to parts of **Central Asia**.<|end_message|><|content_model_end_sampling|>
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```python
+import torch
+
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 model_id = "thinkingmachines/Inkling-2-Small"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
+model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 messages = [
     {
@@ -88,8 +97,11 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 input_len = inputs["input_ids"].shape[-1]
 
-outputs = model.generate(**inputs, max_new_tokens=256)
-print(processor.decode(outputs[0][input_len:], skip_special_tokens=True))
+outputs = model.generate(**inputs, max_new_tokens=1024)
+print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
+# <|message_model|><|content_thinking|>The user is asking to identify the animal and location in the image. Need answer based on visible content. The animal looks like a Pallas's cat (Otocolobus manul), also called manul:
+# ...
+# <|end_message|><|message_model|><|content_text|>The animal is a **Pallas’s cat** (also called a **manul**). It’s walking through **snow** in front of birch logs, likely in a **zoo or enclosed habitat**. The exact geographic location can’t be determined from the image alone; in the wild they’re native to parts of **Central Asia**.<|end_message|><|content_model_end_sampling|>
 ```
 
 </hfoption>
