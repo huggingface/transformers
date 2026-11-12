@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (`_BACKEND_PREPARE`): move the model to the target device/dtype
+   and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -41,13 +41,16 @@ from __future__ import annotations
 import math
 import operator
 import re
+import shutil
 from collections.abc import MutableMapping
+from pathlib import Path
 from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter
+from .metadata import ExportMetadata
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -67,14 +70,8 @@ if is_torch_available():
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
-    from .. import masking_utils
+    from ..cache_utils import EncoderDecoderCache, StaticCache
     from ..modeling_utils import PreTrainedModel
-
-    # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
-    _RUNTIME_ASSERT_TARGETS = (
-        torch.ops.aten._assert_tensor_metadata.default,
-        torch.ops.aten._assert_scalar.default,
-    )
 
 
 if is_executorch_available():
@@ -93,6 +90,7 @@ if is_executorch_available():
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
     from executorch.exir.sym_util import eval_expr
     from executorch.exir.tensor import determine_tensor_dynanism
+    from executorch.runtime import Runtime
 
     # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
     # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
@@ -115,26 +113,26 @@ class ExecutorchExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
 
     >>> exporter = ExecutorchExporter()
-    >>> et_program = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
-    >>> et_program.write_to_file("model.pte")
+    >>> exported = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
+    >>> outputs = exported(**inputs)  # on the ExecuTorch runtime
+    >>> exported.save_pretrained("exported")  # `model.pte`, its metadata and the model config
     ```
     """
 
-    required_packages = ["torch", "executorch"]
-    tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
+    export_format = ExportFormat.EXECUTORCH
+    config_class = ExecutorchConfig
+    program_suffix = ".pte"
 
-    def export(
+    required_packages = ["torch", "executorch"]
+    tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
+
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: ExecutorchConfig | dict[str, Any],
-    ) -> ExecutorchProgramManager:
+        config: ExecutorchConfig,
+    ) -> tuple[ExecutorchProgramManager, ExportMetadata]:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        if isinstance(config, dict):
-            config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
-            raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
-
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
@@ -142,20 +140,51 @@ class ExecutorchExporter(DynamoExporter):
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+                exported_program,
+                partitioner=partitioner,
+                compile_config=_get_edge_compile_config(config.backend),
+                transform_passes=_get_transform_passes(config.backend),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
 
-        return executorch_programs_manager
+        return executorch_programs_manager, metadata
+
+    @classmethod
+    def save_program(cls, program, path) -> None:
+        """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first); a loaded program copies
+        the file it was read from."""
+        if not isinstance(program, ExecutorchProgramManager):
+            shutil.copyfile(program.path, path)
+            return
+        with open(path, "wb") as file:
+            program.write_to_file(file)
+
+    @classmethod
+    def load_program(cls, path):
+        """The saved `.pte` as an `executorch.runtime.Program`, ready to run, read by ExecuTorch from the file. The
+        export-time `ExecutorchProgramManager` can't be rebuilt from it, so the program keeps its `path` to be saved
+        again."""
+        program = Runtime.get().load_program(Path(path))
+        program.path = str(path)
+        return program
 
 
-def _get_edge_compile_config() -> EdgeCompileConfig:
+def _get_transform_passes(backend: str):
+    """Return backend-specific graph transforms, or ``None`` for defaults."""
+    if backend == "mlx":
+        from executorch.backends.mlx.passes import get_default_passes
+
+        return get_default_passes()
+    return None
+
+
+def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     """Build the ``EdgeCompileConfig`` used for ``to_edge_transform_and_lower``.
 
     Adds non-core ATen ops to ``_core_aten_ops_exception_list`` so torch.export
@@ -165,6 +194,8 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     but aren't in the core ATen opset. The CPU portable kernels handle them at
     runtime; XNNPACK leaves them in the non-delegated CPU portion of the graph.
     """
+    if backend == "mlx":
+        return EdgeCompileConfig(_check_ir_validity=False, _skip_dim_order=True)
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
             torch.ops.aten._fft_c2c.default,
@@ -217,9 +248,11 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     can be a non-contiguous broadcast view (e.g. a batch dim expanded from 1), whose stride-0 is
     captured on the input placeholder and later rejected by `spec_prop` ("0 in strides is not
     supported"). `.contiguous()` is a no-op for already-contiguous tensors, so cache buffers keep
-    their identity for in-place static-cache writes.
+    their identity for in-place static-cache writes. In place, so precomputed kwargs reach the caller.
     """
-    return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
+    for name, value in sample_inputs.items():
+        sample_inputs[name] = torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), value)
+    return sample_inputs
 
 
 def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
@@ -259,9 +292,33 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
+def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+    """Apple Silicon GPU inference via the ExecuTorch MLX backend."""
+    for value in sample_inputs.values():
+        caches = [value]
+        if isinstance(value, EncoderDecoderCache):
+            caches = [value.self_attention_cache, value.cross_attention_cache]
+        if any(isinstance(cache, StaticCache) for cache in caches):
+            raise ValueError(
+                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
+            )
+
+    from executorch.backends.mlx import MLXPartitioner
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    # MLX does not support grouped MoE kernels.
+    if isinstance(model, PreTrainedModel) and model._can_set_experts_implementation():
+        model.set_experts_implementation("batched_mm")
+    partitioner = [MLXPartitioner()]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "mlx": prepare_for_mlx,
 }
 
 
@@ -340,7 +397,8 @@ def _patch_topk(original):
     return patch
 
 
-@register_patch("executorch", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.xnnpack", "torch.detach", "torch.Tensor.detach")
+@register_patch("executorch.cuda", "torch.detach", "torch.Tensor.detach")
 def _patch_detach(_original):
     """No-op detach."""
 
@@ -377,42 +435,6 @@ def _patch_avg_pool2d(original):
         divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
         weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
         return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
-
-    return patch
-
-
-@register_patch("executorch", "torch.bucketize")
-def _patch_bucketize(original):
-    """Decompose bucketize into a broadcasted comparison + sum.
-
-    The portable runtime ships no `bucketize.Tensor_out` kernel (used by VLM vision position ids —
-    idefics2/3, smolvlm, phi4_multimodal). `boundaries` is 1-D and sorted, so the bucket index is
-    just the count of boundaries below each value — comparison and sum, both portable ops.
-    """
-
-    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
-        below = (boundaries <= input.unsqueeze(-1)) if right else (boundaries < input.unsqueeze(-1))
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "torch.searchsorted")
-def _patch_searchsorted(original):
-    """Decompose searchsorted into a broadcasted comparison + sum (no portable kernel; same idea as
-    bucketize). ``sorted_sequence`` is sorted, so the insertion index is the count of entries below.
-    """
-
-    def patch(sorted_sequence, input, *, out_int32=False, right=False, side=None, out=None, sorter=None):
-        if side is not None:
-            right = side == "right"
-        seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
-        below = (seq <= val) if right else (seq < val)
-        result = below.sum(dim=-1)
-        result = result.to(torch.int32) if out_int32 else result
-        return out.copy_(result) if out is not None else result
 
     return patch
 
@@ -508,23 +530,6 @@ def _patch_bernoulli(_original):
         probs = input if p is None else p
         result = (torch.rand_like(input) < probs).to(input.dtype)
         return out.copy_(result) if out is not None else result
-
-    return patch
-
-
-@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
-def _patch_broadcast_mask_expansion(_original):
-    """Replace vmap-based mask expansion with broadcast expansion. `aot_autograd` and
-    `gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering passes."""
-
-    def patch(mask_function):
-        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
-            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
-            return mask_function(*broadcasted).expand(
-                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
-            )
-
-        return _expanded
 
     return patch
 
@@ -631,30 +636,6 @@ def _patch_expand(original):
         if 0 in result.stride():
             return result.clone(memory_format=torch.contiguous_format)
         return result
-
-    return patch
-
-
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before ``reshape``.
-
-    ExecuTorch's edge-lowering reshape reference refuses a non-contiguous input (e.g. the
-    ``transpose(1, 2).reshape(...)`` in the packed vision-attention forward). A plain
-    ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
-    ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
-    the copy where ExecuTorch's lowering needs it.
-
-    The clone must force ``contiguous_format``: a bare ``.clone()`` defaults to
-    ``preserve_format``, keeping a transposed dim-order (e.g. ``[0, 2, 1]``) that ExecuTorch's
-    clone lowering can't map to a ``torch.memory_format`` (``Failed to map a given dim_order`` —
-    hit by xcodec2's ISTFT head).
-    """
-
-    def patch(input, *shape, **kwargs):
-        if not input.is_contiguous():
-            input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
 
     return patch
 
@@ -1076,13 +1057,13 @@ def _patch_flatc_compile_nonfinite(original):
     """
 
     def patch(output_dir, schema_path, json_path):
-        with open(json_path) as f:
+        with open(json_path, encoding="utf-8") as f:
             data = f.read()
         fixed = data
         for pattern, repl in _JSON_NONFINITE_SUBS:
             fixed = pattern.sub(repl, fixed)
         if fixed != data:
-            with open(json_path, "w") as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 f.write(fixed)
         return original(output_dir, schema_path, json_path)
 
@@ -1199,50 +1180,6 @@ def _fix_range_constraints(exported_program: ExportedProgram) -> None:
             len(seen),
             details,
         )
-
-
-@register_fx_program_fix("executorch")
-def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
-    """Drop ``_assert_scalar`` / ``_assert_tensor_metadata`` runtime asserts before lowering.
-
-    ``_assert_scalar`` lowers a ``torch._check`` on an unbacked symint (e.g. the image-token
-    count in ``get_placeholder_mask``) into a ``cast_symbool_to_symint`` + ``eq`` chain whose
-    ``Piecewise`` result the ``_ModuleStackTracer`` used by ``to_edge_transform_and_lower``'s
-    decomposition pass cannot proxy (``... is not tracked with proxy``). The range facts these
-    asserts encode survive on ``exported_program.range_constraints`` (further capped by
-    ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
-    ``_assert_tensor_metadata`` (input dtype/device/layout) has no ``range_constraints`` equivalent,
-    but ExecuTorch re-validates every input's spec against the method signature at load / ``set_inputs``,
-    so those checks are re-established at runtime rather than lost.
-    """
-    for module in exported_program.graph_module.modules():
-        if not isinstance(module, torch.fx.GraphModule):
-            continue
-        asserts = [
-            node
-            for node in module.graph.nodes
-            if node.op == "call_function" and node.target in _RUNTIME_ASSERT_TARGETS
-        ]
-        # Erase the asserts and only the symint feeders they leave dead, walking back from each assert's
-        # inputs. We avoid a global `eliminate_dead_code` on purpose: it also visits unrelated dead nodes
-        # and on some graphs (e.g. `minimax_m3_vl` under static shapes) trips an fx `SystemError`/`KeyError`
-        # inside `_update_args_kwargs` erasing an unrelated `expand_as`. Targeted removal only touches the
-        # assert chain, so those unrelated nodes are left for the downstream lowering passes to clean up.
-        stack = [feeder for node in asserts for feeder in node.all_input_nodes]
-        for node in asserts:
-            module.graph.erase_node(node)
-        # A feeder can be reached more than once (shared input / diamond); track erased nodes so we
-        # never call `erase_node` twice on the same one (its `users` is empty after the first erase,
-        # which would otherwise pass the guard below and corrupt the graph).
-        erased = set()
-        while stack:
-            feeder = stack.pop()
-            if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
-                continue
-            stack.extend(feeder.all_input_nodes)
-            module.graph.erase_node(feeder)
-            erased.add(feeder)
-        module.recompile()
 
 
 @register_fx_program_fix("executorch")

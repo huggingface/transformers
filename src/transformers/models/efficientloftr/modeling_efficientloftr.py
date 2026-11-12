@@ -32,8 +32,7 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
@@ -48,29 +47,29 @@ from .configuration_efficientloftr import EfficientLoFTRConfig
 @dataclass
 class EfficientLoFTRKeypointMatchingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matches (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
-    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Scores of predicted matches.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Absolute (x, y) coordinates of predicted keypoints in a given image.
-    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
         num_keypoints)`, returned when `output_hidden_states=True` is passed or when
         `config.output_hidden_states=True`)
-    attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+    attentions (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: torch.FloatTensor | None = None
-    matches: torch.FloatTensor | None = None
-    matching_scores: torch.FloatTensor | None = None
-    keypoints: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    matches: torch.Tensor | None = None
+    matching_scores: torch.Tensor | None = None
+    keypoints: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @compile_compatible_method_lru_cache(maxsize=32)
@@ -88,8 +87,7 @@ def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: i
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: EfficientLoFTRConfig, device=None):
+    def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
         self.config = config
 
@@ -97,16 +95,13 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: EfficientLoFTRConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: EfficientLoFTRConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -124,18 +119,16 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         feats_height, feats_width = x.shape[-2:]
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
-            sin = emb.sin()
-            cos = emb.cos()
+        emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
+        sin = emb.sin()
+        cos = emb.cos()
 
         sin = sin.repeat_interleave(2, dim=-1)
         cos = cos.repeat_interleave(2, dim=-1)
@@ -647,7 +640,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = EfficientLoFTRConfig
+    config: EfficientLoFTRConfig
     base_model_prefix = "efficientloftr"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -673,7 +666,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.num_batches_tracked)
 
     # Copied from transformers.models.superpoint.modeling_superpoint.SuperPointPreTrainedModel.extract_one_channel_pixel_values with SuperPoint->EfficientLoFTR
-    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def extract_one_channel_pixel_values(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
         extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for EfficientLoFTR. This is
@@ -681,10 +674,10 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
         https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
         Args:
-            pixel_values: torch.FloatTensor of shape (batch_size, 3, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 3, height, width)
 
         Returns:
-            pixel_values: torch.FloatTensor of shape (batch_size, 1, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 1, height, width)
 
         """
         return pixel_values[:, 0, :, :][:, None, :, :]
@@ -711,7 +704,7 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
@@ -722,7 +715,7 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
@@ -1287,7 +1280,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EfficientLoFTRKeypointMatchingOutput:
@@ -1298,7 +1291,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"

@@ -20,18 +20,14 @@ import unittest
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from pytest import mark
 
 from tests.utils.test_audio_utils import normalize_waveform
-from transformers import AutoFeatureExtractor, MimiConfig, set_seed
+from transformers import AutoFeatureExtractor, MimiConfig, MimiDecoderConfig, MimiEncoderConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -43,7 +39,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MimiModel
+    from transformers import MimiDecoderModel, MimiEncoderModel, MimiModel
 
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.prepare_inputs_dict
@@ -297,12 +293,10 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
+    def flash_attn_inference_equivalence(self, attn_implementation, padding_side="left"):
+        if padding_side == "right":
+            self.skipTest("The MimiModel does not support right padding")
+
         for model_class in self.all_model_classes:
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
@@ -312,7 +306,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
@@ -331,14 +325,55 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-    @unittest.skip(reason="The MimiModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
+
+    def test_config_without_encoder_or_decoder(self):
+        config = self.model_tester.get_config()
+        self.assertNotIn("encoder_config", config.to_diff_dict())
+
+        config.encoder_config = None
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            config = MimiConfig.from_pretrained(tmp_dir)
+        self.assertIsNone(config.encoder_config)
+        self.assertIsInstance(config.decoder_config, MimiDecoderConfig)
+
+        with self.assertRaises(ValueError):
+            config.decoder_config = None
+        with self.assertRaises(ValueError):
+            config.encoder_config = MimiEncoderConfig()
+
+    def test_model_without_encoder_or_decoder(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_values = inputs_dict["input_values"]
+        model = MimiModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            audio_codes = model.encode(input_values).audio_codes
+            audio_values = model.decode(audio_codes).audio_values
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            encoder_only, encoder_info = MimiModel.from_pretrained(
+                tmp_dir, decoder_config=None, output_loading_info=True
+            )
+            decoder_only, decoder_info = MimiModel.from_pretrained(
+                tmp_dir, encoder_config=None, output_loading_info=True
+            )
+        self.assertFalse(any(encoder_info.values()))
+        self.assertFalse(any(decoder_info.values()))
+
+        encoder_only.to(torch_device).eval()
+        decoder_only.to(torch_device).eval()
+        with torch.no_grad():
+            torch.testing.assert_close(encoder_only.encode(input_values).audio_codes, audio_codes)
+            torch.testing.assert_close(decoder_only.decode(audio_codes).audio_values, audio_values)
+        with self.assertRaises(ValueError):
+            encoder_only.decode(audio_codes)
+        with self.assertRaises(ValueError):
+            decoder_only.encode(input_values)
 
 
 def compute_rmse(arr1, arr2):
@@ -574,3 +609,23 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 rmse = compute_rmse(arr, arr_enc_dec)
                 self.assertTrue(np.abs(rmse - expected_rmse) < 1e-5)
+
+    @slow
+    def test_encoder_decoder_halves(self):
+        """Each half, loaded alone from the full checkpoint, matches `MimiModel` around its quantizer."""
+        model_id = "kyutai/mimi"
+        model = MimiModel.from_pretrained(model_id).to(torch_device)
+        encoder = MimiEncoderModel.from_pretrained(model_id).to(torch_device)
+        decoder = MimiDecoderModel.from_pretrained(model_id).to(torch_device)
+        torch.manual_seed(0)
+        audio_values = torch.randn(2, 1, 24000, device=torch_device) * 0.1
+        with torch.no_grad():
+            audio_codes = model.encode(audio_values).audio_codes
+            latents = encoder(audio_values).latents
+            torch.testing.assert_close(model.quantizer.encode(latents).transpose(0, 1), audio_codes, atol=0, rtol=0)
+            torch.testing.assert_close(
+                decoder(model.quantizer.decode(audio_codes)).audio_values,
+                model.decode(audio_codes).audio_values,
+                atol=0,
+                rtol=0,
+            )

@@ -20,12 +20,10 @@ import unittest
 from pathlib import Path
 
 from transformers import (
-    AudioFlamingo3EncoderConfig,
     AutoProcessor,
     MusicFlamingoConfig,
     MusicFlamingoForConditionalGeneration,
     MusicFlamingoModel,
-    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -54,8 +52,7 @@ class MusicFlamingoModelTester(ALMModelTester):
     config_class = MusicFlamingoConfig
     base_model_class = MusicFlamingoModel
     conditional_generation_class = MusicFlamingoForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = AudioFlamingo3EncoderConfig
+
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
@@ -77,6 +74,7 @@ class MusicFlamingoModelTester(ALMModelTester):
         # MusicFlamingoConfig requires rope_parameters.
         config = super().get_config()
         config.rope_parameters = {"rope_type": "default", "rope_theta": 2048, "partial_rotary_factor": 0.5}
+        config.max_position_embeddings = 2048  # config syncs it with theta in `post-init`
         return config
 
 

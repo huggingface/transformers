@@ -86,9 +86,6 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
-
 # celery beat schedule file
 celerybeat-schedule
 
@@ -163,6 +160,7 @@ tags
 
 # .lock
 *.lock
+!prototype-fleet.lock
 
 # DS_Store (MacOS)
 .DS_Store

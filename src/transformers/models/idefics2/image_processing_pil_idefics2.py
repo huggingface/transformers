@@ -16,7 +16,6 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PIL import Image
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -30,7 +29,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils import TensorType, auto_docstring
 
 
 if TYPE_CHECKING:
@@ -53,25 +52,6 @@ class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_image_splitting: bool
-
-
-# Adapted from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    """
-    if not is_vision_available() or not isinstance(image, Image.Image):
-        return image
-
-    if image.mode == "RGB":
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
 
 
 # Adapted from transformers.models.idefics2.image_processing_idefics2.get_max_height_width
@@ -134,10 +114,6 @@ class Idefics2ImageProcessorPil(PilBackend):
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Convert an image to RGB format."""
-        return convert_to_rgb(image)
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
@@ -246,7 +222,7 @@ class Idefics2ImageProcessorPil(PilBackend):
         if do_pad:
             max_num_images = max(len(images_) for images_ in images)
             max_height, max_width = get_max_height_width(images)
-            num_channels = images[0][0].shape[0]
+            num_channels = next(image for batch_images in images for image in batch_images).shape[0]
 
             padded_images_list = [
                 [np.zeros((num_channels, max_height, max_width), dtype=np.float32) for _ in range(max_num_images)]

@@ -125,7 +125,9 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    sentinel_mask = None
     if self._is_expert_parallel:
+        sentinel_mask = expert_ids >= self.num_experts
         # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
         # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
         # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
@@ -162,7 +164,14 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
+    # Apply optional post expert norm
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)
+
     # Apply routing weights
+    if sentinel_mask is not None:
+        # Zero weights already drop these from the output; the mask keeps them out of the router gradient.
+        sample_weights = sample_weights.masked_fill(sentinel_mask, 0.0)
     weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -224,22 +233,43 @@ def _grouped_mm_fallback_setup_context(ctx, inputs, output):
     ctx.offs = inputs[2]
 
 
-def _grouped_mm_fallback_backward(ctx, grad_output):
-    """Backward pass for `_grouped_mm_fallback`. Computes grad_input and grad_weight per expert group; offs has no gradient."""
-    input, weight = ctx.saved_tensors
+def _grouped_mm_fallback_bwd(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+    grad_output: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Backward implementation for the grouped matmul fallback."""
     grad_input = torch.zeros_like(input)
     grad_weight = torch.zeros_like(weight)
 
     start = 0
     # single cpu<->gpu sync point here,
     # avoids multiple syncs inside the loop
-    for i, end in enumerate(ctx.offs.tolist()):
+    for i, end in enumerate(offs.tolist()):
         if start == end:
             continue
         torch.mm(grad_output[start:end], weight[i].T, out=grad_input[start:end])
         torch.mm(input[start:end].T, grad_output[start:end], out=grad_weight[i])
         start = end
 
+    return grad_input, grad_weight
+
+
+def _grouped_mm_fallback_backward_fake(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    offs: torch.Tensor,
+    grad_output: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Shape/dtype inference for the backward custom operator."""
+    return torch.empty_like(input), torch.empty_like(weight)
+
+
+def _grouped_mm_fallback_backward(ctx, grad_output):
+    """Backward pass for `_grouped_mm_fallback`."""
+    input, weight = ctx.saved_tensors
+    grad_input, grad_weight = torch.ops.transformers.grouped_mm_fallback_backward(input, weight, ctx.offs, grad_output)
     return grad_input, grad_weight, None
 
 
@@ -255,6 +285,17 @@ if is_torch_available():
         "transformers::grouped_mm_fallback",
         _grouped_mm_fallback_backward,
         setup_context=_grouped_mm_fallback_setup_context,
+    )
+    # extra bwd registration to make autograd avoid looking into the experts loop
+    torch.library.custom_op(
+        "transformers::grouped_mm_fallback_backward",
+        _grouped_mm_fallback_bwd,
+        mutates_args=(),
+        schema="(Tensor input, Tensor weight, Tensor offs, Tensor grad_output) -> (Tensor, Tensor)",
+    )
+    torch.library.register_fake(
+        "transformers::grouped_mm_fallback_backward",
+        _grouped_mm_fallback_backward_fake,
     )
 
 
@@ -272,6 +313,11 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
+    # On TPU, `grouped_mm` is lowered natively in eager and under torch.compile for every dtype, so none
+    # of the inductor / CPU restrictions below apply.
+    if weight.device.type == "tpu":
+        return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
+
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
     if (
         (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
@@ -470,6 +516,10 @@ def grouped_mm_experts_forward(
     if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
+    # Apply optional post expert norm
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
@@ -537,6 +587,7 @@ def use_experts_implementation(
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
+    has_post_expert_norm: bool = False,
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
@@ -555,6 +606,8 @@ def use_experts_implementation(
         has_gate (`bool`, *optional*, defaults to `True`):
             Whether the experts use a gating mechanism or not.
             Whether it has gate_up_proj weights or just up_proj weights.
+        has_post_expert_norm (`bool`, *optional*, defaults to `False`):
+            Whether a post norm is applied after each expert application (up (-> gate) -> down).
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -570,6 +623,7 @@ def use_experts_implementation(
             self.config = config
             self.has_gate = has_gate
             self.has_bias = has_bias
+            self.has_post_expert_norm = has_post_expert_norm
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
             self._is_expert_parallel = False

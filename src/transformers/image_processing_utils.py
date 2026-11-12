@@ -379,11 +379,14 @@ class BaseImageProcessor(ImageProcessingMixin):
             resample=resample,
         )
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images.
-        """
+    @auto_docstring(custom_intro="Preprocess an image or a batch of images.")
+    def preprocess(
+        self,
+        images: ImageInput,
+        *args,
+        image_like_kwargs: dict[str, Any] | None = None,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> BatchFeature:
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
 
@@ -397,7 +400,12 @@ class BaseImageProcessor(ImageProcessingMixin):
         # Validate kwargs
         self._validate_preprocess_kwargs(**kwargs)
 
-        return self._preprocess_image_like_inputs(images, *args, **kwargs)
+        # This is a workaround when adding new image like inputs to existing processors where we cannot
+        # modify the order of the input arguments for BC. For details see:
+        # https://github.com/huggingface/transformers/pull/47199#discussion_r4131643549
+        image_like_kwargs = {} if image_like_kwargs is None else image_like_kwargs
+
+        return self._preprocess_image_like_inputs(images, *args, **image_like_kwargs, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
         processor_dict = super().to_dict()

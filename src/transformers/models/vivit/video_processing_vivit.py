@@ -13,10 +13,15 @@
 # limitations under the License.
 """Video processor class for Vivit."""
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoInput
 
 
+@auto_docstring
 class VivitVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -41,7 +46,8 @@ class VivitVideoProcessor(BaseVideoProcessor):
             images = self.normalize(images.float(), image_mean, image_std)
         return images
 
-    def preprocess(self, videos, **kwargs):
+    @auto_docstring
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[VideosKwargs]) -> BatchFeature:
         batch = super().preprocess(videos, **kwargs)
         batch["pixel_values"] = batch.pop("pixel_values_videos")
         return batch

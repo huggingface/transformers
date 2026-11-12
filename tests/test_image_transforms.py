@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import unittest
 
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils.import_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
 if is_torch_available():
@@ -42,6 +43,9 @@ if is_vision_available():
         to_channel_dimension_format,
         to_pil_image,
     )
+
+if is_torchvision_available():
+    from transformers.image_processing_backends import TorchvisionBackend
 
 
 def get_random_image(height, width, num_channels=3, channels_first=True):
@@ -565,31 +569,86 @@ class ImageTransformsTester(unittest.TestCase):
     @require_vision
     def test_convert_to_rgb(self):
         # Test that an RGBA image is converted to RGB
-        image = np.array([[[1, 2, 3, 4], [5, 6, 7, 8]]], dtype=np.uint8)
+        image = np.array([[[1, 2, 3, 0], [5, 6, 7, 255]]], dtype=np.uint8)
         pil_image = PIL.Image.fromarray(image)
         self.assertEqual(pil_image.mode, "RGBA")
         self.assertEqual(pil_image.size, (2, 1))
 
-        # For the moment, numpy images are returned as is
-        rgb_image = convert_to_rgb(image)
-        self.assertEqual(rgb_image.shape, (1, 2, 4))
+        # test that it works also for numpy images. Dummy image
+        # has ambiguous channel format so by default it is assumed to
+        # be RGB image
+        rgb_image = convert_to_rgb(image, return_numpy=True)
+        self.assertEqual(rgb_image.shape, (3, 2, 4))
         self.assertTrue(np.allclose(rgb_image, image))
 
-        # And PIL images are converted
+        # If we pass explicit channel-format, it is converted from RGBA to RGB
+        rgb_image = convert_to_rgb(image, return_numpy=True, input_data_format="channels_last")
+        self.assertEqual(rgb_image.shape, (1, 2, 3))
+        self.assertTrue(np.array_equal(rgb_image, np.array([[[255, 255, 255], [5, 6, 7]]])))
+
+        # And PIL images are converted same way but without channel-layout ambiguity
         rgb_image = convert_to_rgb(pil_image)
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
-        self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[1, 2, 3], [5, 6, 7]]], dtype=np.uint8)))
+        self.assertTrue(np.array_equal(np.array(rgb_image), np.array([[[255, 255, 255], [5, 6, 7]]])))
 
-        # Test that a grayscale image is converted to RGB
+        semi_transparent = PIL.Image.new("RGBA", (1, 1), (255, 0, 0, 128))
+        self.assertEqual(convert_to_rgb(semi_transparent).getpixel((0, 0)), (255, 127, 127))
+
+        # Test that a grayscale image can also be converted to RGB
         image = np.array([[0, 255]], dtype=np.uint8)
         pil_image = PIL.Image.fromarray(image)
         self.assertEqual(pil_image.mode, "L")
         self.assertEqual(pil_image.size, (2, 1))
+
         rgb_image = convert_to_rgb(pil_image)
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+
+        # Test valid float RGBA in [0, 1]
+        valid_float_image = np.array([[[1.0, 0.0, 0.0, 0.5]]], dtype=np.float32)
+        rgb_float = convert_to_rgb(valid_float_image, return_numpy=True, input_data_format="channels_last")
+        self.assertEqual(rgb_float.shape, (1, 1, 3))
+        self.assertTrue(np.allclose(rgb_float, np.array([[[1.0, 0.5, 0.5]]], dtype=np.float32)))
+
+        # Test out-of-range float RGBA raises ValueError
+        invalid_float_image = np.array([[[1.0, 2.0, 3.0, 128.0]]], dtype=np.float32)
+        with self.assertRaises(ValueError):
+            convert_to_rgb(invalid_float_image, return_numpy=True, input_data_format="channels_last")
+
+    @require_torchvision
+    def test_convert_to_rgb_torchvision_out_of_range(self):
+        backend = TorchvisionBackend()
+        invalid_tensor = torch.tensor([[[1.0]], [[2.0]], [[3.0]], [[128.0]]], dtype=torch.float32)
+        with self.assertRaises(ValueError):
+            backend.convert_to_rgb(invalid_tensor)
+
+    @parameterized.expand(["RGB", "L", "P"])
+    def test_convert_to_rgb_png_transparency(self, mode):
+        image = PIL.Image.new(mode, (2, 1))
+        if mode == "RGB":
+            image.putdata([(255, 0, 0), (0, 0, 255)])
+            transparency = (255, 0, 0)
+        elif mode == "L":
+            image.putdata([0, 128])
+            transparency = 0
+        else:
+            image.putpalette([255, 0, 0, 0, 0, 255] + [0] * (256 * 3 - 6))
+            image.putdata([0, 1])
+            transparency = 0
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG", transparency=transparency)
+        buffer.seek(0)
+        image = PIL.Image.open(buffer)
+        self.assertEqual(image.mode, mode)
+        self.assertEqual(image.info["transparency"], transparency)
+
+        rgb_image = convert_to_rgb(image)
+        self.assertEqual(rgb_image.mode, "RGB")
+        self.assertEqual(rgb_image.getpixel((0, 0)), (255, 255, 255))
+        self.assertEqual(rgb_image.getpixel((1, 0)), (128, 128, 128) if mode == "L" else (0, 0, 255))
 
     def test_flip_channel_order(self):
         # fmt: off

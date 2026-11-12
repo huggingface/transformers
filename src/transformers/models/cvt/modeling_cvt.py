@@ -38,13 +38,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     r"""
-    cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
+    cls_token_value (`torch.Tensor` of shape `(batch_size, 1, hidden_size)`):
         Classification token at the output of the last layer of the model.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    cls_token_value: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    cls_token_value: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 class CvtEmbeddings(nn.Module):
@@ -497,7 +497,7 @@ class CvtPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CvtModel(CvtPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CvtConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -547,7 +547,7 @@ class CvtModel(CvtPreTrainedModel):
     """
 )
 class CvtForImageClassification(CvtPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CvtConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -570,12 +570,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.cvt(
             pixel_values,

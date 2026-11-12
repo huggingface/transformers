@@ -275,7 +275,6 @@ pipeline(
 
 - このライブラリは、ニューラルネットのためのビルディングブロックのモジュール式ツールボックスではありません。モデルファイルのコードは、研究者が追加の抽象化/ファイルに飛び込むことなく、各モデルを素早く反復できるように、意図的に追加の抽象化でリファクタリングされていません。
 - 学習APIはTransformersが提供するPyTorchモデルで動作するように最適化されています。一般的な機械学習のループには、[Accelerate](https://huggingface.co/docs/accelerate)のような別のライブラリを使用する必要があります。
-- [example scripts](https://github.com/huggingface/transformers/tree/main/examples)にあるスクリプトはあくまで*例*です。あなたの特定の問題に対してすぐに動作するわけではなく、あなたのニーズに合わせるためにコードを適応させる必要があるでしょう。
 
 ## Transformersを使用している100のプロジェクト
 

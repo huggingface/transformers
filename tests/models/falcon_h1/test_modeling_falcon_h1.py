@@ -276,6 +276,33 @@ class FalconH1ModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_gated_rms_norm_batched_cached_decoding(self, config, input_ids, *args):
+        """
+        With `mamba_rms_norm=True`, a batched single-token cached step must give the same hidden states
+        as the uncached forward pass, and must keep its `[batch_size, 1, hidden_size]` shape.
+        """
+        input_ids = input_ids.to(torch_device)
+        # The gate is applied in a different place depending on `mamba_norm_before_gate`, so we check both
+        for norm_before_gate in (True, False):
+            config.mamba_rms_norm = True
+            config.mamba_norm_before_gate = norm_before_gate
+            model = FalconH1Model(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                full_out = model(input_ids, use_cache=False).last_hidden_state
+                prefill = model(input_ids[:, :-1], use_cache=True)
+                step_out = model(
+                    input_ids[:, -1:], past_key_values=prefill.past_key_values, use_cache=True
+                ).last_hidden_state
+
+            self.parent.assertEqual(step_out.shape, (input_ids.shape[0], 1, config.hidden_size))
+            self.parent.assertTrue(
+                torch.allclose(full_out[:, -1:], step_out, atol=1e-4, rtol=1e-4),
+                msg=f"Max diff: {(full_out[:, -1:] - step_out).abs().max().item():.6f}",
+            )
+
     def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
         """
         Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
@@ -299,7 +326,10 @@ class FalconH1ModelTester:
         input_ids = input_ids.to(torch_device)
         seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
         with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
 
         self.parent.assertTrue(seen, "the Mamba2 mixer was never called")
         self.parent.assertIn("seq_idx", seen[0])
@@ -353,6 +383,10 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    def test_gated_rms_norm_batched_cached_decoding(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gated_rms_norm_batched_cached_decoding(*config_and_inputs)
 
     def test_kwargs_reach_mamba2_mixer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -479,20 +513,20 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
 
             ### **Causes**
-            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (the American Revolution and the Seven Years' War), extravagant spending by the monarchy, and inefficient taxation.
-            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), debt, and inefficient taxation.
+            2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed vast wealth and power, while the common people (the Third Estate) faced extreme poverty and lacked political representation.
             3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
-            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's declaration of itself as the National Assembly, marking the start of the revolution.
 
             ### **Key Events**
-            1. **Opening of the Revolution (1789)**:
-               - **Storming of the Bastille**: Symbolic of the fall of royal authority, marking the start of the revolution.
-               - **Declaration of the Rights of Man and of the Citizen**: A foundational document proclaiming liberty, equality, and fraternity.
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre and the Committee of Public Safety, thousands of perceived enemies of the revolution were executed.
+            4. **Rise and Fall of Robespierre**: Robespierre's radical rule culminated in his own execution during the Thermidorian Reaction (July 1794).
+            5. **Royalist Restoration (1795)**: The monarchy was restored under Louis XVI, but he was forced to abdicate in favor of Louis XVI's younger brother, Louis XVI.
 
-            2. **Stages of the Revolution**:
-               - **Staffords' Reforms (1789–1791)**: Attempts to address grievances, including the abolition of feudal privileges and the introduction of the Civil Constitution of the Church.
-               - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
-               - **Thermidorian Reaction (1794–1795)**: The fall of"""
+            ### **Impact**
+            1. **End of the"""
         )
 
         EXPECTED_TEXT_XPU = textwrap.dedent(

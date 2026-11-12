@@ -33,7 +33,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -49,6 +48,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -215,7 +215,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         model = MusicgenMelodyForCausalLM(config)
 
         model.to(torch_device)
-        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
         model.train()
 
         # Contrarily to the initial method, we don't unfreeze freezed parameters.
@@ -622,7 +622,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
 
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
 
             # The audio encoder weights are not used during the forward pass (only during the generate pass)
@@ -770,7 +770,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
@@ -1046,16 +1046,10 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyIntegrationTests(unittest.TestCase):
+class MusicgenMelodyIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def processor(self):
@@ -1310,7 +1304,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
+class MusicgenMelodyStereoIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-stereo-melody").to(

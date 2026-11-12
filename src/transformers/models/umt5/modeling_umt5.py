@@ -372,7 +372,12 @@ class UMT5Attention(nn.Module):
 class UMT5LayerSelfAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
-        self.SelfAttention = UMT5Attention(config, has_relative_attention_bias=True, layer_idx=layer_idx)
+        self.SelfAttention = UMT5Attention(
+            config,
+            has_relative_attention_bias=True,
+            layer_idx=layer_idx,
+            is_causal=config.is_decoder,
+        )
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -398,7 +403,9 @@ class UMT5LayerSelfAttention(nn.Module):
 class UMT5LayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
-        self.EncDecAttention = UMT5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
+        self.EncDecAttention = UMT5Attention(
+            config, has_relative_attention_bias=False, layer_idx=layer_idx, is_causal=False
+        )
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -625,7 +632,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
 
 
 class UMT5Stack(UMT5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.is_decoder = config.is_decoder
@@ -751,7 +758,7 @@ class UMT5Model(UMT5PreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -783,10 +790,10 @@ class UMT5Model(UMT5PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
@@ -913,7 +920,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         "lm_head.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.model_dim = config.d_model
 
@@ -949,13 +956,13 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1097,12 +1104,11 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     ```"""
 
     model_type = "umt5"
-    # config_class = UMT5Config
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1129,8 +1135,8 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -1192,9 +1198,9 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1226,9 +1232,6 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -1352,8 +1355,6 @@ class UMT5ForTokenClassification(UMT5PreTrainedModel):
             [What are input IDs?](../glossary#input-ids)
 
             To know more on how to prepare `input_ids` for pretraining take a look a [UMT5 Training](./umt5#training).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs: BaseModelOutput = self.transformer(
             input_ids,
@@ -1386,7 +1387,7 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.model_dim = config.d_model
 
@@ -1423,14 +1424,14 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqQuestionAnsweringModelOutput:

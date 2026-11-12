@@ -19,7 +19,16 @@ ARG PYTORCH='2.11.0'
 ARG CUDA='cu126'
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng ffmpeg curl
+
+# Python comes from uv, at the version in the repo's `.python-version` (passed as the `PYTHON_VERSION` build arg by the
+# build workflow), instead of Ubuntu 22.04's 3.10.
+ARG PYTHON_VERSION
+ENV VIRTUAL_ENV="/opt/venv" UV_PYTHON_INSTALL_DIR="/opt/uv/python"
+ENV PATH="$VIRTUAL_ENV/bin:/root/.local/bin:$PATH"
+COPY --from=gpu-common install-python.sh /opt/ci/
+RUN sh /opt/ci/install-python.sh "$PYTHON_VERSION"
+
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
@@ -85,15 +94,11 @@ RUN python3 -m pip install --no-cache-dir torchao
 # Add transformers in editable mode
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 
-# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
-RUN python3 -m pip uninstall -y kernels
-
 # Uninstall flash-attn installed by autoawq, it causes issues here : https://github.com/huggingface/transformers/actions/runs/15915442841/job/44892146131
 RUN python3 -m pip uninstall -y flash-attn
 
-# When installing in editable mode, `transformers` is not recognized as a package.
-# this line must be added in order for python to be aware of transformers.
-RUN cd transformers && python3 setup.py develop
+COPY --from=gpu-common finish-transformers-install.sh /opt/ci/
+RUN sh /opt/ci/finish-transformers-install.sh
 
 # Add fouroversix for quantization testing.
 # fouroversix ships ONLY source distributions (no wheels, any version), and its FP4 GEMM/quant CUDA
@@ -125,9 +130,9 @@ RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"
 # collection for every quantization job, see the Jul 2026 daily CI collapse) fails the build instead
 # of shipping a silently-broken image. No GPU is present at build time, so we only exercise imports
 # and the CUDA runtime load, not device availability.
+COPY --from=gpu-common check-torch.sh /opt/ci/
 RUN set -e; \
-    python3 -c "import torch; print('torch version:', torch.__version__); torch.cuda.is_available()"; \
-    python3 -c "import torch, sys; v = torch.__version__.split('+')[0]; sys.exit(0 if v.startswith('${PYTORCH}') else 'ERROR: torch is ' + torch.__version__ + ', expected ${PYTORCH}.* - the pinned CUDA build was clobbered')"; \
+    sh /opt/ci/check-torch.sh "$PYTORCH"; \
     python3 -c "import torch, torchaudio; print('torchaudio version:', torchaudio.__version__)"; \
     python3 -c "import transformers; print('transformers imports OK:', transformers.__version__)"
 

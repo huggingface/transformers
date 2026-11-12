@@ -839,6 +839,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 (None, None): 'user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the',
+                ("cuda", (8, 6)): "user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. The background is a light blue sky, with a yellow",
             }
         ).get_expectation()
         # fmt: on
@@ -884,7 +885,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                (None, None): ['user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the', 'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'],
+                (None, None): ['user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. The background is a light blue sky, with a yellow', 'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'],
+                ("cuda", (8, 6)): ["user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the", "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by"],
             }
         ).get_expectation()
         # fmt: on
@@ -912,7 +914,8 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                (None, None): ['user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the', 'user\n\nDescribe the image.\nassistant\nThe image depicts a simple, stylized scene with a blue sky, a yellow sun, and a'],
+                (None, None): ['user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. The background is a light blue sky, with a yellow', 'user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape with a blue sky, a yellow sun, and a green'],
+                ("cuda", (8, 6)): ["user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the", "user\n\nDescribe the image.\nassistant\nThe image depicts a simple, stylized scene with a blue sky background. In the upper right corner"],
             }
         ).get_expectation()
         # fmt: on

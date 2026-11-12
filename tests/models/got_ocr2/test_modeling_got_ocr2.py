@@ -178,7 +178,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/iam_picture.jpeg"
         )
 
-        inputs = self.processor(image, return_tensors="pt").to(torch_device)
+        inputs = self.processor(image, return_tensors="pt").to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(
             **inputs,
             do_sample=False,
@@ -201,7 +201,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
         )
 
-        inputs = self.processor(image, return_tensors="pt", format=True).to(torch_device)
+        inputs = self.processor(image, return_tensors="pt", format=True).to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -214,6 +214,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             {
                 (None, None): "R\\&D",
                 ("xpu", 5): "R\\&D",
+                ("rocm", (9, 4)): "\\title{\nR",
             }
         ).get_expectation()
         self.assertEqual(decoded_output, expected_output)
@@ -226,7 +227,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
         )
 
-        inputs = self.processor(image, return_tensors="pt", color="green").to(torch_device)
+        inputs = self.processor(image, return_tensors="pt", color="green").to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -242,7 +243,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
         )
 
-        inputs = self.processor(image, return_tensors="pt", crop_to_patches=True).to(torch_device)
+        inputs = self.processor(image, return_tensors="pt", crop_to_patches=True).to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -261,7 +262,9 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
         )
 
-        inputs = self.processor([image1, image2], return_tensors="pt", multi_page=True).to(torch_device)
+        inputs = self.processor([image1, image2], return_tensors="pt", multi_page=True).to(
+            torch_device, dtype=model.dtype
+        )
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -280,7 +283,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
         )
 
-        inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device)
+        inputs = self.processor([image1, image2], return_tensors="pt").to(torch_device, dtype=model.dtype)
         generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
         decoded_output = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True

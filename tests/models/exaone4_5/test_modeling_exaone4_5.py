@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch EXAONE 4.5 model."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -40,16 +39,13 @@ if is_torch_available():
         Exaone4_5_ForConditionalGeneration,
         Exaone4_5_Model,
         Exaone4_5_Processor,
-        Exaone4_5_VisionConfig,
-        Exaone4Config,
     )
 
 
 class Exaone4_5_ModelTester(VLMModelTester):
     base_model_class = Exaone4_5_Model
     config_class = Exaone4_5_Config
-    text_config_class = Exaone4Config
-    vision_config_class = Exaone4_5_VisionConfig
+
     conditional_generation_class = Exaone4_5_ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -57,9 +53,9 @@ class Exaone4_5_ModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("vision_start_token_id", 5)
         kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
@@ -74,17 +70,20 @@ class Exaone4_5_ModelTester(VLMModelTester):
         # Exaone4_5 vision config expects `in_channels` instead of `num_channels`.
         self.in_channels = self.num_channels
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # EXAONE 4.5 vision tower expects flattened patches:
         # (total_patches, channels * patch_size^2 * temporal_patch_size)
         return torch.rand(
-            self.batch_size * (self.image_size**2) // (self.patch_size**2),
+            batch_size * (self.image_size**2) // (self.patch_size**2),
             self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             device=torch_device,
         )
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device)}
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
     def get_config(self):
         config = super().get_config()
@@ -97,49 +96,9 @@ class Exaone4_5_ModelTester(VLMModelTester):
 @require_torch
 class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Exaone4_5_ModelTester
-    test_all_params_have_gradient = False
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    def test_mismatching_num_image_tokens(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)
-
-            # Test 1: fewer images than image placeholders -> should raise.
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            if "image_grid_thw" in curr_input_dict:
-                curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 2: one image but two prompts with image placeholders -> should raise.
-            curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
-            for key in ["input_ids", "attention_mask", "token_type_ids"]:
-                if key in curr_input_dict and curr_input_dict[key] is not None:
-                    curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 3: two images and two image placeholders -> should pass.
-            curr_input_dict["pixel_values"] = torch.cat(
-                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
-            )
-            if "image_grid_thw" in curr_input_dict:
-                curr_input_dict["image_grid_thw"] = torch.cat(
-                    [curr_input_dict["image_grid_thw"], curr_input_dict["image_grid_thw"]], dim=0
-                )
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = torch.cat(
-                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
-                )
-            _ = model(**curr_input_dict)
 
     @unittest.skip("Model parallel auto-sharding for EXAONE 4.5 VLM is not supported yet.")
     def test_model_parallelism(self):

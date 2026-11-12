@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     CaptureStdout,
     Expectations,
-    cleanup,
     require_deterministic_for_xpu,
     require_torch,
     slow,
@@ -31,7 +30,10 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -186,7 +188,9 @@ class DiffusionGemmaVisionText2TextModelTester:
 
 
 @require_torch
-class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
+class DiffusionGemmaVisionText2TextModelTest(
+    ModelTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (DiffusionGemmaModel, DiffusionGemmaForBlockDiffusion) if is_torch_available() else ()
     all_generative_model_classes = ()  # No class inherits `GenerationMixin`
     additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
@@ -327,9 +331,9 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
         def loss_and_grads(checkpointing):
             model.zero_grad(set_to_none=True)
             if checkpointing:
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": False})
             else:
-                model.gradient_checkpointing_disable()
+                model.activation_checkpointing_disable()
             model.train()
             loss = model(**inputs).logits.float().mean()
             loss.backward()
@@ -871,14 +875,8 @@ class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase
 
 
 @require_torch
-class DiffusionGemmaIntegrationTest(unittest.TestCase):
+class DiffusionGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     _model_path = "google/diffusiongemma-26B-A4B-it"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_diffusion_gemma_chat_template(self):

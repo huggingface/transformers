@@ -39,23 +39,7 @@ Pytorch가 설치되어 있는지 확인하고 시작하세요. MPS 가속은 ma
 pip install torch torchvision torchaudio
 ```
 
-[`TrainingArguments`]는 `mps` 장치가 사용 가능한 경우 이를 기본적으로 사용하므로 장치를 따로 설정할 필요가 없습니다. 예를 들어, MPS 백엔드를 자동으로 활성화하여 [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py) 스크립트를 아무 수정 없이 실행할 수 있습니다.
-
-```diff
-export TASK_NAME=mrpc
-
-python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path google-bert/bert-base-cased \
-  --task_name $TASK_NAME \
-- --use_mps_device \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/
-```
+[`TrainingArguments`]는 `mps` 장치가 사용 가능한 경우 이를 기본적으로 사용하므로 장치를 따로 설정할 필요가 없습니다.
 
 `gloco`와 `nccl`과 같은 [분산 학습 백엔드](https://pytorch.org/docs/stable/distributed.html#backends)는 `mps` 장치에서 지원되지 않으므로, MPS 백엔드에서는 단일 GPU로만 학습이 가능합니다.
 

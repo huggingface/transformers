@@ -20,13 +20,10 @@ import pytest
 from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
-    CLIPVisionConfig,
-    LlamaConfig,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -48,16 +45,10 @@ if is_torch_available():
     from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 
 
-if is_vision_available():
-    pass
-
-
 class LlavaNextVisionText2TextModelTester(VLMModelTester):
     base_model_class = LlavaNextModel
     config_class = LlavaNextConfig
     conditional_generation_class = LlavaNextForConditionalGeneration
-    text_config_class = LlamaConfig
-    vision_config_class = CLIPVisionConfig
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("num_patches_per_image", 2)
@@ -68,14 +59,16 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
         height = width = image_size // patch_size
         grid_tokens = height * (width + 1)
         kwargs.setdefault("num_image_tokens", tokens_per_patch + grid_tokens)
-        kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
+        kwargs.setdefault("image_token_id", 3)
         super().__init__(parent, **kwargs)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         """LlavaNext expects 5D pixel_values: (batch_size, num_patches, channels, height, width)"""
         return floats_tensor(
             [
-                self.batch_size,
+                batch_size,
                 self.num_patches_per_image,
                 self.num_channels,
                 self.image_size,
@@ -83,10 +76,10 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
             ]
         )
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
-        """LlavaNext requires image_sizes tensor"""
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return {
-            "image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size),
+            "image_sizes": torch.tensor([[self.image_size, self.image_size]] * batch_size),
         }
 
     def get_config(self):

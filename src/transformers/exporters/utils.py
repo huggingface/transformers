@@ -40,14 +40,18 @@ import contextlib
 import copy
 import enum
 import functools
+import importlib
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
+
+import numpy as np
+from packaging import version
 
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import _is_package_available, is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -56,6 +60,19 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
+    try:
+        from torch._prims_common import is_contiguous_or_false
+    except ImportError:  # `is_contiguous_or_false` was added in torch 2.9
+        from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
+
+        def is_contiguous_or_false(a: torch.Tensor) -> bool:
+            # Like torch>=2.9's version, answer False instead of raising on data-dependent shapes.
+            try:
+                return bool(a.is_contiguous())
+            except GuardOnDataDependentSymNode:
+                return False
+
+    from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
         get_vision_attention_seqlens,
@@ -74,7 +91,7 @@ if is_torch_available():
 # `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
-_PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
+_PATCHES: dict[str, list[tuple[str, str, callable]]] = {}
 _FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
@@ -106,7 +123,12 @@ def patch_attributes(patches: list[tuple[Any, str, callable]]):
 @contextlib.contextmanager
 def apply_patches(backend: str):
     """Install `_PATCHES[backend]` for the duration of the block."""
-    with patch_attributes(_PATCHES.get(backend, [])):
+    resolved = [
+        (obj, attribute, fn)
+        for obj_path, attribute, fn in _PATCHES.get(backend, [])
+        if (obj := import_dotted_path(obj_path, missing_ok=True)) is not None
+    ]
+    with patch_attributes(resolved):
         yield
 
 
@@ -146,9 +168,9 @@ def register_patch(backend: str, *paths: str):
     Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
     or `"transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier"`.
     The rightmost segment is the attribute to swap; the rest is the object that owns it.
-    Paths are resolved at decoration time — submodules are imported as needed, falling
-    back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
-    isn't installed) is silently skipped so the module still imports.
+    Paths are resolved lazily at export time (inside `apply_patches`) — submodules are
+    imported as needed, falling back to `getattr` for class attributes. A path that fails
+    to resolve (e.g. the backend isn't installed) is silently skipped.
 
     Passing multiple paths registers the SAME factory against each — useful for swapping
     the same method or torch op across several call sites (e.g. ``torch.unsqueeze`` +
@@ -158,32 +180,35 @@ def register_patch(backend: str, *paths: str):
     def decorator(fn):
         for path in paths:
             obj_path, _, attribute = path.rpartition(".")
-            obj = _resolve_dotted_path(obj_path)
-            if obj is None:
-                continue
-            _PATCHES.setdefault(backend, []).append((obj, attribute, fn))
+            _PATCHES.setdefault(backend, []).append((obj_path, attribute, fn))
         return fn
 
     return decorator
 
 
-def _resolve_dotted_path(path: str):
-    """Resolve a dotted Python path to the actual object — importing submodules where
-    possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`).
-    Returns `None` if the path can't be resolved (e.g. the backend isn't installed)."""
-    import importlib
-
+def import_dotted_path(path: str, missing_ok: bool = False) -> Any:
+    """The object at a dotted path (`torch.Tensor.view`), importing modules on the way; `None` if missing and
+    `missing_ok`."""
     parts = path.split(".")
     try:
         obj = importlib.import_module(parts[0])
         for part in parts[1:]:
+            name = f"{obj.__name__}.{part}"
+            if not inspect.ismodule(obj):
+                obj = getattr(obj, part)
+                continue
             try:
-                obj = importlib.import_module(f"{obj.__name__}.{part}")
-            except (ImportError, AttributeError):
+                obj = importlib.import_module(name)
+            except ModuleNotFoundError as error:
+                # Not a submodule: an attribute. A module that fails its own imports raises as is.
+                if error.name != name:
+                    raise
                 obj = getattr(obj, part)
         return obj
     except (ImportError, AttributeError):
-        return None
+        if missing_ok:
+            return None
+        raise
 
 
 def apply_fx_node_fixes(backend: str, graph_module) -> None:
@@ -262,12 +287,58 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
             yield from _iter_leaf_tensors(item, path)
-    elif isinstance(obj, dict):
+    elif isinstance(obj, Mapping):
         for key, value in obj.items():
             path = f"{prefix}.{key}" if prefix else key
             yield from _iter_leaf_tensors(value, path)
     elif hasattr(obj, "__dict__"):
         yield from _iter_leaf_tensors(vars(obj), prefix)
+
+
+def check_packages(
+    owner: str, required_packages: Iterable[str], min_versions: dict[str, str], tested_versions: dict[str, str]
+) -> None:
+    """Raise if one of `required_packages` is missing or older than its `min_versions` entry, and warn when one differs
+    from its `tested_versions` entry. Shared by the exporters and the quantizers; `owner` names the one checking.
+    Missing and outdated packages are reported together, in one error."""
+    installed = {}
+    for package in {*required_packages, *min_versions}:
+        exists, package_version = _is_package_available(package, return_version=True)
+        if exists:
+            # The local build suffix (`+cu126`, `+cpu`) doesn't change the API
+            installed[package] = package_version.split("+", 1)[0]
+
+    missing = [package for package in dict.fromkeys([*required_packages, *min_versions]) if package not in installed]
+    outdated = [
+        f"{package}>={minimum} (found {installed[package]})"
+        for package, minimum in min_versions.items()
+        if package in installed
+        and (installed[package] == "N/A" or version.parse(installed[package]) < version.parse(minimum))
+    ]
+    if missing or outdated:
+        fixes = []
+        if missing:
+            fixes.append(
+                "install "
+                + ", ".join(
+                    f"{package}=={tested_versions[package]}" if package in tested_versions else package
+                    for package in missing
+                )
+            )
+        if outdated:
+            fixes.append(f"upgrade {', '.join(outdated)}")
+        raise ImportError(f"To use {owner}, please {' and '.join(fixes)}.")
+
+    drift = [
+        f"{package}: installed {installed[package]}, tested {tested.split('+', 1)[0]}"
+        for package, tested in tested_versions.items()
+        if package in required_packages and installed[package] not in ("N/A", tested.split("+", 1)[0])
+    ]
+    if drift:
+        logger.warning(
+            f"{owner} is experimental and patches many backend internals; behaviour may differ from what was "
+            f"validated. Version drift detected — {', '.join(drift)}. If you hit issues, try the tested versions."
+        )
 
 
 # ── Public tensor utilities ────────────────────────────────────────────────
@@ -328,13 +399,117 @@ def module_device(model: PreTrainedModel | torch.nn.Module) -> torch.device | No
 
 
 def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None:
-    """`.dtype` for any `nn.Module`. Same fallback story as `module_device`."""
-    if hasattr(model, "dtype"):
-        return model.dtype
+    """The dtype of a module's first floating-point parameter, or `None`."""
+    return next((p.dtype for p in model.parameters() if p.is_floating_point()), None)
+
+
+# ── Flat graph I/O ──────────────────────────────────────────────────────────
+# ONNX and OpenVINO graphs take and return flat tensors named by leaf path.
+
+
+@contextlib.contextmanager
+def patch_model_outputs(model):
+    """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
+    and capture the input/output tensor names from the traced forward in the yielded
+    `(inputs_names, outputs_names, traced_outputs)` lists, with what the model returned. Traced ints in it (a sliding
+    cache's length) are no graph outputs, so they are made concrete.
+    """
+
+    inputs_names: list[str] = []
+    outputs_names: list[str] = []
+    traced_outputs: list = []
+    original_forward = model.forward
+
+    @functools.wraps(original_forward)
+    def patched_forward(*args, **kwargs):
+        # Before the forward: a lazily initialized cache grows its tensors during it, which aren't graph inputs.
+        inputs_names.extend(get_leaf_tensors(kwargs).keys())
+        original_outputs = original_forward(*args, **kwargs)
+        traced_outputs.append(
+            torch.utils._pytree.tree_map_only(torch.SymInt, lambda value: value.node.hint, original_outputs)
+        )
+        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_outputs))
+        outputs_names.extend(outputs.keys())
+        return outputs
+
     try:
-        return next(model.parameters()).dtype
-    except StopIteration:
+        model.forward = patched_forward
+        yield inputs_names, outputs_names, traced_outputs
+    finally:
+        model.forward = original_forward
+
+
+def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
+    """Prefix any name that appears in both lists with `input.` / `output.`."""
+    for name in set(inputs_names).intersection(set(outputs_names)):
+        inputs_names[inputs_names.index(name)] = f"input.{name}"
+        outputs_names[outputs_names.index(name)] = f"output.{name}"
+    return inputs_names, outputs_names
+
+
+def onnx_inputs(input_names: list[str], sample) -> dict[str, torch.Tensor]:
+    """`sample`'s tensor leaves by ONNX input name (mutated inputs carry an `input.` prefix)."""
+    leaves = get_leaf_tensors(sample)
+    paths = {name: name.removeprefix("input.") for name in input_names}
+    return {name: leaves[path] for name, path in paths.items() if path in leaves}
+
+
+def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
+    """`onnx_inputs` as host arrays."""
+    return {name: tensor.cpu().numpy() for name, tensor in onnx_inputs(input_names, sample).items()}
+
+
+def openvino_input_value(tensor: torch.Tensor) -> Any:
+    """`tensor` as an OpenVINO input value. NumPy has no bf16, so a bf16 tensor travels as an `openvino.Tensor` of its
+    raw bits."""
+    tensor = tensor.detach().cpu()
+    if tensor.dtype == torch.bfloat16:
+        import openvino
+
+        value = openvino.Tensor(openvino.Type.bf16, list(tensor.shape))
+        # The Python API exposes a bf16 tensor's buffer as float16: copy the bits in through an int16 view.
+        value.data.view(np.int16)[...] = tensor.view(torch.int16).numpy()
+        return value
+    return tensor.numpy()
+
+
+def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
+    """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
+    the identity `beam_idx`, and scalars as they are."""
+    leaves = {path: openvino_input_value(tensor) for path, tensor in get_leaf_tensors(sample).items()}
+    # `beam_idx` reorders the cache's batch axis: read it off a cache tensor (not a sliding layer's 0-d counter).
+    batched = [path for path, value in leaves.items() if len(value.shape)]
+    batch_path = next(
+        (path for path in batched if path.startswith("past_key_values.")), batched[0] if batched else None
+    )
+    batch = leaves[batch_path].shape[0] if batch_path is not None else 1
+
+    def port_value(name: str) -> Any:
+        path = name.removeprefix("input.")
+        if path in leaves:
+            return leaves[path]
+        if name == "beam_idx":
+            return np.arange(batch, dtype=np.int32)
+        if name in sample:
+            return np.array(sample[name])
         return None
+
+    feed = {}
+    for port in ov_model.inputs:
+        # A port can carry several names: feed it under the first one that has a value
+        for name in port.get_names():
+            if (value := port_value(name)) is not None:
+                feed[name] = value
+                break
+    return feed
+
+
+def quantize_converted_model(program: Any, sample_inputs: MutableMapping[str, Any], config) -> Any:
+    """Quantize a converted model, unless the config's quantizer is absent or works on the FX graph."""
+    quantizer = config.quantizer
+    if quantizer is None or quantizer.quantizes_fx_graph:
+        return program
+    return quantizer.quantize(program, sample_inputs, config.export_format)
 
 
 # Output flags that should be set on `model.config`, not passed as forward() kwargs.
@@ -447,15 +622,14 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
     # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
-    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
+    # (matching the encoder's util call). An explicit `merge_temporal` attribute overrides this default.
     module = sys.modules[type(model).__module__]
     temporal_encoder = hasattr(module, "get_vision_frame_index")
     inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
-        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+        grid_thw, model.config, merge_temporal=getattr(model, "merge_temporal", temporal_encoder), kwargs=inputs
     )
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+    # Encoders opt into 3-axis (t, h, w) positions with an explicit attribute; default to 2-axis (h, w).
+    include_temporal = getattr(model, "include_temporal", False)
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
     window_size = _find_submodule_attr(model, "window_size")
@@ -525,6 +699,23 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
         )
         inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
+
+
+@register_export_input_preparer("image_sizes")
+def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Replace a tensor `image_sizes` with a python list of `(h, w)` int-tuples (the `.tolist()` runs here,
+    outside the traced graph).
+
+    `image_sizes` is per-image geometry, and encoders crop/split each image by it — e.g.
+    `image_sizes[i] // patch_size` (Pixtral) or `int(image_sizes[i] / factor)` (Emu3 VQVAE). As a tensor
+    those bounds become unbacked symints under `torch.export`; as python ints they stay static (matching
+    each encoder's own `image_sizes is None` fallback, which already builds int-tuples). Models that route
+    `image_sizes` around the traced graph (e.g. LLaVA-NeXT resolves anyres before tracing) never hit this.
+    """
+    image_sizes = inputs["image_sizes"]
+    if not torch.is_tensor(image_sizes):
+        return
+    inputs["image_sizes"] = [tuple(int(v) for v in row) for row in image_sizes.tolist()]
 
 
 @register_export_input_preparer("input_features", "feature_lens")
@@ -686,6 +877,10 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
 
     concat_along("input_ids", 1)
     concat_along("inputs_embeds", 1)
+    # Continuous Audio Language models (PocketTTS, GradiumPhononTTS) feed one `audio_latents` frame
+    # `[batch, 1, latent_dim]` per decode step, one per placeholder token, so they grow along the same
+    # axis as `input_ids`.
+    concat_along("audio_latents", 1)
     concat_along("cache_position", 0)
     # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
     # last in both, so a negative dim concatenates it correctly either way.
@@ -927,3 +1122,372 @@ def decompose_for_generation(
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
     return components
+
+
+# ── Cross-backend patches ───────────────────────────────────────────────────
+# Registered against every backend that needs them, so a workaround lives in one place even when the
+# backends break the op for different reasons.
+
+
+@register_patch("onnx", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+@register_patch("openvino", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+def _patch_byte_group_hash(original):
+    """Evaluate BLT's rolling hash in base-256 limbs, which both backends need for different reasons.
+
+    The hash multiplies each byte of a group by ``prime ** k`` and relies on int64 semantics. ONNX
+    Runtime multiplies int64 exactly but reduces through a float: ``sum`` turns `7000000049` into
+    `7000000000`, losing everything below fp32's mantissa. OpenVINO's CPU plugin is narrower still —
+    it executes every internal node in `i32`, so `1000000007 ** 2` saturates at `2147483647`. Either
+    way the hash reads the wrong embedding rows.
+
+    The powers are compile-time constants and the hash reaches the model only as ``hash % max_hash``,
+    so it is computed here as a sum of 8-bit limbs: the single pass below carries each lane and folds
+    it into the running remainder, keeping every intermediate small enough to be exact in both
+    backends. Each limb is taken with `BitwiseAnd`, the only division is by 256 of a value already a
+    multiple of it, and dropping the last carry is the int64 wraparound.
+    """
+    limb_bits = 8
+    limb = 1 << limb_bits
+    limb_count = 64 // limb_bits
+
+    def patch(token_ids, group_size: int = 2, prime: int = 1000000007, max_hash: int = 30000):
+        # Beyond a 16-bit table the limb products leave the window where the plugin's `%` is exact
+        if max_hash > (1 << 16):
+            return original(token_ids, group_size=group_size, prime=prime, max_hash=max_hash)
+
+        powers = [pow(prime, index, 1 << 64) for index in range(group_size)]
+        limbs = torch.tensor(
+            [[(power >> (limb_bits * position)) % limb for power in powers] for position in range(limb_count)],
+            dtype=torch.int64,
+            device=token_ids.device,
+        )
+        padding = torch.zeros(token_ids.shape[0], group_size - 1, dtype=torch.int64, device=token_ids.device)
+        windows = torch.cat([padding, token_ids.to(torch.int64)], dim=1).unfold(1, group_size, 1)
+        lanes = (windows.unsqueeze(-2) * limbs).sum(-1)
+
+        value = carry = torch.zeros_like(lanes[..., 0])
+        for position in range(limb_count):
+            total = lanes[..., position] + carry
+            digit = torch.bitwise_and(total, limb - 1)
+            carry = (total - digit) // limb
+            value = (value + digit * ((1 << (limb_bits * position)) % max_hash)) % max_hash
+        # Those limbs spell the *unsigned* value; eager took the remainder of a signed int64, which
+        # is 2**64 lower whenever the top bit -- the last digit's -- is set.
+        negative = (digit >= limb // 2).to(torch.int64)
+        return (value - negative * ((1 << 64) % max_hash) + max_hash) % max_hash
+
+    return patch
+
+
+@register_patch("onnx", "torch.histc")
+@register_patch("openvino", "torch.histc")
+def _patch_histc(original):
+    """Replace `torch.histc` with a statically-shaped, deterministic `zeros` + `scatter_add_`.
+
+    torchlib's `aten_histc` rejects integer input and casting to float calls the nondeterministic
+    `_histc_cuda`; OV has no `aten.histc` lowering at all. `bincount`, the obvious replacement, has
+    an unbacked SymInt output that trips downstream meta-shape guards (grouped_mm's `offs` check).
+    """
+
+    def patch(input, bins=100, min=0, max=0, *, out=None):
+        flat = input.reshape(-1)
+        if max == min == 0:
+            min_val = flat.min().float()
+            max_val = flat.max().float()
+        else:
+            min_val = torch.tensor(float(min), device=flat.device)
+            max_val = torch.tensor(float(max), device=flat.device)
+        bin_width = (max_val - min_val) / bins
+        idx = ((flat.float() - min_val) / bin_width).long().clamp_(0, bins - 1)
+        out_dtype = input.dtype if input.is_floating_point() else torch.float
+        counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
+        return counts.scatter_add_(0, idx, torch.ones_like(idx, dtype=out_dtype))
+
+    return patch
+
+
+@register_patch("onnx", "torch.searchsorted")
+@register_patch("openvino", "torch.searchsorted")
+@register_patch("executorch", "torch.searchsorted")
+def _patch_searchsorted(original):
+    """Decompose `searchsorted` into a broadcast comparison + sum — the insertion index into a sorted
+    sequence is the count of entries below. O(N*M) instead of O(M log N), but no backend has the op:
+    ONNX lacks it, OV rejects the node when `sorter`/`out` trace as `None`, and the portable runtime
+    ships no kernel.
+    """
+
+    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        if right:
+            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
+        else:
+            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
+        result = mask.sum(-2)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "torch.bucketize")
+@register_patch("executorch", "torch.bucketize")
+def _patch_bucketize(original):
+    """Decompose `bucketize` into a broadcast comparison + sum — `searchsorted` with the arguments the
+    other way round. ONNX's own decomposition materialises scalar constants that become
+    `alias`/`detach_` and break aot's functional-graph assertion; the portable runtime has no
+    `bucketize.Tensor_out` kernel.
+    """
+
+    def patch(input, boundaries, *, out_int32=False, right=False, out=None):
+        if boundaries.numel() == 0:
+            result = torch.zeros_like(input, dtype=torch.int64)
+        else:
+            below = boundaries <= input.unsqueeze(-1) if right else boundaries < input.unsqueeze(-1)
+            result = below.sum(dim=-1)
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
+
+    return patch
+
+
+@register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
+@register_patch("executorch", "transformers.masking_utils._vmap_expansion_sdpa")
+def _patch_broadcast_mask_expansion(_original):
+    """Replace vmap-based mask expansion with broadcast expansion.
+
+    No backend traces `torch.vmap`: OV's frontend sees inputs that "escaped" the vmap context,
+    and `aot_autograd`/`gen_vmap_plumbing` reject vmap-built masks under ExecuTorch's lowering.
+    """
+
+    def patch(mask_function):
+        def _expanded(batch_arange, head_arange, q_arange, kv_arange):
+            broadcasted = masking_utils._non_vmap_expansion_sdpa(batch_arange, head_arange, q_arange, kv_arange)
+            return mask_function(*broadcasted).expand(
+                batch_arange.shape[0], head_arange.shape[0], q_arange.shape[0], kv_arange.shape[0]
+            )
+
+        return _expanded
+
+    return patch
+
+
+@register_patch("onnx", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+def _patch_reshape(original):
+    """Materialise a non-contiguous input before `reshape`/`view`.
+
+    Both backends refuse the resulting `aten.view`, and both eat a plain `.contiguous()` (the ONNX
+    optimizer folds it, functionalization drops it) — a clone survives. `contiguous_format` is not
+    optional: a bare `.clone()` preserves a transposed dim-order ExecuTorch can't map to a
+    `torch.memory_format`.
+    """
+
+    def patch(input, *shape, **kwargs):
+        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
+            input = input.clone(memory_format=torch.contiguous_format)
+        return original(input, *shape, **kwargs)
+
+    return patch
+
+
+def _patch_cummax_or_cummin(original, *, mode: str):
+    """Decompose cummax/cummin via triangular-mask reduction (O(N^2) memory): ONNX and OpenVINO have no lowering."""
+
+    def patch(input, dim):
+        n = input.shape[dim]
+        x = input.movedim(dim, -1)  # (..., n)
+        x_grid = x.unsqueeze(-2).expand(*x.shape[:-1], n, n)  # (..., n, n)
+        include = torch.ones(n, n, dtype=torch.bool, device=input.device).tril()
+        if input.dtype == torch.bool:
+            fill_val = mode != "max"
+        elif input.is_floating_point():
+            fill_val = torch.finfo(input.dtype).min if mode == "max" else torch.finfo(input.dtype).max
+        else:
+            fill_val = torch.iinfo(input.dtype).min if mode == "max" else torch.iinfo(input.dtype).max
+        fill = torch.full((), fill_val, dtype=input.dtype, device=input.device)
+        masked = torch.where(include, x_grid, fill)
+        out = masked.max(dim=-1) if mode == "max" else masked.min(dim=-1)
+        return out.values.movedim(-1, dim), out.indices.movedim(-1, dim)
+
+    return patch
+
+
+@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
+@register_patch("openvino", "torch.cummax", "torch.Tensor.cummax")
+def _patch_cummax(original):
+    return _patch_cummax_or_cummin(original, mode="max")
+
+
+@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
+@register_patch("openvino", "torch.cummin", "torch.Tensor.cummin")
+def _patch_cummin(original):
+    return _patch_cummax_or_cummin(original, mode="min")
+
+
+# ── Cross-backend FX fixes ──────────────────────────────────────────────────
+
+
+@register_fx_node_fix("onnx")
+@register_fx_node_fix("openvino")
+def _fix_scatter_reduce(gm, node):
+    """Lower ``aten.scatter_reduce.two`` at the FX level — OV's frontend has no translation,
+    and its ``ScatterElementsUpdate`` op can't accept the ``reduce`` string as a constant input.
+
+    Handles two patterns the MoE/SSM models use:
+      * ``reduce="sum", include_self=True`` → ``aten.scatter_add`` (BLT/JetMoe/NemotronH router).
+      * ``reduce="amax"/"amin", include_self=False`` → masked extremum over a one-hot expansion of
+        ``index`` (BLT byte-pooling, tapas segment reduction).
+      * ``reduce="sum"/"mean", include_self=False`` → ``scatter_add`` onto zeros, divided by a
+        scattered count for the mean (tapas segment reductions).
+
+    Other combinations fall through to the generic OpConversionFailure.
+    """
+    if node.target is not torch.ops.aten.scatter_reduce.two:
+        return False
+    if len(node.args) < 5:
+        return False
+    reduce = node.args[4]
+    include_self = node.kwargs.get("include_self", True)
+    self_arg, dim, index, src = node.args[0:4]
+
+    if reduce == "sum" and include_self is True:
+        with gm.graph.inserting_before(node):
+            new = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(self_arg, dim, index, src))
+            new.meta.update(node.meta)
+        node.replace_all_uses_with(new)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("sum", "mean") and include_self is False:
+        # ``include_self=False``: a position that receives at least one source element reduces over
+        # *only* those elements, while a position nothing scatters to keeps ``self``. Scattering onto
+        # zeros gives the former, and scattering ones alongside counts the contributors — which both
+        # divides the mean and says which positions were touched at all.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None:
+            return False
+        with gm.graph.inserting_before(node):
+            zeros = gm.graph.call_function(torch.ops.aten.zeros_like.default, args=(self_arg,))
+            sums = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, src))
+            ones = gm.graph.call_function(torch.ops.aten.ones_like.default, args=(src,))
+            counts = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, ones))
+            values = sums
+            if reduce == "mean":
+                # clamped so untouched positions divide by 1 instead of 0 — `where` discards them anyway
+                divisor = gm.graph.call_function(torch.ops.aten.clamp_min.default, args=(counts, 1))
+                values = gm.graph.call_function(torch.ops.aten.div.Tensor, args=(sums, divisor))
+            # OV's frontend has no ``gt.Scalar`` translation, so compare against a 0-dim tensor
+            zero_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default,
+                args=(0,),
+                kwargs={"dtype": src_val.dtype, "device": src_val.device},
+            )
+            touched = gm.graph.call_function(torch.ops.aten.gt.Tensor, args=(counts, zero_tensor))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(touched, values, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("amax", "amin") and include_self is False:
+        # ``amax``/``amin`` with ``include_self=False``: each source element competes for the extremum
+        # at ``index[j]``; positions no source scatters to keep ``self``'s original value. Decompose to
+        # a broadcast comparison + reduction: build a one-hot mask ``(index.unsqueeze(dim) ==
+        # arange(K))``, reduce ``src`` where the mask is set (the opposite extreme elsewhere, so it
+        # never wins), then fall back to ``self`` for positions with no scatter.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None or not src_val.dtype.is_floating_point:
+            return False
+        ndim = self_val.ndim
+        d = dim if dim >= 0 else dim + ndim
+        k_size = self_val.shape[d]
+        # the identity for the reduction: an element that never wins
+        finfo = torch.finfo(src_val.dtype)
+        fill_value = finfo.min if reduce == "amax" else finfo.max
+        reduction = torch.ops.aten.amax.default if reduce == "amax" else torch.ops.aten.amin.default
+        k_shape = [1] * (ndim + 1)
+        k_shape[d] = -1
+        with gm.graph.inserting_before(node):
+            # ``k_size`` is symbolic under dynamic shapes (e.g. BLT's ``max_num_patches``); baking
+            # the ``SymInt`` as an ``arange`` literal makes OV decode it as a malformed inlined
+            # constant. Feed the dimension through a ``sym_size`` node so it stays a real Range input.
+            arange_size = (
+                k_size
+                if isinstance(k_size, int)
+                else gm.graph.call_function(torch.ops.aten.sym_size.int, args=(self_arg, d))
+            )
+            arange = gm.graph.call_function(
+                torch.ops.aten.arange.default, args=(arange_size,), kwargs={"device": self_val.device}
+            )
+            k_range = gm.graph.call_function(torch.ops.aten.view.default, args=(arange, k_shape))
+            index_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, d))
+            mask = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(index_unsq, k_range))
+            src_unsq = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(src, d))
+            # OV's frontend has no ``where.ScalarOther`` translation, so materialise the scalar
+            # branches as 0-dim tensors and use ``where.self`` (broadcasts the same way).
+            scalar_kwargs = {"dtype": src_val.dtype, "device": src_val.device}
+            fill_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default, args=(fill_value,), kwargs=scalar_kwargs
+            )
+            masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, fill_tensor))
+            extrema = gm.graph.call_function(reduction, args=(masked, [d + 1]))
+            any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, extrema, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    return False
+
+
+if is_torch_available():
+    # Asserts no backend lowers; `range_constraints` keeps what they check.
+    _RUNTIME_ASSERT_OPS = frozenset(
+        {torch.ops.aten._assert_scalar.default, torch.ops.aten._assert_tensor_metadata.default}
+    )
+    _ASSERTION_OPS = _RUNTIME_ASSERT_OPS | {
+        torch.ops.aten._assert_async.default,
+        torch.ops.aten._assert_async.msg,
+        torch.ops.aten.sym_constrain_range_for_size.default,
+    }
+
+
+@register_fx_program_fix("executorch")
+def drop_runtime_asserts(exported_program) -> None:
+    """Erase runtime asserts and the symint feeders only they read: re-tracing can't proxy them. OpenVINO calls it
+    before its decomposition replay."""
+    for module in exported_program.graph_module.modules():
+        if not isinstance(module, torch.fx.GraphModule):
+            continue
+        asserts = [
+            node for node in module.graph.nodes if node.op == "call_function" and node.target in _RUNTIME_ASSERT_OPS
+        ]
+        # Not a global `eliminate_dead_code`: it trips fx on unrelated dead nodes (`minimax_m3_vl`).
+        stack = [feeder for node in asserts for feeder in node.all_input_nodes]
+        for node in asserts:
+            module.graph.erase_node(node)
+        # A shared feeder is reached more than once: erase it once.
+        erased = set()
+        while stack:
+            feeder = stack.pop()
+            if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
+                continue
+            stack.extend(feeder.all_input_nodes)
+            module.graph.erase_node(feeder)
+            erased.add(feeder)
+        module.recompile()
+
+
+@register_fx_node_fix("onnx")
+@register_fx_node_fix("openvino")
+def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Erase assertion and shape-constraint nodes, which have no ONNX or OpenVINO equivalent."""
+    if node.target not in _ASSERTION_OPS:
+        return False
+    gm.graph.erase_node(node)
+    return True

@@ -12,9 +12,65 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .auto import AutoExportConfig, AutoHfExporter, get_hf_exporter, register_export_config, register_exporter
-from .base import HfExporter
-from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig
-from .exporter_dynamo import DynamoExporter
-from .exporter_executorch import ExecutorchExporter
-from .exporter_onnx import OnnxExporter
+from typing import TYPE_CHECKING
+
+from ..utils import _LazyModule
+
+
+_import_structure = {
+    "auto": ["AutoExportConfig", "AutoHfExporter", "register_backend"],
+    "base": ["ExportedComponent", "ExportedModel", "HfExporter"],
+    "configs": [
+        "DynamoConfig",
+        "ExecutorchConfig",
+        "ExportConfigMixin",
+        "ExportFormat",
+        "OnnxConfig",
+        "OpenVINOConfig",
+    ],
+    "exporter_dynamo": ["DynamoExporter"],
+    "exporter_executorch": ["ExecutorchExporter"],
+    "exporter_onnx": ["OnnxExporter"],
+    "exporter_openvino": ["OpenVINOExporter"],
+    "metadata": ["ExportMetadata"],
+    "quantizers": [
+        "ExportQuantizer",
+        "NNCFOnnxQuantizer",
+        "NNCFOpenVINOQuantizer",
+        "NNCFQuantizationConfig",
+        "NNCFTorchFXQuantizer",
+        "NNCFWeightCompressionConfig",
+        "OnnxRuntimeDynamicConfig",
+        "OnnxRuntimeQuantizer",
+        "OnnxRuntimeStaticConfig",
+        "PT2EQuantizer",
+    ],
+    "runners": ["ModelRunner"],
+}
+
+if TYPE_CHECKING:
+    from .auto import AutoExportConfig, AutoHfExporter, register_backend
+    from .base import ExportedComponent, ExportedModel, HfExporter
+    from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
+    from .exporter_dynamo import DynamoExporter
+    from .exporter_executorch import ExecutorchExporter
+    from .exporter_onnx import OnnxExporter
+    from .exporter_openvino import OpenVINOExporter
+    from .metadata import ExportMetadata
+    from .quantizers import (
+        ExportQuantizer,
+        NNCFOnnxQuantizer,
+        NNCFOpenVINOQuantizer,
+        NNCFQuantizationConfig,
+        NNCFTorchFXQuantizer,
+        NNCFWeightCompressionConfig,
+        OnnxRuntimeDynamicConfig,
+        OnnxRuntimeQuantizer,
+        OnnxRuntimeStaticConfig,
+        PT2EQuantizer,
+    )
+    from .runners import ModelRunner
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

@@ -74,12 +74,12 @@ class TestAddNewModelLike(unittest.TestCase):
         cls.tmp_dir.cleanup()
 
     def assertFileIsEqual(self, text: str, filepath: str):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             file_text = f.read()
         self.assertEqual(file_text.strip(), text.strip())
 
     def assertInFile(self, text: str, filepath: str):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             file_text = f.read()
         self.assertTrue(text in file_text)
 
@@ -489,7 +489,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 Phi4MultimodalVisionMultiheadAttentionPoolingHead,
                 Phi4MultimodalVisionPreTrainedModel,
             )
-            from ..phi4_multimodal.processing_phi4_multimodal import Phi4MultimodalProcessor, Phi4MultimodalProcessorKwargs
+            from ..phi4_multimodal.processing_phi4_multimodal import Phi4MultimodalProcessor
 
 
             class MyTest2VisionConfig(Phi4MultimodalVisionConfig):
@@ -633,10 +633,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
 
             class MyTest2FeatureExtractor(Phi4MultimodalFeatureExtractor):
-                pass
-
-
-            class MyTest2ProcessorKwargs(Phi4MultimodalProcessorKwargs):
                 pass
 
 

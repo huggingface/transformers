@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -32,7 +32,7 @@ from ...utils import (
     can_return_tuple,
 )
 from ...utils.generic import maybe_autocast
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
 from ..llama.configuration_llama import LlamaConfig
@@ -82,7 +82,11 @@ class Xcodec2Config(LlamaConfig):
     ```"""
 
     model_type = "xcodec2"
-    sub_configs = {"semantic_model_config": AutoConfig}
+    sub_configs_defaults = {
+        "semantic_model_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="wav2vec2-bert", init_kwargs={"num_hidden_layers": 16}
+        ),
+    }
 
     encoder_hidden_size: int = 48
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
@@ -107,17 +111,6 @@ class Xcodec2Config(LlamaConfig):
     base_model_tp_plan = AttributeError()
     base_model_pp_plan = AttributeError()
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.semantic_model_config, dict):
-            self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "wav2vec2-bert")
-            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
-                **self.semantic_model_config
-            )
-        elif self.semantic_model_config is None:
-            self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](num_hidden_layers=16)
-
-        super().__post_init__(**kwargs)
-
     @property
     def hop_length(self) -> int:
         return int(np.prod(self.downsampling_ratios))
@@ -131,7 +124,7 @@ class Xcodec2Config(LlamaConfig):
 @dataclass
 class Xcodec2Output(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained using the decoder
         part of Xcodec2. These represent the reconstructed audio signal.
     audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
@@ -143,7 +136,7 @@ class Xcodec2Output(ModelOutput):
         Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     audio_codes: torch.LongTensor | None = None
     latents: torch.Tensor | None = None
     audio_codes_mask: torch.Tensor | None = None
@@ -172,13 +165,13 @@ class Xcodec2EncoderOutput(ModelOutput):
 @dataclass
 class Xcodec2DecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, segment_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained by converting
         the discrete codes back into continuous audio signals. This represents
         the reconstructed audio that can be played back.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -407,11 +400,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # NOTE: could rewrite to pass tensor to a decorator such that device type is handled internally
         original_dtype = hidden_states.dtype
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             hidden_states = hidden_states.float()
             half_width = self.levels // 2
@@ -624,7 +613,7 @@ class Xcodec2PreTrainedModel(VoxtralPreTrainedModel):
 
 @auto_docstring(custom_intro="Xcodec2 neural audio codec model.")
 class Xcodec2Model(Xcodec2PreTrainedModel):
-    config_class = Xcodec2Config
+    config: Xcodec2Config
 
     def __init__(self, config: Xcodec2Config):
         super().__init__(config)

@@ -313,7 +313,7 @@ class MetaClip2Model(CLIPModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -356,7 +356,7 @@ class MetaClip2Model(CLIPModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
@@ -371,7 +371,7 @@ class MetaClip2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -433,7 +433,7 @@ class MetaClip2Model(CLIPModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -442,7 +442,7 @@ class MetaClip2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -486,7 +486,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -506,7 +506,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -515,7 +515,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -560,7 +560,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -579,7 +579,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -588,7 +588,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 

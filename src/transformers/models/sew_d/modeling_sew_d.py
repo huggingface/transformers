@@ -205,17 +205,14 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     return rel_pos_ids
 
 
-@torch.jit.script
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
-@torch.jit.script
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
-@torch.jit.script
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
@@ -694,7 +691,7 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
@@ -703,14 +700,14 @@ class DisentangledSelfAttention(nn.Module):
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            query_states (`torch.FloatTensor`, *optional*):
+            query_states (`torch.Tensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
                 values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (`torch.FloatTensor`):
+            rel_embeddings (`torch.Tensor`):
                 The embedding of relative distances. It's a tensor of shape [\\(2 \\times
                 \\text{max_relative_positions}\\), *hidden_size*].
 
@@ -1128,7 +1125,7 @@ class SEWDEncoder(nn.Module):
 @auto_docstring
 class SEWDPreTrainedModel(PreTrainedModel):
     config: SEWDConfig
-    base_model_prefix = "sew-d"
+    base_model_prefix = "sew_d"
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
@@ -1210,8 +1207,8 @@ class SEWDModel(SEWDPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -1261,7 +1258,7 @@ class SEWDModel(SEWDPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -1301,7 +1298,7 @@ class SEWDModel(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV2VEC2->SEWD
 class SEWDForCTC(SEWDPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: SEWDConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1406,26 +1403,15 @@ class SEWDForCTC(SEWDPreTrainedModel):
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=input_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1440,7 +1426,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV2VEC2->SEWD
 class SEWDForSequenceClassification(SEWDPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWDConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1483,16 +1469,12 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`SEWDProcessor.__call__`] for details.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            into a tensor of type `torch.Tensor`. See [`SEWDProcessor.__call__`] for details.
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True

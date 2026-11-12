@@ -213,7 +213,6 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     pipeline_model_mapping = {"object-detection": PPDocLayoutV3ForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
 
-    test_missing_keys = False
     test_torch_exportable = True
 
     def setUp(self):

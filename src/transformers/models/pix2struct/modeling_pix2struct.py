@@ -423,7 +423,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
+        flattened_patches (`torch.Tensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
             Flattened and padded pixel values. These values can be obtained using [`AutoImageProcessor`]. See
             [`Pix2StructVisionImageProcessor.__call__`] for details. Check the [original
             paper](https://huggingface.co/papers/2210.03347) (figure 5) for more details.
@@ -431,7 +431,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         Example:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Pix2StructVisionModel
@@ -930,7 +930,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "embed_tokens.weight"}
     supports_gradient_checkpointing = True
 
-    def __init__(self, config):
+    def __init__(self, config: Pix2StructTextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
@@ -956,9 +956,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
@@ -967,7 +967,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         labels: torch.LongTensor | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, ...] | CausalLMOutputWithCrossAttentions:
+    ) -> tuple[torch.Tensor, ...] | CausalLMOutputWithCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
@@ -1174,11 +1174,11 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
     @auto_docstring
     def forward(
         self,
-        flattened_patches: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        flattened_patches: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
@@ -1187,9 +1187,9 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
+    ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
+        flattened_patches (`torch.Tensor` of shape `(batch_size, seq_length, hidden_size)`):
             Flattened pixel patches. the `hidden_size` is obtained by the following formula: `hidden_size` =
             `num_channels` * `patch_size` * `patch_size`
 
@@ -1220,7 +1220,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
@@ -1253,7 +1253,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 

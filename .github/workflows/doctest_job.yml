@@ -18,11 +18,13 @@ env:
   MKL_NUM_THREADS: 16
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   run_doctests:
+    permissions:
+      contents: read
     name: " "
     strategy:
       max-parallel: 8  # 8 jobs at a time

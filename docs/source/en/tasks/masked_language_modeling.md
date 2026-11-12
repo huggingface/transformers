@@ -195,7 +195,7 @@ Use the end-of-sequence token as the padding token and specify `mlm_probability`
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 

@@ -43,7 +43,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import ViTAttention, ViTPreTrainedModel, eager_attention_forward
@@ -157,7 +156,6 @@ class SegformerImageProcessor(BeitImageProcessor):
         return processed_images
 
 
-@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -204,7 +202,7 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest resample is used for segmentation maps instead of BILINEAR.
-                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
+                    "resample": PILImageResampling.NEAREST,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -253,26 +251,26 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
 @auto_docstring
 class SegFormerImageClassifierOutput(ImageClassifierOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, num_channels, height, width)`. Hidden-states (also
         called feature maps) of the model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
         sequence_length)`.
 
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class SegformerOverlapPatchEmbeddings(nn.Module):
@@ -527,7 +525,7 @@ class SegformerPreTrainedModel(ViTPreTrainedModel):
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -545,7 +543,7 @@ class SegformerModel(SegformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = pixel_values
@@ -561,7 +559,7 @@ class SegformerModel(SegformerPreTrainedModel):
     """
 )
 class SegformerForImageClassification(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -577,16 +575,10 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SegFormerImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.segformer(pixel_values, **kwargs)
 
         sequence_output = outputs.last_hidden_state
@@ -652,7 +644,7 @@ class SegformerDecodeHead(nn.Module):
 
         self.config = config
 
-    def forward(self, encoder_hidden_states: torch.FloatTensor, **kwargs) -> torch.Tensor:
+    def forward(self, encoder_hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         batch_size = encoder_hidden_states[-1].shape[0]
 
         all_hidden_states = ()
@@ -691,7 +683,7 @@ class SegformerDecodeHead(nn.Module):
     """
 )
 class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.segformer = SegformerModel(config)
         self.decode_head = SegformerDecodeHead(config)
@@ -704,21 +696,17 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_processor = AutoImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")

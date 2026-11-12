@@ -28,51 +28,17 @@ if is_vision_available():
 
 
 class PPOCRV5ServerRecImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=10,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        do_pad=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        max_image_width=3200,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"height": 48, "width": 320}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_pad = do_pad
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.max_image_width = max_image_width
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 10)
+        kwargs.setdefault("keep_aspect_ratio", False)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "keep_aspect_ratio": False,
-            "do_pad": False,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("max_image_width", 3200)
+        kwargs.setdefault("size", {"height": 48, "width": 320})
+        kwargs.setdefault("do_pad", False)
+
+        super().__init__(**kwargs)
 
     def get_expected_value(self, images):
         shape_list = []
@@ -116,13 +82,7 @@ class PPOCRV5ServerRecImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class PPOCRV5ServerRecImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = PPOCRV5ServerRecImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = PPOCRV5ServerRecImageProcessingTester
 
     @unittest.skip(reason="PPOCRV5ServerRecImageProcessor does not support 4 channel images yet")
     def test_call_numpy_4_channels():
