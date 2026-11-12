@@ -1,6 +1,5 @@
 import torch
 
-from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ..utils import logging
 
@@ -36,7 +35,6 @@ def flash_attention_forward(
     softcap: float | None = None,
     is_causal: bool | None = None,
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
-    cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
