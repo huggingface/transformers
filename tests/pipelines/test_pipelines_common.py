@@ -722,6 +722,21 @@ class PipelineUtilsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             pipe = pipeline("text-generation", model=model, device="cpu", tokenizer=tokenizer)
 
+    @require_torch_accelerator
+    def test_pipeline_single_device_device_map(self):
+        # A single-device `device_map` must not be overridden by the pipeline's fallback to device 0
+        import torch
+
+        from transformers import AutoModelForCausalLM
+
+        pipe = pipeline("text-generation", model="hf-internal-testing/tiny-random-bert", device_map="cpu")
+        self.assertEqual(pipe.model.device, torch.device("cpu"))
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-bert", device_map="cpu")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+        self.assertEqual(pipe.model.device, torch.device("cpu"))
+
     @require_torch_multi_accelerator
     def test_pipeline_device_not_equal_model_device(self):
         # Test when device ids are different, pipeline should move the model to the passed device id
