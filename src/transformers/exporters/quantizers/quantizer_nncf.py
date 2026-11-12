@@ -33,8 +33,8 @@ from ...utils.import_utils import (
     is_torch_available,
 )
 from ..configs import ExportFormat
+from ..utils import onnx_feed, openvino_feed
 from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
-from .utils import onnx_feed, openvino_feed, traced_inputs
 
 
 if is_torch_available():
@@ -254,9 +254,5 @@ class NNCFTorchFXQuantizer(_NNCFQuantizer):
     def quantize(
         self, model: torch.fx.GraphModule, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> torch.fx.GraphModule:
-        traced_names = list(sample_inputs)
-        calibration = CalibrationSet(
-            self.calibration_dataset, sample_inputs, lambda sample: traced_inputs(sample, traced_names)
-        )
         with torch.no_grad():
-            return self._quantize_with_nncf(model, calibration)
+            return self._quantize_with_nncf(model, self.traced_calibration(sample_inputs))

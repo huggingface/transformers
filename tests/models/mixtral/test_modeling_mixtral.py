@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -36,6 +37,7 @@ if is_torch_available():
         MixtralForCausalLM,
         MixtralModel,
     )
+    from transformers.models.mixtral.modeling_mixtral import load_balancing_loss_func
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -106,6 +108,43 @@ class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
 
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
+
+
+@require_torch
+class MixtralLoadBalancingLossTest(unittest.TestCase):
+    def test_loss_and_gradients_match_one_hot(self):
+        for num_experts, top_k in ((1, 1), (3, 1), (8, 2), (8, 8)):
+            for dtype in (torch.float32, torch.float16, torch.bfloat16):
+                with self.subTest(num_experts=num_experts, top_k=top_k, dtype=dtype):
+                    # Include the first and last expert, with unused experts when top_k < num_experts.
+                    logits = torch.arange(num_experts, device=torch_device, dtype=dtype).repeat(6, 1)
+                    gate_logits = (logits.clone().requires_grad_(), logits.flip(-1).clone().requires_grad_())
+                    routing_weights = torch.cat([torch.softmax(layer, dim=-1) for layer in gate_logits])
+                    selected_experts = routing_weights.topk(top_k, dim=-1).indices
+                    tokens_per_expert = torch.nn.functional.one_hot(selected_experts, num_experts).float().mean(0)
+                    expected = num_experts * (tokens_per_expert * routing_weights.float().mean(0)).sum()
+                    actual = load_balancing_loss_func(gate_logits, num_experts=num_experts, top_k=top_k)
+                    torch.testing.assert_close(actual, expected)
+                    actual_grads = torch.autograd.grad(actual, gate_logits)
+                    expected_grads = torch.autograd.grad(expected, gate_logits)
+                    for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+                        torch.testing.assert_close(actual_grad, expected_grad)
+
+    @require_torch_gpu
+    def test_cuda_graph_capture(self):
+        gate_logits = tuple(torch.randn(12, 8, device="cuda") for _ in range(2))
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for _ in range(3):
+                expected = load_balancing_loss_func(gate_logits, num_experts=8, top_k=2)
+        torch.cuda.current_stream().wait_stream(stream)
+
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            actual = load_balancing_loss_func(gate_logits, num_experts=8, top_k=2)
+        graph.replay()
+        torch.testing.assert_close(actual, expected)
 
 
 @require_torch
