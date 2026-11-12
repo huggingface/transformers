@@ -10,6 +10,7 @@ Usage (see "Run Model Integration Contracts locally" in the testing guide):
 
 import ast
 import difflib
+import fnmatch
 import importlib.util
 import json
 import os
@@ -248,15 +249,22 @@ def resolve_model(root, model):
     return None, suggestions[:6]
 
 
-def model_contracts(root, model, fleet_name="prototypes"):
-    """Fleet contracts with a fixture whose top-level `model_type` lives in `models/<model>`."""
+def match_models(root, pattern):
+    """The `models/` directories a shell-style MODEL pattern (`qwen*`, `wav2vec2_*`) matches, sorted."""
+    models = root / "src/transformers/models"
+    directories = [path.name for path in models.iterdir() if path.is_dir() and not path.name.startswith("_")]
+    return sorted(fnmatch.filter(directories, pattern.lower()))
+
+
+def model_contracts(root, models, fleet_name="prototypes"):
+    """Fleet contracts with a fixture whose top-level `model_type` lives in one of the `models/` directories."""
     use_local_source(root)
     from transformers.models.auto.configuration_auto import model_type_to_module_name
 
     selected = []
     for name, folders in fixture_configs(fleet_contracts(root, fleet_name)).items():
         model_types = [json.loads((f / "config.json").read_text(encoding="utf-8"))["model_type"] for f in folders]
-        if any(model_type_to_module_name(model_type) == model for model_type in model_types):
+        if any(model_type_to_module_name(model_type) in models for model_type in model_types):
             selected.append(name)
     return selected
 
@@ -669,17 +677,26 @@ def main():
         print("Use MODEL=<model_directory> or ALL=1, not both.", file=sys.stderr)
         return 2
     if model:
-        resolved, suggestions = resolve_model(ROOT, model)
-        if resolved is None:
-            hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            print(
-                f"Unknown model: {model!r}.{hint} Use a directory name from src/transformers/models/ or a model name.",
-                file=sys.stderr,
-            )
-            return 2
-        if resolved != model:
-            print(f"MODEL={model} is models/{resolved}", flush=True)
-            model = resolved
+        usage = (
+            "Use a directory name from src/transformers/models/ or a model name (MODEL=wav2vec2, MODEL=Wav2Vec2),"
+            " or a pattern for several (MODEL='qwen*', quoted so the shell does not expand it)."
+        )
+        if any(char in model for char in "*?["):
+            model_dirs = match_models(ROOT, model)
+            if not model_dirs:
+                print(f"No model directory matches {model!r}. {usage}", file=sys.stderr)
+                return 2
+            print(f"MODEL={model} matches {len(model_dirs)} model directories: {', '.join(model_dirs)}", flush=True)
+        else:
+            resolved, suggestions = resolve_model(ROOT, model)
+            if resolved is None:
+                hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                print(f"Unknown model: {model!r}.{hint} {usage}", file=sys.stderr)
+                return 2
+            if resolved != model:
+                print(f"MODEL={model} is models/{resolved}", flush=True)
+                model = resolved
+            model_dirs = [model]
     elif all_fixtures != "1":
         try:
             paths = changed_files(ROOT, base)
@@ -701,7 +718,7 @@ def main():
     if supports_allow_missing_baseline(env):
         command.append("--allow-missing-baseline")
     if model:
-        names = model_contracts(ROOT, model, fleet_name)
+        names = model_contracts(ROOT, model_dirs, fleet_name)
         if not names:
             print(f"No MIC contract has a models/{model} fixture in the pinned {fleet_name} fleet; nothing to run.")
             return 0
