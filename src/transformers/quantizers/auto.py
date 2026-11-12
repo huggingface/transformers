@@ -550,6 +550,12 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         transform.operations = [load, *ops] if dequantize else [*ops, load]
         return transform
 
+    def param_needs_quantization(self, model, param_name, **kwargs):
+        if self.patterns is None:
+            self.map_module_to_quantizer(model)
+        quantizer = self.get_quantizer(param_name)
+        return quantizer is not None and quantizer.param_needs_quantization(model, param_name, **kwargs)
+
     def param_element_size(self, model, param_name, param):
         if self.patterns is None:
             self.map_module_to_quantizer(model)
