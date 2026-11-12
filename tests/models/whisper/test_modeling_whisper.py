@@ -1242,6 +1242,51 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
+    def test_token_timestamps_ignore_batch_padding(self):
+        # a sequence padded after its EOS in a batch gets the same token timestamps as when it is generated alone
+        config = self.model_tester.get_config()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+        alignment_heads = [[0, 0], [1, 1]]
+        eos_token_id = config.eos_token_id
+        num_input_ids, num_new_tokens, encoder_length, num_tokens_before_eos = 3, 12, config.max_source_positions, 5
+
+        max_text_token_id = 90  # random text tokens stay below the EOS and the other special token ids
+        sequences = ids_tensor([2, num_input_ids + num_new_tokens], max_text_token_id)
+        sequences[:, -1] = eos_token_id
+        sequences[1, num_input_ids + num_tokens_before_eos :] = eos_token_id  # the second sequence finished early
+
+        # the first step processes the prompt, the next ones one token each; the last token has no cross-attentions
+        cross_attentions = tuple(
+            tuple(
+                torch.rand(2, config.decoder_attention_heads, num_input_ids if step == 0 else 1, encoder_length)
+                .softmax(-1)
+                .to(torch_device)
+                for _ in range(config.decoder_layers)
+            )
+            for step in range(num_new_tokens)
+        )
+        batched = model._extract_token_timestamps(
+            GenerateEncoderDecoderOutput(sequences=sequences, cross_attentions=cross_attentions),
+            alignment_heads,
+            num_input_ids=num_input_ids,
+        )
+
+        single_length = num_input_ids + num_tokens_before_eos + 1
+        single = model._extract_token_timestamps(
+            GenerateEncoderDecoderOutput(
+                sequences=sequences[1:2, :single_length],
+                cross_attentions=tuple(
+                    tuple(layer[1:2] for layer in step) for step in cross_attentions[: num_tokens_before_eos + 1]
+                ),
+            ),
+            alignment_heads,
+            num_input_ids=num_input_ids,
+        )
+
+        torch.testing.assert_close(batched[1, :single_length], single[0])
+        # the padding after the EOS gets the timestamp of the last token
+        self.assertTrue(torch.all(batched[1, single_length:] == single[0, -1]))
+
     @pytest.mark.torch_compile_test
     def test_training_compile_fullgraph(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1954,10 +1999,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [0.0000, 0.8200, 0.9800, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 1.9800, 2.3400, 2.5000, 2.6600, 3.2000, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000, 11.9000],
-            [0.0000, 0.9000, 1.1400, 1.4200, 1.5200, 1.6600, 1.6600, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9400, 4.4000, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600, 17.9600],
+            [0.0000, 0.8200, 0.9800, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 1.9800, 2.3400, 2.5000, 2.6600, 3.2000, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200, 11.9200],
+            [0.0000, 0.9000, 1.1400, 1.4200, 1.5200, 1.6600, 1.6600, 1.8800, 2.1000, 2.2400, 2.6200, 3.1400, 3.5800, 3.9600, 4.4000, 17.1200, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600, 20.1600],
             [0.0000, 0.7600, 1.0000, 1.4200, 1.8000, 1.9400, 2.1800, 2.5200, 3.0200, 3.3200, 3.5400, 3.9400, 4.5600, 4.9400, 5.2800, 5.5600, 5.9000, 6.1600, 6.3000, 6.4800, 6.4800, 6.6400, 7.8200, 7.9600, 8.2200, 8.6000, 8.9200, 9.2200, 9.5200, 9.7200, 10.0800, 10.5400, 10.8800, 11.2600, 11.5400, 11.7400, 12.0800, 16.6000, 16.6000],
-            [0.0000, 0.7400, 1.0400, 1.3000, 1.6800, 2.1200, 2.4800, 2.7600, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4000, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4000, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200]
+            [0.0000, 0.7400, 1.0400, 1.3000, 1.6800, 2.1200, 2.4800, 2.7800, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4000, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4000, 15.8800, 15.8800, 15.8800, 15.8800, 15.8800, 15.8800, 15.8800, 15.8800]
         ])
         # fmt: on
 
