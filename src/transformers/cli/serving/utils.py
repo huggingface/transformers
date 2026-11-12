@@ -1122,8 +1122,9 @@ class BaseHandler:
         """Map OpenAI's ``frequency_penalty`` to ``repetition_penalty`` (``1.0 + frequency_penalty``).
 
         Raises an HTTP 400 for values outside OpenAI's documented range ``[-2.0, 2.0]``, or for
-        values that would map to a non-positive ``repetition_penalty`` (i.e. below -1.0), which
-        would make ``generate()`` fail with a 500 otherwise.
+        values that would map to a non-positive ``repetition_penalty`` (i.e. less than or equal to
+        -1.0, including exactly -1.0, which maps to 0.0), which would make ``generate()`` fail with
+        a 500 otherwise.
 
         Args:
             frequency_penalty (`float`): The OpenAI ``frequency_penalty`` sent by the client.

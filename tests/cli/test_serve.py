@@ -1041,6 +1041,29 @@ class TestCompletion(ServeIntegrationTestCase):
 
     MODEL = "Qwen/Qwen2.5-0.5B"
 
+    # ----- request validation -----
+
+    def test_unsupported_frequency_penalty_rejected(self):
+        """An OpenAI-valid but unsupported `frequency_penalty` is rejected with HTTP 400 before any generation.
+
+        Streaming must fail with a 400 before the SSE stream starts (not a 200 with an error event).
+        See https://github.com/huggingface/transformers/issues/50657
+        """
+        body = {"model": self.MODEL, "prompt": "Hello", "max_tokens": 5, "frequency_penalty": -1.5}
+
+        response = httpx.post(f"{self.base_url}/v1/completions", json=body, timeout=30)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unsupported", response.json()["detail"])
+
+        with httpx.stream(
+            "POST", f"{self.base_url}/v1/completions", json={**body, "stream": True}, timeout=30
+        ) as resp:
+            self.assertEqual(resp.status_code, 400)
+
+        # A supported value must still be accepted.
+        response = httpx.post(f"{self.base_url}/v1/completions", json={**body, "frequency_penalty": 0.5}, timeout=60)
+        self.assertEqual(response.status_code, 200)
+
     # ----- non-streaming -----
 
     def test_non_streaming(self):
