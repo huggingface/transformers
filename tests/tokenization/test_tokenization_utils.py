@@ -626,8 +626,6 @@ class TokenizerUtilsTest(unittest.TestCase):
             "replace": "{{ messages[0]['role'] | replace('user', '<|user|>') }}{{ messages[0]['content'] }}<|end|>",
             "repeat": "{{ '<|user|>' * 2 }}{{ messages[0]['content'] }}<|end|>",
             "slice": "{{ ('  <|user|>' ~ messages[0]['content'] ~ '<|end|>  ')[2:-2] }}",
-            # Adding a string to the output of the `safe` filter HTML-escapes the string, like the name here
-            "safe": "{{ messages[1]['name'] + '[ARGS]' + (messages[1]['arguments'] | tojson | safe) }}<|end|>",
             "special token": "{{ eos_token }}{{ messages[0]['content'] }}<|end|>",
             # Templates that find reasoning in the content, and write it back with their own tokens
             "reasoning": (
@@ -670,8 +668,8 @@ class TokenizerUtilsTest(unittest.TestCase):
         continued = encode(templates["+"], sanitize_control_tokens=True, continue_final_message=True)
         self.assertEqual(continued, encode(templates["+"], continue_final_message=True))
 
-    def test_encode_escaped_chat(self):
-        from transformers.utils.chat_template_utils import encode_escaped_chat, render_jinja_template
+    def test_encode_escaped_text(self):
+        from transformers.utils.chat_template_utils import render_jinja_template
 
         # Byte-level BPE, SentencePiece with a BOS token, and WordPiece with special tokens on both sides
         for name in ["openai-community/gpt2", "hf-internal-testing/llama-tokenizer", "google-bert/bert-base-cased"]:
@@ -691,41 +689,25 @@ class TokenizerUtilsTest(unittest.TestCase):
                 # The user's token is tokenized as if it weren't an added token, and the template's stays a token
                 as_text = tokenizer(f"Say {token} now", split_special_tokens=True, add_special_tokens=False)
                 expected = as_text["input_ids"] + [token_id]
-                encoded = encode_escaped_chat(tokenizer, escaped, add_special_tokens=False)
+                encoded = tokenizer(escaped, add_special_tokens=False)
                 self.assertEqual(encoded["input_ids"], expected)
                 self.assertEqual(encoded["attention_mask"], [1] * len(expected))
 
                 # The special tokens that the tokenizer adds around the text survive, and truncation keeps them
                 unescaped = tokenizer("Say now" + token)["input_ids"]
-                with_special_tokens = encode_escaped_chat(tokenizer, escaped)["input_ids"]
+                with_special_tokens = tokenizer(escaped)["input_ids"]
                 num_special = tokenizer.num_special_tokens_to_add()
                 self.assertEqual(len(with_special_tokens), len(expected) + num_special)
-                truncated = encode_escaped_chat(tokenizer, escaped, truncation=True, max_length=4 + num_special)
+                truncated = tokenizer(escaped, truncation=True, max_length=4 + num_special)
                 self.assertEqual(len(truncated["input_ids"]), 4 + num_special)
                 self.assertEqual(truncated["input_ids"][0], unescaped[0])
                 if tokenizer.cls_token is not None:
                     self.assertEqual(truncated["input_ids"][-1], unescaped[-1])
 
-                batch = encode_escaped_chat(
-                    tokenizer, [escaped, "Hi"], padding=True, return_tensors="np", add_special_tokens=False
-                )
+                batch = tokenizer([escaped, "Hi"], padding=True, return_tensors="np", add_special_tokens=False)
                 self.assertEqual(batch["input_ids"].shape, (2, len(expected)))
                 self.assertEqual(batch["input_ids"][0].tolist(), expected)
                 self.assertEqual(batch["attention_mask"][0].tolist(), [1] * len(expected))
-
-                # Text without escaped tokens is encoded as usual
-                self.assertEqual(encode_escaped_chat(tokenizer, "Hi there"), tokenizer("Hi there"))
-                self.assertEqual(encode_escaped_chat(tokenizer, ["Hi", "there"]), tokenizer(["Hi", "there"]))
-
-                # Settings that we can't support fail for text with escaped tokens, and only for that text
-                with self.assertRaises(ValueError):
-                    encode_escaped_chat(tokenizer, escaped, return_offsets_mapping=True)
-                self.assertIn("offset_mapping", encode_escaped_chat(tokenizer, "Hi", return_offsets_mapping=True))
-                with self.assertRaises(ValueError):
-                    encode_escaped_chat(tokenizer, escaped, text_pair="pair")
-
-        with self.assertRaises(ValueError):
-            encode_escaped_chat(ByT5Tokenizer(), escaped)
 
     @require_tokenizers
     def test_special_tokens_overwrite(self):

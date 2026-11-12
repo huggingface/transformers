@@ -66,7 +66,6 @@ from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
     _get_template_literal_text,
-    encode_escaped_chat,
     render_jinja_template,
 )
 
@@ -3186,9 +3185,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             rendered_chat = rendered_chat[0]
 
         if tokenize:
-            # With `sanitize_control_tokens`, the control tokens from the inputs are escaped in the rendered chat
-            out = encode_escaped_chat(
-                self,
+            out = self(
                 rendered_chat,
                 padding=padding,
                 truncation=truncation,

@@ -69,7 +69,7 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import _get_template_variables, encode_escaped_chat, render_jinja_template
+from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -698,8 +698,7 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            # Chats rendered with `sanitize_control_tokens=True` escape the control tokens that users typed
-            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -2668,8 +2667,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            # Chats rendered with `sanitize_control_tokens=True` escape the control tokens that users typed
-            text_inputs = encode_escaped_chat(self.tokenizer, text, **merged_kwargs["text_kwargs"])
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
