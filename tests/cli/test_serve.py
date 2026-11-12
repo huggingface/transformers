@@ -428,7 +428,8 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_config({"frequency_penalty": 0.5}, GenerationConfig())
         self.assertAlmostEqual(result.repetition_penalty, 1.5)
 
-    def test_frequency_penalty_full_openai_range(self):
+    def test_frequency_penalty_supported_values(self):
+        """Values in (-1.0, 2.0] are supported and map to 1.0 + frequency_penalty."""
         from transformers import GenerationConfig
 
         handler = self._make_handler()
@@ -436,16 +437,8 @@ class TestBuildGenerationConfig(unittest.TestCase):
             result = handler._build_generation_config({"frequency_penalty": frequency_penalty}, GenerationConfig())
             self.assertAlmostEqual(result.repetition_penalty, 1.0 + frequency_penalty)
 
-    def test_frequency_penalty_out_of_openai_range_rejected(self):
-        from transformers import GenerationConfig
-
-        with self.assertRaises(HTTPException) as ctx:
-            self._make_handler()._build_generation_config({"frequency_penalty": 2.5}, GenerationConfig())
-        self.assertEqual(ctx.exception.status_code, 400)
-        self.assertIn("[-2.0, 2.0]", ctx.exception.detail)
-
-    def test_frequency_penalty_mapping_to_non_positive_penalty_rejected(self):
-        """Values <= -1.0 map to a non-positive repetition penalty and must be rejected with a 400.
+    def test_frequency_penalty_openai_valid_but_unsupported_rejected(self):
+        """OpenAI-valid values <= -1.0 map to a non-positive repetition penalty and must be rejected with a 400.
 
         See https://github.com/huggingface/transformers/issues/50657
         """
@@ -457,9 +450,21 @@ class TestBuildGenerationConfig(unittest.TestCase):
                     {"frequency_penalty": frequency_penalty}, GenerationConfig()
                 )
             self.assertEqual(ctx.exception.status_code, 400)
-            self.assertIn("non-positive repetition penalty", ctx.exception.detail)
+            self.assertIn("unsupported by the current", ctx.exception.detail)
 
-    def test_completion_frequency_penalty_full_openai_range(self):
+    def test_frequency_penalty_openai_invalid_rejected(self):
+        """Values outside OpenAI's documented range [-2.0, 2.0] are rejected with a 400."""
+        from transformers import GenerationConfig
+
+        for frequency_penalty in [-2.5, 2.5]:
+            with self.assertRaises(HTTPException) as ctx:
+                self._make_handler()._build_generation_config(
+                    {"frequency_penalty": frequency_penalty}, GenerationConfig()
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("[-2.0, 2.0]", ctx.exception.detail)
+
+    def test_completion_frequency_penalty_supported_values(self):
         from transformers import GenerationConfig
         from transformers.cli.serving.completion import CompletionHandler
 
@@ -468,14 +473,26 @@ class TestBuildGenerationConfig(unittest.TestCase):
             result = handler._build_generation_config({"frequency_penalty": frequency_penalty}, GenerationConfig())
             self.assertAlmostEqual(result.repetition_penalty, 1.0 + frequency_penalty)
 
-    def test_completion_frequency_penalty_mapping_to_non_positive_penalty_rejected(self):
+    def test_completion_frequency_penalty_openai_valid_but_unsupported_rejected(self):
+        from transformers import GenerationConfig
+        from transformers.cli.serving.completion import CompletionHandler
+
+        handler = CompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        for frequency_penalty in [-1.0, -1.5, -2.0]:
+            with self.assertRaises(HTTPException) as ctx:
+                handler._build_generation_config({"frequency_penalty": frequency_penalty}, GenerationConfig())
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("unsupported by the current", ctx.exception.detail)
+
+    def test_completion_frequency_penalty_openai_invalid_rejected(self):
         from transformers import GenerationConfig
         from transformers.cli.serving.completion import CompletionHandler
 
         handler = CompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
         with self.assertRaises(HTTPException) as ctx:
-            handler._build_generation_config({"frequency_penalty": -1.0}, GenerationConfig())
+            handler._build_generation_config({"frequency_penalty": 2.5}, GenerationConfig())
         self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("[-2.0, 2.0]", ctx.exception.detail)
 
     def test_logit_bias_tuple_keys(self):
         from transformers import GenerationConfig

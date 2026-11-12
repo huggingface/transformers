@@ -1143,8 +1143,9 @@ class BaseHandler:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"`frequency_penalty` of {frequency_penalty} maps to a non-positive repetition penalty "
-                    f"({repetition_penalty}); only values greater than -1.0 are supported."
+                    f"`frequency_penalty` of {frequency_penalty} is valid for OpenAI, but it maps to a "
+                    f"non-positive repetition penalty ({repetition_penalty}) which is unsupported by the "
+                    "current `1.0 + frequency_penalty` mapping; only values greater than -1.0 are supported."
                 ),
             )
         return repetition_penalty
