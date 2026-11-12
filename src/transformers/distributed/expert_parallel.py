@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
 
 if is_torch_distributed_available():
-    from torch.distributed import all_to_all_single, get_process_group_ranks
+    from torch.distributed import all_gather_into_tensor, all_to_all_single, get_process_group_ranks
     from torch.distributed._functional_collectives import all_to_all_single_autograd
     from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
 
@@ -183,18 +183,6 @@ class EpRouterParallel(ExpertParallelLayer):
             router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
         return router_logits, router_scores, router_indices, *extra_outputs
-
-
-class RouterParallelMegaMoe(EpRouterParallel):
-    """Router TP plan used with DeepGEMM Mega MoE.
-
-    Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
-    with unmasked routing weights, so the router doesn't pre-shard per EP rank like
-    ``EpRouterParallel`` does.
-    """
-
-    def transform_output_post_forward(self, module, output, mesh):
-        return output
 
 
 class EPImplementation:
@@ -376,30 +364,87 @@ class AllReduceEP(EPImplementation):
         return _AllReduceForward.apply(expert_output, ep_group)
 
 
+def _uses_megamoe(experts: nn.Module) -> bool:
+    """Mega MoE experts exchange the tokens inside their kernel, so only `MegaMoeEP` can run them."""
+    return getattr(getattr(experts, "config", None), "_experts_implementation", None) == "deepgemm_megamoe"
+
+
 class AutoEP(EPImplementation):
     """
-    The default: `AllReduceEP` at inference (gradients disabled) when the EP group shares one batch, and `AllToAllEP`
-    in training and wherever the ranks hold different batches. At inference, the all-reduce never reads split sizes
-    back to the host, so decode captures in a CUDA graph.
+    The default. It runs, in order:
+
+    - `MegaMoeEP` for DeepGEMM Mega MoE experts (`experts_implementation="deepgemm_megamoe"`), which only run
+      through it.
+    - `AllReduceEP` at inference (no gradients through the inputs) when the EP group shares one batch. It never reads
+      split sizes back to the host, so decode captures in a CUDA graph.
+    - `AllToAllEP` otherwise: in training, and wherever the ranks hold different batches.
     """
 
     def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh):
         super().__init__(experts, ep_mesh, tp_mesh)
         self.all_to_all = AllToAllEP(experts, ep_mesh, tp_mesh)
-        # Only built where it can run: an EP group whose ranks hold different batches has no all-reduce path.
         self.all_reduce = AllReduceEP(experts, ep_mesh, tp_mesh) if self.shares_batch else None
+        self.megamoe = MegaMoeEP(experts, ep_mesh, tp_mesh) if _uses_megamoe(experts) else None
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
-        if self.all_reduce is not None and not torch.is_grad_enabled():
+        if self.megamoe is not None:
+            return self.megamoe(hidden_states, top_k_index, top_k_weights)
+        if self.all_reduce is not None and not (torch.is_grad_enabled() and hidden_states.requires_grad):
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
+
+
+class MegaMoeEP(EPImplementation):
+    """
+    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. It treats each rank's rows as
+    that rank's own tokens. Here every rank of the EP group holds the same batch, so each rank hands the kernel an equal
+    slice of it, with global expert ids and unmasked weights, and the slices' outputs are gathered back. Every token goes
+    through the experts once. The kernel has no backward, so this runs at inference only.
+
+    Example: 4 tokens on 2 ranks.
+
+    GPU                    0                      1
+                           |                      |
+    batch           [t0, t1, t2, t3]       [t0, t1, t2, t3]     the same tokens on both ranks
+    kernel input        [t0, t1]               [t2, t3]          each rank's slice
+    kernel output    [y0, y1]               [y2, y3]            the kernel exchanges tokens between ranks
+    after all-gather         [y0, y1, y2, y3] on both ranks
+    """
+
+    # TODO: Mega MoE is built for ranks holding different batches (data-parallel attention + EP), where neither the
+    # slicing nor the gather is needed. Until inference supports data parallelism, it runs on the shared batch.
+    needs_shared_batch = True
+
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
+        num_tokens = hidden_states.size(0)
+        # equal slices so the outputs gather evenly; a slice running past the batch is padded with skipped slots
+        # (expert id -1, weight 0), only on the ranks it reaches
+        rows_per_rank = max(1, -(-num_tokens // ep_size))
+        rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
+        hidden_states, top_k_index, top_k_weights = hidden_states[rows], top_k_index[rows], top_k_weights[rows]
+        padding = rows_per_rank - hidden_states.size(0)
+        if padding:
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, padding))
+            top_k_index = torch.nn.functional.pad(top_k_index, (0, 0, 0, padding), value=-1)
+            top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
+
+        local_output = self.experts_forward(hidden_states, top_k_index, top_k_weights, process_group=ep_group)
+        output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
+        all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
+        return output[:num_tokens].to(hidden_states.dtype)
 
 
 class EPImplementationInterface(GeneralInterface):
     """Registry of the `EPImplementation`s `DistributedConfig.ep_implementation` names. Add one with
     `EPImplementationInterface.register(name, cls)`."""
 
-    _global_mapping = {"auto": AutoEP, "all_to_all": AllToAllEP, "all_reduce": AllReduceEP}
+    _global_mapping = {
+        "auto": AutoEP,
+        "all_to_all": AllToAllEP,
+        "all_reduce": AllReduceEP,
+        "deepgemm_megamoe": MegaMoeEP,
+    }
 
 
 class EpDispatchExpertsParallel(ExpertParallelLayer):
@@ -411,6 +456,11 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
 
     def install_forward(self, module, ep_mesh, *, tp_mesh, ep_implementation="auto"):
         """`tp_mesh` is the group of ranks holding the same batch (size 1 without TP)."""
+        if _uses_megamoe(module) and ep_implementation not in ("auto", "deepgemm_megamoe"):
+            raise ValueError(
+                f'`experts_implementation="deepgemm_megamoe"` runs with `ep_implementation="auto"` or '
+                f'`"deepgemm_megamoe"`, got `ep_implementation={ep_implementation!r}`.'
+            )
         implementations = EPImplementationInterface()
         if ep_implementation not in implementations:
             raise ValueError(
@@ -433,32 +483,10 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
         return module
 
 
-class MoeTensorParalellMegaMoeExperts(ExpertParallelLayer):
-    """TP layer for DeepGEMM Mega MoE experts.
-
-    Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
-    combine + per-rank token sharding internally — so we skip the gradient-sync hooks
-    that ``MoeExpertsParallel`` would apply, and we forward the EP ``process_group``
-    into the module so the symm-buffer rendezvous can run on first forward.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
-        return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
-
-    def context_around_forward(self, module, mesh):
-        return _use_local_dtensor_params(module)
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        return output
-
-
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("grouped_gemm", MoEParamShard(Shard(0), shards_expert_dim=True))
     ALL_PARALLEL_STYLES.register("ep_router", EpRouterParallel())
     ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
-    ALL_PARALLEL_STYLES.register("megamoe_router", RouterParallelMegaMoe())
-    ALL_PARALLEL_STYLES.register("megamoe_experts", MoeTensorParalellMegaMoeExperts())
 
 
 def apply_expert_parallelism(
