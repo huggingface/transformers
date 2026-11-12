@@ -46,7 +46,7 @@ from transformers.exporters import utils as exporter_utils
 from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
 from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
-from transformers.exporters.decompose import decompose_multimodal
+from transformers.exporters.decompose import decompose_multimodal, embedded_inputs
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -421,6 +421,17 @@ class DecomposeMultimodalTest(unittest.TestCase):
             expected = model(**inputs).logits
             actual = main.module(**main.inputs).logits
         torch.testing.assert_close(actual, expected)
+
+    def test_embedded_inputs_drop_the_modality_side_inputs(self):
+        """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
+        `image_position_ids`), which a text-only call doesn't carry."""
+        inputs = {
+            "inputs_embeds": torch.randn(2, 6, 16),
+            "attention_mask": torch.ones(2, 6, dtype=torch.long),
+            "pixel_values": torch.randn(2, 16, 48),
+            "image_position_ids": torch.zeros(2, 16, 2, dtype=torch.long),
+        }
+        self.assertEqual(sorted(embedded_inputs(inputs, {})), ["attention_mask", "inputs_embeds"])
 
     def test_export_multimodal_exports_each_component(self):
         from transformers.exporters import DynamoExporter
