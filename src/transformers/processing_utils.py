@@ -439,7 +439,8 @@ class AudioKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
-            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
+            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"soundfile"`, `"torchaudio"`
+            (`"librosa"` is a deprecated alias of `"soundfile"`).
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
@@ -2242,7 +2243,8 @@ class ProcessorMixin(PushToHubMixin):
         return {"sampling_rate": sampling_rate, "backend": backend}
 
     def _normalize_conversations(self, conversation) -> tuple[list, bool]:
-        """Batch a single conversation if needed and convert OpenAI image_url blocks to HF image blocks."""
+        """Batch a single conversation if needed, drop the keys whose value is None, and convert OpenAI image_url
+        blocks to HF image blocks."""
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -2251,6 +2253,13 @@ class ProcessorMixin(PushToHubMixin):
         else:
             is_batched = False
             conversations = [conversation]
+
+        # Normalize: drop the keys whose value is None.
+        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
+        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
+        conversations = [
+            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
+        ]
 
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
@@ -2868,7 +2877,6 @@ def prepare_prompt_input(
     inputs: str | list[str] | None,
     batch_size: int,
     input_name: str = "inputs",
-    broadcast: bool = True,
 ) -> list[str | None]:
     """
     Normalize a string, list of strings, or ``None`` into a list of length ``batch_size``.
@@ -2881,9 +2889,6 @@ def prepare_prompt_input(
             Expected length of the output list.
         input_name (`str`, *optional*, defaults to `"inputs"`):
             Name used in error messages to identify the argument.
-        broadcast (`bool`, *optional*, defaults to `True`):
-            Whether a single string is broadcast to all batch items. If `False`, it is treated as a list of one item,
-            so it is only valid for a batch of one (e.g. a target transcription, which is specific to each audio).
 
     Returns:
         `list[str | None]`: A list of length ``batch_size``.
@@ -2891,9 +2896,7 @@ def prepare_prompt_input(
     if inputs is None:
         return [None] * batch_size
     if isinstance(inputs, str):
-        if broadcast:
-            return [inputs] * batch_size
-        inputs = [inputs]
+        return [inputs] * batch_size
     if isinstance(inputs, (list, tuple)):
         if len(inputs) != batch_size:
             raise ValueError(
