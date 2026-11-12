@@ -53,6 +53,7 @@ class GraniteDoclingModelTester(VLMModelTester):
     conditional_generation_class = GraniteDoclingForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 7)  # fixes unwanted conversions during sdpa vs eager tests (forces bsz==7)
         kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("out_hidden_size", kwargs["hidden_size"])
         kwargs.setdefault("intermediate_size", 37)
