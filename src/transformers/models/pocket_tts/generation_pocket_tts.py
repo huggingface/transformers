@@ -23,6 +23,7 @@ from ...generation.logits_process import LogitsProcessorList
 from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
 from ...generation.utils import ALL_CACHE_NAMES, GenerateNonBeamOutput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -119,6 +120,8 @@ class PocketTTSEosThresholdCriteria(StoppingCriteria):
 
 
 class PocketTTSGenerationMixin(GenerationMixin):
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         inputs: torch.Tensor | None = None,

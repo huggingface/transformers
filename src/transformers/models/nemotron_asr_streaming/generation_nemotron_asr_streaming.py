@@ -22,6 +22,7 @@ from ...models.parakeet.generation_parakeet import (
     ParakeetRNNTGenerateOutput,
     ParakeetRNNTGenerationMixin,
 )
+from ...utils.deprecation import deprecate_kwarg
 
 
 class NemotronAsrStreamingRNNTDecoderCache(ParakeetRNNTDecoderCache): ...
@@ -209,6 +210,8 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
 
         return model_inputs
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(self, inputs=None, generation_config=None, **kwargs):
         input_features = kwargs.get("input_features", inputs)
         self._streaming = isinstance(input_features, GeneratorType)

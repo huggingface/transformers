@@ -34,6 +34,7 @@ from ...generation.logits_process import (
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
 
@@ -380,6 +381,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         return timestamps
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         input_features: torch.Tensor | None = None,

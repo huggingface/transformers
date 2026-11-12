@@ -33,6 +33,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -414,6 +415,8 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         inputs: torch.Tensor | None = None,

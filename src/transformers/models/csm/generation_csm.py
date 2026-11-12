@@ -28,6 +28,7 @@ from ...generation.logits_process import LogitsProcessorList
 from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
 from ...generation.utils import GenerateNonBeamOutput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -331,6 +332,8 @@ class CsmGenerationMixin(GenerationMixin):
         else:
             return input_ids
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         input_ids: torch.Tensor | None = None,

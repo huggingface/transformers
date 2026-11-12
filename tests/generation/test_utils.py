@@ -2684,6 +2684,59 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # since the mtp model was randomly created)
                     _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
 
+    def test_bc_cache_name_generate(self):
+        """Test that BC is correctly handled in `generate` for the cache name."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Those models fail for random reason not related to this BC test
+        broken_model_types = [
+            "higgs_audio_v2",
+            "kyutai_speech_to_text",
+            "pp_formulanet",
+            "switch_transformers",
+            "vibevoice",
+            "voxtral_realtime",
+        ]
+        if config.model_type in broken_model_types:
+            self.skipTest("Fails for random reasons not related to the actual test")
+
+        for model_class in self.all_generative_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+                model.eval()
+
+                generate_kwarg = {
+                    "do_sample": False,
+                    "max_new_tokens": 5,
+                    "min_new_tokens": 5,
+                    "return_dict_in_generate": True,
+                }
+
+                inputs_dict["use_cache"] = True
+                output = model(**inputs_dict)
+                if "cache" not in output or type(output.cache) not in (DynamicCache, EncoderDecoderCache):
+                    self.skipTest("Not returning cache or non standard Cache")
+
+                old_name = "cache_params" if all(output.cache.is_linear) else "past_key_values"
+                empty_cache = DynamicCache(config=config.get_text_config(decoder=True))
+                if isinstance(output.cache, EncoderDecoderCache):
+                    empty_cache = EncoderDecoderCache(empty_cache, copy.deepcopy(empty_cache))
+
+                generate_kwarg[old_name] = copy.deepcopy(empty_cache)
+                # Make sure we raise the deprecation warning
+                with warnings.catch_warnings(record=True) as warning_list:
+                    output_old_name = model.generate(**inputs_dict, **generate_kwarg)
+                self.assertTrue(any(f"`{old_name}` is deprecated" in str(warn.message) for warn in warning_list))
+
+                generate_kwarg.pop(old_name)
+                generate_kwarg["cache"] = copy.deepcopy(empty_cache)
+                output_new_name = model.generate(**inputs_dict, **generate_kwarg)
+
+                self.assertTrue(output_old_name.cache is not None)
+                self.assertTrue(output_new_name.cache is not None)
+                self._check_caches_are_equal(output_old_name.cache, output_new_name.cache)
+                torch.testing.assert_close(output_old_name.sequences, output_new_name.sequences)
+
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
         internal_batch_size = (

@@ -18,6 +18,7 @@ import torch
 
 from ...generation import GenerationMixin, StoppingCriteria
 from ...utils import ModelOutput
+from ...utils.deprecation import deprecate_kwarg
 
 
 class ParakeetRNNTDecoderCache:
@@ -247,6 +248,8 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
 
         return model_inputs
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(self, inputs=None, generation_config=None, **kwargs):
         # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
         self._encoder_finished = None
