@@ -402,6 +402,11 @@ class NVFP4ExpertsTest(unittest.TestCase):
             torch.testing.assert_close(experts(hidden_states, top_k_index, top_k_weights), grouped, rtol=0, atol=0)
         # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first
         torch.testing.assert_close(grouped, eager, rtol=0.05, atol=0.05)
+        # A bf16 model routes with bf16 weights
+        with patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm):
+            experts.config._experts_implementation = "grouped_mm"
+            bf16_grouped = experts(hidden_states, top_k_index, top_k_weights.bfloat16())
+        torch.testing.assert_close(bf16_grouped, grouped, rtol=0.02, atol=0.02)
 
     def test_load_linear_with_static_input_scale(self, *_):
         # ModelOpt's W4A4 linears save a static `input_scale` (e.g. nvidia/Qwen3-30B-A3B-NVFP4's attention)

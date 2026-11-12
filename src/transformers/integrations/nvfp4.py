@@ -318,7 +318,7 @@ def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_wei
     hidden = self.grouped_linear("down_proj", hidden, *grouped) * top_k_weights.reshape(-1)[perm, None]
     hidden = hidden.masked_fill(~on_rank[:, None], 0.0)
     output = torch.empty_like(hidden, dtype=torch.float32)
-    output[perm] = hidden  # back to the token order
+    output[perm] = hidden.to(output.dtype)  # back to the token order
     return output.view(*top_k_index.shape, -1).sum(dim=1).to(hidden_states.dtype)
 
 
