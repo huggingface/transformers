@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "imports_only")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "triton_wrapper_only")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -762,6 +762,12 @@ class CaptureDebugPlugin:
         if PLUGIN_MODE == "repeat_only":
             # Bisect step: no patch, no GC callback, no faulthandler, no ctypes — only duplicate the targets and dump on
             # failure. Even the MINIMAL (pure-Python) patches seemed to hide the whisper failure.
+            return
+        if PLUGIN_MODE == "triton_wrapper_only":
+            # Bisect step: imports_only did NOT hide deepseek (FAILED). Only the pass-through Python wrapper around
+            # `CachingAutotuner.run` (no CUDA call: S.full is never set in this mode).
+            _patch_triton_launch()
+            log("triton_wrapper_only: CachingAutotuner.run wrapped (pass-through)")
             return
         faulthandler.enable(file=sys.stderr, all_threads=True)
         try:
