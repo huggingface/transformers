@@ -72,6 +72,20 @@ env:
     and not PhimoeIntegrationTest and not Qwen3MoeIntegrationTest
     and not Qwen3OmniModelIntegrationTest and not Qwen3VLMoeIntegrationTest
     and not SeedOssIntegrationTest and not test_cwm_sliding_window_long_sequence
+  # gfx1201 only, measured on an R9700 (32 GB card, 32 GB RAM): the card is the
+  # limit. These run out of card memory, offload to disk or hit the 20 min
+  # timeout. -k matches substrings, so test-level skips name their class, and
+  # VideoLlava/VipLlava are kept out of Llava's.
+  BIG_MODEL_SKIP_GFX1201: >-
+    and not DeepseekV2IntegrationTest and not DiffusionGemmaIntegrationTest
+    and not Exaone4IntegrationTest
+    and not (LlavaForConditionalGenerationIntegrationTest and not VideoLlava and not VipLlava)
+    and not Mistral3IntegrationTest and not MuseGlimmerIntegrationTest
+    and not (GemmaIntegrationTest and test_model_7b_fp16)
+    and not (Gemma2IntegrationTest and (test_model_9b_fp16 or test_model_9b_pipeline_bf16))
+    and not ((Glm4vIntegrationTest or Glm46VIntegrationTest) and (test_small_model_integration_test_batch_wo_image or test_small_model_integration_test_expand))
+    and not (Mamba2IntegrationTest and test_simple_generate)
+    and not (Qwen2MoeIntegrationTest and test_speculative_generation)
 
 jobs:
   models-setup:
@@ -99,6 +113,7 @@ jobs:
           PY
           # The -k expression for this GPU, computed once for all three groups.
           skip="not test_flex_attention_with_grads ${BIG_MODEL_SKIP}"
+          [ "$ARCH" = gfx1201 ] && skip="${skip} ${BIG_MODEL_SKIP_GFX1201}"
           echo "skip=${skip}" >> "$GITHUB_OUTPUT"
 
   # One job per model. Three near-identical job groups, one per slice, so each
