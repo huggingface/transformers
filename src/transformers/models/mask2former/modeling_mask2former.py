@@ -2182,17 +2182,10 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             init.zeros_(module.cross_attn.in_proj_bias)
 
         elif isinstance(module, Mask2FormerPixelDecoder):
-            # Meta's original does not explicitly initialize level_embed, so it keeps
-            # PyTorch's default. Previously this was normal_(std=0) which incorrectly
-            # zeroed the parameter. Use normal_(std=1.0) to match PyTorch's default
-            # nn.Embedding-style init (level_embed is an nn.Parameter, not nn.Embedding).
             init.normal_(module.level_embed, std=1.0)
 
         elif isinstance(module, Mask2FormerPredictionBlock):
-            # Meta's original MLP is just nn.Linear with default init, which is
-            # kaiming_uniform_(a=math.sqrt(5)) for weights and uniform_ for biases.
-            # The base PreTrainedModel._init_weights would apply normal_(std=0.02)
-            # on weights and zero all biases, which diverges from the original.
+            # The mask MLP keeps the default nn.Linear init in the original
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
                     init.kaiming_uniform_(submodule.weight, a=math.sqrt(5))
@@ -2202,13 +2195,8 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                         init.uniform_(submodule.bias, -bound, bound)
 
         elif isinstance(module, nn.Embedding):
-            # Meta's original creates embeddings (query_feat, query_embed, level_embed)
-            # without explicit initialization, so they use PyTorch's default normal(std=1.0).
-            # The base PreTrainedModel._init_weights would apply normal_(std=0.02), which
-            # is far too small and not what the original Mask2Former code does.
+            # The query and level embeddings keep the default nn.Embedding init in the original
             init.normal_(module.weight, mean=0.0, std=1.0)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
@@ -2225,8 +2213,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             init.copy_(module.empty_weight, empty_weight)
 
         else:
-            # For all other modules (nn.Linear, nn.Conv2d, etc.), fall back to
-            # the base PreTrainedModel default initialization.
             super()._init_weights(module)
 
         if hasattr(module, "reference_points"):
