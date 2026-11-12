@@ -639,7 +639,9 @@ class TrainerOptimizerGroupLookupTest(TestCasePlus):
         trainer.create_optimizer()
         parameter = model.get_parameter(name)
         expected = next(
-            group for group in trainer.optimizer.param_groups if any(candidate is parameter for candidate in group["params"])
+            group
+            for group in trainer.optimizer.param_groups
+            if any(candidate is parameter for candidate in group["params"])
         )
         self.assertIs(trainer.get_optimizer_group(name if kind == "name" else parameter), expected)
 
@@ -649,9 +651,7 @@ class TrainerOptimizerGroupLookupTest(TestCasePlus):
     def test_lookup_controls_actual_parameter_updates(self, kind, dtype):
         torch.manual_seed(42)
         model = nn.Sequential(nn.Linear(4, 4, bias=False), nn.Linear(4, 4, bias=False)).to(dtype=dtype)
-        optimizer = torch.optim.SGD(
-            [{"params": [model[0].weight]}, {"params": [model[1].weight]}], lr=0.1
-        )
+        optimizer = torch.optim.SGD([{"params": [model[0].weight]}, {"params": [model[1].weight]}], lr=0.1)
         trainer = Trainer(
             model=model,
             args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
@@ -686,9 +686,7 @@ class TrainerOptimizerGroupLookupTest(TestCasePlus):
             args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
         )
         trainer.create_optimizer()
-        self.assertIs(
-            trainer.get_optimizer_group("1.weight"), trainer.get_optimizer_group(model[0].weight)
-        )
+        self.assertIs(trainer.get_optimizer_group("1.weight"), trainer.get_optimizer_group(model[0].weight))
 
     def test_foreign_equal_parameter_keeps_all_groups_fallback(self):
         model = nn.ParameterList([nn.Parameter(torch.tensor(2.0))])
