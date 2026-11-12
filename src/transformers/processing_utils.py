@@ -1966,7 +1966,10 @@ class ProcessorMixin(PushToHubMixin):
                     sub_processor_type, pretrained_model_name_or_path, **kwargs
                 )
                 processor_dict[sub_processor_type] = tokenizer
-            else:
+            elif (
+                isinstance(sub_processor_config := processor_dict.get(sub_processor_type), dict)
+                or sub_processor_config is None
+            ):
                 # Load with `Auto` class for non-tokenizer sub-processors
                 modality = _get_modality_for_attribute(sub_processor_type)
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[modality]
@@ -1979,7 +1982,6 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
 
-                sub_processor_config = processor_dict.get(sub_processor_type, None)
                 sub_processor, unused_kwargs = auto_processor_class.from_pretrained(
                     pretrained_model_name_or_path,
                     processor_config=sub_processor_config,
