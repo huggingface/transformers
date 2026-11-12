@@ -170,7 +170,7 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> BatchFeature:
-        audio_kwargs = dict(kwargs.pop("audio_kwargs", {}))
+        audio_kwargs = dict(kwargs.get("audio_kwargs", {}))
         if "n_window" in audio_kwargs:
             logger.warning_once(
                 "Passing `n_window` in `audio_kwargs` is deprecated "
