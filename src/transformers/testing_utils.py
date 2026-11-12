@@ -4968,9 +4968,7 @@ def scoped_non_kernels(test):
 
 
 def scoped_non_kernels_class(test_class):
-    """
-    Applies `scoped_non_kernels` to each test function and hook.
-    """
+    """Apply `scoped_non_kernels` to test methods and lifecycle hooks."""
     class_hooks = {"setUpClass", "tearDownClass", "setup_class", "teardown_class"}
     all_hooks = class_hooks | {"setUp", "tearDown", "setup_method", "teardown_method"}
 
@@ -4978,15 +4976,19 @@ def scoped_non_kernels_class(test_class):
         if not (name.startswith("test") or name in all_hooks):
             continue
 
-        test = getattr(test_class, name)
+        descriptor = inspect.getattr_static(test_class, name)
+        test = descriptor.__func__ if isinstance(descriptor, (classmethod, staticmethod)) else descriptor
 
         if not callable(test) or getattr(test, "_is_scoped_kernels", False):
             continue
 
-        if name in class_hooks and hasattr(test, "__func__"):
-            setattr(test_class, name, classmethod(scoped_non_kernels(test.__func__)))
-        else:
-            setattr(test_class, name, scoped_non_kernels(test))
+        wrapped = scoped_non_kernels(test)
+        if isinstance(descriptor, classmethod):
+            wrapped = classmethod(wrapped)
+        elif isinstance(descriptor, staticmethod):
+            wrapped = staticmethod(wrapped)
+
+        setattr(test_class, name, wrapped)
 
     return test_class
 
