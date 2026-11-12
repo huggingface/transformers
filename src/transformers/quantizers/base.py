@@ -11,13 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, should_convert_module
 
 
 if TYPE_CHECKING:
@@ -85,6 +84,9 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
+    # The exact module names of the quantization plan (e.g. `lm_head` in `{"lm_head": fp8, "*": fp8}`), set by the
+    # plan: they override a format's default skips, `get_modules_to_not_convert` leaves them out
+    plan_module_names: list[str] = []
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -123,7 +125,7 @@ class HfQuantizer(ABC):
 
     @property
     def quantized_element_size(self) -> float | None:
-        "Bytes per element of a quantized weight, `None` to use the param's own element size."
+        """Bytes per element of a quantized weight, `None` to use the param's own element size."""
         return None
 
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
@@ -155,6 +157,19 @@ class HfQuantizer(ABC):
         """
         return False
 
+    @property
+    def all_quantizers(self) -> list["HfQuantizer"]:
+        """The quantizers loading the model: this one, or the ones of a quantization plan"""
+        return [self]
+
+    def get_quantizer(self, name: str) -> "HfQuantizer | None":
+        """
+        The quantizer of the module or param `name`: this one unless `modules_to_not_convert` skips its module, or in
+        a quantization plan the one of its pattern (the skips are folded into the plan, see its `replace_modules`)
+        """
+        module = name.rpartition(".")[0]
+        return self if should_convert_module(module, getattr(self, "modules_to_not_convert", None)) else None
+
     def validate_environment(self, *args, **kwargs):
         """
         This method is used to potentially check for potential conflicts with arguments that are
@@ -163,16 +178,20 @@ class HfQuantizer(ABC):
         """
         return
 
-    def update_parallel_plan(self, model, plan: dict[str, str]):
+    def update_parallel_plan(self, model, parallel_plan: dict[str, str]):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
         from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
-        suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}
-        extra = {key + suffix: style for key, style in plan.items() for suffix in suffixes}
-        plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
+        names = {name for serialized in self.serialized_names.values() for name in serialized}
+        # A param named after a planned one shards like it: `gate_up_proj_scale_inv`, `gate_up_proj_blocks`
+        for key, style in list(parallel_plan.items()):
+            module, _, planned = key.rpartition(".")
+            for name in names:
+                if name.startswith(planned) and f"{module}.{name}" in params - parallel_plan.keys():
+                    parallel_plan[f"{module}.{name}"] = style
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
@@ -180,6 +199,49 @@ class HfQuantizer(ABC):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
+
+    def quantized_module(self, name: str, module: "torch.nn.Module") -> "torch.nn.Module | None":
+        """
+        The quantized module replacing `module` (named `name`) before loading, created on meta, or `None` to keep it.
+        `replace_modules` swaps them in one pass over the model, shared by the quantizers of a quantization plan.
+        """
+        return None
+
+    @property
+    def replaces_modules(self) -> bool:
+        """Whether this quantizer swaps its modules through `quantized_module`"""
+        return type(self).quantized_module is not HfQuantizer.quantized_module
+
+    def replace_modules(self, model):
+        """
+        Swaps the modules for their quantized ones, in one pass: like the dtype plan's, the pattern a module's params
+        match picks its quantizer (this one, or in a quantization plan the one of its pattern).
+        """
+        replaced, swapped = set(), ()
+        for name, module in list(model.named_modules()):
+            if name.startswith(swapped):  # inside a module already swapped
+                continue
+            if not module._parameters:  # containers are never swapped
+                continue
+
+            quantizer = self.get_quantizer(f"{name}.")
+            if quantizer is None or not quantizer.replaces_modules:
+                continue
+            with torch.device("meta"):
+                new_module = quantizer.quantized_module(name, module)
+            if new_module is None:
+                continue
+
+            model.set_submodule(name, new_module)
+            replaced.add(quantizer)
+            swapped += (f"{name}.",)
+
+        for quantizer in self.all_quantizers:
+            if quantizer.replaces_modules and quantizer not in replaced:
+                logger.warning(
+                    f"No module was quantized with {quantizer.quantization_config.quant_method}: please double check "
+                    "the model architecture and `modules_to_not_convert`."
+                )
 
     def preprocess_model(self, model: "PreTrainedModel", dtype=None, **kwargs):
         """
@@ -193,13 +255,16 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_before_weight_loading`.
         """
-        setattr(model, "is_quantized", True)
-        setattr(model, "quantization_method", self.quantization_config.quant_method)
-        if self.pre_quantized:
-            self._convert_model_for_quantization(model)
-        self._process_model_before_weight_loading(model, **kwargs)
-        self.update_parallel_plan(model, model.tp_plan)
-        self.update_parallel_plan(model, model.ep_plan)
+        for quantizer in self.all_quantizers:
+            setattr(model, "is_quantized", True)
+            setattr(model, "quantization_method", quantizer.quantization_config.quant_method)
+            if quantizer.pre_quantized:
+                quantizer._convert_model_for_quantization(model)
+            quantizer._process_model_before_weight_loading(model, **kwargs)
+        self.replace_modules(model)
+        for quantizer in self.all_quantizers:
+            quantizer.update_parallel_plan(model, model.tp_plan)
+            quantizer.update_parallel_plan(model, model.ep_plan)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
@@ -255,8 +320,8 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
-    @staticmethod
     def get_modules_to_not_convert(
+        self,
         model: "PreTrainedModel",
         skip_modules: list[str] | None = None,
         keep_in_fp32_modules: list[str] | None = None,
@@ -273,9 +338,7 @@ class HfQuantizer(ABC):
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        modules_to_not_convert = list(set(modules_to_not_convert))
-
-        return modules_to_not_convert
+        return [name for name in set(modules_to_not_convert) if name not in self.plan_module_names]
 
     @property
     def is_qat_trainable(self) -> bool:
@@ -323,59 +386,37 @@ class HfQuantizer(ABC):
     def get_load_operations(self) -> dict:
         """
         Op classes loading the serialized tensors, e.g. `{"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}`.
-        A deserialization builds the params of one module, so it only runs on the general converters. A dequantization
-        also runs before the ops of the model's converters, e.g. before a per-expert merge.
+        A deserialization runs after the ops of a param's converter, a dequantization before them (e.g. before a
+        per-expert merge).
         """
         return {}
 
-    def get_weight_conversions(self):
-        "Return the loading to perform on any parameter that is not matched by the model's converters"
-        from ..core_model_loading import WeightConverter
+    def get_load_operation(self):
+        """The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"""
+        if not self.pre_quantized:
+            return None
+        dequantize = getattr(self.quantization_config, "dequantize", False)
+        return self.get_load_operations().get("dequantize" if dequantize else "deserialize")
 
-        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
-        operation = self.get_load_operations().get(mode) if self.pre_quantized else None
-        if operation is None:
+    def get_weight_conversions(self):
+        """General converters: a param's serialized names load together. Their ops are set per param, by the plan"""
+        from ..core_model_loading import WeightConverter, _IdentityOp
+
+        # Only to read a checkpoint this format can load (it has a load op). Nothing is converted back on save: a
+        # dequantized model saves unquantized.
+        # TODO: quantize back on save (each format's dequantize reversed). Needs what was dequantized on load per param
+        # (module and layout, e.g. `modules_to_convert`, per-tensor vs block scales): the config alone can't say
+        if self.get_load_operation() is None:
             return []
-        return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
+        return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
+
+    # Globs of a checkpoint's keys (the first one naming a key wins) to our name, on the format's layers, see
+    # `rename_layer`. E.g. `{"scale": "weight_scale_inv"}` renames `*.scale`
+    checkpoint_renames: dict[str, str] = {}
 
     def update_weight_conversions(self, weight_conversions, model):
-        """
-        Makes the model's converters (from the conversion mapping) load the serialized names. The model's params
-        decide, e.g. for a merge of `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
-        - `experts.gate_up_proj_scale_inv` is a param: a copy merges `experts.*.gate_proj.weight_scale_inv` into it
-        - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
-        """
-        from ..core_model_loading import WeightConverter
-
-        param_names = "\n".join(name for name, _ in model.named_parameters())
-        dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
-        updated = []
-        for converter in weight_conversions:
-            updated.append(converter)
-            if not isinstance(converter, WeightConverter):
-                continue
-            sources, targets = converter._original_source_patterns, converter._original_target_patterns
-            param = sources[0].rpartition(".")[2]
-            serialized = self.serialized_names.get(param)
-            if not serialized or not all(source.endswith(f".{param}") for source in sources):
-                continue
-            # `weight_scale_inv` -> `_scale_inv`
-            suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
-            if suffixes and re.search(f"{targets[0]}{suffixes[0]}$", param_names, re.MULTILINE):
-                # The module keeps the companions as params: each one gets its own copy of the converter
-                for suffix in suffixes:
-                    suffixed_sources = [source + suffix for source in sources]
-                    suffixed_targets = [target + suffix for target in targets]
-                    updated.append(
-                        converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
-                    )
-            elif dequantize is not None:
-                # The module only has `param`: the converter also collects the companions and dequantizes first
-                all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
-                updated[-1] = converter.copy(
-                    all_sources, targets, operations=[dequantize(self)] + converter.operations
-                )
-        return updated + self.get_weight_conversions()
+        """A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"""
+        return weight_conversions
 
 
 class SequentialLlama4TextExperts(ModuleList):

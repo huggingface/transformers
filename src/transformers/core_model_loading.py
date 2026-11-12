@@ -112,6 +112,10 @@ class _IdentityOp(ConversionOps):
     def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
         return input_dict
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return _IdentityOp()
+
 
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
@@ -216,7 +220,9 @@ class Concatenate(ConversionOps):
                 all_tensors.extend(tensors)
             else:
                 all_tensors.append(tensors)
-        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
+        # Tensors without `dim` (e.g. one scale per expert after a merge) are stacked along it
+        join = torch.stack if all_tensors[0].dim() <= self.dim else torch.cat
+        return {target_pattern: join(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern
@@ -897,9 +903,13 @@ class WeightTransform:
         for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
-            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
-            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
-            if re.search(r"[a-zA-Z0-9]$", pattern):
+            # `gate` matches `*.gate`, not `*.gate_*`
+            # `gate` in a WeightConverter matches `*.gate`, not `*.gate_*` nor `*.gate.weight`
+            # `gate_up_proj.weight` matches `gate_up_proj.weight` but also `gate_up_proj.weight_scale_inv`
+            # `gate_` matches `gate_*`
+            if isinstance(self, WeightConverter) and re.fullmatch(r"\w+", pattern):
+                pattern = rf"(?<![^.]){pattern}$"
+            elif re.search(r"[a-zA-Z0-9]$", pattern) and not pattern.endswith(".weight"):
                 pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
@@ -1711,9 +1721,11 @@ def convert_and_load_state_dict_in_model(
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
+        key = original_key if hf_quantizer is None else hf_quantizer.rename_layer(original_key)
         renamed_key, source_pattern = rename_source_key(
-            original_key, renamings, converters, base_model_prefix, meta_model_state_dict
+            key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
+        # FIXME: this should just not happen
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
             renamed_key, source_pattern = rename_source_key(
@@ -1726,22 +1738,17 @@ def convert_and_load_state_dict_in_model(
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
-                # each target key gets its own converter instance
-                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
             # Otherwise, only potential renaming
             else:
-                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                new_converter = WeightRenaming(original_key, renamed_key)
                 source_pattern = original_key
+            # each target key gets its own converter instance, with the ops of its quantizer
+            if hf_quantizer is not None and renamed_key not in param_name_to_load:
+                new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
+            mapping = param_name_to_load.setdefault(renamed_key, new_converter)
 
             # 3. Handle dtype casting
-            needs_quantization = (
-                hf_quantizer
-                and not hf_quantizer.pre_quantized
-                and hf_quantizer.param_needs_quantization(model, renamed_key)
-            )
-            if needs_quantization:
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
-
+            needs_quantization = mapping.quantization_operation is not None  # set by `update_weight_transform`
             _dtype = dtype
             if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)

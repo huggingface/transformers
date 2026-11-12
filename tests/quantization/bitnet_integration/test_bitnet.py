@@ -161,7 +161,8 @@ class BitNetTest(unittest.TestCase):
         gc.collect()
 
     def test_replace_with_bitlinear(self):
-        from transformers.integrations import BitLinear, replace_with_bitnet_linear
+        from transformers.integrations import BitLinear
+        from transformers.quantizers.quantizer_bitnet import BitNetHfQuantizer
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id)
@@ -174,7 +175,9 @@ class BitNetTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model = replace_with_bitnet_linear(model)
+        quantizer = BitNetHfQuantizer(BitNetQuantConfig())
+        quantizer.modules_to_not_convert = None
+        quantizer.replace_modules(model)
         nb_bitnet_linear = 0
         for module in model.modules():
             if isinstance(module, BitLinear):
@@ -254,7 +257,7 @@ class BitNetTest(unittest.TestCase):
         test that the BitNet layer weight shapes are correct, and the weight_scale is correctly initialized to 1
         """
 
-        from transformers.integrations import replace_with_bitnet_linear
+        from transformers.quantizers.quantizer_bitnet import BitNetHfQuantizer
 
         out_features = 1024
         in_features = 512
@@ -277,7 +280,9 @@ class BitNetTest(unittest.TestCase):
                 return self.linear(x)
 
         model = SimpleLinearModule()
-        replace_with_bitnet_linear(model)
+        quantizer = BitNetHfQuantizer(BitNetQuantConfig())
+        quantizer.modules_to_not_convert = None
+        quantizer.replace_modules(model)
 
         self.assertEqual(list(model.linear.weight.shape), [out_features // 4, in_features])
         self.assertEqual(model.linear.weight_scale, 1)

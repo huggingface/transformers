@@ -61,6 +61,34 @@ quantized_model.save_pretrained(quant_path)
 model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
 ```
 
+## Activation schemes
+
+`activation_scheme` sets how activations are quantized:
+
+| scheme | activations |
+|---|---|
+| `"dynamic"` (default) | quantized per token group at runtime |
+| `"static"` | quantized with a stored per-tensor `activation_scale` |
+| `"none"` | not quantized (weight-only FP8): weights are dequantized to the activations' dtype in forward |
+
+`weight_block_size=None` stores one scale per tensor (per-tensor FP8).
+
+## Pre-quantized checkpoints
+
+FP8 checkpoints load without a `quantization_config`, e.g. [Qwen/Qwen3-30B-A3B-FP8](https://huggingface.co/Qwen/Qwen3-30B-A3B-FP8)
+or [deepseek-ai/DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) (`(128, 128)` blocks). Checkpoints that
+name their scales differently load too: DeepSeek-V4's `scale`, Mistral Large 4's `qscale_weight`, and per-tensor FP8's
+`weight_scale` / `input_scale`.
+
+Checkpoints that mix FP8 with other methods per layer load as a [quantization plan](./overview#quantization-plans),
+with fine-grained FP8 for their FP8 layers:
+
+- [DeepSeek-V4](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) is fine-grained FP8 (ue8m0 scales) except for its
+  routed experts, saved as MXFP4 (`expert_dtype: "fp4"`), which load with [MXFP4](./mxfp4).
+- ModelOpt checkpoints with `quant_algo: "MIXED_PRECISION"`, e.g. [nvidia/Qwen3.6-35B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4),
+  list a `quant_algo` per layer: `FP8` (per-tensor, static activations) and `FP8_PB_WO` (`(128, 128)` blocks,
+  weight-only) layers load with fine-grained FP8, `NVFP4` ones with [NVFP4](./nvfp4).
+
 ## DeepGEMM fast path
 
 On Hopper (SM90+) and Blackwell (SM100+) GPUs, every FP8 linear automatically dispatches to the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm) when `weight_block_size=(128, 128)` and `activation_scheme="dynamic"`. DeepGEMM is 3-6x faster than the Triton fallback. Install or upgrade the [kernels](https://github.com/huggingface/kernels) package to enable it.

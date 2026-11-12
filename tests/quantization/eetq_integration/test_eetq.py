@@ -92,8 +92,8 @@ class EetqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from transformers.integrations import replace_with_eetq_linear
         from transformers.integrations.eetq import EetqLinear
+        from transformers.quantizers.quantizer_eetq import EetqHfQuantizer
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -106,7 +106,7 @@ class EetqTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model = replace_with_eetq_linear(model)
+        EetqHfQuantizer(EetqConfig(), pre_quantized=False).replace_modules(model)
         nb_eetq_linear = 0
         for module in model.modules():
             if isinstance(module, EetqLinear):
@@ -117,7 +117,9 @@ class EetqTest(unittest.TestCase):
         # Try with `modules_to_not_convert`
         with torch.device("meta"):
             model = OPTForCausalLM(config)
-        model = replace_with_eetq_linear(model, modules_to_not_convert=["fc1"])
+        quantizer = EetqHfQuantizer(EetqConfig(), pre_quantized=False)
+        quantizer.modules_to_not_convert = ["fc1"]
+        quantizer.replace_modules(model)
         nb_eetq_linear = 0
         for module in model.modules():
             if isinstance(module, EetqLinear):

@@ -448,12 +448,13 @@ if matched_tp_pattern := tp_plan_alt.search(renamed_key):
 
 ## Quantization integration
 
-Quantization hooks into the loading pipeline in two ways, depending on whether the checkpoint is already quantized:
+Every quantized model loads through a `QuantizationPlanHfQuantizer` (built by `AutoHfQuantizer.from_plan`), a quantization plan mapping module patterns to quantizers (a single method is the plan `{"*": quantizer}`; a checkpoint describing its quantization in its own scheme, like ModelOpt's `quantized_layers`, is read into a plan by `read_quantization_schema`). It hooks into the loading pipeline at three points:
 
-- **Pre-quantized checkpoints**: The quantizer provides [`WeightConverter`] instances (via `get_weight_conversions()`) that deserialize quantized tensors. Checkpoint dtypes are preserved to avoid unwanted casts.
-- **On-the-fly quantization**: The quantizer provides a quantization operation that is applied after conversion ops, quantizing weights as they are loaded.
+- **Renaming**: `rename_layer` renames each checkpoint key with its layer's format `checkpoint_renames` (e.g. FP8's `scale` → `weight_scale_inv`) before any [`WeightRenaming`] or [`WeightConverter`] sees it.
+- **Conversions**: `update_weight_conversions` appends each format's converters, which collect a param's `serialized_names` together. A model [`WeightConverter`] whose source ends in `.weight` also matches the tensors named after it, so `mlp.experts.*.gate_proj.weight_scale_inv` goes through the experts merge into `mlp.experts.gate_up_proj_scale_inv`. With `dequantize=True`, the model's converters read the scales into the weight's target instead.
+- **Ops**: `update_weight_transform` gives each param the op of its layer's quantizer, once the param's first key matches a converter. A deserialization runs after the converter's ops, a dequantization before them (so per-block scales apply before the expert merge), and a quantization of a full-precision checkpoint at the end.
 
-The quantizer can also rewrite the entire conversion list at the end of [`get_model_conversion_mapping`] via `update_weight_conversions(...)` — for example, the FP8 dequantizer prepends a `Fp8Dequantize` op to every existing converter so per-block scales are applied *before* any expert-merge / concat ops flatten the per-expert structure.
+Checkpoint dtypes of pre-quantized tensors are preserved to avoid unwanted casts. See [Add a quantized format](./quantization/add_format) for how a format declares these.
 
 ## Fast and efficient model loading
 

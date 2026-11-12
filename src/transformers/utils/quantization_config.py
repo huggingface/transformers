@@ -203,6 +203,13 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
+    def get_loading_attributes(self) -> dict[str, Any]:
+        """
+        The attributes a config passed to `from_pretrained` overrides on the checkpoint's own config (e.g.
+        `dequantize`). None by default.
+        """
+        return {}
+
 
 @dataclass
 class AutoRoundConfig(QuantizationConfigMixin):
@@ -1678,14 +1685,15 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
-@dataclass
+@dataclass(repr=False)  # the JSON repr: a quantization plan shares one quantizer between equal reprs
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
     FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+            How activations are quantized: `"dynamic"`, `"static"` (a stored per-tensor `activation_scale`), or
+            `"none"` for weight-only FP8: the weights are dequantized to the activations' dtype in forward.
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
         dequantize (`bool`, *optional*, defaults to `False`):
@@ -1697,8 +1705,6 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
-        expert_dtype (`str`, *optional*, defaults to `"fp8"`):
-            Format of the MoE experts' weights: `"fp8"`, or `"fp4"` for DeepSeek-V4's FP4-packed experts.
     """
 
     def __init__(
@@ -1709,7 +1715,6 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_not_convert: list | None = None,
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
-        expert_dtype: str = "fp8",
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1723,7 +1728,6 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
-        self.expert_dtype = expert_dtype
         self.post_init()
 
     def post_init(self):
@@ -1731,7 +1735,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         self.activation_scheme = self.activation_scheme.lower()
-        if self.activation_scheme not in ["dynamic", "static"]:
+        if self.activation_scheme not in ["dynamic", "static", "none"]:
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
         if self.weight_block_size is not None and len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")
@@ -1739,8 +1743,6 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
-        if self.expert_dtype not in ("fp8", "fp4"):
-            raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
@@ -2070,17 +2072,33 @@ class NVFP4Config(QuantizationConfigMixin):
     Args:
         modules_to_not_convert (`list[str]`, *optional*):
             Module-name patterns that should remain in their original precision.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize a pre-quantized checkpoint while loading it.
+        weight_only (`bool`, *optional*, defaults to `False`):
+            Whether the pre-quantized checkpoint is weight-only (W4A16): its layers keep their packed weights and
+            dequantize them in each forward, so activations stay in full precision.
         kwargs (`dict[str, Any]`, *optional*):
             Additional values are ignored and reported through the Transformers logger.
     """
 
-    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
+    def __init__(
+        self,
+        modules_to_not_convert: list[str] | None = None,
+        dequantize: bool = False,
+        weight_only: bool = False,
+        **kwargs,
+    ):
         self.quant_method = QuantizationMethod.NVFP4
         self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
+        self.weight_only = weight_only
         if kwargs:
             logger.info(
                 f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
             )
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
 
 
 @dataclass
