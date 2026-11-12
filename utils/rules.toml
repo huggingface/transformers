@@ -911,7 +911,7 @@ diff = '''
 [rules.TRF051]
 description = "Modeling code must not branch on _attn_implementation; the attention interface owns dispatch."
 default_enabled = true
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm5_next", "glm_moe_dsa", "gpt2", "hy_v4", "minimax_m3_vl", "mistral_large4", "qwen2_5_omni"]
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "dots3_note", "falcon", "glm5_next", "glm_moe_dsa", "gpt2", "hy_v4", "minimax_m3_vl", "mistral_large4", "qwen2_5_omni"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."

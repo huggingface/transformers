@@ -42,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "Dots3NoteAudioConfig": ["feature_size"],  # used in __post_init__ to compute conv_output_size
     "NemotronH_Omni_Reasoning_V3_Config": [
         "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
     ],
@@ -323,6 +324,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GlmgaConfig": ["vision_config"],
     # Use the Llama implementation, which the auto mappings point to
     "InternLM3Config": True,
+    "IQuestCoderConfig": True,
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer

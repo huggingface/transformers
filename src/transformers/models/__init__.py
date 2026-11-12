@@ -131,6 +131,7 @@ if TYPE_CHECKING:
     from .doge import *
     from .donut import *
     from .dots1 import *
+    from .dots3_note import *
     from .dpr import *
     from .dpt import *
     from .edgetam import *
@@ -245,6 +246,7 @@ if TYPE_CHECKING:
     from .instructblipvideo import *
     from .internlm3 import *
     from .internvl import *
+    from .iquestcoder import *
     from .jais2 import *
     from .jamba import *
     from .janus import *
