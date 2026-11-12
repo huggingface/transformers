@@ -31,6 +31,8 @@ rendered properly in your Markdown viewer.
 > [!WARNING]
 > The tokenizer is built from the checkpoints' SentencePiece model. Many of its pieces share the same score, and SentencePiece breaks those ties by position, which the `tokenizers` library can't reproduce, so a small fraction of texts tokenize differently from the original remote code.
 
+The auto classes load it with the Llama implementation ([`LlamaModel`] and [`LlamaForCausalLM`]), so only [`IQuestCoderConfig`] is specific to IQuestCoder.
+
 The example below demonstrates how to generate text with the [`AutoModelForCausalLM`] class.
 
 ```python
@@ -49,13 +51,3 @@ print(tokenizer.decode(output[0][inputs["input_ids"].shape[1] :], skip_special_t
 ## IQuestCoderConfig
 
 [[autodoc]] IQuestCoderConfig
-
-## IQuestCoderModel
-
-[[autodoc]] IQuestCoderModel
-    - forward
-
-## IQuestCoderForCausalLM
-
-[[autodoc]] IQuestCoderForCausalLM
-    - forward

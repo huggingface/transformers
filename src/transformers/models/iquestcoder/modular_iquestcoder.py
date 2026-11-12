@@ -17,7 +17,6 @@ from huggingface_hub.dataclasses import strict
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import LlamaForCausalLM, LlamaModel, LlamaPreTrainedModel
 
 
 @auto_docstring(checkpoint="IQuestLab/IQuest-Coder-V1-40B-Instruct")
@@ -25,13 +24,13 @@ from ..llama.modeling_llama import LlamaForCausalLM, LlamaModel, LlamaPreTrained
 class IQuestCoderConfig(LlamaConfig):
     r"""
     ```python
-    >>> from transformers import IQuestCoderConfig, IQuestCoderModel
+    >>> from transformers import AutoModelForCausalLM, IQuestCoderConfig
 
     >>> # Initializing an IQuest-Coder-V1-40B style configuration
     >>> configuration = IQuestCoderConfig()
 
-    >>> # Initializing a model from the IQuest-Coder-V1-40B style configuration
-    >>> model = IQuestCoderModel(configuration)
+    >>> # Initializing a model (which uses the Llama implementation) from that configuration
+    >>> model = AutoModelForCausalLM.from_config(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -72,16 +71,4 @@ class IQuestCoderConfig(LlamaConfig):
             raise ValueError("IQuestCoder does not support `use_sliding_window`.")
 
 
-class IQuestCoderPreTrainedModel(LlamaPreTrainedModel):
-    pass
-
-
-class IQuestCoderModel(LlamaModel):
-    pass
-
-
-class IQuestCoderForCausalLM(LlamaForCausalLM):
-    pass
-
-
-__all__ = ["IQuestCoderConfig", "IQuestCoderPreTrainedModel", "IQuestCoderModel", "IQuestCoderForCausalLM"]
+__all__ = ["IQuestCoderConfig"]

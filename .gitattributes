@@ -269,7 +269,6 @@ src/transformers/models/instructblipvideo/configuration_*.py linguist-generated=
 src/transformers/models/instructblipvideo/modeling_*.py linguist-generated=true
 src/transformers/models/internvl/modeling_*.py linguist-generated=true
 src/transformers/models/iquestcoder/configuration_*.py linguist-generated=true
-src/transformers/models/iquestcoder/modeling_*.py linguist-generated=true
 src/transformers/models/jais2/configuration_*.py linguist-generated=true
 src/transformers/models/jais2/modeling_*.py linguist-generated=true
 src/transformers/models/jamba/modeling_*.py linguist-generated=true
