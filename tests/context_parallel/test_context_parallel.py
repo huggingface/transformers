@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import functools
 import inspect
 import types
 import unittest
@@ -39,7 +38,6 @@ from transformers.distributed.context_parallel import (
     SplitSequenceParallel,
     UlyssesAttention,
     apply_context_parallelism,
-    context_parallel_loss,
 )
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.loss.loss_utils import ForCausalLMLoss
@@ -216,15 +214,25 @@ def _test_attention_kwargs(rank, cp_size):
 def _test_context_parallel_loss(rank, cp_size):
     """Every rank reports the loss of the whole sequences, with the gradient of its own slice times `cp_size`."""
     mesh = _init_cp_mesh("cpu")
+    style, module = ModelContextParallel(), types.SimpleNamespace(config=types.SimpleNamespace(pad_token_id=0))
     batch, seq, vocab_size, num_items_in_batch = 2, 8, 11, 7
     full_logits = _same_on_every_rank(batch, seq, vocab_size)
     labels = torch.randint(0, vocab_size, (batch, seq), generator=torch.Generator().manual_seed(1))
     labels[:, -2:] = -100
-    loss_function = functools.partial(context_parallel_loss, ForCausalLMLoss, mesh)
+
+    def loss_function(local_logits, labels, **kwargs):
+        """The model between the two transforms: its own loss, on its slice of the logits."""
+        _, kwargs = style.transform_inputs_pre_forward(
+            module, (), {"input_ids": labels, "labels": labels, **kwargs}, mesh
+        )
+        loss = ForCausalLMLoss(
+            local_logits, labels, vocab_size, kwargs["num_items_in_batch"], shift_labels=kwargs["shift_labels"]
+        )
+        return style.transform_output_post_forward(module, types.SimpleNamespace(loss=loss), mesh).loss
 
     # this rank holds its slice of the logits, and the labels of the whole sequence
     local_logits = full_logits.chunk(cp_size, dim=1)[rank].detach().clone().requires_grad_(True)
-    loss = loss_function(local_logits, labels, vocab_size)
+    loss = loss_function(local_logits, labels)
     loss.backward()
     torch.testing.assert_close(loss, ForCausalLMLoss(full_logits, labels, vocab_size))
 
@@ -234,14 +242,14 @@ def _test_context_parallel_loss(rank, cp_size):
 
     # a caller's `num_items_in_batch` scales the summed loss, and is not replaced by the token count
     local_logits = full_logits.chunk(cp_size, dim=1)[rank].detach().clone().requires_grad_(True)
-    loss = loss_function(local_logits, labels, vocab_size, num_items_in_batch=num_items_in_batch)
+    loss = loss_function(local_logits, labels, num_items_in_batch=num_items_in_batch)
     expected = ForCausalLMLoss(full_logits, labels, vocab_size, num_items_in_batch=num_items_in_batch)
     torch.testing.assert_close(loss, expected)
 
     # the first rank's slice of the shifted labels is all `-100`: it contributes nothing, and reports no NaN
     no_targets = labels.clone()
     no_targets[:, : seq // cp_size + 1] = -100
-    loss = loss_function(local_logits, no_targets, vocab_size)
+    loss = loss_function(local_logits, no_targets)
     torch.testing.assert_close(loss, ForCausalLMLoss(full_logits, no_targets, vocab_size))
 
 
@@ -463,6 +471,31 @@ class TestModelContextParallel(unittest.TestCase):
         args, kwargs = style.transform_inputs_pre_forward(model, (input_ids,), {"use_cache": True}, _MeshStub(2))
         self.assertEqual(args, (input_ids,))
         self.assertIs(kwargs["use_cache"], False)
+
+    def test_gives_the_loss_this_ranks_shifted_labels(self):
+        model, labels = LlamaForCausalLM(_tiny_config()), torch.tensor([[1, 2, 3, 4]])
+        _, kwargs = ModelContextParallel().transform_inputs_pre_forward(
+            model, (), {"input_ids": labels, "labels": labels}, _MeshStub(2, rank=1)
+        )
+        # the labels stay whole, the loss gets the second half of their shift and the count of the whole sequence
+        torch.testing.assert_close(kwargs["labels"], labels)
+        torch.testing.assert_close(kwargs["shift_labels"], torch.tensor([[4, -100]]))
+        self.assertEqual(kwargs["num_items_in_batch"], 3)
+
+        # a caller's shifted labels and token count are kept: the shift is only sliced
+        _, kwargs = ModelContextParallel().transform_inputs_pre_forward(
+            model,
+            (),
+            {
+                "input_ids": labels,
+                "labels": labels,
+                "shift_labels": torch.tensor([[2, 3, -100, -100]]),
+                "num_items_in_batch": 9,
+            },
+            _MeshStub(2, rank=0),
+        )
+        torch.testing.assert_close(kwargs["shift_labels"], torch.tensor([[2, 3]]))
+        self.assertEqual(kwargs["num_items_in_batch"], 9)
 
     def test_keeps_the_forward_signature(self):
         # `Trainer` reads it to drop the dataset columns the model does not take

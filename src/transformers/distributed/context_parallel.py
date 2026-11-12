@@ -22,16 +22,15 @@ A context parallel plan pairs two kinds of styles:
   `num_heads / cp_size` heads, runs the model's own attention function with the model's own mask, and all-to-alls the
   output back. Another algorithm is a [`ContextParallelAttention`] subclass added to `ALL_CP_STYLES`.
 
-`apply_context_parallelism` checks the model, then installs such a plan on it, [`ModelContextParallel`] on the model
-itself (a forward that refuses a cache and pads the sequences to a multiple of `cp_size`), and `context_parallel_loss`
-as its `loss_function`, which reports the loss of the whole sequences on every rank. The styles share [`ContextParallelLayer`], which has the `install_forward` contract of the tensor and
+`apply_context_parallelism` checks the model, then installs such a plan on it, and [`ModelContextParallel`] on the
+model itself: it refuses a cache, pads the sequences to a multiple of `cp_size`, gives the loss this rank's slice of
+the shifted labels, and reports the loss of the whole sequences on every rank. The styles share [`ContextParallelLayer`], which has the `install_forward` contract of the tensor and
 expert parallel styles.
 """
 
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable
 from functools import partial, wraps
 from typing import TYPE_CHECKING
 
@@ -67,12 +66,15 @@ class ContextParallelLayer:
     """
     Base class of the context parallel styles, with the hooks of `TensorParallelLayer`: `install_forward` replaces
     `module.forward` by one that runs `transform_inputs_pre_forward` first, then the original forward inside
-    `context_around_forward`. The styles shard no parameter, so the parameter hooks of the other parallelisms have no
-    counterpart here.
+    `context_around_forward`, then `transform_output_post_forward`. The styles shard no parameter, so the parameter
+    hooks of the other parallelisms have no counterpart here.
     """
 
     def transform_inputs_pre_forward(self, module: nn.Module, args: tuple, kwargs: dict, cp_mesh: DeviceMesh):
         return args, kwargs
+
+    def transform_output_post_forward(self, module: nn.Module, output, cp_mesh: DeviceMesh):
+        return output
 
     def context_around_forward(self, module: nn.Module, cp_mesh: DeviceMesh):
         return contextlib.nullcontext()
@@ -85,7 +87,8 @@ class ContextParallelLayer:
         def cp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, cp_mesh, **options)
             with self.context_around_forward(module, cp_mesh):
-                return original_forward(*args, **kwargs)
+                output = original_forward(*args, **kwargs)
+            return self.transform_output_post_forward(module, output, cp_mesh)
 
         module.forward = cp_forward
         return module
@@ -203,9 +206,10 @@ def pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
 
 class ModelContextParallel(ContextParallelLayer):
     """
-    The model itself, outside the plan since no plan key names the root module: its forward refuses a cache, which
-    context parallelism does not split, and pads every sequence at the end to a multiple of `cp_size`, before the
-    model builds its masks from them.
+    The model itself, outside the plan since no plan key names the root module. Its inputs lose the cache, which
+    context parallelism does not split, are padded at the end to a multiple of `cp_size` before the model builds its
+    masks from them, and carry this rank's slice of the shifted labels with the token count of the whole sequences.
+    Its loss is the one of the whole sequences, which every rank reports.
     """
 
     def transform_inputs_pre_forward(self, module: nn.Module, args: tuple, kwargs: dict, cp_mesh: DeviceMesh):
@@ -220,64 +224,56 @@ class ModelContextParallel(ContextParallelLayer):
         if tokens is None:
             tokens = kwargs["inputs_embeds"]
         pad_len = -tokens.shape[1] % cp_mesh.size()
-        if pad_len == 0:
-            return args, kwargs
+        if pad_len:
+            pad_token_id = getattr(module.config, "pad_token_id", None) or 0
+            if args:
+                args = (pad_sequence(args[0], pad_len, pad_token_id),) + args[1:]
+            padding_values = {
+                "input_ids": pad_token_id,
+                "inputs_embeds": 0,
+                "attention_mask": 0,
+                "labels": -100,
+                "shift_labels": -100,
+            }
+            for name, value in padding_values.items():
+                if kwargs.get(name) is not None:
+                    kwargs[name] = pad_sequence(kwargs[name], pad_len, value)
+            if kwargs.get("position_ids") is not None:
+                # the padding continues the positions of the last document of every row
+                position_ids = kwargs["position_ids"]
+                steps = torch.arange(1, pad_len + 1, device=position_ids.device)
+                kwargs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
 
-        pad_token_id = getattr(module.config, "pad_token_id", None) or 0
-        if args:
-            args = (pad_sequence(args[0], pad_len, pad_token_id),) + args[1:]
-        padding_values = {
-            "input_ids": pad_token_id,
-            "inputs_embeds": 0,
-            "attention_mask": 0,
-            "labels": -100,
-            "shift_labels": -100,
-        }
-        for name, value in padding_values.items():
-            if kwargs.get(name) is not None:
-                kwargs[name] = pad_sequence(kwargs[name], pad_len, value)
-        if kwargs.get("position_ids") is not None:
-            # the padding continues the positions of the last document of every row
-            position_ids = kwargs["position_ids"]
-            steps = torch.arange(1, pad_len + 1, device=position_ids.device)
-            kwargs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
+        labels = kwargs.get("labels")
+        if labels is not None:
+            shift_labels = kwargs.get("shift_labels")
+            if shift_labels is None:
+                shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
+            if kwargs.get("num_items_in_batch") is None:
+                kwargs["num_items_in_batch"] = (shift_labels != -100).sum()
+            kwargs["shift_labels"] = split_sequence(shift_labels, 1, cp_mesh)
         return args, kwargs
 
-
-def context_parallel_loss(
-    loss_function: Callable,
-    cp_mesh: DeviceMesh,
-    logits: torch.Tensor,
-    labels: torch.Tensor,
-    vocab_size: int,
-    num_items_in_batch: torch.Tensor | None = None,
-    **kwargs,
-) -> torch.Tensor:
-    """
-    The loss of the whole sequences, which every rank reports, from this rank's slice of the logits and its slice of
-    the shifted labels. Its gradient stays this rank's, multiplied by `cp_size`, so that FSDP2's average over the cp
-    ranks gives the gradient of the full-sequence loss.
-    """
-    shift_labels = kwargs.pop("shift_labels", None)
-    if shift_labels is None:
-        shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)
-    if num_items_in_batch is None:
-        num_items_in_batch = (shift_labels != -100).sum()
-    kwargs["shift_labels"] = split_sequence(shift_labels, 1, cp_mesh)
-    loss = loss_function(logits, labels, vocab_size, num_items_in_batch=num_items_in_batch, **kwargs)
-
-    total = loss.detach().clone()
-    dist.all_reduce(total, group=cp_mesh.get_group())
-    return total + (loss - loss.detach()) * cp_mesh.size()
+    def transform_output_post_forward(self, module: nn.Module, output, cp_mesh: DeviceMesh):
+        """
+        The loss of the whole sequences from this rank's partial loss. Its gradient stays this rank's, multiplied by
+        `cp_size`, so that FSDP2's average over the cp ranks gives the gradient of the full-sequence loss.
+        """
+        loss = getattr(output, "loss", None)
+        if loss is None:
+            return output
+        total = loss.detach().clone()
+        dist.all_reduce(total, group=cp_mesh.get_group())
+        output.loss = total + (loss - loss.detach()) * cp_mesh.size()
+        return output
 
 
 def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: dict[str, str]) -> nn.Module:
     """
-    Let the ranks of `cp_mesh` split every sequence: `ModelContextParallel` on the model and `context_parallel_loss`
-    as its loss, then the plan, whose `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention
-    modules run their attention over the whole sequence. The model's own forward refuses a cache and pads the sequences
-    to a multiple of `cp_size`. Raises a `ValueError` if context parallelism would silently change the logits or the
-    loss of `model`.
+    Let the ranks of `cp_mesh` split every sequence: `ModelContextParallel` on the model, then the plan, whose
+    `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention modules run their attention over
+    the whole sequence. Raises a `ValueError` if context parallelism would silently change the logits or the loss of
+    `model`.
     """
     if not model._supports_attention_backend:
         raise ValueError(
@@ -305,7 +301,6 @@ def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: di
         )
 
     ModelContextParallel().install_forward(model, cp_mesh)
-    model.loss_function = partial(context_parallel_loss, model.loss_function, cp_mesh)
     modules = dict(model.named_modules())
     # the first decoder layer still gets the whole sequence: it is the one that cuts it
     first_layer = next(name for name, style in cp_plan.items() if style == "cp_split_sequence")
