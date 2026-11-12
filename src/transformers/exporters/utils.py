@@ -548,8 +548,7 @@ def prepare_for_export(
     # repeat_interleave, or itertools.groupby — untraceable by dynamo.
     # TODO: use the collator API once it covers these cases.
     if hasattr(model, "config"):
-        with torch.no_grad():
-            inputs.update(precompute_export_inputs(model.config, inputs))
+        inputs.update(precompute_export_inputs(model.config, inputs))
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).

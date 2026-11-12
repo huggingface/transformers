@@ -405,14 +405,15 @@ def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]
     """
     inputs = dict(inputs)
 
-    if inputs.get("position_ids") is None and inputs.get("input_ids") is not None:
-        # Prefill: ids span the whole mask; a dict of masks (or none) counts as prefill.
-        attn_mask = inputs.get("attention_mask")
-        is_prefill = not isinstance(attn_mask, torch.Tensor) or inputs["input_ids"].shape[1] == attn_mask.shape[1]
-        if is_prefill and (rope_index := get_rope_index_from_config(config, inputs)) is not None:
-            inputs["position_ids"] = rope_index[0]
+    with torch.no_grad():
+        if inputs.get("position_ids") is None and inputs.get("input_ids") is not None:
+            # Prefill: ids span the whole mask; a dict of masks (or none) counts as prefill.
+            attn_mask = inputs.get("attention_mask")
+            is_prefill = not isinstance(attn_mask, torch.Tensor) or inputs["input_ids"].shape[1] == attn_mask.shape[1]
+            if is_prefill and (rope_index := get_rope_index_from_config(config, inputs)) is not None:
+                inputs["position_ids"] = rope_index[0]
 
-    for markers, preparer in _EXPORT_INPUT_PREPARERS.items():
-        if all(inputs.get(m) is not None for m in markers):
-            preparer(config, inputs)
+        for markers, preparer in _EXPORT_INPUT_PREPARERS.items():
+            if all(inputs.get(m) is not None for m in markers):
+                preparer(config, inputs)
     return inputs
