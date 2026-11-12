@@ -42,6 +42,7 @@ from transformers import (
 from transformers.testing_utils import (
     CaptureLogger,
     is_flaky,
+    is_moe_model,
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
@@ -122,10 +123,6 @@ if is_torch_available():
 from unittest.mock import patch
 
 from tests.exporters.test_export import ExportGenerateTesterMixin
-
-
-def is_moe_model(config):
-    return getattr(config, "_experts_implementation", None) is not None
 
 
 class GenerationTesterMixin(ExportGenerateTesterMixin):
@@ -782,7 +779,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # some models requires larger tolerance
             if model.config.model_type in ["vibevoice_asr"]:
                 atol = rtol = 5e-3
-            elif is_moe_model(config):
+            elif is_moe_model(model):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -865,7 +862,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             # The two outputs must match and their shape must be as expected
-            if is_moe_model(config):
+            if is_moe_model(model):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1235,7 +1232,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
-            if is_moe_model(config):
+            if is_moe_model(model):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1408,7 +1405,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            if is_moe_model(config):
+            if is_moe_model(model):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -1679,7 +1676,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                if is_moe_model(config):
+                if is_moe_model(model):
                     # MoE routing accumulates FP noise across experts (different routing decisions
                     # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
@@ -1850,7 +1847,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     "See the test logs for more details."
                 )
 
-            if is_moe_model(config):
+            if is_moe_model(model):
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
@@ -5649,7 +5646,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         # The two sets of generated text and past kv should be equal to each other
-        if is_moe_model(model.config):
+        if is_moe_model(model):
             atol = rtol = 1e-3
         else:
             atol = rtol = 1e-5
