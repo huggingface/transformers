@@ -44,6 +44,8 @@ The loss follows the [official implementation](https://github.com/LiQiiiii/Jeva/
 candidate cross-entropy plus binary coverage loss when `allow_null=True`. It returns standard `loss` and `logits`
 for `Trainer` and TRL. Pass `num_items_in_batch` to normalize by decisions across accumulation steps.
 
+Training updates the encoder and decision head by default. MoE router auxiliary losses are not added automatically.
+
 `outputs.logits` contains conditional candidate log probabilities and `outputs.coverage_logits` contains coverage logits. For a nullable choice, candidate probabilities are `sigmoid(coverage_logits) * exp(logits)` and null probability is `sigmoid(-coverage_logits)`. For a closed choice, use `exp(logits)` directly.
 
 After training, save and reload with `save_pretrained` and `AutoModelForDecision.from_pretrained`. The [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) accepts the shared `state` / `questions` schema. A choice with `allow_null=True` also returns `null_probability` and can return `choice=None`. Score questions can supply numeric `values` for their rubric levels.
