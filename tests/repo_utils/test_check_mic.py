@@ -220,6 +220,20 @@ class CheckMicTest(unittest.TestCase):
         self.assertEqual(warning[1:3], ["    T5  slim", "    CLIP  slim"])
         self.assertNotIn("    BERT  slim", warning)
 
+    def test_failures_are_red_only_when_the_checker_shows_a_terminal(self):
+        record = {"contract": "r", "contract_name": "CLIP", "target": "slim", "status": "fail", "failures": ["x"]}
+        passed = {**record, "contract_name": "BERT", "status": "pass", "failures": []}
+        with patch.dict(os.environ, {"CHECKERS_COLOR": ""}):
+            self.assertEqual(check_mic.format_record(record)[0], "✗ CLIP  slim  fail")
+        with patch.dict(os.environ, {"CHECKERS_COLOR": "1"}):
+            self.assertEqual(check_mic.format_record(record)[0], "\033[31m✗ CLIP  slim  fail\033[0m")
+            self.assertEqual(check_mic.format_record(record)[1], "    x")
+            self.assertEqual(check_mic.format_record(passed)[0], "✓ BERT  slim  pass")
+            self.assertRegex(
+                check_mic.format_summary({"pass": 2, "fail": 1}, 1.0),
+                r"^MIC: 2 passed, \033\[31m1 failed\033\[0m in 1.0s$",
+            )
+
     def test_dict_mismatch_lists_only_differing_keys(self):
         failure = (
             "runtime: {'device': 'cpu', 'dtype': 'bfloat16', 'attn_implementations': {'audio_config': 'sdpa'}}"

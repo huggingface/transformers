@@ -50,6 +50,14 @@ STATUS = {
     "unsupported": "-",
     "recorded": "+",
 }
+FAILED = ("fail", "error")
+
+
+def red(text):
+    """`text` in red when the checker shows this output in a terminal (`utils/checkers.py` sets CHECKERS_COLOR)."""
+    return f"\033[31m{text}\033[0m" if os.environ.get("CHECKERS_COLOR") == "1" else text
+
+
 # Raw runner lines kept for context when a run fails without explaining itself.
 TAIL_LINES = 30
 
@@ -337,7 +345,8 @@ def format_record(record, note=""):
     variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
     seconds = f"  {record['seconds']:.1f}s" if "seconds" in record else ""
     label = f"{status} ({note})" if note else status
-    lines = [f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {label}{seconds}"]
+    headline = f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {label}{seconds}"
+    lines = [red(headline) if status in FAILED else headline]
     if status == "xfail":
         lines.append(f"    known failure: {record.get('known_failure', '?')}")
     for failure in record.get("failures", []):
@@ -378,7 +387,11 @@ def format_selection(selection):
 
 
 def format_summary(counts, elapsed):
-    parts = [f"{counts[k]} {word}" for k, word in SUMMARY_WORDS.items() if counts.get(k)]
+    parts = [
+        red(f"{counts[k]} {word}") if k in FAILED else f"{counts[k]} {word}"
+        for k, word in SUMMARY_WORDS.items()
+        if counts.get(k)
+    ]
     return f"MIC: {', '.join(parts) or 'nothing ran'} in {elapsed:.1f}s"
 
 

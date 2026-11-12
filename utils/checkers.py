@@ -365,7 +365,9 @@ class SlidingWindow:
             # A line starting with "\r" redraws the previous one in place (e.g. a progress bar).
             if line.startswith("\r") and self.lines:
                 self.lines.pop()
-            self.lines.append(line.lstrip("\r").rstrip()[: self.term_width])
+            shown = line.lstrip("\r").rstrip()[: self.term_width]
+            # Truncation can cut a colored line before its reset code: never let the color bleed.
+            self.lines.append(shown + RESET if "\033[" in shown else shown)
             self._redraw()
 
     def finish(self, success, elapsed=None, show_lines=True):
@@ -637,6 +639,9 @@ def main():
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
+    if is_tty and "NO_COLOR" not in os.environ:
+        # Checkers write to a pipe, so they cannot see the terminal: tell them they may use color.
+        os.environ["CHECKERS_COLOR"] = "1"
 
     if not is_tty and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
