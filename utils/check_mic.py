@@ -644,15 +644,19 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     return 1 if failed else returncode
 
 
+def installed_mic_version():
+    from importlib.metadata import version
+
+    return version("transformers-mic")
+
+
 def missing_requirements():
     """Check if mic (0.1.2 or newer: its runtime extra pulls num2words) and hf-doc-builder are installed"""
     if importlib.util.find_spec("transformers_mic") is None:
         return True
-    from importlib.metadata import version
-
     from packaging.version import Version
 
-    if Version(version("transformers-mic")) < Version("0.1.2"):
+    if Version(installed_mic_version()) < Version("0.1.2"):
         return True
     try:
         from doc_builder.testing import DocIntegrationTest  # noqa: F401
