@@ -38,7 +38,7 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_moe_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
 

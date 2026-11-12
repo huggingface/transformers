@@ -13,23 +13,14 @@
 # limitations under the License.
 import re
 
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
 
 
 @auto_docstring
@@ -42,7 +33,11 @@ class HunYuanVLProcessor(ProcessorMixin):
     build HunYuanVL's multimodal RoPE position ids at runtime.
     """
 
-    valid_processor_kwargs = HunYuanVLProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "add_special_tokens": False,
+    }
+    return_mm_token_type_ids = True
 
     def __init__(
         self, image_processor=None, tokenizer=None, chat_template=None, cat_extra_token: bool = True, **kwargs
@@ -110,25 +105,11 @@ class HunYuanVLProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[HunYuanVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
-        if images is not None and text is not None:
-            if any(not isinstance(prompt, str) for prompt in text):
-                raise ValueError(
-                    "`HunYuanVLProcessor` expects string prompts when multimodal inputs are provided so that multimodal "
-                    "placeholder tokens can be expanded before tokenization."
-                )
-
-            num_image_tokens = sum(prompt.count(self.image_token) for prompt in text)
-            num_images = len(make_flat_list_of_images(images))
-            if num_image_tokens != num_images:
-                raise ValueError(
-                    f"Number of {self.image_token} tokens in text ({num_image_tokens}) does not match the number of "
-                    f"images ({num_images})."
-                )
-
+        if text is not None:
             for prompt in text:
                 for match in re.finditer(re.escape(self.image_token), prompt):
                     if not self._has_wrappers(
@@ -145,8 +126,7 @@ class HunYuanVLProcessor(ProcessorMixin):
         """Compute the number of placeholder tokens needed for the given list of image sizes."""
         vision_data: dict = {}
         if image_sizes is not None:
-            images_kwargs = HunYuanVLProcessorKwargs._defaults.get("images_kwargs", {}).copy()
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
 
             num_image_patches_size = [
@@ -166,5 +146,7 @@ class HunYuanVLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"HunYuanVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["HunYuanVLProcessor"]

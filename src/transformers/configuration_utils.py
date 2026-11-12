@@ -403,6 +403,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
+    # EXPERIMENTAL: files of checkpoints that ship a decision head next to their weights, read with them
+    extra_files: ClassVar[tuple[str, ...]] = ()  # safetensors weights
+    extra_config_files: ClassVar[tuple[str, ...]] = ()  # json configs
 
     # Attributes set internally when saving and used to infer model
     # class for `Auto` mapping

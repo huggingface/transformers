@@ -718,6 +718,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2SamVisionConfig
     _input_embed_layer = "patch_embed"
     config: DeepseekOcr2SamVisionConfig
 
@@ -785,13 +786,13 @@ class DeepseekOcr2VisionEncoderLayer(Qwen2DecoderLayer):
 
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2VisionEncoderConfig
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
-    config: DeepseekOcr2VisionConfig
 
-    def __init__(self, config: DeepseekOcr2VisionConfig):
+    def __init__(self, config: DeepseekOcr2VisionEncoderConfig):
         super().__init__(config)
         del self.embed_tokens
         self.layers = nn.ModuleList(

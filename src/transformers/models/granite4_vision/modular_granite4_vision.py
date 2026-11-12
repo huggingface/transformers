@@ -28,9 +28,11 @@ from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
@@ -126,7 +128,7 @@ class Granite4VisionConfig(LlavaNextConfig):
 
     model_type = "granite4_vision"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite4_vision_text"),
+        "text_config": Granite4VisionTextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
         "qformer_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -533,6 +535,12 @@ class Granite4VisionModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states(
+        lambda self: [
+            *(vision_layer for vision_layer, _ in self.config.deepstack_layer_map),
+            self.config.spatial_vision_layer,
+        ]
+    )
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -573,7 +581,6 @@ class Granite4VisionModel(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
@@ -803,6 +810,8 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         return mm_encoder_output
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Granite4VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Granite4VisionConfig",

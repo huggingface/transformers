@@ -1798,7 +1798,7 @@ class TrainingArguments:
                 raise ValueError("lr_scheduler_type greedy requires an eval strategy")
 
         if self.warmup_steps < 0:
-            raise ValueError("warmup_steps must be an integer or a float")
+            raise ValueError(f"Got warmup_steps = {self.warmup_steps}, Expected value warmup_steps >= 0")
 
         if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
             raise ValueError(

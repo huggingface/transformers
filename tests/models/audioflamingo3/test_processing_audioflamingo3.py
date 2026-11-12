@@ -22,7 +22,6 @@ from parameterized import parameterized
 
 from transformers import (
     AudioFlamingo3Processor,
-    AutoProcessor,
     AutoTokenizer,
     WhisperFeatureExtractor,
 )
