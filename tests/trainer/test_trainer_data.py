@@ -334,12 +334,12 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
             {"logits": logits}, labels, shift_labels=shift_labels, num_items_in_batch=count
         )
         scores = reference_logits[:, :-1] if shift_labels else reference_logits
-        log_probs = nn.functional.log_softmax(scores, dim=-1).float()
+        log_probs = nn.functional.log_softmax(scores, dim=-1)
         denominator = active_count if count is None else count
         expected_nll = nn.functional.nll_loss(
-            log_probs.reshape(-1, 64), shifted_labels.reshape(-1), reduction="sum"
-        ) / denominator
-        expected_uniform = -log_probs[shifted_labels.ne(-100)].sum() / (denominator * 64)
+            log_probs.reshape(-1, 64), shifted_labels.reshape(-1), reduction="none"
+        ).float().sum() / denominator
+        expected_uniform = -log_probs.float()[shifted_labels.ne(-100)].sum() / (denominator * 64)
         expected = (1 - epsilon) * expected_nll + epsilon * expected_uniform
         self.assertTrue(torch.isfinite(actual))
         torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
@@ -379,13 +379,13 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
             output = model(tokens)
             reference_output = reference(tokens)
             actual = LabelSmoother(0.1)(output, labels, shift_labels=True)
-            log_probs = nn.functional.log_softmax(reference_output.logits[:, :-1], dim=-1).float()
+            log_probs = nn.functional.log_softmax(reference_output.logits[:, :-1], dim=-1)
             targets = labels[:, 1:]
             count = targets.ne(-100).sum()
             expected_nll = nn.functional.nll_loss(
-                log_probs.reshape(-1, 64), targets.reshape(-1), reduction="sum"
-            ) / count
-            expected_uniform = -log_probs[targets.ne(-100)].sum() / (count * 64)
+                log_probs.reshape(-1, 64), targets.reshape(-1), reduction="none"
+            ).float().sum() / count
+            expected_uniform = -log_probs.float()[targets.ne(-100)].sum() / (count * 64)
             expected = 0.9 * expected_nll + 0.1 * expected_uniform
             self.assertTrue(torch.isfinite(actual))
             torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
