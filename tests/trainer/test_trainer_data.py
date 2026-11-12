@@ -24,6 +24,7 @@ import warnings
 
 import numpy as np
 import torch
+from parameterized import parameterized
 from torch import nn
 
 from transformers import (
@@ -308,6 +309,94 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         log_probs[2, 3] = 0.0
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
         torch.testing.assert_close(label_smoothed_loss, expected_loss)
+
+    @parameterized.expand(
+        [
+            (dtype, count_kind, shift_labels, epsilon)
+            for dtype in (torch.float16, torch.bfloat16)
+            for count_kind in ("inferred", "integer", "tensor")
+            for shift_labels in (False, True)
+            for epsilon in (0.0, 0.1)
+        ]
+    )
+    def test_label_smoothing_low_precision_reduction(self, dtype, count_kind, shift_labels, epsilon):
+        torch.manual_seed(0)
+        logits = torch.randn(64, 512, 64, dtype=dtype, requires_grad=True)
+        labels = torch.randint(64, (64, 512))
+        labels[:, ::11] = -100
+        reference_logits = logits.detach().clone().requires_grad_()
+        shifted_labels = labels[:, 1:] if shift_labels else labels
+        active_count = int(shifted_labels.ne(-100).sum())
+        count = {"inferred": None, "integer": active_count * 2, "tensor": torch.tensor(active_count * 2)}[
+            count_kind
+        ]
+        actual = LabelSmoother(epsilon)(
+            {"logits": logits}, labels, shift_labels=shift_labels, num_items_in_batch=count
+        )
+        scores = reference_logits[:, :-1] if shift_labels else reference_logits
+        log_probs = nn.functional.log_softmax(scores, dim=-1).float()
+        denominator = active_count if count is None else count
+        expected_nll = nn.functional.nll_loss(
+            log_probs.reshape(-1, 64), shifted_labels.reshape(-1), reduction="sum"
+        ) / denominator
+        expected_uniform = -log_probs[shifted_labels.ne(-100)].sum() / (denominator * 64)
+        expected = (1 - epsilon) * expected_nll + epsilon * expected_uniform
+        self.assertTrue(torch.isfinite(actual))
+        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
+        actual.backward()
+        expected.backward()
+        torch.testing.assert_close(logits.grad, reference_logits.grad, atol=0, rtol=0)
+
+    @parameterized.expand([(dtype, shift) for dtype in (torch.float32, torch.float64) for shift in (False, True)])
+    def test_label_smoothing_preserves_reduction_precision(self, dtype, shift_labels):
+        torch.manual_seed(0)
+        logits = torch.randn(2, 7, 13, dtype=dtype, requires_grad=True)
+        labels = torch.randint(13, (2, 7))
+        actual = LabelSmoother(0.0)({"logits": logits}, labels, shift_labels=shift_labels)
+        scores = logits[:, :-1] if shift_labels else logits
+        targets = labels[:, 1:] if shift_labels else labels
+        expected = nn.functional.cross_entropy(scores.reshape(-1, 13), targets.reshape(-1))
+        self.assertEqual(actual.dtype, dtype)
+        torch.testing.assert_close(actual, expected)
+
+    @parameterized.expand([(torch.float16,), (torch.bfloat16,)])
+    def test_label_smoothing_half_model_updates(self, dtype):
+        torch.manual_seed(0)
+        config = GPT2Config(
+            vocab_size=64, n_positions=128, n_embd=16, n_layer=1, n_head=2,
+            resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0,
+        )
+        model = GPT2LMHeadModel(config).to(dtype=dtype)
+        reference = copy.deepcopy(model)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        reference_optimizer = torch.optim.SGD(reference.parameters(), lr=0.1)
+        for _ in range(2):
+            tokens = torch.randint(64, (256, 128))
+            labels = tokens.clone()
+            labels[:, ::11] = -100
+            optimizer.zero_grad()
+            reference_optimizer.zero_grad()
+            output = model(tokens)
+            reference_output = reference(tokens)
+            actual = LabelSmoother(0.1)(output, labels, shift_labels=True)
+            log_probs = nn.functional.log_softmax(reference_output.logits[:, :-1], dim=-1).float()
+            targets = labels[:, 1:]
+            count = targets.ne(-100).sum()
+            expected_nll = nn.functional.nll_loss(
+                log_probs.reshape(-1, 64), targets.reshape(-1), reduction="sum"
+            ) / count
+            expected_uniform = -log_probs[targets.ne(-100)].sum() / (count * 64)
+            expected = 0.9 * expected_nll + 0.1 * expected_uniform
+            self.assertTrue(torch.isfinite(actual))
+            torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-6)
+            actual.backward()
+            expected.backward()
+            for parameter, reference_parameter in zip(model.parameters(), reference.parameters()):
+                torch.testing.assert_close(parameter.grad, reference_parameter.grad, atol=0, rtol=0)
+            optimizer.step()
+            reference_optimizer.step()
+            for parameter, reference_parameter in zip(model.parameters(), reference.parameters()):
+                torch.testing.assert_close(parameter, reference_parameter, atol=0, rtol=0)
 
     def test_label_smoothing_multi_label_incompatibility(self):
         """Test that Trainer warns and disables label smoothing for multi-label classification"""
