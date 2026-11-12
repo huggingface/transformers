@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -38,22 +39,22 @@ if is_modelopt_available():
 
 @contextmanager
 def _restored_onnxruntime_quantization():
-    """ModelOpt patches ONNX Runtime's calibrators and QDQ quantizer in place for its own calibration
+    """ModelOpt patches ONNX Runtime's quantization modules in place for its own calibration
     (`modelopt.onnx.quantization.ort_patches`) and leaves them patched, which breaks a later `OnnxRuntimeQuantizer` in
-    the same process. Put back every attribute it adds or replaces on them."""
-    from onnxruntime.quantization import base_quantizer, calibrate, qdq_quantizer
-
-    owners = (
-        calibrate,
-        qdq_quantizer,
-        calibrate.CalibraterBase,
-        calibrate.MinMaxCalibrater,
-        calibrate.HistogramCalibrater,
-        calibrate.HistogramCollector,
-        qdq_quantizer.QDQQuantizer,
-        base_quantizer.BaseQuantizer,
-    )
-    snapshots = [(owner, dict(vars(owner))) for owner in owners]
+    the same process. Put back every attribute it adds or replaces on any loaded `onnxruntime.quantization` module or
+    class defined there (ModelOpt imports the ones it patches before this runs)."""
+    modules = [
+        module
+        for name, module in list(sys.modules.items())
+        if module is not None and (name == "onnxruntime.quantization" or name.startswith("onnxruntime.quantization."))
+    ]
+    classes = [
+        value
+        for module in modules
+        for value in vars(module).values()
+        if isinstance(value, type) and value.__module__ == module.__name__
+    ]
+    snapshots = [(owner, dict(vars(owner))) for owner in modules + classes]
     try:
         yield
     finally:
