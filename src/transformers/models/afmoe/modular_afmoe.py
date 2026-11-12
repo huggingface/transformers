@@ -271,7 +271,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "hidden_states": AfmoeDecoderLayer,
         "attentions": AfmoeAttention,
     }
-    _keep_in_fp32_modules = [
+    _keep_in_fp32_modules_strict = [
         "input_layernorm",
         "post_attention_layernorm",
         "pre_mlp_layernorm",

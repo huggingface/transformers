@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import pytest
@@ -108,6 +109,30 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
     )
+
+    def test_keep_in_fp32_source_values(self):
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            keep_fp32 = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
+            self.assertIn("expert_bias", keep_fp32)
+            for name, parameter in model.named_parameters():
+                if keep_fp32.intersection(name.split(".")):
+                    # Ones and zero biases would hide rounding during checkpoint loading.
+                    with torch.no_grad():
+                        parameter.fill_(0.0012345 if "expert_bias" in name else 1.0001234)
+            original = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+            for max_shard_size in ("100KB", "5GB"):
+                with tempfile.TemporaryDirectory() as directory:
+                    model.save_pretrained(directory, max_shard_size=max_shard_size)
+                    for dtype in (torch.bfloat16, torch.float16):
+                        with self.subTest(model=model_class.__name__, dtype=dtype, max_shard_size=max_shard_size):
+                            loaded = model_class.from_pretrained(directory, dtype=dtype, local_files_only=True)
+                            for name, parameter in loaded.named_parameters():
+                                expected = original[name]
+                                if not keep_fp32.intersection(name.split(".")):
+                                    expected = expected.to(dtype)
+                                torch.testing.assert_close(parameter, expected, rtol=0, atol=0)
 
     @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
