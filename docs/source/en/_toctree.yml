@@ -751,6 +751,8 @@
         title: Jamba
       - local: model_doc/jetmoe
         title: JetMoe
+      - local: model_doc/jev
+        title: JEV
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
       - local: model_doc/kimi_linear
@@ -1443,6 +1445,8 @@
         title: LayoutXLM
       - local: model_doc/lfm2_vl
         title: LFM2-VL
+      - local: model_doc/lfm3_vl
+        title: LFM3-VL
       - local: model_doc/lighton_ocr
         title: LightOnOcr
       - local: model_doc/lilt

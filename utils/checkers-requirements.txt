@@ -17,7 +17,6 @@
 # A checker that needs one of these is responsible for saying so when it is missing, and for
 # deciding whether that is fatal: installing may fail, and running the checkers offline is normal.
 
-# `utils/check_reviewers.py` — the resolver it shares with the `Assign PR Reviewers` workflow, so
-# the check and the thing that actually assigns reviewers cannot disagree. Pin this to a released
-# version once transformers-ci is published, the way transformers-mlinter already is.
+# `utils/check_reviewers.py` — the reviewer-file resolver. Pin this to a released version once
+# transformers-ci is published, the way transformers-mlinter already is.
 transformers-ci[reviewers] @ git+https://github.com/huggingface/transformers-ci@main

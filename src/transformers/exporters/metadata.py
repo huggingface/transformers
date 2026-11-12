@@ -1,0 +1,101 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""What an exporter records about each graph it exports: precision, traced inputs, and input/output names."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, fields
+from typing import Any
+
+from .. import __version__
+from ..utils.import_utils import _is_package_available, is_torch_available
+from .utils import get_leaf_tensors
+
+
+if is_torch_available():
+    import torch
+
+
+def _describe_traced_kwarg(value: Any) -> dict[str, Any]:
+    """How one traced kwarg was shaped, as JSON: rank/shape/dtype for a tensor, per leaf for a mapping, and the
+    kind for anything else."""
+    if isinstance(value, torch.Tensor):
+        return {
+            "rank": value.dim(),
+            "shape": [int(dim) for dim in value.shape],
+            "dtype": str(value.dtype).removeprefix("torch."),
+        }
+    if isinstance(value, Mapping):
+        return {"leaves": {str(key): _describe_traced_kwarg(leaf) for key, leaf in value.items()}}
+    return {"container": type(value).__name__}
+
+
+def _traced_output_names(exported_program) -> list[str]:
+    """The model's output leaf names in order, read off the program's output pytree."""
+    spec = exported_program.call_spec.out_spec
+    placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
+    return list(get_leaf_tensors(torch.utils._pytree.tree_unflatten(placeholders, spec)))
+
+
+def _package_versions(packages: Iterable[str]) -> dict[str, str]:
+    """`{package: version}` for transformers and the exporter's packages, as provenance."""
+    versions = {"transformers": __version__}
+    for package in packages:
+        exists, version = _is_package_available(package, return_version=True)
+        if exists and version != "N/A":
+            versions[package] = version
+    return versions
+
+
+@dataclass
+class ExportMetadata:
+    """What the exporter recorded about one graph ([`~exporters.metadata.build_export_metadata`])."""
+
+    architecture: str | None = None
+    packages: dict[str, str] = field(default_factory=dict)
+    dtype: str | None = None
+    device: str | None = None
+    kwargs: dict[str, dict] = field(default_factory=dict)
+    # Flat graph order.
+    input_names: list[str] = field(default_factory=list)
+    output_names: list[str] = field(default_factory=list)
+    export_config: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, values: Mapping[str, Any]) -> ExportMetadata:
+        """Build the metadata from its saved dict, skipping fields this class doesn't have (added by a newer version)."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{name: value for name, value in values.items() if name in known})
+
+
+def build_export_metadata(
+    model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
+) -> ExportMetadata:
+    """Record a graph's precision, traced kwargs and flat input/output order."""
+    graph_signature = exported_program.graph_signature
+    # Includes `ConstantArgument` slots: a positional backend (ExecuTorch) must still bind them.
+    user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
+    return ExportMetadata(
+        architecture=type(model).__name__,
+        packages=_package_versions(packages),
+        # Off the parameters: a split-out component is a plain `nn.Module` with no `.dtype`.
+        dtype=str(
+            next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
+        ).removeprefix("torch."),
+        device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
+        kwargs={name: _describe_traced_kwarg(value) for name, value in inputs.items()},
+        input_names=[arg.name for arg in user_inputs],
+        output_names=_traced_output_names(exported_program),
+    )

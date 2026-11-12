@@ -21,27 +21,21 @@ from ...image_utils import ImageInput, concatenate_list
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
-
-
-class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
 
 
 @auto_docstring
 class InternVLProcessor(ProcessorMixin):
-    valid_processor_kwargs = InternVLProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -81,7 +75,7 @@ class InternVLProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[InternVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -94,7 +88,6 @@ class InternVLProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -139,7 +132,7 @@ class InternVLProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[InternVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
@@ -171,8 +164,7 @@ class InternVLProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = InternVLProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -191,5 +183,7 @@ class InternVLProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"InternVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["InternVLProcessor"]
