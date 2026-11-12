@@ -1020,8 +1020,10 @@ class GraniteSwitchDecoderLayer(GradientCheckpointingLayer):
     `shared_mlp` when `shared_intermediate_size > 0`, or both for the Granite 4 hybrid.
 
     This is the layer for plain LoRA and aLoRA checkpoints. A Shadow Residual checkpoint uses
-    [`GraniteSwitchShadowResidualDecoderLayer`], which subclasses this one and holds exactly the
-    same parameters plus a `cross_stream` injection site.
+    [`GraniteSwitchShadowResidualDecoderLayer`], which holds exactly the same parameters plus a
+    `cross_stream` injection site. The two are siblings rather than parent and child so that each
+    reads on its own in the generated modeling file, which is why the MLP helpers below appear in
+    both.
     """
 
     def __init__(self, config: GraniteSwitchConfig, layer_idx: int):
@@ -1139,22 +1141,43 @@ class GraniteSwitchDecoderLayer(GradientCheckpointingLayer):
         return residual + hidden_states * self.residual_multiplier
 
 
-class GraniteSwitchShadowResidualDecoderLayer(GraniteSwitchDecoderLayer):
+class GraniteSwitchShadowResidualDecoderLayer(GradientCheckpointingLayer):
     """
     A Shadow Residual decoder layer: a frozen base stream and a LoRA'd adapter stream, run through
     one set of weights.
 
-    It holds exactly the parameters of its single-stream parent plus one `cross_stream` injection
-    site. Every module is shared between the two streams -- the base stream simply calls them with
-    `adapter_indices=None`, which makes each switched LoRA linear fall back to its base weight --
-    and K/V always come from the base stream, so the cache stays base-clean.
-
-    Subclassing rather than writing a parallel module is deliberate: there is no second `__init__`
-    that could forget a base-model submodule such as `block_sparse_moe`.
+    It holds exactly the parameters of [`GraniteSwitchDecoderLayer`] plus one `cross_stream`
+    injection site, and the two layers are checkpoint-compatible everywhere else. Every module is
+    shared between the two streams -- the base stream simply calls them with `adapter_indices=None`,
+    which makes each switched LoRA linear fall back to its base weight -- and K/V always come from
+    the base stream, so the cache stays base-clean.
     """
 
     def __init__(self, config: GraniteSwitchConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.residual_multiplier = config.residual_multiplier
+        self.self_attn = GraniteSwitchAttention(config, layer_idx)
+
+        # The expert bank is frozen and carries no LoRA, so it is the upstream module unchanged.
+        # CODEPATH: present on the sparse and hybrid MoE bases, absent on a dense one.
+        self.has_experts = config.num_local_experts > 0
+        self.block_sparse_moe = GraniteSwitchMoE(config) if self.has_experts else None
+
+        # Skipped, not made zero-width, when the base has no dense shared MLP. See
+        # [`GraniteSwitchDecoderLayer`].
+        # CODEPATH: present on the dense and hybrid bases, absent on a pure sparse one.
+        self.has_shared_mlp = config.shared_intermediate_size > 0
+        self.shared_mlp = GraniteSwitchMLP(config) if self.has_shared_mlp else None
+
+        if not self.has_experts and not self.has_shared_mlp:
+            raise ValueError(
+                "A decoder layer needs at least one MLP path, but this config has neither: "
+                "`num_local_experts=0` and `shared_intermediate_size=0`."
+            )
+
+        self.input_layernorm = GraniteSwitchRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GraniteSwitchRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # The one place the base stream feeds the adapter stream. Its base weight is zeroed in
         # `GraniteSwitchPreTrainedModel._init_weights`, so the site contributes only the selected
@@ -1166,6 +1189,47 @@ class GraniteSwitchShadowResidualDecoderLayer(GraniteSwitchDecoderLayer):
             config.cross_stream_rank,
             bias=False,
         )
+
+    def _route(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Run the frozen router alone, without touching the expert bank, so that both streams can be
+        partitioned by one routing decision. See [`GraniteSwitchDecoderLayer._route`].
+        """
+        flat = hidden_states.reshape(-1, hidden_states.shape[-1])
+        _, top_k_weights, top_k_index = self.block_sparse_moe.router(flat)
+        return top_k_index, top_k_weights
+
+    def _apply_experts(self, hidden_states: torch.Tensor, routing: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """The expert bank under a routing decision made elsewhere."""
+        top_k_index, top_k_weights = routing
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        flat = hidden_states.reshape(-1, hidden_size)
+        expert_output = self.block_sparse_moe.experts(flat, top_k_index, top_k_weights)
+        return expert_output.view(batch_size, seq_len, hidden_size)
+
+    def _mlp_block(
+        self,
+        hidden_states: torch.Tensor,
+        adapter_indices: torch.Tensor | None,
+        routing: tuple[torch.Tensor, torch.Tensor] | None,
+    ) -> torch.Tensor:
+        """
+        The expert bank (where there is one) plus the dense shared MLP (where there is one), for a
+        single stream, reusing a partition `_route` produced on the *other* stream. Only the routing
+        is shared: the shared MLP still runs under this stream's own `adapter_indices`.
+
+        `routing` is `None` only when there is no expert bank, in which case it is unused.
+        """
+        moe_output = None
+        if self.has_experts:
+            moe_output = self._apply_experts(hidden_states, routing)
+        if not self.has_shared_mlp:
+            return moe_output
+
+        shared_output = self.shared_mlp(hidden_states, adapter_indices)
+        if moe_output is None:
+            return shared_output
+        return moe_output + shared_output
 
     @auto_docstring
     def forward(
@@ -1255,9 +1319,12 @@ class GraniteSwitchPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _is_stateful = True
+    # Both decoder layers are listed because they are siblings, not parent and child: a recorder on
+    # one does not match the other, and a Shadow Residual model would silently record no hidden
+    # states. Only one of the two is ever built, so there is no double-install.
     _can_record_outputs = {
         "router_logits": OutputRecorder(GraniteSwitchTopKRouter, index=0),
-        "hidden_states": GraniteSwitchDecoderLayer,
+        "hidden_states": [GraniteSwitchDecoderLayer, GraniteSwitchShadowResidualDecoderLayer],
         "attentions": GraniteSwitchAttention,
     }
 
@@ -1472,6 +1539,9 @@ def load_balancing_loss_func(
     # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
     # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
     compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
     tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     total_rows = 0.0
@@ -1484,9 +1554,9 @@ def load_balancing_loss_func(
         routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
         _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
         if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
             )
             # Sum of routing probabilities per expert
             router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
