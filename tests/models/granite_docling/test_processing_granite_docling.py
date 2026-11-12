@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
 
+@unittest.skip(reason="waiting for official ckpts to go public")
 @require_vision
 class GraniteDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GraniteDoclingProcessor

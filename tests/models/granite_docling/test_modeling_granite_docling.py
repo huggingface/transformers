@@ -53,7 +53,7 @@ class GraniteDoclingModelTester(VLMModelTester):
     conditional_generation_class = GraniteDoclingForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("out_hidden_size", kwargs["hidden_size"])
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("shared_intermediate_size", 37)
@@ -98,6 +98,7 @@ class GraniteDoclingModelTester(VLMModelTester):
 @require_torch
 class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = GraniteDoclingModelTester
+    additional_model_inputs = ["pixel_attention_mask"]  # needed for e.g. FA tests
     # Image tokens of all tiles come flattened in tile order, not one row per image
     skip_test_image_features_output_shape = True
     # A batch takes one connector path, so the fine path gets no gradient from the coarse batch of the shared tests
