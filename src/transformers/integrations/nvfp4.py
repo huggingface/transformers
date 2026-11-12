@@ -128,7 +128,9 @@ def nvfp4_linear(
 class NVFP4Linear(nn.Module):
     """Bias-free linear layer backed by packed NVFP4 weights."""
 
-    def __init__(self, in_features: int, out_features: int, weight_only: bool = False):
+    def __init__(
+        self, in_features: int, out_features: int, weight_only: bool = False, static_input_scale: bool = False
+    ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -143,8 +145,9 @@ class NVFP4Linear(nn.Module):
         # As ModelOpt saves them, `weight = fp4 * weight_scale * weight_scale_2`; the W4A16 GEMV reads row-major scales
         self.weight_scale = nn.Buffer(torch.empty(out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8))
         self.weight_scale_2 = nn.Buffer(torch.empty(1, dtype=torch.float32))
-        # Empty for dynamic activation quantization. Weight-only checkpoints save one too, unused
-        self.input_scale = nn.Buffer(torch.empty(0, dtype=torch.float32))
+        # ModelOpt checkpoints save a static activation scale (weight-only ones too, unused). Empty for dynamic
+        # activation quantization, when quantizing a full-precision checkpoint
+        self.input_scale = nn.Buffer(torch.empty(1 if static_input_scale else 0, dtype=torch.float32))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight_only:

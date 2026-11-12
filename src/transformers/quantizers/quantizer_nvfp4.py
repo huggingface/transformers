@@ -137,7 +137,9 @@ class NVFP4HfQuantizer(HfQuantizer):
             )
             return experts_class(module.config, has_gate=has_gate, weight_only=weight_only)
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
-            return NVFP4Linear(module.in_features, module.out_features, weight_only=weight_only)
+            return NVFP4Linear(
+                module.in_features, module.out_features, weight_only=weight_only, static_input_scale=self.pre_quantized
+            )
         return None
 
     def get_quantize_ops(self):

@@ -399,6 +399,21 @@ class NVFP4ExpertsTest(unittest.TestCase):
         # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first
         torch.testing.assert_close(grouped, eager, rtol=0.05, atol=0.05)
 
+    def test_load_linear_with_static_input_scale(self, *_):
+        # ModelOpt's W4A4 linears save a static `input_scale` (e.g. nvidia/Qwen3-30B-A3B-NVFP4's attention)
+        config, checkpoint = _mixtral_checkpoint()
+        config.quantization_config.modules_to_not_convert.remove("q_proj")
+        for layer in range(config.num_hidden_layers):
+            q_proj = f"model.layers.{layer}.self_attn.q_proj"
+            packed, weight_scale, weight_scale_2 = _modelopt_quantize(checkpoint[f"{q_proj}.weight"].float())
+            checkpoint |= {f"{q_proj}.weight": packed, f"{q_proj}.weight_scale": weight_scale}
+            checkpoint |= {f"{q_proj}.weight_scale_2": weight_scale_2, f"{q_proj}.input_scale": torch.tensor(1 / 448)}
+        quantized, info = _load(config, MixtralForCausalLM, checkpoint)
+        self.assertFalse(any(info.values()), info)
+        layer = quantized.model.layers[0].self_attn.q_proj
+        self.assertIsInstance(layer, NVFP4Linear)
+        torch.testing.assert_close(layer.input_scale, torch.tensor([1 / 448]))
+
 
 def _expert_parallelism_shards_each_expert(rank, path, weight_only):
     """Each rank holds its half of every expert tensor, swizzled scales included, and the model runs as one process's,
