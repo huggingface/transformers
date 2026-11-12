@@ -22,9 +22,9 @@ construct a model config; they are not a checkpoint or quantization recipe.
 Legacy constructor customizations still run normally but must be migrated into
 ``small_config_overrides`` to appear in the class-level defaults API.
 
-For example, a model can declare ``small_config_overrides = {"hidden_size": 64}``
-and callers can use ``Tester.get_small_config_defaults(hidden_size=128)``.
-The caller's width wins, and any derived head size uses that final width.
+For example, a model declares ``small_config_overrides = {"hidden_size": 64}``
+and ``Tester.get_small_config_defaults()["head_dim"]`` is derived from that width.
+Keyword arguments mirror the tester constructor (``Tester(parent, **kwargs)``).
 """
 
 from copy import deepcopy
