@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -222,6 +223,7 @@ class _MegaMoeExperts(torch.nn.Module):
     """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
 
     num_experts = 2
+    config = SimpleNamespace(_experts_implementation="deepgemm_megamoe")
 
     def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
         self.received = (hidden_states, top_k_index, top_k_weights, process_group)
@@ -230,12 +232,12 @@ class _MegaMoeExperts(torch.nn.Module):
 
 def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
     mesh = init_device_mesh("cpu", (2,))
-    layers = [
+    # `"auto"` runs Mega MoE experts through `MegaMoeEP`, and any other implementation is refused
+    layers = [EpDispatchExpertsParallel().install_forward(_MegaMoeExperts(), mesh, tp_mesh=mesh) for _ in range(2)]
+    with pytest.raises(ValueError, match="deepgemm_megamoe"):
         EpDispatchExpertsParallel().install_forward(
-            _MegaMoeExperts(), mesh, tp_mesh=mesh, ep_implementation="deepgemm_megamoe"
+            _MegaMoeExperts(), mesh, tp_mesh=mesh, ep_implementation="all_to_all"
         )
-        for _ in range(2)
-    ]
     # 3 tokens on 2 ranks: rank 1 gets the last token and one skipped slot
     hidden_states = torch.arange(24.0).view(3, 8) / 10
     top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0]])

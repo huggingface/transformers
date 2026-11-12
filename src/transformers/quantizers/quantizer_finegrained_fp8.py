@@ -149,20 +149,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
         plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
 
-        # DeepGEMM Mega MoE exchanges the tokens inside its kernel, through the `deepgemm_megamoe` implementation's buffers
-        distributed_config = getattr(model.config, "distributed_config", None)
-        if (
-            getattr(model.config, "_experts_implementation", None) == "deepgemm_megamoe"
-            and distributed_config is not None
-        ):
-            if distributed_config.ep_implementation not in ("auto", "deepgemm_megamoe"):
-                raise ValueError(
-                    "DeepGEMM Mega MoE exchanges tokens inside its kernel and only runs with "
-                    f'`ep_implementation="deepgemm_megamoe"`, got '
-                    f"`ep_implementation={distributed_config.ep_implementation!r}`."
-                )
-            distributed_config.ep_implementation = "deepgemm_megamoe"
-
     def is_serializable(self):
         return True
 

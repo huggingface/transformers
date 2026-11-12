@@ -23,11 +23,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DeepseekV4Config,
     FineGrainedFP8Config,
     OPTForCausalLM,
 )
-from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -81,23 +79,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
-
-    def test_megamoe_selects_its_ep_implementation(self):
-        """Mega MoE exchanges the tokens inside its kernel, so loading with it selects the `deepgemm_megamoe` EP
-        implementation and rejects any other."""
-        model = torch.nn.Linear(2, 2)
-        model.config = DeepseekV4Config()
-        model.config._experts_implementation = "deepgemm_megamoe"
-        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
-        for ep_implementation in ("auto", "deepgemm_megamoe"):
-            model.config.distributed_config = DistributedConfig(
-                tp_size=2, ep_size=2, ep_implementation=ep_implementation
-            )
-            quantizer.update_parallel_plan(model, {})
-            self.assertEqual(model.config.distributed_config.ep_implementation, "deepgemm_megamoe")
-        model.config.distributed_config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")
-        with self.assertRaisesRegex(ValueError, "deepgemm_megamoe"):
-            quantizer.update_parallel_plan(model, {})
 
 
 @slow

@@ -364,20 +364,27 @@ class AllReduceEP(EPImplementation):
         return _AllReduceForward.apply(expert_output, ep_group)
 
 
+def _uses_megamoe(experts: nn.Module) -> bool:
+    """Mega MoE experts exchange the tokens inside their kernel, so only `MegaMoeEP` can run them."""
+    return getattr(getattr(experts, "config", None), "_experts_implementation", None) == "deepgemm_megamoe"
+
+
 class AutoEP(EPImplementation):
     """
-    The default: `AllReduceEP` at inference (gradients disabled) when the EP group shares one batch, and `AllToAllEP`
-    in training and wherever the ranks hold different batches. At inference, the all-reduce never reads split sizes
-    back to the host, so decode captures in a CUDA graph.
+    The default: `MegaMoeEP` for Mega MoE experts. Otherwise `AllReduceEP` at inference (gradients disabled) when the EP
+    group shares one batch, and `AllToAllEP` in training and wherever the ranks hold different batches. At inference,
+    the all-reduce never reads split sizes back to the host, so decode captures in a CUDA graph.
     """
 
     def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh):
         super().__init__(experts, ep_mesh, tp_mesh)
         self.all_to_all = AllToAllEP(experts, ep_mesh, tp_mesh)
-        # Only built where it can run: an EP group whose ranks hold different batches has no all-reduce path.
         self.all_reduce = AllReduceEP(experts, ep_mesh, tp_mesh) if self.shares_batch else None
+        self.megamoe = MegaMoeEP(experts, ep_mesh, tp_mesh) if _uses_megamoe(experts) else None
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
+        if self.megamoe is not None:
+            return self.megamoe(hidden_states, top_k_index, top_k_weights)
         if self.all_reduce is not None and not torch.is_grad_enabled():
             return self.all_reduce(hidden_states, top_k_index, top_k_weights)
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
@@ -445,6 +452,11 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
 
     def install_forward(self, module, ep_mesh, *, tp_mesh, ep_implementation="auto"):
         """`tp_mesh` is the group of ranks holding the same batch (size 1 without TP)."""
+        if _uses_megamoe(module) and ep_implementation not in ("auto", "deepgemm_megamoe"):
+            raise ValueError(
+                f'`experts_implementation="deepgemm_megamoe"` runs with `ep_implementation="auto"` or '
+                f'`"deepgemm_megamoe"`, got `ep_implementation={ep_implementation!r}`.'
+            )
         implementations = EPImplementationInterface()
         if ep_implementation not in implementations:
             raise ValueError(
