@@ -207,7 +207,8 @@ CUDART = _Cudart()
 
 
 def _status_str(stream_ptr=None):
-    if S.capture_depth == 0 and stream_ptr is None:
+    # MINIMAL mode (everything except FULL repeats): no CUDA API call at all from the plugin.
+    if not S.full or (S.capture_depth == 0 and stream_ptr is None):
         return "-"
     status = CUDART.stream_status(stream_ptr)
     return _CAPTURE_STATUS.get(status, status)
@@ -367,23 +368,30 @@ def _patch_cuda_graph():
     def capture_begin(self, *args, **kwargs):
         S.capture_count += 1
         S.culprit_reported = False
-        log(
-            f"CUDAGraph.capture_begin #{S.capture_count} test={S.test} args={args} kwargs={kwargs} "
-            f"stream={torch.cuda.current_stream()} thread_mode_before={CUDART.thread_capture_mode()} "
-            f"peek_error={CUDART.peek_error()} {cuda_mem()} threads={_thread_names()}",
-            stack=S.is_target,
-        )
+        if S.full:
+            log(
+                f"CUDAGraph.capture_begin #{S.capture_count} test={S.test} args={args} kwargs={kwargs} "
+                f"stream={torch.cuda.current_stream()} thread_mode_before={CUDART.thread_capture_mode()} "
+                f"peek_error={CUDART.peek_error()} {cuda_mem()} threads={_thread_names()}",
+                stack=True,
+            )
+        else:  # MINIMAL: pure Python only
+            log(
+                f"CUDAGraph.capture_begin #{S.capture_count} test={S.test} kwargs={kwargs} threads={_thread_names()}",
+                live=S.is_target,
+            )
         try:
             out = orig_begin(self, *args, **kwargs)
         except BaseException as e:
             log(f"capture_begin RAISED {e!r}", stack=True)
             raise
         S.capture_depth += 1
-        S.last_status = CUDART.stream_status()
-        log(
-            f"capture started: status={_CAPTURE_STATUS.get(S.last_status, S.last_status)} "
-            f"thread_mode={CUDART.thread_capture_mode()}"
-        )
+        if S.full:
+            S.last_status = CUDART.stream_status()
+            log(
+                f"capture started: status={_CAPTURE_STATUS.get(S.last_status, S.last_status)} "
+                f"thread_mode={CUDART.thread_capture_mode()}"
+            )
         if S.full and _trace_mode_cls is not None:
             mode = _trace_mode_cls(f"capture#{S.capture_count}")
             mode.__enter__()
@@ -396,22 +404,33 @@ def _patch_cuda_graph():
             with contextlib.suppress(Exception):
                 mode.__exit__(None, None, None)
             log(f"capture trace: {mode.n} aten ops traced")
-        status = CUDART.stream_status()
-        log(
-            f"CUDAGraph.capture_end #{S.capture_count} (before) status={_CAPTURE_STATUS.get(status, status)} "
-            f"peek_error={CUDART.peek_error()}"
-        )
-        if status == 2:
-            dump_trace(f"capture #{S.capture_count} is INVALIDATED at capture_end")
-            dump_threads("threads at capture_end with INVALIDATED capture")
+        if S.full:
+            status = CUDART.stream_status()
+            log(
+                f"CUDAGraph.capture_end #{S.capture_count} (before) status={_CAPTURE_STATUS.get(status, status)} "
+                f"peek_error={CUDART.peek_error()}"
+            )
+            if status == 2:
+                dump_trace(f"capture #{S.capture_count} is INVALIDATED at capture_end")
+                dump_threads("threads at capture_end with INVALIDATED capture")
         try:
             return orig_end(self, *args, **kwargs)
         except BaseException as e:
-            log(f"capture_end RAISED {e!r}", stack=True)
+            # Capture failed: CUDA queries are now harmless, so collect everything.
+            log(
+                f"capture_end #{S.capture_count} RAISED {e!r} | status={CUDART.stream_status()} "
+                f"peek_error={CUDART.peek_error()} threads={_thread_names()}",
+                stack=True,
+            )
+            dump_trace(f"trace at capture_end #{S.capture_count} failure")
+            dump_threads(f"threads at capture_end #{S.capture_count} failure")
             raise
         finally:
             S.capture_depth = max(0, S.capture_depth - 1)
-            log(f"CUDAGraph.capture_end #{S.capture_count} (after) {cuda_mem()}")
+            log(
+                f"CUDAGraph.capture_end #{S.capture_count} (after)" + (f" {cuda_mem()}" if S.full else ""),
+                live=S.is_target,
+            )
 
     G.capture_begin, G.capture_end = capture_begin, capture_end
 
@@ -428,8 +447,9 @@ def _patch_cudagraph_trees():
     def _record(self, model, inputs):
         log(
             f"cudagraph_trees._record START graph_id={getattr(self, 'id', '?')} fn={getattr(model, '__name__', model)} "
-            f"n_inputs={len(inputs)} kernel_free={getattr(self.wrapped_function, 'kernel_free_cudagraph', '?')} "
-            f"{cuda_mem()}"
+            f"n_inputs={len(inputs)} kernel_free={getattr(self.wrapped_function, 'kernel_free_cudagraph', '?')}"
+            + (f" {cuda_mem()}" if S.full else ""),
+            live=S.is_target,
         )
         try:
             out = orig_record(self, model, inputs)
@@ -451,7 +471,8 @@ def _patch_cudagraph_trees():
     def warmup_run(self, new_inputs):
         log(
             f"cudagraph_trees warmup START fn={getattr(self.wrapped_function.model, '__name__', '?')} "
-            f"n_inputs={len(new_inputs)} {cuda_mem()}"
+            f"n_inputs={len(new_inputs)}" + (f" {cuda_mem()}" if S.full else ""),
+            live=S.is_target,
         )
         mode = None
         if S.full and _trace_mode_cls is not None:
@@ -535,7 +556,7 @@ def _gc_callback(phase, info):
         return
     if phase == "start":
         log(f"!!! GC start DURING CAPTURE gen={info.get('generation')}", stack=True)
-    else:
+    elif S.full:
         log(f"GC stop during capture collected={info.get('collected')} -> status now={_status_str()}")
         _check_transition(f"GC (gen={info.get('generation')}, collected={info.get('collected')})")
 
@@ -562,7 +583,7 @@ def _patch_ort():
                 stack=during,
                 live=during or S.is_target,
             )
-            if during:
+            if during and S.full:
                 _check_transition(f"ORT session #{sid} finalizer")
 
         weakref.finalize(self, _finalized)
@@ -580,7 +601,7 @@ def _patch_transformers():
     orig_generate = gu.GenerationMixin.generate
 
     def generate(self, *args, **kwargs):
-        if not S.is_target:
+        if not S.full:
             return orig_generate(self, *args, **kwargs)
         log(f"generate START {type(self).__name__} kwargs={sorted(kwargs)} {cuda_mem()}")
         log_obj("generate.inputs", {k: v for k, v in kwargs.items() if k != "generation_config"})
@@ -598,7 +619,7 @@ def _patch_transformers():
 
     def _valid_auto_compile_criteria(self, model_kwargs, generation_config):
         result = orig_crit(self, model_kwargs, generation_config)
-        if S.is_target:
+        if S.full:
             log(f"_valid_auto_compile_criteria -> {result} compile_config={generation_config.compile_config}")
         return result
 
@@ -734,9 +755,9 @@ class CaptureDebugPlugin:
                 gc.callbacks.append(_gc_callback)
         except Exception as e:
             log(f"torch patches failed: {e!r}", stack=True)
-        _patch_ort()
-        _patch_transformers()
-        self.env_logged = False
+        # ORT / transformers patches import onnxruntime and transformers.exporters. Importing them at configure time
+        # changes library load order vs a plain run, which may hide the bug: apply them lazily at the first FULL repeat.
+        self.heavy_patched = False
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):
@@ -763,13 +784,16 @@ class CaptureDebugPlugin:
         S.full = S.is_target and S.repeat_index % 2 == 1
         if S.is_target:
             S.trace.clear()
-            if not self.env_logged:
-                self.env_logged = True
-                _log_environment()  # touches CUDA (device properties), so only once a target is about to run
+            if S.full and not self.heavy_patched:
+                self.heavy_patched = True
+                _patch_ort()
+                _patch_transformers()
+                _log_environment()
             log(
                 f"########## TARGET START {item.nodeid} repeat={S.repeat_index} "
-                f"mode={'FULL (per-op tracing)' if S.full else 'LIGHT'} {cuda_mem()} threads={_thread_names()} "
-                f"gc_count={gc.get_count()} captures_so_far={S.capture_count}"
+                f"mode={'FULL (per-op tracing)' if S.full else 'MINIMAL (pure Python, no CUDA calls)'}"
+                + (f" {cuda_mem()}" if S.full else "")
+                + f" threads={_thread_names()} gc_count={gc.get_count()} captures_so_far={S.capture_count}"
             )
             if S.repeat_index > 0 and RESET_BETWEEN_REPEATS:
                 try:
@@ -780,11 +804,12 @@ class CaptureDebugPlugin:
                 except Exception as e:
                     log(f"dynamo reset failed: {e!r}")
         else:
-            log(f"test start {item.nodeid} {cuda_mem()} threads={len(threading.enumerate())}", live=False)
+            log(f"test start {item.nodeid} threads={len(threading.enumerate())}", live=False)
         yield
         log(
-            f"{'########## TARGET' if S.is_target else 'test'} END {item.nodeid} {cuda_mem()} "
-            f"captures_so_far={S.capture_count}",
+            f"{'########## TARGET' if S.is_target else 'test'} END {item.nodeid}"
+            + (f" {cuda_mem()}" if S.full else "")
+            + f" captures_so_far={S.capture_count}",
             live=S.is_target,
         )
         S.test, S.is_target, S.full = None, False, False
@@ -804,6 +829,22 @@ class CaptureDebugPlugin:
             )
             dump_trace("trace at test failure", n=200)
             dump_threads("threads at test failure")
+            # The failure already happened: CUDA queries / imports can no longer hide it.
+            log(f"after failure: peek_error={CUDART.peek_error()} thread_mode={CUDART.thread_capture_mode()}")
+            _log_environment()
+            log(
+                f"modules loaded at failure: onnxruntime={'onnxruntime' in sys.modules} "
+                f"openvino={'openvino' in sys.modules} transformers.exporters={'transformers.exporters' in sys.modules}"
+            )
+            with contextlib.suppress(Exception), open("/proc/self/maps", encoding="utf-8") as f:
+                libs = sorted(
+                    {
+                        line.split()[-1]
+                        for line in f
+                        if any(k in line for k in ("libcu", "libnv", "cudnn", "onnxruntime"))
+                    }
+                )
+                log("CUDA-related shared libraries loaded (load order unknown, sorted):\n    " + "\n    ".join(libs))
             try:
                 import torch
 
