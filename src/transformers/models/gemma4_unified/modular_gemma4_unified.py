@@ -1035,6 +1035,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -1051,6 +1052,9 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
         pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         split_sizes = non_pad_mask.sum(dim=-1).tolist()
         vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
@@ -1062,6 +1066,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -1088,6 +1093,9 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Flatten valid patches: keep only non-padding patches across all frames
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         num_tokens_per_frame = non_pad_mask.sum(dim=-1)
         split_sizes = [
             int(video_frames.sum())

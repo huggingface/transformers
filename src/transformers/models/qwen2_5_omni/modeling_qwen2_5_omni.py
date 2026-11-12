@@ -1687,10 +1687,13 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        if return_flat:
+            return vision_outputs
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
@@ -1702,10 +1705,13 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        if return_flat:
+            return vision_outputs
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs

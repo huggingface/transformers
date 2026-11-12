@@ -593,10 +593,14 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
+        if return_flat:
+            vision_outputs.pooler_output = image_embeds
+            return vision_outputs
         merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
         split_sizes = (image_grid_thw.prod(-1) // merge_kernel_size).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)

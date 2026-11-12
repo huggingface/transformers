@@ -214,6 +214,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -259,6 +260,9 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
+        if return_flat:
+            image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+            return image_outputs
         image_outputs.pooler_output = [
             f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
         ]

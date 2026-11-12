@@ -85,6 +85,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
+        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -94,6 +95,9 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.pooler_output)
 
+        if return_flat:
+            vision_outputs.pooler_output = image_embeds
+            return vision_outputs
         split_sizes = (image_grid_thw.prod(-1) // self.vision_model.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 

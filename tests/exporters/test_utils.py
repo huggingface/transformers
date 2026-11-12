@@ -46,7 +46,7 @@ from transformers.exporters import utils as exporter_utils
 from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
 from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
-from transformers.exporters.decompose import decompose_multimodal
+from transformers.exporters.decompose import decompose_multimodal, embedded_inputs
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -421,6 +421,32 @@ class DecomposeMultimodalTest(unittest.TestCase):
             expected = model(**inputs).logits
             actual = main.module(**main.inputs).logits
         torch.testing.assert_close(actual, expected)
+
+    def test_vision_graph_runs_on_another_image_count(self):
+        """The vision graph takes any number of images: the getter returns its features as one tensor, which a
+        per-image list would have fixed to the traced count."""
+        from transformers.exporters import DynamoExporter
+        from transformers.exporters.components import ModalityEncoder
+
+        model, _ = _tiny_llava()
+        vision = ModalityEncoder(model.model, "get_image_features")
+        pixel_values = torch.randn(2, 3, 30, 30)
+        exported = DynamoExporter().export(vision, {"pixel_values": pixel_values}, DynamoConfig(dynamic=True))
+        with torch.no_grad():
+            for images in (pixel_values, pixel_values[:1], torch.randn(3, 3, 30, 30)):
+                expected = torch.cat(model.model.get_image_features(images).pooler_output)
+                torch.testing.assert_close(exported(pixel_values=images), expected)
+
+    def test_embedded_inputs_drop_the_modality_side_inputs(self):
+        """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
+        `image_position_ids`), which a text-only call doesn't carry."""
+        inputs = {
+            "inputs_embeds": torch.randn(2, 6, 16),
+            "attention_mask": torch.ones(2, 6, dtype=torch.long),
+            "pixel_values": torch.randn(2, 16, 48),
+            "image_position_ids": torch.zeros(2, 16, 2, dtype=torch.long),
+        }
+        self.assertEqual(sorted(embedded_inputs(inputs, {})), ["attention_mask", "inputs_embeds"])
 
     def test_export_multimodal_exports_each_component(self):
         from transformers.exporters import DynamoExporter
