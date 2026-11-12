@@ -31,6 +31,7 @@ expert parallel styles.
 from __future__ import annotations
 
 import contextlib
+import inspect
 from functools import partial, wraps
 from typing import TYPE_CHECKING
 
@@ -219,17 +220,13 @@ class ModelContextParallel(ContextParallelLayer):
                 "sequences without a cache, or disable context parallelism."
             )
         kwargs["use_cache"] = False
+        if args:  # `model(input_ids, ...)`: by name, like the rest
+            kwargs, args = {**inspect.signature(module.forward).bind_partial(*args).arguments, **kwargs}, ()
 
-        tokens = args[0] if args else kwargs.get("input_ids")
-        if tokens is None:
-            tokens = kwargs["inputs_embeds"]
-        pad_len = -tokens.shape[1] % cp_mesh.size()
-        if pad_len:
-            pad_token_id = getattr(module.config, "pad_token_id", None) or 0
-            if args:
-                args = (pad_sequence(args[0], pad_len, pad_token_id),) + args[1:]
+        tokens = kwargs["inputs_embeds"] if kwargs.get("input_ids") is None else kwargs["input_ids"]
+        if pad_len := -tokens.shape[1] % cp_mesh.size():
             padding_values = {
-                "input_ids": pad_token_id,
+                "input_ids": getattr(module.config, "pad_token_id", None) or 0,
                 "inputs_embeds": 0,
                 "attention_mask": 0,
                 "labels": -100,
@@ -238,14 +235,12 @@ class ModelContextParallel(ContextParallelLayer):
             for name, value in padding_values.items():
                 if kwargs.get(name) is not None:
                     kwargs[name] = pad_sequence(kwargs[name], pad_len, value)
-            if kwargs.get("position_ids") is not None:
+            if (position_ids := kwargs.get("position_ids")) is not None:
                 # the padding continues the positions of the last document of every row
-                position_ids = kwargs["position_ids"]
                 steps = torch.arange(1, pad_len + 1, device=position_ids.device)
                 kwargs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
 
-        labels = kwargs.get("labels")
-        if labels is not None:
+        if (labels := kwargs.get("labels")) is not None:
             shift_labels = kwargs.get("shift_labels")
             if shift_labels is None:
                 shift_labels = torch.nn.functional.pad(labels[..., 1:], (0, 1), value=-100)

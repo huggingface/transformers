@@ -469,7 +469,8 @@ class TestModelContextParallel(unittest.TestCase):
                 model, (), {"input_ids": input_ids, "past_key_values": DynamicCache()}, _MeshStub(2)
             )
         args, kwargs = style.transform_inputs_pre_forward(model, (input_ids,), {"use_cache": True}, _MeshStub(2))
-        self.assertEqual(args, (input_ids,))
+        self.assertEqual(args, ())
+        self.assertIs(kwargs["input_ids"], input_ids)
         self.assertIs(kwargs["use_cache"], False)
 
     def test_gives_the_loss_this_ranks_shifted_labels(self):
@@ -513,7 +514,12 @@ class TestContextParallelPadding(unittest.TestCase):
         return ModelContextParallel().transform_inputs_pre_forward(module, args, kwargs, _MeshStub(2))
 
     def _module(self, pad_token_id=7):
-        return types.SimpleNamespace(config=types.SimpleNamespace(pad_token_id=pad_token_id))
+        """A model stand-in: the config the padding reads, and the signature the positional inputs bind to."""
+
+        def forward(input_ids=None, attention_mask=None, labels=None, **kwargs):
+            pass
+
+        return types.SimpleNamespace(config=types.SimpleNamespace(pad_token_id=pad_token_id), forward=forward)
 
     def test_pads_input_ids_labels_and_the_mask(self):
         input_ids = torch.tensor([[1, 2, 3, 4, 5]])
@@ -536,8 +542,9 @@ class TestContextParallelPadding(unittest.TestCase):
         input_ids = torch.tensor([[1, 2, 3, 4, 5]])
         args, padded = self._prepare(self._module(pad_token_id=None), (input_ids,), labels=input_ids.clone())
 
-        # no `pad_token_id` on the config: the padding token is 0, and a positional input stays positional
-        torch.testing.assert_close(args[0], torch.tensor([[1, 2, 3, 4, 5, 0]]))
+        # no `pad_token_id` on the config: the padding token is 0, and a positional input is passed on by name
+        self.assertEqual(args, ())
+        torch.testing.assert_close(padded["input_ids"], torch.tensor([[1, 2, 3, 4, 5, 0]]))
         torch.testing.assert_close(padded["labels"], torch.tensor([[1, 2, 3, 4, 5, -100]]))
 
     def test_leaves_a_divisible_sequence_alone(self):
