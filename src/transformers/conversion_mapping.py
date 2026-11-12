@@ -1252,6 +1252,10 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "Dots3NoteForConditionalGeneration": [
+            WeightRenaming(r"^audio_encoder\.audio_adapter\.", "audio_adapter."),
+            WeightRenaming(r"^(vision_encoder|audio_encoder|audio_adapter)\.", r"model.\1."),
+        ],
         "Dots3NoteModel": [
             PrefixChange(prefix_to_remove="model"),
             WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
