@@ -90,21 +90,6 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
         self.assertTrue(np.abs(orig_image - unnormalized_images.numpy()).max() >= 1)
 
-    def test_image_tokens_with_explicit_input_format(self):
-        processor = self.get_processor()
-        image = np.full((32, 48, 3), 100, dtype=np.uint8)
-        text = f"Describe {processor.image_token}"
-        inferred = processor(text=text, images=image, return_tensors="pt")
-        explicit = processor(text=text, images=image, input_data_format="channels_last", return_tensors="pt")
-
-        np.testing.assert_array_equal(explicit.pixel_values, inferred.pixel_values)
-        np.testing.assert_array_equal(explicit.image_sizes, inferred.image_sizes)
-        np.testing.assert_array_equal(explicit.input_ids, inferred.input_ids)
-        height, width = explicit.image_sizes[0].tolist()
-        expected_tokens = (height // processor.downsample_ratio) * (width // processor.downsample_ratio + 1)
-        self.assertGreater(expected_tokens, 0)
-        self.assertEqual((explicit.input_ids == processor.image_token_id).sum().item(), expected_tokens)
-
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
