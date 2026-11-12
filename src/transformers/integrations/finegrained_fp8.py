@@ -235,15 +235,10 @@ def fp8_linear(
             to a single CUDA context and produce garbage across devices (see the multi-device guard
             in ``quantizer_finegrained_fp8.py``).
     """
-    # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP8-block-128-only. On SM100 its FP8 GEMM only
-    # consumes UE8M0 scales; float32 scales would be ceil-rounded to UE8M0 without requantizing and
-    # silently corrupt the output (#47030), so we skip DeepGEMM up front for that combo rather than
-    # attempt-then-fall-back every call — `_assert_sm100_requirements` still guards it as a backstop.
-    # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single dispatcher (the
-    # experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation`` for that). Used by the
-    # FP8 MoE batched_mm / grouped_mm paths to avoid a still-unexplained DeepGEMM-vs-Triton interaction that
-    # degrades end-to-end generation on B200 (per-row kernel outputs still measure bit-perfect, but final
-    # tokens drift; not reproducible with the DeepGEMM linear off).
+    # DeepGEMM: CUDA, dynamic activations, SM90+, 128x128 FP8 blocks. On SM100 it only reads UE8M0 scales: float32
+    # ones would silently corrupt the output (#47030), so that combo skips it up front.
+    # `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` forces Triton here only (the experts' `deepgemm` is unaffected): the
+    # FP8 MoE paths use it, as DeepGEMM next to Triton drifts end-to-end generation on B200 (still unexplained).
     deepgemm_preferred = (
         allow_deepgemm
         and is_deepgemm_loadable()
@@ -265,12 +260,8 @@ def fp8_linear(
                 bias=bias,
             )
         except (ImportError, NotImplementedError, ValueError) as e:
-            # DeepGEMM is loadable but declined this specific input; fall back to Triton, which is more
-            # permissive (handles FP8 with float32 or UE8M0 scales on any arch, plus input dtypes
-            # DeepGEMM rejects). If Triton can't serve it either, it raises its own error.
-            #   - NotImplementedError: an arch/input combo DeepGEMM has no kernel for (float32 scales on Blackwell);
-            #   - ValueError: an input DeepGEMM rejects but Triton supports (e.g. activations it won't quantize);
-            #   - ImportError: a symbol/build gap.
+            # DeepGEMM declined this input (no kernel for the arch/input, e.g. float32 scales on Blackwell; an input
+            # it rejects; a missing symbol): Triton is more permissive, and raises its own error if it can't serve it
             logger.warning_once(
                 f"DeepGEMM declined this call, falling back to Triton. Reason: {e} "
                 "Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to skip DeepGEMM for FP8 linear entirely."
