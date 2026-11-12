@@ -32,14 +32,13 @@ from transformers import (
     MistralConfig,
 )
 from transformers.distributed.context_parallel import (
+    ALL_CP_STYLES,
     ContextParallelAttention,
     ModelContextParallel,
     SplitSequenceParallel,
     UlyssesAttention,
     apply_context_parallelism,
-    context_parallel_styles,
 )
-from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.loss.loss_utils import ForCausalLMLoss
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -491,10 +490,5 @@ class TestContextParallelChecks(unittest.TestCase):
 
 class TestContextParallelStyles(unittest.TestCase):
     def test_styles_are_registered(self):
-        self.assertIsInstance(ALL_PARALLEL_STYLES["cp_split_sequence"], SplitSequenceParallel)
-        self.assertIsInstance(ALL_PARALLEL_STYLES["cp_ulysses"], UlyssesAttention)
-        self.assertEqual(context_parallel_styles(), ["cp_split_sequence", "cp_ulysses"])
-
-    def test_a_registered_attention_style_is_a_context_parallel_style(self):
-        with mock.patch.dict(ALL_PARALLEL_STYLES._global_mapping, {"cp_spy": _SpyAttention()}):
-            self.assertIn("cp_spy", context_parallel_styles())
+        self.assertIsInstance(ALL_CP_STYLES["cp_split_sequence"], SplitSequenceParallel)
+        self.assertIsInstance(ALL_CP_STYLES["cp_ulysses"], UlyssesAttention)

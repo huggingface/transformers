@@ -20,7 +20,7 @@ A context parallel plan pairs two kinds of styles:
 - An attention style, `"cp_ulysses"`, on their attention modules, whose attention function runs over the whole
   sequence while the module runs. [`UlyssesAttention`] all-to-alls the query, key and value, so that every rank holds the whole sequence for
   `num_heads / cp_size` heads, runs the model's own attention function with the model's own mask, and all-to-alls the
-  output back. Another algorithm is a [`ContextParallelAttention`] subclass registered in `ALL_PARALLEL_STYLES`.
+  output back. Another algorithm is a [`ContextParallelAttention`] subclass added to `ALL_CP_STYLES`.
 
 `apply_context_parallelism` installs such a plan on a model, and [`ModelContextParallel`] on the model itself: the
 model checks, a forward that refuses a cache, and a `loss_function` that reports the loss of the whole sequences on
@@ -37,7 +37,6 @@ from typing import TYPE_CHECKING
 
 from ..loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .parallel_utils import ALL_PARALLEL_STYLES
 
 
 if TYPE_CHECKING:
@@ -119,8 +118,8 @@ class ContextParallelAttention(ContextParallelLayer):
     """
     Attention module: run its attention function over the whole sequence, when each rank of `cp_mesh` holds a slice
     of it. While the module runs, its entry in `ALL_ATTENTION_FUNCTIONS` is `attention` around the registered
-    function, and it is restored after; the module's forward itself stays as is. A subclass is an algorithm,
-    registered in `ALL_PARALLEL_STYLES` and named in the plan like any style.
+    function, and it is restored after; the module's forward itself stays as is. A subclass is an algorithm, added
+    to `ALL_CP_STYLES` and named in the plan like any style.
     """
 
     def check(self, module: nn.Module, cp_mesh: DeviceMesh) -> None:
@@ -190,19 +189,10 @@ class UlyssesAttention(ContextParallelAttention):
         return _all_to_all(output), attn_weights
 
 
-if is_torch_distributed_available():
-    ALL_PARALLEL_STYLES.register("cp_split_sequence", SplitSequenceParallel())
-    ALL_PARALLEL_STYLES.register("cp_ulysses", UlyssesAttention())
-
-
-def context_parallel_styles() -> list[str]:
-    """The names of the context parallel styles in `ALL_PARALLEL_STYLES`, the registered attention algorithms included."""
-    return [name for name in ALL_PARALLEL_STYLES if isinstance(ALL_PARALLEL_STYLES[name], ContextParallelLayer)]
-
-
-# Layer types that only mix tokens through softmax attention over the whole sequence. Every other one (recurrent,
-# convolutional, sparse-indexer, ...) mixes tokens outside attention and would silently be cut at the slice boundaries.
-SOFTMAX_ATTENTION_LAYER_TYPES = ("full_attention", "sliding_attention", "chunked_attention")
+ALL_CP_STYLES: dict[str, ContextParallelLayer] = {
+    "cp_split_sequence": SplitSequenceParallel(),
+    "cp_ulysses": UlyssesAttention(),
+}
 
 
 class ModelContextParallel(ContextParallelLayer):
@@ -222,8 +212,9 @@ class ModelContextParallel(ContextParallelLayer):
                 "disable context parallelism."
             )
 
+        # every other layer type (recurrent, convolutional, sparse-indexer, ...) mixes tokens outside attention
         layer_types = set(getattr(model.config.get_text_config(), "layer_types", None) or ())
-        if unsupported := layer_types - set(SOFTMAX_ATTENTION_LAYER_TYPES):
+        if unsupported := layer_types - {"full_attention", "sliding_attention", "chunked_attention"}:
             raise ValueError(
                 f"Context parallelism does not support the {sorted(unsupported)} layers of {model.__class__.__name__}: "
                 "they mix tokens outside softmax attention, so they would run on this rank's slice only and be silently "
@@ -292,5 +283,5 @@ def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: di
     first_layer = next(name for name, style in cp_plan.items() if style == "cp_split_sequence")
     for name, style in cp_plan.items():
         options = {"split_hidden_states": name == first_layer} if style == "cp_split_sequence" else {}
-        ALL_PARALLEL_STYLES[style].install_forward(modules[name], cp_mesh, **options)
+        ALL_CP_STYLES[style].install_forward(modules[name], cp_mesh, **options)
     return model
