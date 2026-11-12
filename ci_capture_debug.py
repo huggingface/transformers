@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "repeat_only")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "imports_only")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -745,6 +745,20 @@ class CaptureDebugPlugin:
             f"reset={RESET_BETWEEN_REPEATS} log_file={S.fh.name}"
         )
         self.heavy_patched = False
+        if PLUGIN_MODE == "imports_only":
+            # Bisect step: "repeat_only" reproduced the failure (deepseek + whisper originals FAILED), all patched modes
+            # hid it. The patched modes import these modules (and so triton) at configure time: only do that here.
+            try:
+                import torch._inductor.cudagraph_trees  # noqa: F401
+                import torch._inductor.runtime.triton_heuristics  # noqa: F401
+
+                log(
+                    f"imports_only: imported inductor cudagraph_trees + triton_heuristics; triton in sys.modules="
+                    f"{'triton' in sys.modules}"
+                )
+            except Exception as e:
+                log(f"imports_only: import failed: {e!r}")
+            return
         if PLUGIN_MODE == "repeat_only":
             # Bisect step: no patch, no GC callback, no faulthandler, no ctypes — only duplicate the targets and dump on
             # failure. Even the MINIMAL (pure-Python) patches seemed to hide the whisper failure.
@@ -788,7 +802,7 @@ class CaptureDebugPlugin:
         S.test = item.nodeid
         S.is_target = _is_target(item.nodeid)
         S.repeat_index = getattr(item, "_capdbg_repeat", 0)
-        S.full = PLUGIN_MODE != "repeat_only" and S.is_target and S.repeat_index % 2 == 1
+        S.full = PLUGIN_MODE == "patched" and S.is_target and S.repeat_index % 2 == 1
         if S.is_target:
             S.trace.clear()
             if S.full and not self.heavy_patched:
