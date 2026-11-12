@@ -98,11 +98,6 @@ def XiaomiLens0ForConditionalGenerationLoss(
     r"""
     Compute the language modeling loss and weighted mask loss for Xiaomi-Lens-0.
 
-    Every supervised call participates in mask-count normalization, including language-only batches, which
-    contribute zero masks without running the mask decoder. In distributed training, all ranks must call this
-    loss with language labels or mask labels. Distributed wrappers must support unused parameters when a rank
-    has no mask supervision.
-
     Args:
         logits (`torch.Tensor` of shape `(batch_size, sequence_length, vocab_size)`):
             Raw language-model logits. Also determines the device for mask-count normalization when mask labels
@@ -138,7 +133,7 @@ def XiaomiLens0ForConditionalGenerationLoss(
         - **mask_loss** (`torch.Tensor` of shape `()` or `None`) -- Dice and binary cross-entropy loss
           multiplied by `config.mask_loss_weight`, or `None` when `mask_labels` is absent.
     """
-    # Import here because loss_utils registers this function in LOSS_MAPPING.
+    # Import here to avoid circular imports because loss_utils registers this function in LOSS_MAPPING.
     from .loss_utils import ForCausalLMLoss
 
     loss = lm_loss = mask_loss = None
@@ -156,6 +151,6 @@ def XiaomiLens0ForConditionalGenerationLoss(
         )
         loss = mask_loss if loss is None else loss + mask_loss
     elif labels is not None:
-        # Match the collective on ranks with mask supervision without connecting the decoder to the loss.
+        # Must be called from all ranks to keep the collective in sync.
         _normalize_mask_count(logits.new_zeros((), dtype=torch.float32))
     return loss, lm_loss, mask_loss
