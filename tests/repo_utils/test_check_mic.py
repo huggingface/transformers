@@ -419,7 +419,13 @@ sys.exit(1)
         self.assertNotIn("✗", output)
         self.assertIn("No reviewed cpu-arm64 baseline for DistilBERT; running without comparison.", output)
         self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
-        self.assertRegex(output.splitlines()[-1], r"^MIC: 1 passed, 1 ran without a baseline in [0-9.]+s$")
+        self.assertRegex(output, r"\nMIC: 1 passed, 1 ran without a baseline in [0-9.]+s\n")
+        # After the summary, the unchecked target is named as a smoke test only.
+        self.assertIn("⚠ 1 target passed as a smoke test only: no reviewed cpu-arm64 baseline", output)
+        self.assertIn("\n    DistilBERT  slim\n", output)
+
+    def test_smoke_warning_is_empty_when_every_target_was_compared(self):
+        self.assertEqual(check_mic.format_smoke_warning({}), [])
 
     def test_runner_flag_for_missing_baseline_is_reported_in_one_pass(self):
         record = {
@@ -438,7 +444,9 @@ sys.exit(1)
         output = stdout.getvalue()
         self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
         self.assertNotIn("running without comparison", output)
-        self.assertRegex(output.splitlines()[-1], r"^MIC: 1 ran without a baseline in [0-9.]+s$")
+        self.assertRegex(output, r"\nMIC: 1 ran without a baseline in [0-9.]+s\n")
+        self.assertIn("⚠ 1 target passed as a smoke test only", output)
+        self.assertIn("\n    DistilBERT  slim\n", output)
 
     def test_whole_fleet_change_needs_all(self):
         with (

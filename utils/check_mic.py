@@ -396,6 +396,21 @@ def format_environment_warning(env_failures):
     ]
 
 
+def format_smoke_warning(smoke_only):
+    """End-of-run warning for targets that passed without a baseline: they ran, nothing was compared."""
+    lines = []
+    for platform, targets in smoke_only.items():
+        count = len(targets)
+        lines += [
+            "",
+            f"⚠ {count} target{'s' if count > 1 else ''} passed as a smoke test only: no reviewed {platform} baseline,"
+            " so the model loaded and ran but its outputs were not compared:",
+            *(f"    {target}" for target in targets),
+            f"  A regression in their outputs goes unnoticed here until a {platform} baseline is recorded.",
+        ]
+    return lines
+
+
 HEARTBEAT_SECONDS = 15
 
 
@@ -592,15 +607,18 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     missing = []
     started = time.perf_counter()
 
-    env_failures = []
+    env_failures, smoke_only = [], {}
 
     def count(record, key=None):
         key = key or record["status"]
         counts[key] = counts.get(key, 0) + 1
+        name = record.get("contract_name", record["contract"])
+        variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
+        label = f"{name}{variant}  {record['target']}"
         if key in ("fail", "error") and record.get("environment_differs"):
-            name = record.get("contract_name", record["contract"])
-            variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
-            env_failures.append(f"{name}{variant}  {record['target']}")
+            env_failures.append(label)
+        if key == "unchecked":
+            smoke_only.setdefault(record.get("platform", "this platform"), []).append(label)
 
     def first_pass(record, progress):
         if record.get("baseline_missing"):
@@ -642,7 +660,7 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
         # The runner failed before (or without) reporting a failing target: show what it said.
         print("Runner output:\n" + "\n".join(f"  {line}" for line in tail), flush=True)
     print("\n" + format_summary(counts, time.perf_counter() - started), flush=True)
-    warning = format_environment_warning(env_failures)
+    warning = format_smoke_warning(smoke_only) + format_environment_warning(env_failures)
     if warning:
         print("\n".join(warning), flush=True)
     return 1 if failed else returncode
