@@ -17,6 +17,7 @@ import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..utils import is_torch_available
 from ..utils.import_utils import (
@@ -170,14 +171,20 @@ class NVFP4Experts(nn.Module):
     their swizzled `{proj}_sf`, per-tensor `{proj}_scale_2` and `{proj}_input_scale` (`(num_experts, 2)` for gate, up).
     """
 
-    def __init__(self, experts: nn.Module):
+    def __init__(self, config, has_gate: bool = True, has_bias: bool = False):
         super().__init__()
-        self.config = experts.config
-        self.has_gate = getattr(experts, "has_gate", True)
-        self.act_fn, self.limit = experts.act_fn, getattr(experts, "limit", None)
-        self.in_proj = "gate_up_proj" if self.has_gate else "up_proj"
-        self.projections = {name: getattr(experts, name).shape for name in (self.in_proj, "down_proj")}
-        self.num_experts = experts.down_proj.shape[0]
+        if has_bias:
+            raise ValueError("NVFP4Experts does not support bias")
+        self.config = config
+        self.has_gate = has_gate
+        self.act_fn = ACT2FN[getattr(config, "hidden_activation", None) or config.hidden_act]
+        self.limit = getattr(config, "swiglu_limit", None)
+        self.num_experts = getattr(config, "num_local_experts", None) or config.num_experts
+        hidden = config.hidden_size
+        intermediate = getattr(config, "moe_intermediate_size", None) or config.intermediate_size
+        self.in_proj = "gate_up_proj" if has_gate else "up_proj"
+        in_proj_shape = (self.num_experts, 2 * intermediate if has_gate else intermediate, hidden)
+        self.projections = {self.in_proj: in_proj_shape, "down_proj": (self.num_experts, hidden, intermediate)}
         for name, (num_experts, out_features, in_features) in self.projections.items():
             sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
             self.register_buffer(name, torch.empty(num_experts, out_features, in_features // 2, dtype=torch.uint8))
@@ -259,10 +266,8 @@ class NVFP4Experts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
     def forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-        experts_forward = ALL_NVFP4_EXPERTS_FUNCTIONS.get_interface(
-            self.config._experts_implementation, type(self).eager_forward
-        )
-        return experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        # The eager implementation: `quantized_module` wraps the class to dispatch to `ALL_NVFP4_EXPERTS_FUNCTIONS`
+        return self.eager_forward(hidden_states, top_k_index, top_k_weights)
 
 
 def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:

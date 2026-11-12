@@ -23,7 +23,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps, _IdentityOp
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available
@@ -1062,5 +1062,5 @@ class Fp8Dequantize(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        # A dequantized model has no quantization config anymore: it saves unquantized
-        return _IdentityOp()
+        # Dequantized on load, quantized back on save: the checkpoint keeps its FP8 format
+        return Fp8Quantize(self.hf_quantizer)

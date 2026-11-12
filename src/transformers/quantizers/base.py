@@ -221,8 +221,9 @@ class HfQuantizer(ABC):
         for name, module in list(model.named_modules()):
             if name.startswith(swapped):  # inside a module already swapped
                 continue
-            param = next(iter(module._parameters), None)
-            quantizer = self.get_quantizer(f"{name}.{param}") if param is not None else None
+            if not module._parameters:  # containers are never swapped
+                continue
+            quantizer = self.get_quantizer(f"{name}.")
             if quantizer is None or not quantizer.replaces_modules:
                 continue
             with torch.device("meta"):

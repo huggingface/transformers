@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import re
 import warnings
 from typing import TypeGuard
@@ -426,13 +427,13 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             rename_layer("layers.0.self_attn.q_proj.scale")  # `p0` -> "layers.0.self_attn.q_proj.weight_scale_inv"
         """
         from ..conversion_mapping import get_model_conversion_mapping
-        from ..core_model_loading import WeightConverter, rename_source_key
+        from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 
         checkpoint = {}
         if self.checkpoint_names:
             transforms = get_model_conversion_mapping(model)
             converters = [t for t in transforms if isinstance(t, WeightConverter)]
-            renamings = [t for t in transforms if t not in converters]
+            renamings = [t for t in transforms if isinstance(t, WeightRenaming)]
             checkpoint = {pattern: quantizer for pattern, quantizer in self.quantizers.items() if "*" not in pattern}
             renamed = {
                 rename_source_key(f"{pattern}.weight", renamings, converters)[0].rpartition(".")[0]: quantizer
@@ -501,16 +502,39 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             if getattr(quantizer.quantization_config, "dequantize", False):
                 names += [*quantizer.serialized_names["weight"], *quantizer.checkpoint_renames.values()]
 
+        # A single format quantizing back on save has its dequantization on the converters themselves: saving reverses
+        # them. Else each param gets its own, see `update_weight_transform`
+        quantizer = self.round_trip_quantizer
+        load = [] if quantizer is None else [quantizer.get_load_operation()(quantizer)]
         for i, converter in enumerate(weight_conversions):
             sources = converter._original_source_patterns
             if names and isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
                 sources = [source.removesuffix("weight") + name for source in sources for name in names]
                 weight_conversions[i] = converter.copy(
-                    sources, converter._original_target_patterns, operations=converter.operations
+                    sources, converter._original_target_patterns, operations=[*load, *converter.operations]
                 )
 
         general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
+        if load:
+            general = [
+                c.copy(c._original_source_patterns, c._original_target_patterns, operations=load) for c in general
+            ]
         return [*weight_conversions, *general]
+
+    @property
+    def round_trip_quantizer(self):
+        """
+        The single dequantized format that quantizes back on save (its dequantization reverses to a quantization, e.g.
+        FP8): the model keeps its format on save. A mixed plan, or a format without it, saves unquantized.
+        """
+        from ..core_model_loading import _IdentityOp
+
+        quantizer = self.quantizer
+        if quantizer is None or not quantizer.pre_quantized:
+            return None
+        if not getattr(quantizer.quantization_config, "dequantize", False) or quantizer.get_load_operation() is None:
+            return None
+        return None if isinstance(quantizer.get_load_operation()(quantizer).reverse_op, _IdentityOp) else quantizer
 
     def rename_layer(self, key):
         """
@@ -541,6 +565,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             return transform
 
         operation = quantizer.get_load_operation()
+        if self.round_trip_quantizer is not None:  # already on the converters, see `update_weight_conversions`
+            return transform
         tensors = {tensor for names in quantizer.serialized_names.values() for tensor in names}
         if operation is None or not isinstance(transform, WeightConverter) or name.rpartition(".")[2] not in tensors:
             return transform  # e.g. a merged expert bias: not one of the format's tensors
@@ -632,6 +658,12 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             for quantizer in self.all_quantizers
             if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
         }
+        if (quantizer := self.round_trip_quantizer) is not None:
+            # Unquantized in memory, saved back in its format: the config it saves with no longer dequantizes
+            self.remove_quantization_config(model)
+            model.config.quantization_config = copy.copy(quantizer.quantization_config)
+            model.config.quantization_config.dequantize = False
+            return model
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
         self.patterns = [(glob, None if q in dequantized else q) for glob, q in self.patterns]
         if not self.all_quantizers:

@@ -169,26 +169,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, parallel_plan)
-        # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) and the experts' per-expert
-        # `activation_scale`s are not sharded
-        scales = {
-            replace_layer_number_by_wildcard(n)
-            for n, p in model.named_parameters()
-            if p.ndim == 0 or n.endswith("activation_scale")
-        }
-        parallel_plan.update(
-            {name: "replicate" for name in scales if _get_parameter_plan(name, parallel_plan) is not None}
-        )
-        # The style of the experts' kernel, on its experts only (not another format's of a quantization parallel_plan)
-        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        experts = {replace_layer_number_by_wildcard(n) for n, m in model.named_modules() if isinstance(m, FP8Experts)}
-        parallel_plan.update(
-            {
-                key: overwrite.get(style, style)
-                for key, style in parallel_plan.items()
-                if key.rpartition(".")[0] in experts
-            }
-        )
+        # Per-tensor scales and the experts' per-expert `activation_scale`s are replicated
+        for name, param in model.named_parameters():
+            name = replace_layer_number_by_wildcard(name)
+            if (param.ndim == 0 or name.endswith("activation_scale")) and _get_parameter_plan(name, parallel_plan):
+                parallel_plan[name] = "replicate"
+        # The experts' kernel may shard its own way
+        overrides = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
+        parallel_plan.update({key: overrides.get(style, style) for key, style in parallel_plan.items()})
 
     def is_serializable(self):
         return True

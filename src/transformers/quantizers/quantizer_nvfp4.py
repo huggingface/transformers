@@ -102,12 +102,18 @@ class NVFP4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
+        from ..integrations.moe import use_experts_implementation
+        from ..integrations.nvfp4 import ALL_NVFP4_EXPERTS_FUNCTIONS, NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return None
         if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
-            return NVFP4Experts(module)  # TODO: quantize experts from a full-precision checkpoint too
+            # TODO: quantize experts from a full-precision checkpoint too
+            has_gate = getattr(module, "has_gate", True)
+            experts_class = use_experts_implementation(
+                experts_class=NVFP4Experts, experts_interface=ALL_NVFP4_EXPERTS_FUNCTIONS, has_gate=has_gate
+            )
+            return experts_class(module.config, has_gate=has_gate)
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
             return NVFP4Linear(module.in_features, module.out_features)
         return None
