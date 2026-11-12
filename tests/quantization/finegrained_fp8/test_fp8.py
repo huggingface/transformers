@@ -395,7 +395,6 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         if experts_implementation == "deepgemm":
             from transformers.integrations.deepgemm import is_sm100
 
-            # the checkpoint's scales are plain float32, which DeepGEMM has no path for on Blackwell (UE8M0 only)
             if is_sm100():
                 self.skipTest("DeepGEMM takes only UE8M0 scales on SM100, and this checkpoint's are float32")
 
