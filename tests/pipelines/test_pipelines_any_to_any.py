@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     Expectations,
     is_pipeline_test,
-    require_librosa,
+    require_audio,
     require_torch,
     require_vision,
     slow,
@@ -52,7 +52,7 @@ if is_torch_available():
 
 @is_pipeline_test
 @require_vision
-@require_librosa
+@require_audio
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
