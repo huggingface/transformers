@@ -32,9 +32,6 @@ if TYPE_CHECKING:
 
 @auto_docstring
 class GraniteDoclingProcessor(ProcessorMixin):
-    images_kwargs = {
-        "return_row_col_info": True,
-    }
     # rows/cols build the prompt. They are ragged across a batch, so they stay Python lists and are dropped
     # before the processor returns.
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "rows", "cols"]

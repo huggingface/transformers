@@ -574,6 +574,8 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
 
 @auto_docstring
 class GraniteDoclingProcessor(Idefics3Processor):
+    images_kwargs = AttributeError()  # different image processor
+
     # rows/cols build the prompt. They are ragged across a batch, so they stay Python lists and are dropped
     # before the processor returns.
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "rows", "cols"]
