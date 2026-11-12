@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import contextlib
-import math
 import re
 import warnings
 from typing import TYPE_CHECKING
@@ -45,7 +44,6 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -96,7 +94,7 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
 
 
 class TensorParallelLayer:
-    # Styles that read `module.config` (set by `apply_tensor_parallelism`)
+    # Styles that read `module.config` and `module._mesh_manager` (set by `apply_tensor_parallelism`)
     needs_config = False
 
     def should_use_local_tensors(self, module):
@@ -219,21 +217,6 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
-def _unit_mesh(mesh, unit_number: int):
-    """
-    A 2-D unit-view of `mesh`. We reshape the mesh as (units, replicas), so every rank owns units.
-    """
-    # ponytail: new process groups for every projection; build them once in `MeshManager` if group creation shows up
-    groups = math.gcd(unit_number, mesh.size())
-    replicas = mesh.size() // groups
-    outer = mesh.mesh_dim_names[0] if mesh.mesh_dim_names else "unit"
-    return DeviceMesh(
-        device_type=mesh.device_type,
-        mesh=mesh.mesh.reshape(groups, replicas),
-        mesh_dim_names=[outer, "unit_replicate"],
-    )
-
-
 class UnitColwiseParallel(ColwiseParallel):
     """This forces all ranks to own at least 1 unit of the tensor.
     It is designed to be used on `query/key/value` layers when running TP.
@@ -263,11 +246,9 @@ class UnitColwiseParallel(ColwiseParallel):
         weight = module._parameters["weight"]
         config = module.config
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        unit = weight.shape[0] // head_dim
-        unit_mesh = _unit_mesh(mesh, unit)
-        module._unit_mesh = unit_mesh
+        module._unit_mesh = module._mesh_manager.get_unit_mesh(weight.shape[0] // head_dim)
         module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
+            distribute_tensor(meta, module._unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
             requires_grad=meta.requires_grad,
         )
 
@@ -406,8 +387,7 @@ class UnitRowwiseParallel(RowwiseParallel):
         weight = module._parameters["weight"]
         config = module.config
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        unit = weight.shape[-1] // head_dim
-        module._unit_mesh = _unit_mesh(mesh, unit)
+        module._unit_mesh = module._mesh_manager.get_unit_mesh(weight.shape[-1] // head_dim)
         # bias is added once after the reduce, so it stays replicated
         placements = [Replicate(), Replicate()] if param == "bias" else [Shard(meta.ndim - 1), Replicate()]
         module._parameters[param] = torch.nn.Parameter(
@@ -824,6 +804,7 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
             # Config-aware styles (head-aware sharding, MLA's rope split) read it from the module.
             # TODO: Store what they need on the modules when the models initialize them.
             module.config = text_config
+            module._mesh_manager = model._mesh_manager
         if is_param:
             style.validate_param(module, param_name, tp_mesh, parameter_name=name)
             style.shard_param(module, param_name, tp_mesh)
