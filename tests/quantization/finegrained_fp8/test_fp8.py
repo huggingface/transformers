@@ -116,6 +116,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_OUTPUTS = {
         "Once upon a time, there was a little girl who loved to play",
         "Once upon a time, there was a man who was very rich.",
+        "Once upon a time, there was a man who was a very rich",
     }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
@@ -638,3 +639,28 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+
+class FP8ModulesToNotConvertTest(unittest.TestCase):
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_checkpoint_module_names_follow_weight_renamings(self):
+        # The checkpoint's `self_attn.f_a_proj` loads as `self_attn.forget_gate.f_a_proj`
+        from transformers import KimiLinearConfig, KimiLinearForCausalLM
+        from transformers.integrations.finegrained_fp8 import FP8Linear
+
+        config = KimiLinearConfig(
+            vocab_size=64, pad_token_id=0, bos_token_id=1, eos_token_id=2, hidden_size=64, intermediate_size=64,
+            num_hidden_layers=1, num_attention_heads=4, num_key_value_heads=4, layer_types=["linear_attention"],
+            mlp_layer_types=["dense"], linear_conv_kernel_dim=2, linear_head_dim=16, linear_num_heads=4,
+        )  # fmt: skip
+        quantization_config = FineGrainedFP8Config(
+            weight_block_size=(16, 16), modules_to_not_convert=["model.layers.0.self_attn.f_a_proj"]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            KimiLinearForCausalLM(config).save_pretrained(tmp)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmp, quantization_config=quantization_config, device_map="cpu"
+            )
+        forget_gate = model.model.layers[0].self_attn.forget_gate
+        self.assertNotIsInstance(forget_gate.f_a_proj, FP8Linear)
+        self.assertIsInstance(forget_gate.f_b_proj, FP8Linear)
