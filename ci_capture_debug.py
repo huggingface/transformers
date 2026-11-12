@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "triton_wrapper_only")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "repeat_only")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -356,6 +356,20 @@ def _make_trace_mode():
 
 
 _trace_mode_cls = None
+CUDA_LOG_PATH = None
+
+
+def _dump_cuda_driver_log(title, max_chars=20000):
+    """Log the content of `$CUDA_LOG_FILE` (CUDA driver error log), if any."""
+    path = CUDA_LOG_PATH
+    if not path or not os.path.exists(path):
+        log(f"===== {title}: no CUDA driver log at {path!r} =====")
+        return
+    with open(path, encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    log(f"===== {title} ({path}, {len(content)} chars, last {max_chars} shown) =====\n{content[-max_chars:]}")
+
+
 _capture_trace_modes = []
 
 
@@ -740,9 +754,23 @@ class CaptureDebugPlugin:
         out_dir = os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR") or os.environ.get("CAPDBG_DIR") or "/tmp"
         os.makedirs(out_dir, exist_ok=True)
         S.fh = open(os.path.join(out_dir, f"capture_debug_{os.getpid()}.log"), "w", encoding="utf-8")
+        # CUDA error log management (CUDA >= 12.9): the driver writes the detailed reason of every CUDA error (e.g. which
+        # call invalidated a stream capture) to this file. Zero Python / timing cost; read only after a failure. Must be
+        # set before the CUDA driver is initialized (torch initializes it lazily, at the first CUDA call of a test).
+        global CUDA_LOG_PATH
+        CUDA_LOG_PATH = os.path.join(out_dir, f"cuda_driver_errors_{os.getpid()}.log")
+        os.environ.setdefault("CUDA_LOG_FILE", CUDA_LOG_PATH)
+        CUDA_LOG_PATH = os.environ["CUDA_LOG_FILE"]
+        try:
+            import torch
+
+            cuda_initialized = torch.cuda.is_initialized()
+        except Exception as e:
+            cuda_initialized = f"? ({e!r})"
         log(
             f"ci_capture_debug plugin active: mode={PLUGIN_MODE} targets={TARGETS} repeat={REPEAT} "
-            f"reset={RESET_BETWEEN_REPEATS} log_file={S.fh.name}"
+            f"reset={RESET_BETWEEN_REPEATS} log_file={S.fh.name} CUDA_LOG_FILE={CUDA_LOG_PATH} "
+            f"(cuda already initialized: {cuda_initialized})"
         )
         self.heavy_patched = False
         if PLUGIN_MODE == "imports_only":
@@ -857,6 +885,7 @@ class CaptureDebugPlugin:
             dump_trace("trace at test failure", n=200)
             dump_threads("threads at test failure")
             # The failure already happened: CUDA queries / imports can no longer hide it.
+            _dump_cuda_driver_log("CUDA driver error log at test failure")
             log(f"after failure: peek_error={CUDART.peek_error()} thread_mode={CUDART.thread_capture_mode()}")
             _log_environment()
             log(
@@ -882,6 +911,7 @@ class CaptureDebugPlugin:
 
     def pytest_unconfigure(self, config):
         log(f"session end: total captures={S.capture_count}")
+        _dump_cuda_driver_log("CUDA driver error log at session end")
         if _gc_callback in gc.callbacks:
             gc.callbacks.remove(_gc_callback)
         fh, S.fh = S.fh, None
