@@ -866,7 +866,8 @@ def _fill_megamoe_buffer(
     """Stage a call's inputs in the Mega MoE symmetric buffer: the tokens as FP8 with packed UE8M0 group-32 scales
     (DeepGEMM's `per_token_cast_to_fp8(..., use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)` bit for bit, without its
     padded copy, its fp32 temporaries and the host sync of `pack_ue8m0_to_int`'s check, so the forward stays
-    capturable in a CUDA graph), and their top-k ids and weights."""
+    capturable in a CUDA graph), and their top-k ids and weights. A compiled model fuses it into one reduction and its
+    pointwise ops."""
     num_tokens, hidden_dim = hidden_states.shape
     groups = hidden_states.view(num_tokens, hidden_dim // 32, 32)
     amax = groups.abs().amax(dim=-1).float().clamp(min=1e-4)
@@ -880,14 +881,6 @@ def _fill_megamoe_buffer(
     symm_buffer.x_sf[:num_tokens].copy_(exponent.to(torch.uint8).view(torch.int32))
     symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
     symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
-
-
-@functools.cache
-def _compiled_fill_megamoe_buffer():
-    """`_fill_megamoe_buffer` fused by `torch.compile` (one reduction and its pointwise ops, bit for bit the same):
-    B200, hidden 4096, in a CUDA graph, 1 token 32 -> 5 us, 16384 tokens 914 -> 45 us. Compiled on first use, and once
-    more when the batch size first changes."""
-    return torch.compile(_fill_megamoe_buffer, fullgraph=True)
 
 
 def deepgemm_fp8_fp4_megamoe_experts_forward(
@@ -974,9 +967,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         )
 
     symm_buffer = symm_buffers[buffer_key]
-    # a model compiled as a whole fuses the staging itself
-    fill = _fill_megamoe_buffer if torch.compiler.is_compiling() else _compiled_fill_megamoe_buffer()
-    fill(symm_buffer, hidden_states, top_k_index, top_k_weights)
+    _fill_megamoe_buffer(symm_buffer, hidden_states, top_k_index, top_k_weights)
 
     # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
     # fused SwiGLU sees the same value range the model was calibrated for.
