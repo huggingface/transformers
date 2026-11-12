@@ -53,6 +53,9 @@ DEFAULT_TARGETS = (
 TARGETS = tuple(t for t in os.environ.get("CAPDBG_TARGETS", ",".join(DEFAULT_TARGETS)).split(",") if t)
 REPEAT = int(os.environ.get("CAPDBG_REPEAT", "5"))
 RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
+# Tensor value stats (`.item()`) and `cudaMemGetInfo` force device syncs. With them on, whisper passed 10/10 in CI (bug
+# hidden?); without the plugin it failed again. Off by default so the plugin never syncs the device by itself.
+STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -242,7 +245,7 @@ def _describe_tensor(t, stats):
             s += f" ptr%16={t.data_ptr() % 16} ptr%128={t.data_ptr() % 128} contig={t.is_contiguous()}"
     except Exception:  # noqa: S110
         pass
-    if stats and t.numel() and S.capture_depth == 0:
+    if stats and STATS and t.numel() and S.capture_depth == 0:
         try:
             d = t.detach()
             if d.is_floating_point():
@@ -300,7 +303,7 @@ def cuda_mem():
 
         if not torch.cuda.is_initialized():
             return "cuda=uninitialized"
-        free, total = torch.cuda.mem_get_info() if S.capture_depth == 0 else (-1, -1)
+        free, total = torch.cuda.mem_get_info() if STATS and S.capture_depth == 0 else (-1, -1)
         return (
             f"alloc={torch.cuda.memory_allocated() / 2**20:.1f}MiB "
             f"reserved={torch.cuda.memory_reserved() / 2**20:.1f}MiB free={free / 2**20:.0f}/{total / 2**20:.0f}MiB"
