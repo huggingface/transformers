@@ -43,12 +43,19 @@ def pack_gqa(hidden_states: torch.Tensor | None, n_rep: int) -> torch.Tensor | N
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
     if os.environ.get("TRANSFORMERS_SDPA_FORCE_GQA", "0") == "1":
         return True
+    if (
+        _is_torch_npu_available
+        and key.device.type == "npu"
+        and key.dtype in (torch.float16, torch.bfloat16)
+        and not torch.is_grad_enabled()
+    ):
+        return key.shape[-1] == value.shape[-1] <= 256
     # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
     elif _is_torch_mps_available:
         return _is_torch_greater_or_equal_than_2_13
-    # CUDA and Ascend NPU require no mask and supported head dims to avoid falling back to the math kernel.
+    # Other SDPA paths require no mask and supported head dimensions for native GQA.
     return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 

@@ -84,6 +84,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
+    require_torch_npu,
     slow,
     torch_device,
 )
@@ -3283,6 +3284,53 @@ class TestAttentionImplementation(unittest.TestCase):
         with sdpa_kernel([backends[expected_backend]]):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    @parameterized.expand([("float16", 1), ("float16", 16), ("bfloat16", 1), ("bfloat16", 16)])
+    @require_torch_npu
+    def test_gqa_in_sdpa_with_mask_npu(self, dtype_name, query_length):
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward, use_gqa_in_sdpa
+
+        dtype = getattr(torch, dtype_name)
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4
+        visible_mask = torch.ones(2, 1, query_length, 32, device=torch_device, dtype=torch.bool).tril(
+            diagonal=32 - query_length
+        )
+        visible_mask[1, ..., :3] = False
+        for head_dim in (64, 128, 256):
+            values = (
+                torch.arange(2 * 12 * 32 * head_dim, device=torch_device, dtype=torch.float32)
+                .sin()
+                .reshape(2, 12, 32, head_dim)
+                .to(dtype)
+            )
+            query, key, value = values[:, :8, -query_length:], values[:, 8:10], values[:, 10:]
+            with torch.enable_grad():
+                self.assertFalse(use_gqa_in_sdpa(visible_mask, key, value))
+            for additive_mask in (False, True):
+                with self.subTest(head_dim=head_dim, additive_mask=additive_mask):
+                    attention_mask = visible_mask
+                    if additive_mask:
+                        attention_mask = torch.zeros_like(visible_mask, dtype=dtype).masked_fill(
+                            ~visible_mask, torch.finfo(dtype).min
+                        )
+                    with torch.no_grad(), sdpa_kernel([SDPBackend.OVERRIDEABLE]):
+                        self.assertTrue(use_gqa_in_sdpa(attention_mask, key, value))
+                        self.assertFalse(use_gqa_in_sdpa(attention_mask, key.float(), value.float()))
+                        self.assertFalse(use_gqa_in_sdpa(attention_mask, key.cpu(), value.cpu()))
+                        expected = torch.nn.functional.scaled_dot_product_attention(
+                            query, repeat_kv(key, 4), repeat_kv(value, 4), attn_mask=visible_mask
+                        ).transpose(1, 2)
+                        actual, _ = sdpa_attention_forward(
+                            module, query, key, value, attention_mask=attention_mask, is_causal=False
+                        )
+                        if head_dim == 128 and query_length == 16 and not additive_mask:
+                            compiled = torch.compile(sdpa_attention_forward, backend="eager", fullgraph=True)
+                            compiled_output, _ = compiled(module, query, key, value, attention_mask, is_causal=False)
+                            torch.testing.assert_close(compiled_output, expected)
+                    torch.testing.assert_close(actual, expected)
 
     @parameterized.expand([(False,), (True,)])
     def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
