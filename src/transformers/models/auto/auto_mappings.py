@@ -339,6 +339,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("instructblipvideo", "InstructBlipVideoConfig"),
         ("instructblipvideo_qformer", "InstructBlipVideoQFormerConfig"),
         ("instructblipvideo_vision_model", "InstructBlipVideoVisionConfig"),
+        ("internlm3", "InternLM3Config"),
         ("internvl", "InternVLConfig"),
         ("internvl_vision", "InternVLVisionConfig"),
         ("jais2", "Jais2Config"),
