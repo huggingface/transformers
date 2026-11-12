@@ -5,7 +5,6 @@
 #                          modular_wav2vec2_bert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
-import warnings
 from collections.abc import Callable
 
 import numpy as np
@@ -30,7 +29,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_peft_available
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -1301,6 +1300,34 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
         )
 
 
+class TDNNLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
+        self.out_conv_dim = config.tdnn_dim[layer_id]
+        self.kernel_size = config.tdnn_kernel[layer_id]
+        self.dilation = config.tdnn_dilation[layer_id]
+
+        self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
+        self.activation = nn.ReLU()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # `self.kernel` has to be called as a module (rather than using its weights in `F.conv1d`), otherwise
+        # hooks registered on it are bypassed, e.g. accelerate's offloading hooks that load the weights
+        hidden_states = hidden_states.unsqueeze(1)
+        hidden_states = nn.functional.unfold(
+            hidden_states,
+            (self.kernel_size, self.in_conv_dim),
+            stride=(1, self.in_conv_dim),
+            dilation=(self.dilation, 1),
+        )
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.kernel(hidden_states)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
 class AMSoftmaxLoss(nn.Module):
     def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
         super().__init__()
@@ -1322,38 +1349,6 @@ class AMSoftmaxLoss(nn.Module):
         loss = self.loss(logits, labels)
 
         return loss
-
-
-class TDNNLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
-        self.out_conv_dim = config.tdnn_dim[layer_id]
-        self.kernel_size = config.tdnn_kernel[layer_id]
-        self.dilation = config.tdnn_dilation[layer_id]
-
-        self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
-        self.activation = nn.ReLU()
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if is_peft_available():
-            from peft.tuners.lora import LoraLayer
-
-        if is_peft_available():
-            if isinstance(self.kernel, LoraLayer):
-                warnings.warn(
-                    "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
-                    "You should exclude TDNNLayer from LoRA's target modules.",
-                )
-
-        # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
-        hidden_states = hidden_states.transpose(1, 2)
-        weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
-        hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
 
 
 @auto_docstring(
