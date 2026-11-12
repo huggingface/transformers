@@ -21,14 +21,13 @@
 
 import numpy as np
 
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_librosa_available, is_torch_available, logging
+from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires
 
 
-if is_librosa_available():
-    import librosa
 if is_torch_available():
     import torch
 
@@ -37,7 +36,7 @@ logger = logging.get_logger(__name__)
 LOG_ZERO_GUARD_VALUE = 2**-24
 
 
-@requires(backends=("torch", "librosa"))
+@requires(backends=("torch",))
 class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a NemotronAsrStreaming feature extractor.
@@ -90,22 +89,17 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.win_length = win_length
         self.preemphasis = preemphasis
-
-        # TODO: @eustlb, for now we use librosa to compute the mel filters
-        # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerical differences
-        # self.mel_filters = mel_filter_bank(
-        #     num_frequency_bins=n_fft // 2 + 1,
-        #     num_mel_filters=feature_size,
-        #     min_frequency=0.0,
-        #     max_frequency=sampling_rate / 2,
-        #     sampling_rate=sampling_rate,
-        #     norm="slaney",
-        #     mel_scale="slaney",
-        # )
-        mel_filters = librosa.filters.mel(
-            sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=n_fft // 2 + 1,
+            num_mel_filters=feature_size,
+            min_frequency=0.0,
+            max_frequency=sampling_rate / 2,
+            sampling_rate=sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+            dtype=np.float32,
         )
-        self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
+        self.mel_filters = torch.from_numpy(np.ascontiguousarray(mel_filters.T))
         self.mel_filters_dtype = mel_filters_dtype
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):

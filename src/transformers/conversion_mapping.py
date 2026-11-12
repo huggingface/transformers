@@ -1266,6 +1266,11 @@ def _build_checkpoint_conversion_mapping():
         "lfm3": [
             WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],
+        "lfm3_vl_vision": [
+            WeightRenaming(source_patterns="patchifier", target_patterns="patch_embed"),
+            WeightRenaming(source_patterns="q_layernorm", target_patterns="q_norm"),
+            WeightRenaming(source_patterns="k_layernorm", target_patterns="k_norm"),
+        ],
         "lfm2_moe": [
             WeightConverter(
                 source_patterns=[
