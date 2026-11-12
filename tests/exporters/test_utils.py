@@ -145,7 +145,7 @@ class _StubExporter(HfExporter):
     program_suffix = ".txt"
 
     def export_program(self, model, sample_inputs, config):
-        return "program", ExportMetadata(input_names=list(sample_inputs))
+        return "program", ExportMetadata(kwargs={name: {} for name in sample_inputs})
 
     @classmethod
     def save_program(cls, program, path):
@@ -192,7 +192,7 @@ class ExportedModelTest(unittest.TestCase):
         exported = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
         self.assertEqual(list(exported.components), ["model"])
         self.assertEqual(exported.program, "program")
-        self.assertEqual(exported.components["model"].metadata.input_names, ["input_ids"])
+        self.assertEqual(list(exported.components["model"].metadata.kwargs), ["input_ids"])
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
@@ -202,7 +202,7 @@ class ExportedModelTest(unittest.TestCase):
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
-            "prefill": ExportedComponent("prefill program", ExportMetadata(input_names=["input_ids"])),
+            "prefill": ExportedComponent("prefill program", ExportMetadata(architecture="Stub")),
             "decode": ExportedComponent("decode program", ExportMetadata()),
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
@@ -236,7 +236,7 @@ class ExportedModelTest(unittest.TestCase):
 
     def test_from_pretrained_loads_a_newer_manifest(self):
         """An export from a newer transformers, with a field this version doesn't know, loads with a warning."""
-        components = {"model": ExportedComponent("program", ExportMetadata(input_names=["input_ids"]))}
+        components = {"model": ExportedComponent("program", ExportMetadata(architecture="Stub"))}
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend(_StubExporter)
             with tempfile.TemporaryDirectory() as directory:
@@ -248,7 +248,7 @@ class ExportedModelTest(unittest.TestCase):
                 with self.assertLogs("transformers.exporters.base", level="WARNING") as logs:
                     loaded = ExportedModel.from_pretrained(directory)
         self.assertIn("newer format", logs.output[0])
-        self.assertEqual(loaded.components["model"].metadata.input_names, ["input_ids"])
+        self.assertEqual(loaded.components["model"].metadata.architecture, "Stub")
 
     def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
         with tempfile.TemporaryDirectory() as directory:

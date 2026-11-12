@@ -548,7 +548,10 @@ class AXK1PreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(AXK1TopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    # The released checkpoints also store `post_mlp_layernorm` for the dense layers, which do not use it
+    _keys_to_ignore_on_load_unexpected = ["inv_freq", r"mlp\.post_mlp_layernorm"]
+    # and route without a score correction bias
+    _keys_to_ignore_on_load_missing = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):

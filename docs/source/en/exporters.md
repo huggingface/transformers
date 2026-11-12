@@ -156,7 +156,7 @@ config = DynamoConfig(dynamic=True)
 exported = exporter.export(model, inputs, config=config)
 
 # run the exported graph directly
-outputs = exported.program.module()(**inputs)
+outputs = exported(**inputs)
 ```
 
 </hfoption>
@@ -174,14 +174,12 @@ exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 exported = exporter.export(model, inputs, config=config)
 
-# save and load with ONNX Runtime
+# save, then load and run on ONNX Runtime
 exported.save_pretrained("qwen3-onnx")
 
-import onnxruntime as ort
+from transformers.exporters import ExportedModel
 
-session = ort.InferenceSession("qwen3-onnx/model.onnx")
-ort_inputs = {k: v.numpy() for k, v in inputs.items()}
-outputs = session.run(None, ort_inputs)
+outputs = ExportedModel.from_pretrained("qwen3-onnx")(**inputs)
 ```
 
 </hfoption>
@@ -207,12 +205,10 @@ exported = exporter.export(model, inputs, config=config)
 # save for on-device deployment
 exported.save_pretrained("qwen3-executorch")
 
-# load and run via the ExecuTorch Python runtime
-from executorch.runtime import Runtime
+# load and run on the ExecuTorch runtime
+from transformers.exporters import ExportedModel
 
-program = Runtime.get().load_program("qwen3-executorch/model.pte")
-method = program.load_method("forward")
-outputs = method.execute(list(inputs.values()))
+outputs = ExportedModel.from_pretrained("qwen3-executorch")(**inputs)
 ```
 
 </hfoption>
@@ -232,15 +228,37 @@ exported = exporter.export(model, inputs, config=config)
 
 exported.save_pretrained("qwen3-openvino")
 
-# compile and run on CPU (or "GPU" / "NPU" if available)
-import openvino as ov
-compiled = ov.Core().compile_model(exported.program, "CPU")
-ov_inputs = {k: v.numpy() for k, v in inputs.items()}
-outputs = compiled(ov_inputs)
+# run on CPU (or "xpu" for an Intel GPU)
+outputs = exported.to("cpu")(**inputs)
 ```
 
 </hfoption>
 </hfoptions>
+
+## Run an export
+
+An [`ExportedModel`] runs an export on its backend's runtime (`torch.export`'s module, ONNX Runtime, OpenVINO, or the
+ExecuTorch runtime) and is called like the model it came from: same kwargs, same [`~utils.ModelOutput`] class. The
+compute runs in the backend, which is often faster than eager PyTorch (OpenVINO on CPU, ONNX Runtime on CUDA), and
+quantized exports run the same way. Inputs the export wasn't traced with are dropped, so a processor's whole output
+can be passed.
+
+A fresh export runs on first call (on the backend's default device, or the one [`~ExportedModel.to`] picks), and
+[`ExportedModel.from_pretrained`] loads a saved one from a local directory or the Hub, ready to run.
+
+```python
+from transformers.exporters import ExportedModel
+
+outputs = exported(**inputs)
+
+exported.save_pretrained("qwen3-onnx")
+model = ExportedModel.from_pretrained("qwen3-onnx", device="cuda")
+logits = model(**inputs).logits
+```
+
+`device` picks where it runs: an ONNX Runtime provider (`"cpu"`, `"cuda"`), an OpenVINO device (`"cpu"`, `"xpu"` for an
+Intel GPU, or `AUTO` by default), or where a `torch.export` module is moved. An ExecuTorch program runs where it was
+lowered for. Exports with several components (generation) don't run yet.
 
 ## Dynamic shapes
 
@@ -498,7 +516,7 @@ components = decompose_for_generation(model, inputs)
 exported = {}
 for name, (submodel, subinputs) in components.items():
     eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    exported[name] = exporter.export(submodel, subinputs, config=config).program
+    exported[name] = exporter.export(submodel, subinputs, config=config)
 ```
 
 ### Multi-token decode
@@ -581,6 +599,7 @@ gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
 exported = exporter.export_for_generation(
     model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
 )
+exported.save_pretrained("qwen3-static")
 ```
 
 </hfoption>
@@ -625,7 +644,7 @@ with no host copies — as long as the runtime binds the caller's buffers rather
 own arena. What that takes is the only per-backend part left:
 
 - **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
-  `exported.components["decode"].program.module()(...)` updates the cache tensors you pass in directly. Reuse the same
+  `exported.runners["decode"](...)` updates the cache tensors you pass in directly. Reuse the same
   tensors each step; nothing to configure.
 
 - **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
@@ -670,25 +689,22 @@ in-place path is C++ (its Python runtime can't, as noted above).
 <hfoptions id="decode-loop">
 <hfoption id="Dynamo">
 
-torch.export records the static-cache write as a `USER_INPUT_MUTATION`, so the loaded graph's `module()`
-updates the `StaticCache` you pass in **directly** — one cache carries state across the whole loop with
-nothing to bind or thread back out. `register_pytree_node(StaticCache)` lets `torch.export.load` unflatten
-the `StaticCache` input. The cache has to be **initialized up front** (torch.export bakes the allocated K/V
-into the input spec, so a lazy blank cache won't match) — but the saved program carries its own
-`example_inputs`, so reuse that already-initialized `StaticCache` template, reset to empty:
+torch.export records the static-cache write as a `USER_INPUT_MUTATION`, so the `decode` runner updates the
+`StaticCache` you pass in **directly** — one cache carries state across the whole loop with nothing to bind or
+thread back out. The cache has to be **initialized up front** (torch.export bakes the allocated K/V into the
+input spec, so a lazy blank cache won't match) — but the saved program carries its own `example_inputs`, so reuse
+that already-initialized `StaticCache` template, reset to empty:
 
 ```python
 import copy
 import torch
-from transformers import StaticCache
-from transformers.exporters.exporter_dynamo import register_pytree_node
+from transformers.exporters import ExportedModel
 
-register_pytree_node(StaticCache)
-exported = torch.export.load("decode.pt2")
-decode = exported.module()   # runs on the device its inputs / cache live on (CUDA here)
+exported = ExportedModel.from_pretrained("qwen3-static", device="cuda")
+decode = exported.runners["decode"]
 
-# the artifact carries an initialized StaticCache template — reuse it (reset to empty)
-_, example_kwargs = exported.example_inputs
+# the program carries an initialized StaticCache template — reuse it (reset to empty)
+_, example_kwargs = exported.components["decode"].program.example_inputs
 cache = copy.deepcopy(example_kwargs["cache"])
 cache.reset()
 
@@ -851,6 +867,41 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 </hfoptions>
 
 </details>
+
+## ONNX Runtime fusions
+
+Set `ort_fusions` to rewrite an ONNX export into ONNX Runtime's fused transformer ops before it's saved. ONNX Runtime
+runs the fused graph much faster than the plain one. The fusions cover RMS and layer norms, attention
+(`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
+projections that share an input. Each fusion gives the same result as the ops it replaces.
+
+Set `ort_fusions` to the execution provider the graph will run on. Each provider gets the fused ops it supports.
+
+```python
+config = OnnxConfig(ort_fusions="cpu")
+config = OnnxConfig(ort_fusions="cuda")
+config = OnnxConfig(ort_fusions="webgpu")
+config = OnnxConfig(ort_fusions="dml")
+```
+
+| | `"cpu"` | `"cuda"` | `"webgpu"` | `"dml"` |
+|---|---|---|---|---|
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
+| Mixture of experts | unfused | `MoE` | unfused | unfused |
+| CUDA graphs | — | static exports can replay | — | — |
+
+A `"cuda"` graph with `MoE` doesn't run on CPU, since ONNX Runtime's `MoE` only exists for CUDA. A `"webgpu"` graph runs
+in the browser with onnxruntime-web, or natively with onnxruntime-webgpu. A `"dml"` graph runs on Windows with
+onnxruntime-directml.
+
+The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
+is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
+each.
+
+The fusions run before [`~exporters.OnnxRuntimeQuantizer`] quantizes the graph, as ONNX Runtime recommends. They're
+skipped when the model is quantized before export, and they require `optimize=True` (the default). The `"cuda"` fusions
+need onnxruntime 1.28 or later.
 
 ## Quantization
 
