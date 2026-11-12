@@ -1494,7 +1494,7 @@ class ProcessorTesterMixin:
             for token in [*processor.all_special_multimodal_tokens, tokenizer.eos_token]
             if token in control_tokens
             and tokenizer.convert_tokens_to_ids(token)
-            not in chat_template_utils._encode_stretch(tokenizer, token, 0, len(token))
+            not in chat_template_utils._encode_stretch(tokenizer, token, 0, len(token)).ids
         ]
         if not typed_tokens:
             self.skipTest("Processor has no control tokens that can be sanitized")
@@ -1533,7 +1533,7 @@ class ProcessorTesterMixin:
             patch.object(chat_template_utils, "_parse_escaped_control_tokens", wraps=parse) as mock_parse,
         ):
             sanitized = encode(f"What is {' '.join(typed_tokens)}?", sanitize_control_tokens=True)
-        # The processor has to encode its text with `encode_escaped_chat`, or the escaped tokens come out as garbage.
+        # The processor has to encode its text through the tokenizer, or the escaped tokens come out as garbage.
         # Some templates break up control tokens in user text themselves, and then there is nothing to escape
         if any(chat_template_utils._ESCAPE_START in escaped_chat for escaped_chat in escaped_chats):
             mock_parse.assert_called()

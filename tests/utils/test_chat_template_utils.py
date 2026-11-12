@@ -896,19 +896,16 @@ class TemplateTextTest(unittest.TestCase):
         return _compile_traced_jinja_template(template).render(**inputs)
 
     def mark_inputs(self, text):
-        # Put brackets around the input spans, which is easier to read than character offsets
-        marked, position = "", 0
-        for start, end in text.input_spans:
-            marked += (
-                str.__getitem__(text, slice(position, start)) + "[" + str.__getitem__(text, slice(start, end)) + "]"
-            )
-            position = end
-        return marked + str.__getitem__(text, slice(position, None))
+        # Put brackets around the text that came from inputs, which is easier to read than a mask
+        import re
+
+        marked = "".join(f"{char}" if trusted else f"[{char}]" for char, trusted in zip(text, text.trusted))
+        return re.sub(r"\]\[", "", marked)
 
     def test_only_template_text_is_trusted(self):
-        from transformers.utils.chat_template_utils import _TemplateText
+        from transformers.utils.chat_template_utils import _TemplateText, _trusted
 
-        template_text, mixed = _TemplateText("<a>", ()), _TemplateText("<a>") + _TemplateText("<b>", ())
+        template_text, mixed = _trusted("<a>"), _TemplateText("<a>") + _trusted("<b>")
         self.assertEqual(self.mark_inputs(template_text), "<a>")
         # A string built without spans could have come from anywhere, so it counts as input
         self.assertEqual(self.mark_inputs(_TemplateText("<a>")), "[<a>]")
@@ -922,14 +919,12 @@ class TemplateTextTest(unittest.TestCase):
         self.assertEqual(self.mark_inputs("x" + template_text + "y" + "z"), "[x]<a>[yz]")
         self.assertEqual(self.mark_inputs(mixed[1:5]), "[a>]<b")
         self.assertEqual(self.mark_inputs(("  " + template_text + " ").strip()), "<a>")
-        self.assertEqual(self.mark_inputs(_TemplateText(", ", ()).join(["x", template_text])), "[x], <a>")
+        self.assertEqual(self.mark_inputs(_trusted(", ").join(["x", template_text])), "[x], <a>")
         self.assertEqual(self.mark_inputs(mixed.replace("a", template_text)), "[<]<a>[>]<b>")
         self.assertEqual(self.mark_inputs(template_text * 2), "<a><a>")
-        # An empty input leaves an empty span, so that a control token can't match across it
-        self.assertEqual((template_text + "" + template_text).input_spans, ((3, 3),))
 
         # Any other string method gives a plain string, which counts as input wherever it ends up
-        for untracked in [template_text.upper(), template_text.center(5), template_text[::-1], f"{template_text}!"]:
+        for untracked in [template_text.upper(), template_text.center(5), f"{template_text}!"]:
             self.assertIs(type(untracked), str)
 
     def test_templates_render_template_text(self):
@@ -951,7 +946,7 @@ class TemplateTextTest(unittest.TestCase):
             "{{ '<a>' | upper }}{{ ['<a>', '<b>'] | join('|') }}{{ '<a>' | replace('a', 'b') }}": "[<A>]<a>|<b><b>",
             "{% filter upper %}<a>{% endfilter %}": "[<A>]",
             # Undefined variables render as empty inputs, like they do normally
-            "{{ missing ~ '<a>' ~ missing }}{{ missing | safe }}{{ '<{}>'.format(missing) }}": "[]<a>[<>]",
+            "{{ missing ~ '<a>' ~ missing }}{{ missing | safe }}{{ '<{}>'.format(missing) }}": "<a>[<>]",
         }
         for template, expected in templates.items():
             with self.subTest(template):
@@ -961,10 +956,10 @@ class TemplateTextTest(unittest.TestCase):
                 self.assertEqual(rendered, render_jinja_template([messages], chat_template=template)[0][0])
 
     def test_safe_filter_escapes_like_markup(self):
-        # Adding a string to the output of `safe` HTML-escapes the string, and we still know who wrote what
+        # Adding a string to the output of `safe` HTML-escapes the string. That isn't traced, so it all counts as input
         template = "{{ name + '[ARGS]' + (arguments | tojson | safe) }}|{{ ('<a>' | safe) + '<b>' + name }}"
         rendered = self.render(template, name="a&b", arguments={"x": "<y>"})
-        self.assertEqual(self.mark_inputs(rendered), '[a&amp;b][ARGS][{"x": "<y>"}]|<a>&lt;b&gt;[a&amp;b]')
+        self.assertEqual(self.mark_inputs(rendered), '[a&amp;b[ARGS]{"x": "<y>"}]|[<a>&lt;b&gt;a&amp;b]')
         normal, _ = render_jinja_template(
             [[{"role": "user", "content": ""}]], chat_template=template, name="a&b", arguments={"x": "<y>"}
         )

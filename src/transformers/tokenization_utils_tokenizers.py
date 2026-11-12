@@ -47,6 +47,7 @@ from .tokenization_utils_base import (
     generate_merges,
 )
 from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
+from .utils.chat_template_utils import _ESCAPE_START, encode_escaped_text
 
 
 logger = logging.get_logger(__name__)
@@ -1060,12 +1061,28 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer.encode_special_tokens != split_special_tokens:
             self._tokenizer.encode_special_tokens = split_special_tokens
 
-        # Direct rust backend call
-        encodings = self._tokenizer.encode_batch(
-            batch_text_or_text_pairs,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=is_split_into_words,
-        )
+        if any(isinstance(text, str) and _ESCAPE_START in text for text in batch_text_or_text_pairs):
+            # A chat rendered with `sanitize_control_tokens=True`, see `apply_chat_template`
+            encodings = [encode_escaped_text(self, text, add_special_tokens) for text in batch_text_or_text_pairs]
+            if (padding := self._tokenizer.padding) is not None and padding["length"] is None:
+                longest = max(len(encoding) for encoding in encodings)
+                if multiple := padding["pad_to_multiple_of"]:
+                    longest = -(-longest // multiple) * multiple
+                for encoding in encodings:
+                    encoding.pad(
+                        longest,
+                        direction=padding["direction"],
+                        pad_id=padding["pad_id"],
+                        pad_type_id=padding["pad_type_id"],
+                        pad_token=padding["pad_token"],
+                    )
+        else:
+            # Direct rust backend call
+            encodings = self._tokenizer.encode_batch(
+                batch_text_or_text_pairs,
+                add_special_tokens=add_special_tokens,
+                is_pretokenized=is_split_into_words,
+            )
 
         # Convert encodings to BatchEncoding format
         tokens_and_encodings = [
