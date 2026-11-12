@@ -72,7 +72,7 @@ deps = {
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
     "tqdm": "tqdm>=4.60",
-    "transformers-mic[runtime]": "transformers-mic[runtime]",
+    "transformers-mic[runtime]": "transformers-mic[runtime]>=0.1.2",
     "typer": "typer",
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
