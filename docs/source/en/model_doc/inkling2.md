@@ -20,11 +20,43 @@ limitations under the License.
 
 # Inkling 2 Small
 
-[Inkling 2 Small](https://huggingface.co/thinkingmachines/Inkling-2-Small) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that takes text and images and generates text. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. Every decoder layer is a mixture-of-experts layer. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch.
+[Inkling 2 Small](https://huggingface.co/thinkingmachines/Inkling-2-Small) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is intended for use in English and other languages, and across multiple coding languages. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. The language backbone consists of 48 mixture-of-experts decoder layers, each routing tokens to 8 of 384 experts. The model has 594B total and 17B active parameters. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch. 
 
-The example below generates text from an image and a prompt.
+TODO: quantization info
+
+## Resources
+
+- [Hugging Face Model](https://huggingface.co/thinkingmachines/Inkling-2-Small)
+- [Thinking Machines Blog](https://thinkingmachines.ai/news/inkling-2-small/)
+- [Hugging Face Blog](https://huggingface.co/blog/thinkingmachines-inkling)
+
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+pipe = pipeline("image-text-to-text", model="thinkingmachines/Inkling-2-Small", device_map="auto")
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            {"type": "text", "text": "What animal is in this image, and where is it?"},
+        ],
+    },
+]
+
+output = pipe(messages, max_new_tokens=256, return_full_text=False)
+print(output[0]["generated_text"])
+```
+
+</hfoption>
 <hfoption id="AutoModel">
 
 ```python
