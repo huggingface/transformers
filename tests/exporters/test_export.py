@@ -234,11 +234,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "onnx.exactness": {
         "Wav2Vec2ForPreTraining": (
-            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
-            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
-            "with itself either."
+            "The quantizer picks codes with `argmax`; on near-tied logits ORT's rounding can pick another "
+            "code, and `codevector_perplexity` jumps far over the tolerance. See PR #50575."
         ),
-        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechSatForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "Wav2Vec2ConformerForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
         "PatchTSTForPretraining": (
             "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
             "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
@@ -691,16 +692,25 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
+def _run_onnx_program(onnx_model, inputs) -> dict:
+    """Run an ONNX graph (an `onnx_ir.Model`) as an `ONNXProgram` and return outputs as a `{name: torch.Tensor}` dict.
+    A loaded graph runs from its saved file (`meta["path"]`), whose weights `onnx_ir` can't read through symlinks.
 
-    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
-    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
+    Outputs come back on CPU whatever device eager ran on, so callers compare them the same way across backends (with
+    `check_device=False`).
     """
+    import onnxruntime as ort
+    from torch.onnx import ONNXProgram
+
+    onnx_program = ONNXProgram(onnx_model, None)
+    if (path := onnx_model.meta.get("path")) is not None:
+        # The providers `ONNXProgram` picks for a fresh graph, so a loaded one runs where it would.
+        available = ort.get_available_providers()
+        providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+        onnx_program.initialize_inference_session(lambda _: ort.InferenceSession(path, providers=providers))
     set_seed(1234)
-    onnx_inputs = get_leaf_tensors(inputs)
-    onnx_outputs = onnx_program(**onnx_inputs)
-    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
+    onnx_outputs = onnx_program(**get_leaf_tensors(inputs))
+    onnx_names = (re.sub(r"^output\.", "", value.name) for value in onnx_model.graph.outputs)
     return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
 
 
@@ -1049,7 +1059,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    exported_program = exporter.export(model, inputs, config=config).program
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -1086,7 +1096,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_program = exporter.export(model, inputs, config=config).program
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1118,7 +1128,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1158,7 +1168,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config).program
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
@@ -1259,7 +1269,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    exported_program = exporter.export(model, inputs, config=config).program
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -1308,7 +1318,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_program = exporter.export(model, inputs, config=config).program
                     set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
@@ -1341,7 +1351,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1380,7 +1390,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config).program
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
