@@ -390,6 +390,23 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     local_kwargs["additional_special_tokens"] = [
                         _unnormalized(token) for token in local_kwargs["additional_special_tokens"]
                     ]
+            elif user_defined and added_tokens_decoder:
+                # Without a dummy prefix, user-defined pieces are matched on the normalized text, as SentencePiece
+                # does. A config may mark them `normalized=False` (Gemma's "▁▁", "▁▁▁", ...), which would match them
+                # against raw spaces instead of "▁", and merges can't build them because they aren't normal pieces.
+                local_kwargs["added_tokens_decoder"] = {
+                    token_id: AddedToken(
+                        token.content,
+                        single_word=token.single_word,
+                        lstrip=token.lstrip,
+                        rstrip=token.rstrip,
+                        normalized=True,
+                        special=token.special,
+                    )
+                    if isinstance(token, AddedToken) and token.content in user_defined
+                    else token
+                    for token_id, token in added_tokens_decoder.items()
+                }
 
             tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(proto=extractor.proto, vocab=vocab)
             if tokenizer_object is not None:

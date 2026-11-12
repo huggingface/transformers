@@ -129,6 +129,27 @@ class SentencePieceModelConversionTest(unittest.TestCase):
                     self.assertEqual(tokenizer.encode(text, add_special_tokens=False), ids, text)
                     self.assertEqual(tokenizer.decode(ids), sp.decode(ids), text)
 
+    def test_user_defined_whitespace_pieces_marked_unnormalized(self):
+        # Like Gemma: no dummy prefix, whitespace-only user-defined pieces that the config lists as `normalized=False`
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sp = self._train(
+                tmp_dir,
+                add_dummy_prefix=False,
+                remove_extra_whitespaces=False,
+                allow_whitespace_only_pieces=True,
+                user_defined_symbols=["▁▁", "▁▁▁", "▁▁▁▁"],
+            )
+            added_tokens_decoder = {
+                str(sp.piece_to_id(piece)): {"content": piece, "normalized": False, "special": False}
+                for piece in ["▁▁", "▁▁▁", "▁▁▁▁"]
+            }
+            with open(f"{tmp_dir}/tokenizer_config.json", "w", encoding="utf-8") as f:
+                json.dump({"added_tokens_decoder": added_tokens_decoder}, f)
+
+            tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+            for text in ["trailing   ", "  indented\n    code", "hi  there"]:
+                self.assertEqual(tokenizer.encode(text, add_special_tokens=False), sp.encode(text), text)
+
     def test_added_tokens_decoder_can_swap_pieces(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             sp = self._train(tmp_dir, control_symbols=["<a>", "<b>"])
