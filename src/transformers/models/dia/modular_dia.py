@@ -383,7 +383,7 @@ class DiaDecoder(DiaPreTrainedModel):
         input_ids: torch.Tensor,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],

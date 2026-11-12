@@ -29,7 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, select_hidden_states
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -135,7 +135,7 @@ class InternVLVisionAttention(JanusVisionAttention):
 @dataclass
 class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
@@ -487,18 +487,19 @@ class InternVLModel(LlavaModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
         vision_feature_layer (`int` or `list[int]`):
             Layer index or list of layer indices to extract features from.
@@ -506,8 +507,6 @@ class InternVLModel(LlavaModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
-        if vision_feature_layer != -1:
-            kwargs["output_hidden_states"] = True
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         if vision_feature_layer == -1:
             vision_features = vision_outputs.last_hidden_state
@@ -541,11 +540,11 @@ class InternVLModel(LlavaModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,

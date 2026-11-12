@@ -13,7 +13,7 @@ from transformers import (
     GenerationConfig,
     Llama4Config,
     Llama4ForConditionalGeneration,
-    Llama4ImageProcessorFast,
+    Llama4ImageProcessor,
     Llama4Processor,
     Llama4TextConfig,
     Llama4VisionConfig,
@@ -680,7 +680,7 @@ def write_tokenizer(args):
     )
     tokenizer = converter.converted_tokenizer
 
-    image_processor = Llama4ImageProcessorFast()
+    image_processor = Llama4ImageProcessor()
     processor = Llama4Processor(
         image_processor=image_processor,
         tokenizer=tokenizer,

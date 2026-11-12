@@ -44,7 +44,7 @@ class MimiOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
         Discrete code embeddings computed using `model.encode`.
-    audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Mimi.
     encoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
@@ -65,7 +65,7 @@ class MimiOutput(ModelOutput):
     """
 
     audio_codes: torch.LongTensor | None = None
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     encoder_past_key_values: Cache | None = None
     decoder_past_key_values: Cache | None = None
 
@@ -180,48 +180,48 @@ class MimiEncoderOutput(ModelOutput):
         have their past key value states given to this model).
     padding_cache (`MimiConv1dPaddingCache`, *optional*):
         Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the encoder transformer at the output of each layer plus its input.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each encoder transformer layer.
     """
 
     audio_codes: torch.LongTensor | None = None
     encoder_past_key_values: Cache | None = None
     padding_cache: MimiConv1dPaddingCache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
 class MimiEncoderModelOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, frames)`):
+    latents (`torch.Tensor` of shape `(batch_size, latent_dim, frames)`):
         Continuous latents of the audio, one frame per `config.frame_size` audio samples.
     past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
         when streaming.
     padding_cache (`MimiConv1dPaddingCache`, *optional*):
         Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the encoder transformer at the output of each layer plus its input.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each encoder transformer layer.
     """
 
-    latents: torch.FloatTensor | None = None
+    latents: torch.Tensor | None = None
     past_key_values: Cache | None = None
     padding_cache: MimiConv1dPaddingCache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
 class MimiDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
         Decoded audio values, obtained using the decoder part of Mimi.
     decoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
@@ -231,16 +231,16 @@ class MimiDecoderOutput(ModelOutput):
 
         If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
         have their past key value states given to this model).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the decoder transformer at the output of each layer plus its input.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each decoder transformer layer.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     decoder_past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class MimiConv1d(nn.Module):
@@ -827,7 +827,7 @@ class MimiTransformerModel(nn.Module):
     ) -> BaseModelOutputWithPast:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Embedded representation that will be contextualized by the model
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1313,7 +1313,7 @@ class MimiDecoderModel(MimiPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MimiDecoderOutput:
         r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
+        latents (`torch.Tensor` of shape `(batch_size, hidden_size, frames)`):
             Continuous latents to decode, as computed by [`MimiModel.decode`].
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
@@ -1463,7 +1463,7 @@ class MimiModel(MimiPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MimiOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0

@@ -69,7 +69,7 @@ class ConvBertEmbeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.LongTensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -172,7 +172,7 @@ class ConvBertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -274,7 +274,7 @@ class ConvBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -367,7 +367,7 @@ class ConvBertLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -436,7 +436,7 @@ class ConvBertEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs,
@@ -528,20 +528,18 @@ class ConvBertSequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: torch.LongTensor | None = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -598,10 +596,10 @@ class ConvBertModel(ConvBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithCrossAttentions:
         if input_ids is not None and inputs_embeds is not None:
@@ -659,7 +657,7 @@ class ConvBertGeneratorPredictions(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
-    def forward(self, generator_hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, generator_hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(generator_hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -692,10 +690,10 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
@@ -772,10 +770,10 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
@@ -839,10 +837,10 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MultipleChoiceModelOutput:
@@ -868,7 +866,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -934,10 +932,10 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
@@ -985,10 +983,10 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

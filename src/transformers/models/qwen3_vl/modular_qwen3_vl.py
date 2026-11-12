@@ -32,6 +32,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, is_torchvision_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import (
     merge_with_config_defaults,
 )
@@ -80,11 +81,11 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
-    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+    deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
     """
 
-    deepstack_features: list[torch.FloatTensor] | None = None
+    deepstack_features: list[torch.Tensor] | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -102,7 +103,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -510,7 +511,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         # args for deepstack
         visual_pos_masks: torch.Tensor | None = None,
@@ -636,7 +637,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -654,7 +655,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -667,9 +668,9 @@ class Qwen3VLModel(Qwen2VLModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -786,10 +787,10 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -870,18 +871,13 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         )
 
 
-class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Qwen3VLProcessor(Qwen2VLProcessor):
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template, **kwargs)
         self.vision_start_token = (
@@ -1132,6 +1128,8 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
 
         return indices
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Qwen3VLConfig",

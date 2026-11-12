@@ -956,7 +956,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
     mode = (Mode.INFERENCE if not model.training else Mode.TRAINING) if mode is None else mode
-    device = Device(type=get_device_type(model.device))
+    device = get_device_type(model.device)
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 

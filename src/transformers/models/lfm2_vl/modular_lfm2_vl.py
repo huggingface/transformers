@@ -97,13 +97,13 @@ class Lfm2VlModel(LlavaModel):
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
             The spatial shapes of the input images.
@@ -142,7 +142,7 @@ class Lfm2VlModel(LlavaModel):
         return image_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -172,11 +172,11 @@ class Lfm2VlModel(LlavaModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -239,13 +239,13 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
             The spatial shapes of the input images.
@@ -263,13 +263,13 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -277,7 +277,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm2VlCausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`, *optional*):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`, *optional*):
             The input image tensors.
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
