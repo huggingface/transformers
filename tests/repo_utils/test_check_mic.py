@@ -15,6 +15,12 @@ spec.loader.exec_module(check_mic)
 
 
 class CheckMicTest(unittest.TestCase):
+    def setUp(self):
+        # Tests fake an installed transformers-mic through find_spec; pin its version to match.
+        patcher = patch.object(check_mic, "installed_mic_version", return_value="0.1.2")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @unittest.skipUnless(importlib.util.find_spec("transformers_mic"), "needs transformers-mic")
     def test_cached_snapshot_is_verified_offline_against_the_fleet_hashes(self):
         from transformers_mic import resources
@@ -92,7 +98,37 @@ class CheckMicTest(unittest.TestCase):
             patch.object(check_mic, "run", side_effect=execute),
         ):
             self.assertEqual(check_mic.main(), 1)
-            model_contracts.assert_called_once_with(check_mic.ROOT, "bert", "prototypes")
+            model_contracts.assert_called_once_with(check_mic.ROOT, ["bert"], "prototypes")
+
+    def test_model_pattern_selects_every_matching_directory(self):
+        self.assertIn("qwen2", check_mic.match_models(check_mic.ROOT, "qwen+"))
+        # + is the shell-safe spelling of *.
+        self.assertEqual(
+            check_mic.match_models(check_mic.ROOT, "qwen*"), check_mic.match_models(check_mic.ROOT, "qwen+")
+        )
+        self.assertEqual(
+            check_mic.match_models(check_mic.ROOT, "Wav2Vec2_+")[:2], ["wav2vec2_bert", "wav2vec2_conformer"]
+        )
+        self.assertEqual(check_mic.match_models(check_mic.ROOT, "no_such_+"), [])
+        with (
+            patch.dict(os.environ, {"MODEL": "qwen+", "ALL": "", "FLEET": ""}),
+            patch.object(check_mic.importlib.util, "find_spec", return_value=object()),
+            patch.object(check_mic, "model_contracts", return_value=[]) as model_contracts,
+            patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            self.assertEqual(check_mic.main(), 0)
+            models = model_contracts.call_args.args[1]
+            self.assertEqual(models, check_mic.match_models(check_mic.ROOT, "qwen+"))
+            self.assertTrue(len(models) > 1 and all(m.startswith("qwen") for m in models))
+
+    def test_unknown_model_explains_names_and_patterns(self):
+        with (
+            patch.dict(os.environ, {"MODEL": "wave2vec", "ALL": ""}),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(check_mic.main(), 2)
+        self.assertIn("Did you mean: wav2vec2?", err.getvalue())
+        self.assertIn("MODEL=qwen+", err.getvalue())
 
     def test_model_without_contract_runs_nothing(self):
         with (
@@ -151,26 +187,90 @@ class CheckMicTest(unittest.TestCase):
         # The runner reports a contract only when it finishes, so the wait is announced.
         self.assertEqual(lines[1], "Running the selected contracts, results print as each one finishes...")
         self.assertEqual(lines[2], "Selected BERT: models/bert (src/transformers/models/bert/modeling_bert.py)")
-        self.assertEqual(lines[3], "✓ BERT  slim  pass  1.6s")
-        self.assertEqual(lines[4], "✗ CLIP [sdpa]  slim  fail  2.0s")
-        self.assertEqual(lines[5], "    logits differ")
-        self.assertIn("torch 2.14 (pinned 2.11)", lines[6])
+        # Blank lines set the results apart from the setup lines above and the summary below.
+        self.assertEqual(lines[3], "")
+        self.assertEqual(lines[4], "✓ BERT  slim  pass  1.6s")
+        self.assertEqual(lines[5], "✗ CLIP [sdpa]  slim  fail  2.0s")
+        self.assertEqual(lines[6], "    logits differ")
+        self.assertEqual(lines[7], "    environment differs from the baseline:")
+        self.assertEqual(lines[8], "      torch 2.14 (pinned 2.11)")
         # A failing target explains the exit code; raw runner noise stays hidden.
         self.assertNotIn("noise", stdout.getvalue())
-        self.assertRegex(lines[-1], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+        self.assertEqual(lines[9], "")
+        self.assertRegex(lines[10], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+        # After the summary, the warning names the target; the versions are only listed above.
+        self.assertEqual(lines[11], "")
+        self.assertEqual(
+            lines[12],
+            "⚠ 1 failure ran on package versions other than the baseline's (listed above, still counted as failures):",
+        )
+        self.assertEqual(lines[13], "    CLIP [sdpa]  slim")
 
-    def test_progress_counts_contracts_and_beats_while_the_runner_is_quiet(self):
+    def test_environment_warning_lists_only_failures(self):
+        self.assertEqual(check_mic.format_environment_warning({}), [])
+        record = {
+            "contract": "r",
+            "target": "slim",
+            "failures": [],
+            "environment_differs": {"numpy": "2.3 (pinned 1.26)"},
+        }
+        script = "".join(
+            f"print({json.dumps(json.dumps({**record, 'contract_name': name, 'status': status}))})\n"
+            for name, status in (("BERT", "pass"), ("T5", "fail"), ("CLIP", "error"))
+        )
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy()), 1)
+        output = stdout.getvalue()
+        self.assertIn("⚠ 2 failures ran on package versions other than the baseline's", output)
+        warning = output.split("⚠", 1)[1].splitlines()
+        self.assertEqual(warning[1:3], ["    T5  slim", "    CLIP  slim"])
+        self.assertNotIn("    BERT  slim", warning)
+
+    def test_failures_are_red_only_when_the_checker_shows_a_terminal(self):
+        record = {"contract": "r", "contract_name": "CLIP", "target": "slim", "status": "fail", "failures": ["x"]}
+        passed = {**record, "contract_name": "BERT", "status": "pass", "failures": []}
+        with patch.dict(os.environ, {"CHECKERS_COLOR": ""}):
+            self.assertEqual(check_mic.format_record(record)[0], "✗ CLIP  slim  fail")
+        with patch.dict(os.environ, {"CHECKERS_COLOR": "1"}):
+            self.assertEqual(check_mic.format_record(record)[0], "\033[31m✗ CLIP  slim  fail\033[0m")
+            self.assertEqual(check_mic.format_record(record)[1], "    x")
+            self.assertEqual(check_mic.format_record(passed)[0], "✓ BERT  slim  pass")
+            self.assertRegex(
+                check_mic.format_summary({"pass": 2, "fail": 1}, 1.0),
+                r"^MIC: 2 passed, \033\[31m1 failed\033\[0m in 1.0s$",
+            )
+
+    def test_dict_mismatch_lists_only_differing_keys(self):
+        failure = (
+            "runtime: {'device': 'cpu', 'dtype': 'bfloat16', 'attn_implementations': {'audio_config': 'sdpa'}}"
+            " != {'device': 'cpu', 'dtype': 'float32', 'seed': 0}"
+        )
+        self.assertEqual(
+            check_mic.format_failure(failure),
+            [
+                "    runtime differs from the baseline:",
+                "      dtype: 'bfloat16'  (baseline: 'float32')",
+                "      seed: missing  (baseline: 0)",
+                "      attn_implementations: {'audio_config': 'sdpa'}  (not in the baseline)",
+            ],
+        )
+        # Anything that is not a pair of dicts is printed as the runner wrote it.
+        for failure in ("logits: max delta 0.1 over tolerance", "ids: [1, 2] != [1, 3]", "x: {1} != {2}"):
+            self.assertEqual(check_mic.format_failure(failure), [f"    {failure}"])
+
+    def test_progress_counts_contracts_and_prints_nothing_while_the_runner_is_quiet(self):
         record = {"contract": "r", "contract_name": "BERT", "target": "slim", "status": "pass", "failures": []}
         script = (
             "import json, time\n"
-            "time.sleep(1.5)\n"
+            "time.sleep(1.2)\n"
             f"print(json.dumps({record!r}))\n"
             f"print(json.dumps({ {**record, 'target': 'other'}!r}))\n"
         )
-        with patch.object(check_mic, "HEARTBEAT_SECONDS", 1), patch("sys.stdout", new_callable=io.StringIO) as stdout:
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=2), 0)
-        lines = stdout.getvalue().splitlines()
-        self.assertRegex(lines[0], r"^\.\.\. 1s in, 0/2 contracts done, loading the first contract$")
+        lines = stdout.getvalue().split("\n")  # not splitlines(): it splits on "\r" too
+        # The wait shows as the checker window's timer, not as lines in the log.
+        self.assertEqual(lines[0], "")
         # Both targets belong to one contract: the counter counts contracts.
         self.assertEqual(lines[1], "[1/2] ✓ BERT  slim  pass")
         self.assertEqual(lines[2], "[1/2] ✓ BERT  other  pass")
@@ -210,14 +310,45 @@ class CheckMicTest(unittest.TestCase):
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=12), 1)
         lines = stdout.getvalue().rstrip("\n").split("\n")  # not splitlines(): it splits on "\r" too
         # Every line after the first bar redraws it, except the failure (printed in full) and the bar after it.
-        self.assertEqual(lines[0], "███" + "░" * 37 + " 1/12")
-        self.assertEqual(lines[5], "\r✗ C5  t  fail")
-        self.assertEqual(lines[6], "    logits differ")
-        self.assertEqual(lines[7], "████████████████████" + "░" * 20 + " 6/12")
-        self.assertEqual(lines[8], "\r" + "███████████████████████" + "░" * 17 + " 7/12")
-        self.assertEqual(lines[-2], "\r" + "█" * 40 + " 12/12")
+        self.assertEqual(lines[0], "")
+        self.assertEqual(lines[1], "███" + "░" * 37 + " 1/12")
+        self.assertEqual(lines[6], "\r✗ C5  t  fail")
+        self.assertEqual(lines[7], "    logits differ")
+        self.assertEqual(lines[8], "████████████████████" + "░" * 20 + " 6/12")
+        self.assertEqual(lines[9], "\r" + "███████████████████████" + "░" * 17 + " 7/12")
+        self.assertEqual(lines[-3], "\r" + "█" * 40 + " 12/12")
+        self.assertEqual(lines[-2], "")
         self.assertNotIn("C0", stdout.getvalue())
         self.assertRegex(lines[-1], r"^MIC: 11 passed, 1 failed in [0-9.]+s$")
+
+    def test_model_resolves_by_directory_or_model_name(self):
+        root = check_mic.ROOT
+        self.assertEqual(check_mic.resolve_model(root, "wav2vec2"), ("wav2vec2", []))
+        # Case and punctuation are ignored, for directories, model types and config class names.
+        for name in ("Wav2Vec2", "wav2vec-2", "WAV2VEC2"):
+            self.assertEqual(check_mic.resolve_model(root, name), ("wav2vec2", []))
+        self.assertEqual(check_mic.resolve_model(root, "gpt-sw3"), ("gpt_sw3", []))
+        # A typo or a prefix is only suggested: close names often belong to sibling models.
+        self.assertEqual(check_mic.resolve_model(root, "wave2vec"), (None, ["wav2vec2"]))
+        directory, suggestions = check_mic.resolve_model(root, "wav2vec")
+        self.assertIsNone(directory)
+        self.assertEqual(suggestions[:2], ["wav2vec2", "wav2vec2_bert"])
+        self.assertEqual(check_mic.resolve_model(root, "no_such_model_xyz"), (None, []))
+
+    def test_command_is_shown_as_a_tmic_line(self):
+        command = [sys.executable, "-m", "transformers_mic.cli", "check", "--fleet", "prototypes"]
+        command += ["--contract", "AudioFlamingo3", "--contract", "Gemma 3", "--variant", "bfloat16"]
+        env = {"HF_HUB_OFFLINE": "1", "OMP_NUM_THREADS": "2"}
+        self.assertEqual(
+            check_mic.format_command(command, env),
+            "OMP_NUM_THREADS=2 HF_HUB_OFFLINE=1 PYTHONPATH=src tmic check --fleet prototypes"
+            " --contract AudioFlamingo3 --contract 'Gemma 3' --variant bfloat16",
+        )
+        # ALL=1 shows --run-all rather than every contract of the fleet.
+        self.assertEqual(
+            check_mic.format_command(command, {}, run_all=True),
+            "OMP_NUM_THREADS=4 PYTHONPATH=src tmic check --fleet prototypes --variant bfloat16 --run-all",
+        )
 
     def test_install_hints_name_what_is_missing(self):
         import builtins
@@ -234,6 +365,11 @@ class CheckMicTest(unittest.TestCase):
         with patch("importlib.util.find_spec", return_value=object()), old_doc_builder:
             self.assertTrue(check_mic.missing_requirements())
         with patch("importlib.util.find_spec", return_value=None):
+            self.assertTrue(check_mic.missing_requirements())
+        with (
+            patch("importlib.util.find_spec", return_value=object()),
+            patch.object(check_mic, "installed_mic_version", return_value="0.1.1"),
+        ):
             self.assertTrue(check_mic.missing_requirements())
         self.assertIn("transformers-mic", check_mic.INSTALL_HINT)
         self.assertIn('pip install -e ".[testing]"', check_mic.INSTALL_HINT)
@@ -311,7 +447,13 @@ sys.exit(1)
         self.assertNotIn("✗", output)
         self.assertIn("No reviewed cpu-arm64 baseline for DistilBERT; running without comparison.", output)
         self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
-        self.assertRegex(output.splitlines()[-1], r"^MIC: 1 passed, 1 ran without a baseline in [0-9.]+s$")
+        self.assertRegex(output, r"\nMIC: 1 passed, 1 ran without a baseline in [0-9.]+s\n")
+        # After the summary, the unchecked target is named as a smoke test only.
+        self.assertIn("⚠ 1 target passed as a smoke test only: no reviewed cpu-arm64 baseline", output)
+        self.assertIn("\n    DistilBERT  slim\n", output)
+
+    def test_smoke_warning_is_empty_when_every_target_was_compared(self):
+        self.assertEqual(check_mic.format_smoke_warning({}), [])
 
     def test_runner_flag_for_missing_baseline_is_reported_in_one_pass(self):
         record = {
@@ -330,7 +472,9 @@ sys.exit(1)
         output = stdout.getvalue()
         self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
         self.assertNotIn("running without comparison", output)
-        self.assertRegex(output.splitlines()[-1], r"^MIC: 1 ran without a baseline in [0-9.]+s$")
+        self.assertRegex(output, r"\nMIC: 1 ran without a baseline in [0-9.]+s\n")
+        self.assertIn("⚠ 1 target passed as a smoke test only", output)
+        self.assertIn("\n    DistilBERT  slim\n", output)
 
     def test_whole_fleet_change_needs_all(self):
         with (

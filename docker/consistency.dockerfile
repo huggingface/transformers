@@ -3,7 +3,7 @@ ARG REF=main
 RUN apt-get update && apt-get install -y time git g++ cmake pkg-config make git-lfs
 RUN uv pip install --no-cache-dir GitPython
 RUN uv pip install --no-cache-dir --upgrade 'torch<=2.15.0' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[quality,testing,torch-speech,vision]"
+RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[quality,testing,vision]"
 RUN git lfs install
 
 # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded` (#40201)

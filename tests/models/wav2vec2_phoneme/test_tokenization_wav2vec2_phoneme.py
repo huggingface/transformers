@@ -15,12 +15,15 @@
 
 import json
 import os
+import tempfile
 import unittest
+from unittest import mock
 
 from transformers import Wav2Vec2PhonemeCTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2_phoneme.tokenization_wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizerOutput
 from transformers.testing_utils import require_phonemizer
+from transformers.utils import import_utils
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -412,3 +415,26 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 output = tokenizer.convert_tokens_to_string(tokens)
 
                 self.assertIsInstance(output["text"], str)
+
+
+class Wav2Vec2PhonemeCTCTokenizerWithoutPhonemizerTest(unittest.TestCase):
+    """Loading and decoding must not need phonemizer / espeak-ng; only phonemizing text does."""
+
+    def test_load_and_decode_without_phonemizer(self):
+        vocab = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3, "h": 4, "ə": 5, "l": 6, "oʊ": 7}
+        unavailable = (lambda: False, import_utils.BACKENDS_MAPPING["phonemizer"][1])
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            mock.patch.dict(import_utils.BACKENDS_MAPPING, {"phonemizer": unavailable}),
+        ):
+            vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["vocab_file"])
+            with open(vocab_file, "w", encoding="utf-8") as fp:
+                json.dump(vocab, fp)
+
+            tokenizer = Wav2Vec2PhonemeCTCTokenizer(vocab_file)  # do_phonemize=True by default
+            self.assertTrue(tokenizer.do_phonemize)
+            self.assertEqual(tokenizer.decode([4, 5, 6, 7]), "h ə l oʊ")
+            self.assertEqual(tokenizer("h ə l oʊ", do_phonemize=False).input_ids, [4, 5, 6, 7])
+
+            with self.assertRaisesRegex(ImportError, "espeak-ng"):
+                tokenizer("hello", do_phonemize=True)
