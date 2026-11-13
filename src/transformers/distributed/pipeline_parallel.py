@@ -108,19 +108,17 @@ class PipelineStage:
 
     def layer_range_for_rank(self, rank: int, num_layers: int) -> tuple[int, int]:
         """
-        Return [start, end) owned by rank.
+        Return [start, end) owned by rank. The remainder goes to the first ranks, one layer each.
 
         Example with pp_size=3 and num_layers=32:
-            layers_per_rank = 32 // 3 = 10
-            rank 0 -> [0, 10)   # layers 0-9
-            rank 1 -> [10, 20)  # layers 10-19
-            rank 2 -> [20, 32)  # layers 20-31 (10 + 2 remainder)
+            rank 0 -> [0, 11)   # layers 0-10
+            rank 1 -> [11, 22)  # layers 11-21
+            rank 2 -> [22, 32)  # layers 22-31
         """
         # TODO(3outeille): Balance stages by layer type or parameter bytes instead of splitting solely by layer count.
-        layers_per_rank = num_layers // self.pp_size
-        start_layer = rank * layers_per_rank
-        # last rank will always have more layers if uneven split. Else, it will have the same number of layers as the other ranks.
-        end_layer = num_layers if rank == self.pp_size - 1 else start_layer + layers_per_rank
+        layers_per_rank, remainder = divmod(num_layers, self.pp_size)
+        start_layer = rank * layers_per_rank + min(rank, remainder)
+        end_layer = start_layer + layers_per_rank + (rank < remainder)
         return start_layer, end_layer
 
     def find_rank_for_key(self, key: str, num_layers: int, base_model_prefix: str) -> int | None:
