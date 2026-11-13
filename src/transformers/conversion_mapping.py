@@ -1251,6 +1251,35 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
+        "xiaomi_lens0": [
+            WeightRenaming(r"mask_decoder\.(?!mask_embed\.)", "mask_decoder.pixel_decoder."),
+            WeightRenaming(r"\.net\.0\.", r"\.fc1\."),
+            WeightRenaming(r"\.net\.2\.", r"\.fc2\."),
+            WeightRenaming(r"patch_self_attn\.norm(\d)\.", r"patch_layer.layer_norm\1."),
+            WeightRenaming(r"patch_self_attn\.mlp\.", "patch_layer.mlp."),
+            WeightRenaming(r"patch_self_attn\.attn\.out_proj\.", "patch_layer.self_attn.out_proj."),
+            WeightConverter(
+                source_patterns="patch_self_attn.attn.in_proj_weight",
+                target_patterns=[
+                    "patch_layer.self_attn.q_proj.weight",
+                    "patch_layer.self_attn.k_proj.weight",
+                    "patch_layer.self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="patch_self_attn.attn.in_proj_bias",
+                target_patterns=[
+                    "patch_layer.self_attn.q_proj.bias",
+                    "patch_layer.self_attn.k_proj.bias",
+                    "patch_layer.self_attn.v_proj.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(r"upscaler\.0\.", "upscale_block.conv1."),
+            WeightRenaming(r"upscaler\.1\.", "upscale_block.layer_norm."),
+            WeightRenaming(r"upscaler\.3\.", "upscale_block.conv2."),
+        ],
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
