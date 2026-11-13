@@ -301,6 +301,9 @@ class RippleAttention(nn.Module):
 
 
 class RippleDecoderLayer(GradientCheckpointingLayer):
+    """Gemma3DecoderLayer with `value_residual` as a positional input (gradient checkpointing with `use_reentrant=True`
+    only detaches positional inputs; the scaled embeddings carry a graph and reach every layer)."""
+
     def __init__(self, config: RippleConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -316,6 +319,7 @@ class RippleDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        value_residual: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -328,6 +332,7 @@ class RippleDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
+            value_residual=value_residual,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -451,7 +456,7 @@ class RippleModel(RipplePreTrainedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                value_residual=value_residual,
+                value_residual,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
