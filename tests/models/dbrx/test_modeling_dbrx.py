@@ -89,7 +89,7 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "trl-internal-testing/tiny-DbrxForCausalLM"
+        model_name = "hf-internal-testing/tiny-DbrxForCausalLM"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 

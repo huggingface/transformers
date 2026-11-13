@@ -592,7 +592,7 @@ NEFTune 是一种提升聊天模型性能的技术，由 Jain 等人在论文“
 > 使用 Alpaca 对 LLaMA-2-7B 进行标准微调，可以在 AlpacaEval 上达到 29.79%，而使用带有噪音embedding的情况下，性能提高至 64.69%。NEFTune 还在modern instruction数据集上大大优于基线。Evol-Instruct 训练的模型表现提高了 10%，ShareGPT 提高了 8%，OpenPlatypus 提高了 8%。即使像 LLaMA-2-Chat 这样通过 RLHF 进一步细化的强大模型，通过 NEFTune 的额外训练也能受益。
 
 <div style="text-align: center">
-<img src="https://huggingface.co/datasets/trl-internal-testing/example-images/resolve/main/images/neft-screenshot.png">
+<img src="https://huggingface.co/datasets/hf-internal-testing/example-images/resolve/main/images/neft-screenshot.png">
 </div>
 
 要在 `Trainer` 中使用它，只需在创建 `TrainingArguments` 实例时传递 `neftune_noise_alpha`。请注意，为了避免任何意外行为，NEFTune在训练后被禁止，以此恢复原始的embedding层。
