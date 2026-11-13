@@ -74,6 +74,7 @@ from .integrations.accelerate import (
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model, prevent_arange_dtype_change
 from .integrations.eager_paged import eager_paged_attention_forward
+from .integrations.experts_offload import prepare_experts_offload
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
@@ -187,6 +188,8 @@ class LoadStateDictConfig:
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
+    # Checkpoint keys another component reads on its own (e.g. experts streamed by `experts_offload`).
+    skip_keys: set = field(default_factory=set)
 
     @property
     def is_quantized(self) -> bool:
@@ -4166,6 +4169,7 @@ class PreTrainedModel(
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
+        experts_offload = kwargs.pop("experts_offload", None)
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4394,6 +4398,17 @@ class PreTrainedModel(
         if gguf_file:
             state_dict = hf_quantizer.get_state_dict(checkpoint_files[0], model)
 
+        skip_keys = set()
+        if experts_offload is not None:
+            devices = set(device_map.values()) if isinstance(device_map, dict) else {device_map or "cpu"}
+            if len(devices) != 1 or gguf_file or hf_quantizer is not None or state_dict is not None:
+                raise ValueError(
+                    "experts_offload needs a single-device device_map and an unquantized safetensors checkpoint"
+                )
+            skip_keys = prepare_experts_offload(
+                model, checkpoint_files, dtype=dtype, device=devices.pop(), options=experts_offload
+            )
+
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
@@ -4425,6 +4440,7 @@ class PreTrainedModel(
             use_safetensors=use_safetensors,
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
+            skip_keys=skip_keys,
         )
         if distributed_checkpoint_dir is not None:
             loading_info = model._load_and_finalize_distributed_pretrained_model(
@@ -4551,6 +4567,8 @@ class PreTrainedModel(
                 merged_state_dict = {}
                 for file in checkpoint_files:
                     if load_config.disable_mmap or _is_on_hf_mount(file):
+                        if load_config.skip_keys:
+                            raise ValueError("experts_offload does not support disable_mmap or HF mounts")
                         with open(file, "rb") as _fh:
                             merged_state_dict.update(_safe_load_bytes(_fh.read()))
                         continue
@@ -4570,7 +4588,8 @@ class PreTrainedModel(
                     file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                        if k not in load_config.skip_keys:
+                            merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
@@ -4663,6 +4682,10 @@ class PreTrainedModel(
 
 
         Args:
+            experts_offload (`dict`, *optional*):
+                Keep the experts of an MoE model on disk and stream them through a device cache of
+                `experts_offload["cache_bytes"]` bytes, for models whose experts do not fit in memory. Inference only, on a
+                single device. The options are documented in `transformers.integrations.experts_offload.prepare_experts_offload`.
             auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
                 The auto class to register this new model with.
         """
