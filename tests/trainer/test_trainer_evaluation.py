@@ -149,6 +149,51 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
             self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
+    def test_predict_preprocessed_float8_logits(self):
+        dtypes = (
+            torch.float8_e4m3fn,
+            torch.float8_e4m3fnuz,
+            torch.float8_e5m2,
+            torch.float8_e5m2fnuz,
+            torch.bfloat16,
+            torch.float32,
+            torch.float64,
+        )
+        for dtype in dtypes:
+            for accumulation_steps in (None, 1):
+                with self.subTest(dtype=dtype, accumulation_steps=accumulation_steps):
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        trainer = get_regression_trainer(
+                            a=1.5,
+                            b=2.5,
+                            double_output=True,
+                            eval_len=7,
+                            per_device_eval_batch_size=3,
+                            eval_accumulation_steps=accumulation_steps,
+                            preprocess_logits_for_metrics=lambda logits, labels: tuple(t.to(dtype) for t in logits),
+                            compute_metrics=lambda output: {"prediction_mean": output.predictions[0].mean().item()},
+                            output_dir=tmp_dir,
+                            report_to=[],
+                        )
+                        raw = torch.from_numpy(1.5 * trainer.eval_dataset.x + 2.5)
+                        expected = raw.to(dtype)
+                        if dtype != torch.float64:
+                            expected = expected.float()
+                        expected = expected.numpy()
+
+                        output = trainer.predict(trainer.eval_dataset)
+                        self.assertIsInstance(output.predictions, tuple)
+                        self.assertEqual(len(output.predictions), 2)
+                        for predictions in output.predictions:
+                            self.assertEqual(predictions.dtype, expected.dtype)
+                            np.testing.assert_array_equal(predictions, expected)
+                        np.testing.assert_array_equal(output.label_ids, trainer.eval_dataset.ys[0])
+                        self.assertEqual(output.metrics["test_prediction_mean"], expected.mean().item())
+
+                        metrics = trainer.evaluate()
+                        self.assertEqual(metrics["eval_prediction_mean"], expected.mean().item())
+                        self.assertAlmostEqual(metrics["eval_loss"], output.metrics["test_loss"], places=6)
+
     def test_train_and_predict_loss_parity(self):
         """
         Tests that the loss computed during a training_step is the same as the one computed during prediction_step.
