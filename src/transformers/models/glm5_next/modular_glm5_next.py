@@ -173,6 +173,7 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
     mlp_bias = AttributeError()
     rope_parameters = AttributeError()
     first_k_dense_replace = AttributeError()
+    index_chunk_size = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
