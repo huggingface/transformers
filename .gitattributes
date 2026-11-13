@@ -237,6 +237,8 @@ src/transformers/models/granite_speech_plus/configuration_*.py linguist-generate
 src/transformers/models/granite_speech_plus/modeling_*.py linguist-generated=true
 src/transformers/models/granite_swa/configuration_*.py linguist-generated=true
 src/transformers/models/granite_swa/modeling_*.py linguist-generated=true
+src/transformers/models/granite_switch/configuration_*.py linguist-generated=true
+src/transformers/models/granite_switch/modeling_*.py linguist-generated=true
 src/transformers/models/granitemoe/modeling_*.py linguist-generated=true
 src/transformers/models/granitemoe_swa/configuration_*.py linguist-generated=true
 src/transformers/models/granitemoe_swa/modeling_*.py linguist-generated=true

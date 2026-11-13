@@ -250,6 +250,18 @@ SPECIAL_CASES_TO_ALLOW = {
         "max_atomic_number",
     ],
     "AXK2Config": ["layer_types"],  # needed for correct cache
+    "GraniteSwitchConfig": [
+        # Needed for correct cache: read by the Cache classes, not by the modeling file.
+        "layer_types",
+        # Adapter metadata, validated in the config's own `__post_init__`. A checkpoint records the
+        # adapter names and the rank each was trained at; the modeling file only ever needs the
+        # maximum, which it reads as `max_lora_rank`.
+        "adapter_names",
+        "adapter_ranks",
+        # Superseded by `ms_counting_head_dim`, which is what the switch heads read. Kept so that
+        # checkpoints written with the older key still round-trip.
+        "switch_head_dim",
+    ],
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
     "EsmFold2AtomEncoderConfig": True,
