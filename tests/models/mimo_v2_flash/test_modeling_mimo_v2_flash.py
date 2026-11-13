@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -80,6 +81,28 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         config = MiMoV2FlashConfig(sliding_window=128, sliding_window_size=128)
         self.assertEqual(config.sliding_window, 129)
         self.assertEqual(MiMoV2FlashConfig.from_dict(config.to_dict()).sliding_window, 129)
+
+    def test_router_kept_in_float32(self):
+        # The checkpoint stores the router weight (`mlp.gate.weight`) and its correction bias in float32.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiMoV2FlashForCausalLM(config)
+        gates = {n: p.detach().clone() for n, p in model.named_parameters() if n.endswith("mlp.gate.weight")}
+        self.assertTrue(gates)
+        for name in gates:  # values bfloat16 cannot represent
+            gates[name] = 1.0 + 2.0**-12 * torch.randn_like(gates[name])
+            model.get_parameter(name).data.copy_(gates[name])
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = MiMoV2FlashForCausalLM.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+        for name, gate in gates.items():
+            loaded = model.get_parameter(name)
+            self.assertEqual(loaded.dtype, torch.float32, name)
+            torch.testing.assert_close(loaded, gate.to(loaded.device), rtol=0, atol=0)
+        for name, bias in model.named_buffers():
+            if name.endswith("e_score_correction_bias"):
+                self.assertEqual(bias.dtype, torch.float32, name)
+        # the dense MLP's gate_proj is not matched and follows the requested dtype
+        self.assertEqual(model.model.layers[0].mlp.gate_proj.weight.dtype, torch.bfloat16)
 
     # Tests from Gemma3 adapted to MiMo
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])

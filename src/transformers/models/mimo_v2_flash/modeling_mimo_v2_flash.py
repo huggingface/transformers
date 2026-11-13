@@ -466,7 +466,8 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
         "attentions": MiMoV2FlashAttention,
         "router_logits": OutputRecorder(MiMoV2FlashTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    # The checkpoint stores the router weight in float32, like the correction bias
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "mlp.gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
     _compatible_flash_implementations = ["flash_attention_4"]
 

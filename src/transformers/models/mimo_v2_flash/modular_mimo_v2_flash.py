@@ -310,6 +310,8 @@ class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_flex_attn = False  # asymmetric head dim + not being a power of 2
     _compatible_flash_implementations = ["flash_attention_4"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
+    # The checkpoint stores the router weight in float32, like the correction bias
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "mlp.gate.weight"]
 
     @torch.no_grad()
     def _init_weights(self, module):
