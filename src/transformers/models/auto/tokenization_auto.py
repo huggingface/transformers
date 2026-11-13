@@ -674,7 +674,7 @@ class AutoTokenizer:
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
     def from_pretrained(
         cls, pretrained_model_name_or_path, *inputs, **kwargs
-    ) -> TokenizersBackend | SentencePieceBackend:
+    ) -> "TokenizersBackend | SentencePieceBackend":
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 

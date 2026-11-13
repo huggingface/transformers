@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_python import AddedToken
+from transformers.utils import is_tokenizers_v1_available
 
 from .test_sentencepiece_backend_mixin import SentencePieceBackendTesterMixin
 from .test_tokenizers_backend_mixin import TokenizersBackendTesterMixin
@@ -1157,6 +1158,7 @@ Hey how are you doing"""  # noqa: W293
 
     @require_torch
     @require_jinja
+    @unittest.skipIf(is_tokenizers_v1_available(), "needs offsets, which tokenizers>=1 doesn't expose yet")
     def test_chat_template_return_assistant_tokens_mask(self):
         dummy_template = (
             "{% for message in messages %}"
@@ -1350,6 +1352,7 @@ Hey how are you doing"""  # noqa: W293
                 )
 
     @require_jinja
+    @unittest.skipIf(is_tokenizers_v1_available(), "needs offsets, which tokenizers>=1 doesn't expose yet")
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         dummy_template = (
             "{% for message in messages %}"
