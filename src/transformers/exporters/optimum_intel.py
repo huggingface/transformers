@@ -33,7 +33,7 @@ if is_openvino_available():
     import openvino
 
 if TYPE_CHECKING:
-    from .base import ExportArtifacts
+    from .base import ExportedModel
 
 
 logger = logging.get_logger(__name__)
@@ -85,21 +85,17 @@ def _metadata(program, config, kwargs: dict[str, Any], outputs: Any, stateful: b
     traced = {name: value if isinstance(value, dict) else _traced(value) for name, value in kwargs.items()}
     return ExportMetadata(
         architecture=(config.architectures or [None])[0],
-        dtype="float32",
-        device="cpu",
+        export_dtype="float32",
+        export_device="cpu",
         kwargs=traced,
-        input_names=[port.get_any_name() for port in program.inputs],
-        output_names=[port.get_any_name() for port in program.outputs][
-            : len(torch.utils._pytree.tree_leaves(outputs))
-        ],
         in_spec=treespec_dumps(tree_structure(((), dict.fromkeys(kwargs, 0)))),
         out_spec=treespec_dumps(tree_structure(outputs)),
         export_config={"export_format": "openvino", "dynamic": True, "stateful": stateful},
     )
 
 
-def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadKwargs]) -> ExportArtifacts:
-    """An optimum-intel export as [`ExportArtifacts`]: a stateful causal LM (inputs `input_ids`, `attention_mask`,
+def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadKwargs]) -> ExportedModel:
+    """An optimum-intel export as an [`ExportedModel`]: a stateful causal LM (inputs `input_ids`, `attention_mask`,
     `position_ids`, `beam_idx`; output `logits`; the cache as state) or encoder-decoder (Whisper's, T5's: an encoder
     graph, and a decoder that writes its own cross cache into state) that the generation runtime drives, or an
     encoder (feature extraction, classification), whose outputs come back as a dict by the IR's output names.
@@ -112,7 +108,7 @@ def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadK
     from ..generation import GenerationConfig
     from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, Seq2SeqLMOutput
     from ..models.auto import AutoConfig
-    from .base import ExportArtifacts, ExportedComponent
+    from .base import ExportedComponent, _exported_model_class
 
     logger.warning(
         f"{pretrained_model_name_or_path} is an optimum-intel export, loaded as a legacy format: its metadata is "
@@ -139,8 +135,9 @@ def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadK
             "the components here: re-export it with `OpenVINOExporter().export_for_generation`."
         )
 
-    def artifacts(components: dict, generation: bool) -> ExportArtifacts:
-        return ExportArtifacts(
+    def exported_model(components: dict, generation: bool) -> ExportedModel:
+        model_class = _exported_model_class(components, generation=generation)
+        return model_class(
             components, "openvino", config=config, generation_config=generation_config, generation=generation
         )
 
@@ -155,15 +152,15 @@ def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadK
         decoder_kwargs = {
             "decoder_input_ids": decoder.input("decoder_input_ids"),
             "encoder_outputs": {"container": "BaseModelOutput"},
-            "past_key_values": {"container": "EncoderDecoderCache"},
+            "cache": {"container": "EncoderDecoderCache"},
         }
         encoder_metadata = _metadata(encoder, config, encoder_kwargs, hidden, stateful=False)
         decoder_metadata = _metadata(decoder, config, decoder_kwargs, Seq2SeqLMOutput(logits=torch.zeros(1)), True)
         # The output class of the encoder, which the runtime reads off the decode graph's input spec.
         decoder_metadata.in_spec = treespec_dumps(
-            tree_structure(((), {"decoder_input_ids": 0, "encoder_outputs": hidden, "past_key_values": 0}))
+            tree_structure(((), {"decoder_input_ids": 0, "encoder_outputs": hidden, "cache": 0}))
         )
-        return artifacts(
+        return exported_model(
             {
                 "encoder_model": ExportedComponent(encoder, encoder_metadata),
                 "decoder_model": ExportedComponent(decoder, decoder_metadata),
@@ -176,7 +173,7 @@ def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadK
     output_names = [port.get_any_name() for port in program.outputs]
     if len(inputs) == len(program.inputs):
         outputs = dict.fromkeys(output_names, torch.zeros(1))
-        return artifacts(
+        return exported_model(
             {"model": ExportedComponent(program, _metadata(program, config, inputs, outputs, False))}, False
         )
     if output_names[:1] != ["logits"]:
@@ -184,6 +181,6 @@ def load_optimum_intel(pretrained_model_name_or_path, **kwargs: Unpack[DownloadK
             f"{pretrained_model_name_or_path} keeps a state but doesn't return logits (outputs {output_names}): only "
             "a stateful causal LM loads from optimum-intel. Re-export it with `OpenVINOExporter`."
         )
-    inputs["past_key_values"] = {"container": "DynamicCache"}
+    inputs["cache"] = {"container": "DynamicCache"}
     metadata = _metadata(program, config, inputs, CausalLMOutputWithPast(logits=torch.zeros(1)), stateful=True)
-    return artifacts({"model": ExportedComponent(program, metadata)}, generation=True)
+    return exported_model({"model": ExportedComponent(program, metadata)}, generation=True)

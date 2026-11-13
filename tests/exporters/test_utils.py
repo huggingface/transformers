@@ -20,9 +20,9 @@ DON'T touch:
 
 - The **auto factory** (``AutoExportConfig`` / ``AutoHfExporter``) — models bypass it and
   instantiate concrete exporters directly.
-- **Config dict round-trips** — configs are built via constructor calls, never serialised.
+- **Config dict round-trips** — configs are built via constructor calls, never read back from a dict.
 - **Registration edge cases** — type-check rejections in ``register_backend``.
-- **``ExportArtifacts`` saving** — the manifest ``save_pretrained`` writes next to the components.
+- **``ExportedModel`` saving** — the manifest ``save_pretrained`` writes next to the components.
 - **`patch_attributes` restore-on-exception** — the happy path is exercised but the exception
   branch never fires in real exports.
 - The **`decompose_prefill_decode` guard** against generators that bypass the top-level
@@ -33,25 +33,20 @@ DON'T touch:
 Everything below targets one of those gaps.
 """
 
-import dataclasses
 import json
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from unittest import mock
 
 from transformers import BertConfig, GenerationConfig, PreTrainedConfig
-from transformers.exporters import (
-    EXPORT_BACKENDS,
-    AutoExportConfig,
-    AutoHfExporter,
-    get_exporter_class,
-    register_backend,
-)
+from transformers.exporters import AutoExportConfig, AutoHfExporter, register_backend
 from transformers.exporters import utils as exporter_utils
-from transformers.exporters.base import ExportArtifacts, ExportedComponent, HfExporter
+from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
+from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
-from transformers.exporters.decompose import decompose_multimodal
+from transformers.exporters.decompose import decompose_multimodal, embedded_inputs
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -101,7 +96,7 @@ class AutoExportConfigTest(unittest.TestCase):
                 self.assertIsInstance(AutoExportConfig.from_dict({"export_format": export_format}), config_cls)
 
     def test_from_dict_missing_export_format_raises(self):
-        with self.assertRaisesRegex(ValueError, "No export format"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format None"):
             AutoExportConfig.from_dict({})
 
     def test_from_dict_unknown_format_raises(self):
@@ -134,11 +129,11 @@ class AutoHfExporterTest(unittest.TestCase):
     def test_from_config_raises_on_unknown_format(self):
         with self.assertRaisesRegex(ValueError, "Unknown export format"):
             AutoHfExporter.from_config({"export_format": "not_a_real_backend"})
-        with self.assertRaisesRegex(ValueError, "No export format"):
+        with self.assertRaisesRegex(ValueError, "Unknown export format None"):
             AutoHfExporter.from_config({})
 
 
-@dataclasses.dataclass
+@dataclass
 class _StubConfig(DynamoConfig):
     export_format: str = "stub"
 
@@ -151,7 +146,7 @@ class _StubExporter(HfExporter):
     program_suffix = ".txt"
 
     def export_program(self, model, sample_inputs, config):
-        return "program", {"input_names": list(sample_inputs)}
+        return "program", ExportMetadata(kwargs={name: {} for name in sample_inputs})
 
     @classmethod
     def save_program(cls, program, path):
@@ -193,49 +188,75 @@ class RegistrationTest(unittest.TestCase):
         self.assertNotIn("stub", EXPORT_BACKENDS)
 
 
-class ExportArtifactsTest(unittest.TestCase):
+class ExportedModelTest(unittest.TestCase):
     def test_export_returns_single_model_component(self):
-        artifacts = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
-        self.assertEqual(list(artifacts), ["model"])
-        self.assertEqual(artifacts.program, "program")
-        self.assertEqual(artifacts["model"].metadata.input_names, ["input_ids"])
+        exported = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
+        self.assertEqual(list(exported.components), ["model"])
+        self.assertEqual(exported.program, "program")
+        self.assertEqual(list(exported.components["model"].metadata.kwargs), ["input_ids"])
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
-        artifacts = ExportArtifacts({"encoder_model": component, "decoder_model": component}, "stub")
+        exported = ExportedModel({"encoder_model": component, "decoder_model": component}, "stub")
         with self.assertRaisesRegex(ValueError, "2 components"):
-            artifacts.program
+            exported.program
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
-            "encoder_model": ExportedComponent("encoder program", ExportMetadata(input_names=["input_ids"])),
+            "encoder_model": ExportedComponent("encoder program", ExportMetadata(architecture="Stub")),
             "decoder_model": ExportedComponent("decoder program", ExportMetadata()),
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend(_StubExporter)
             with tempfile.TemporaryDirectory() as directory:
-                ExportArtifacts(components, "stub", config, generation_config, generation=True).save_pretrained(
+                ExportedModel(components, "stub", config, generation_config, generation=True).save_pretrained(
                     directory
                 )
                 self.assertTrue((Path(directory) / "decoder_model.txt").is_file())
-                loaded = ExportArtifacts.from_pretrained(directory)
+                loaded = ExportedModel.from_pretrained(directory)
         self.assertEqual(loaded.export_format, "stub")
         self.assertEqual(
-            {name: component.program for name, component in loaded.items()},
+            {name: component.program for name, component in loaded.components.items()},
             {"encoder_model": "encoder program", "decoder_model": "decoder program"},
         )
         self.assertTrue(loaded.generation)
-        self.assertEqual(loaded["encoder_model"].metadata, components["encoder_model"].metadata)
+        self.assertEqual(loaded.components["encoder_model"].metadata, components["encoder_model"].metadata)
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
+
+    def test_from_pretrained_passes_trust_remote_code_to_the_config(self):
+        components = {"model": ExportedComponent("program", ExportMetadata())}
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend(_StubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportedModel(components, "stub", BertConfig(hidden_size=32)).save_pretrained(directory)
+                with mock.patch("transformers.exporters.base.AutoConfig.from_pretrained") as load_config:
+                    ExportedModel.from_pretrained(directory, trust_remote_code=True)
+        self.assertTrue(load_config.call_args.kwargs["trust_remote_code"])
+
+    def test_from_pretrained_loads_a_newer_manifest(self):
+        """An export from a newer transformers, with a field this version doesn't know, loads with a warning."""
+        components = {"model": ExportedComponent("program", ExportMetadata(architecture="Stub"))}
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend(_StubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportedModel(components, "stub").save_pretrained(directory)
+                manifest = json.loads(Path(directory, "export.json").read_text(encoding="utf-8"))
+                manifest["schema_version"] += 1
+                manifest["components"]["model"]["metadata"]["added_later"] = True
+                Path(directory, "export.json").write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertLogs("transformers.exporters.base", level="WARNING") as logs:
+                    loaded = ExportedModel.from_pretrained(directory)
+        self.assertIn("newer format", logs.output[0])
+        self.assertEqual(loaded.components["model"].metadata.architecture, "Stub")
 
     def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(OSError, "export.json"):
-                ExportArtifacts.from_pretrained(directory)
+                ExportedModel.from_pretrained(directory)
             with self.assertRaisesRegex(OSError, "export.json"):
-                ExportArtifacts.from_pretrained(directory, subfolder="onnx")
+                ExportedModel.from_pretrained(directory, subfolder="onnx")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -263,7 +284,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "factory boom"):
             with patch_attributes(
                 [
-                    (a, "method", lambda original: (lambda: "a-patched")),
+                    (a, "method", lambda original: lambda: "a-patched"),
                     (b, "method", _bad_factory),
                 ]
             ):
@@ -331,6 +352,24 @@ class LeafTensorInvariantsTest(unittest.TestCase):
         self.assertEqual(out["input_ids"].dtype, torch.int64)
         self.assertEqual(out["attention_mask"].dtype, torch.int32)
         self.assertEqual(out["hidden"].dtype, torch.float16)
+
+
+@require_torch
+class AutoDynamicShapesTest(unittest.TestCase):
+    def test_batch_feature_keeps_its_nested_structure(self):
+        """A processor's `BatchFeature` exports like the dict of its items, a list under one key included (a
+        deepstack tower's per-layer features)."""
+        from transformers import BatchFeature
+        from transformers.exporters import DynamoExporter
+
+        class Model(nn.Module):
+            def forward(self, hidden, deepstack):
+                return hidden + deepstack[0] + deepstack[1]
+
+        inputs = BatchFeature({"hidden": torch.randn(2, 4), "deepstack": [torch.randn(2, 4), torch.randn(2, 4)]})
+        exported = DynamoExporter().export(Model().eval(), inputs, DynamoConfig(dynamic=True))
+        hidden, deepstack = torch.randn(3, 4), [torch.randn(3, 4), torch.randn(3, 4)]
+        torch.testing.assert_close(exported(hidden=hidden, deepstack=deepstack), hidden + deepstack[0] + deepstack[1])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -404,13 +443,95 @@ class DecomposeMultimodalTest(unittest.TestCase):
             actual = main.module(**main.inputs).logits
         torch.testing.assert_close(actual, expected)
 
+    def test_vision_graph_runs_on_another_image_count(self):
+        """The vision graph takes any number of images: the getter returns its features as one tensor, which a
+        per-image list would have fixed to the traced count."""
+        from transformers.exporters import DynamoExporter
+        from transformers.exporters.components import ModalityEncoder
+
+        model, _ = _tiny_llava()
+        vision = ModalityEncoder(model.model, "get_image_features")
+        pixel_values = torch.randn(2, 3, 30, 30)
+        exported = DynamoExporter().export(vision, {"pixel_values": pixel_values}, DynamoConfig(dynamic=True))
+        with torch.no_grad():
+            for images in (pixel_values, pixel_values[:1], torch.randn(3, 3, 30, 30)):
+                expected = torch.cat(model.model.get_image_features(images).pooler_output)
+                torch.testing.assert_close(exported(pixel_values=images), expected)
+
+    def test_embedded_inputs_drop_the_modality_side_inputs(self):
+        """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
+        `image_position_ids`, LLaVA-OneVision's `batch_num_images`, LFM2-VL's `spatial_shapes`, an audio tower's
+        `input_features_mask`), which a text-only call doesn't carry."""
+        inputs = {
+            "inputs_embeds": torch.randn(2, 6, 16),
+            "attention_mask": torch.ones(2, 6, dtype=torch.long),
+            "pixel_values": torch.randn(2, 16, 48),
+            "image_position_ids": torch.zeros(2, 16, 2, dtype=torch.long),
+            "batch_num_images": torch.ones(2, dtype=torch.long),
+            "spatial_shapes": torch.ones(2, 2, dtype=torch.long),
+            "input_features": torch.randn(2, 10, 8),
+            "input_features_mask": torch.ones(2, 10, dtype=torch.bool),
+        }
+        self.assertEqual(sorted(embedded_inputs(inputs, {})), ["attention_mask", "inputs_embeds"])
+
+    def test_modality_specs_cover_every_getter_only_input(self):
+        """Every `forward` input a multimodal model reads only to compute its features belongs to a modality in
+        `_MODALITY_SPECS`: the language model would otherwise keep it as a graph input, which a text-only call can't
+        give. Checked on the source of each model that scatters features into its embeddings, since the processor
+        inputs that hit it (LLaVA-OneVision's `batch_num_images`) are rarely in a model tester's."""
+        import ast
+
+        import transformers.models
+        from transformers.exporters.decompose import _MODALITY_SPECS
+
+        getters = {"get_image_features", "get_video_features", "get_audio_features"}
+        merges = {"get_placeholder_mask", "masked_scatter"}
+        # Settings rather than tensors, and the anyres image sizes, which only the runtime reads
+        not_graph_inputs = {
+            "vision_feature_layer",
+            "vision_feature_select_strategy",
+            "interpolate_pos_encoding",
+            "downsample_mode",
+            "sample",
+            "image_sizes",
+        }
+        known = {key for spec in _MODALITY_SPECS for key in (*spec.input_keys, spec.grid_key)} | not_graph_inputs
+        missing = []
+        for path in sorted(Path(transformers.models.__path__[0]).glob("*/modeling_*.py")):
+            for cls in [node for node in ast.parse(path.read_text()).body if isinstance(node, ast.ClassDef)]:
+                for forward in [
+                    node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "forward"
+                ]:
+                    attributes = {node.attr for node in ast.walk(forward) if isinstance(node, ast.Attribute)}
+                    if not (attributes & getters and attributes & merges):
+                        continue
+                    getter_calls = [
+                        node
+                        for node in ast.walk(forward)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in getters
+                    ]
+                    in_getters = {id(node) for call in getter_calls for node in ast.walk(call)}
+                    for argument in forward.args.args[1:] + forward.args.kwonlyargs:
+                        reads = [
+                            node
+                            for node in ast.walk(forward)
+                            if isinstance(node, ast.Name)
+                            and node.id == argument.arg
+                            and isinstance(node.ctx, ast.Load)
+                        ]
+                        if reads and argument.arg not in known and all(id(node) in in_getters for node in reads):
+                            missing.append(f"{cls.name}.{argument.arg}")
+        self.assertEqual(missing, [], "add these inputs to their modality in `exporters.decompose._MODALITY_SPECS`")
+
     def test_export_multimodal_exports_each_component(self):
         from transformers.exporters import DynamoExporter
 
         model, inputs = _tiny_llava()
-        artifacts = DynamoExporter().export_multimodal(model, inputs, DynamoConfig())
+        exported = DynamoExporter().export_multimodal(model, inputs, DynamoConfig())
         names = {"text_embeddings_model", "vision_embeddings_model", "language_model"}
-        self.assertEqual(set(artifacts), names)
+        self.assertEqual(set(exported.components), names)
         with tempfile.TemporaryDirectory() as directory:
-            artifacts.save_pretrained(directory)
-            self.assertEqual(set(ExportArtifacts.from_pretrained(directory)), names)
+            exported.save_pretrained(directory)
+            self.assertEqual(set(ExportedModel.from_pretrained(directory).components), names)

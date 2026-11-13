@@ -233,7 +233,7 @@ class EmbeddingGemma2ModelTester:
 
     def get_config(self):
         return EmbeddingGemma2Config(
-            text_config=self.text_config,
+            text_config=self.llm_tester.get_config(),
             vision_config=self.vision_config,
             audio_config=self.audio_config,
             image_token_id=self.image_token_id,

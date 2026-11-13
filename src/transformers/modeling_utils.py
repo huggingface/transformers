@@ -1800,6 +1800,16 @@ class PreTrainedModel(
                 requested_original_flash_attn = False
 
         if is_kernel(applicable_attn_implementation):
+            # A Flash Attention kernel from the Hub needs the same model support as `flash_attention_*`
+            if not self._supports_flash_attn and is_flash_attention_requested(
+                requested_attention_implementation=applicable_attn_implementation
+            ):
+                raise ValueError(
+                    f"{self.__class__.__name__} does not support Flash Attention yet, so it cannot use the "
+                    f"`{applicable_attn_implementation}` kernel. Please request to add support where the model is "
+                    f"hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
+                    " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+                )
             try:
                 # preload flash attention here to allow compile with fullgraph
                 lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
@@ -2090,7 +2100,7 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `model.tp_plan` by `update_parallel_plan` (and isn't
+        # MegaMoE is locked at load time: its EP implementation is set by the FP8 quantizer at load (and isn't
         # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
         # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
@@ -3386,8 +3396,9 @@ class PreTrainedModel(
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+            quant_method = hf_quantizer.quantization_config.quant_method
             raise ValueError(
-                f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
+                f"The model is quantized with {getattr(quant_method, 'value', quant_method)} and is not serializable - check out the warnings from"
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
 

@@ -259,6 +259,7 @@ class CLIPSegTextModelTester:
     def get_config(self):
         return CLIPSegTextConfig(
             vocab_size=self.vocab_size,
+            eos_token_id=self.vocab_size - 1,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -399,6 +400,12 @@ class CLIPSegModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values = config_and_inputs
+
+        # Ensure eos pooling uses an unmasked token
+        eos_id = config.text_config.eos_token_id
+        input_ids[input_ids == eos_id] = 3
+        input_ids[:, -2] = eos_id
+
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,

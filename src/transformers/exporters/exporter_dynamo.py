@@ -40,11 +40,10 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
-import importlib
 import inspect
 import sys
 import types
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -52,8 +51,8 @@ from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig, ExportFormat
-from .metadata import build_export_metadata
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .metadata import ExportMetadata, build_export_metadata
+from .utils import apply_patches, import_dotted_path, patch_attributes, prepare_for_export, register_patch
 
 
 if is_torch_available():
@@ -77,7 +76,7 @@ class DynamoExporter(HfExporter):
 
     >>> exporter = DynamoExporter()
     >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.program.module()(**inputs)
+    >>> outputs = exported(**inputs)
     >>> exported.save_pretrained("exported")  # `model.pt2`, its metadata and the model config
     ```
     """
@@ -94,9 +93,8 @@ class DynamoExporter(HfExporter):
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: DynamoConfig | dict[str, Any],
-    ) -> tuple[ExportedProgram, dict[str, Any]]:
-        config = self._as_config(config)
+        config: DynamoConfig,
+    ) -> tuple[ExportedProgram, ExportMetadata]:
         if config.quantizer is not None:
             config.quantizer.validate_environment(config.export_format)
 
@@ -159,11 +157,9 @@ class DynamoExporter(HfExporter):
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
 # Replaces `model.forward` with a flat explicit signature derived from the
 # inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
-# `patch_model_config` lives here too — it strips output flags from the inputs
-# and applies them onto `model.config` for the duration of the trace.
+# `patch_model_config` applies the output flags to `model.config` for the trace.
 
 
-# Output flags stripped from inputs and applied onto `model.config` for the trace.
 @contextmanager
 def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     """Reversibly tweak `model.config` for the trace:
@@ -431,6 +427,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v.modeling_glm4v.Glm4vVisionAttention.forward",
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
+    "transformers.models.dots3_note.modeling_dots3_note.Dots3NoteVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
     # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
@@ -447,6 +444,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
+    "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
@@ -482,11 +480,7 @@ def _class_to_path(cls: type) -> str:
 
 
 def _path_to_class(path: str) -> type:
-    module_name, qualname = path.split(":", 1)
-    obj = importlib.import_module(module_name)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
-    return obj
+    return import_dotted_path(path.replace(":", "."))
 
 
 def _maybe_sym_constant(sym: Any) -> Any:
@@ -719,9 +713,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
     - Scalars / None → None (no dynamic dims).
     - Registered pytree nodes (ModelOutput, Cache, …) → list of one spec per child of the
       registered flatten, recursed, matching the ``TreeSpec(list, …)`` torch.export compares against.
-    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Lists / tuples → same container type, recursed element-wise.
-    - Plain dicts → recursed dict of specs.
+    - Dicts and other mappings (a processor's `BatchFeature`) → recursed dict of specs.
+    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
@@ -740,6 +734,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
         # against -- flattening it to tensors hands over a flat spec where nested children are expected.
         children, _ = node.flatten_fn(inputs)
         return [get_auto_dynamic_shapes(child) for child in children]
+    if isinstance(inputs, Mapping):
+        # A processor's `BatchFeature`, which `torch.export` takes as the dict of its items
+        return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
     if hasattr(inputs, "__dict__"):
         leaves, _ = _pytree_flatten(inputs)
         return get_auto_dynamic_shapes(leaves)

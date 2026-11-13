@@ -74,7 +74,10 @@ class ModalityEncoder(_ModelComponent):
         # The precompute may offer kwargs the getter never takes (`window_index` on minicpmv4_6).
         getter = getattr(self.model, self._getter)
         parameters = inspect.signature(getter).parameters
-        if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+            # One tensor for every image: a list would fix the image count in the graph.
+            kwargs["return_flat"] = True
+        else:
             kwargs = {name: value for name, value in kwargs.items() if name in parameters}
         outputs = getter(**kwargs)
         # Some outputs declare both fields and fill neither (granite4_vision), so fall through on `None`.

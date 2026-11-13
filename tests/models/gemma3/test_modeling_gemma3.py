@@ -396,7 +396,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             config=config.text_config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
             block_sequence_ids=block_sequence_ids,
         )
@@ -437,7 +437,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
         model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
         batch_size, prompt_length = inputs_dict["input_ids"].shape
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=config.get_text_config(),
             max_batch_size=batch_size,
             max_cache_len=prompt_length + 8,  # longer than the sliding window
@@ -446,7 +446,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         )
 
         with torch.no_grad():
-            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+            model(**inputs_dict, cache=cache, use_cache=True)
 
 
 @slow
@@ -886,12 +886,12 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         forward_outputs = model(**model_inputs)
-        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.cache))
 
         generate_outputs = model.generate(
             **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True
         )
-        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.cache))
 
         # Even if we manually specify cache_implementation="hybrid", it will still use the dynamic sliding window cache
         generate_outputs = model.generate(
@@ -901,4 +901,4 @@ class Gemma3IntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
             cache_implementation="hybrid",
         )
-        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.cache))
