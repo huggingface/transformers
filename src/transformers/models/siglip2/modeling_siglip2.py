@@ -26,7 +26,6 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -111,33 +110,6 @@ class Siglip2Output(ModelOutput):
         return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
-def get_vision_position_interpolation_weights(
-    spatial_shapes: torch.LongTensor, position_embedding_size: int, max_length: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """`(num_images, max_length, position_embedding_size**2)` weights resizing the position-embedding grid to each
-    image's `(height, width)` like the antialiased bilinear `F.interpolate` does, padded with the first position.
-    Popped from `kwargs` when precomputed, so the embeddings avoid a per-image `spatial_shapes.tolist()` loop under
-    export.
-    """
-    if kwargs is not None and (weights := kwargs.pop("position_interpolation_weights", None)) is not None:
-        return weights
-    num_positions = position_embedding_size**2
-    # Interpolation is linear: resizing each one-hot grid gives the weight of that position in every output
-    basis = torch.eye(num_positions, device=spatial_shapes.device).reshape(
-        num_positions, 1, position_embedding_size, position_embedding_size
-    )
-    weights = torch.empty(spatial_shapes.shape[0], max_length, num_positions, device=spatial_shapes.device)
-    for i, (height, width) in enumerate(spatial_shapes.tolist()):
-        torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
-        torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
-        torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
-        resized = F.interpolate(basis, size=(height, width), mode="bilinear", align_corners=False, antialias=True)
-        resized = resized.reshape(num_positions, height * width).transpose(0, 1)
-        weights[i, : height * width] = resized
-        weights[i, height * width :] = resized[0]
-    return weights
-
-
 class Siglip2VisionEmbeddings(nn.Module):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__()
@@ -159,7 +131,6 @@ class Siglip2VisionEmbeddings(nn.Module):
         positional_embeddings: torch.Tensor,
         spatial_shapes: torch.LongTensor,
         max_length: int,
-        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Resize positional embeddings to image-specific size and pad to a fixed size.
@@ -175,19 +146,34 @@ class Siglip2VisionEmbeddings(nn.Module):
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
-        interpolation_weights = get_vision_position_interpolation_weights(
-            spatial_shapes, positional_embeddings.shape[0], max_length, kwargs=kwargs
+        torch_compilable_check((spatial_shapes > 0).all(), "Resized positional embeddings must have a positive size.")
+        torch_compilable_check(
+            (spatial_shapes.prod(-1) <= max_length).all(), "Resized positional embeddings exceed max_length."
         )
-        positional_embeddings = positional_embeddings.reshape(-1, positional_embeddings.shape[-1])
-        resized_embeddings = interpolation_weights.to(positional_embeddings.device) @ positional_embeddings.float()
+        grid_size = positional_embeddings.shape[0]
+
+        # Each output position's row and column in its image, the padding positions taking the first one
+        sizes = spatial_shapes.float()[:, None]
+        positions = torch.arange(max_length, device=spatial_shapes.device, dtype=torch.float32)[None, :, None]
+        rows = torch.div(positions, sizes[..., 1:], rounding_mode="floor")
+        output_index = torch.cat([rows, positions - rows * sizes[..., 1:]], dim=-1)
+        output_index = output_index * (positions < sizes.prod(-1, keepdim=True))
+
+        # The weights of `F.interpolate(mode="bilinear", align_corners=False, antialias=True)` along each axis
+        scale = grid_size / sizes
+        support = scale.clamp(min=1)
+        center = (output_index + 0.5) * scale - 0.5
+        source = torch.arange(grid_size, device=spatial_shapes.device, dtype=torch.float32)
+        weights = (1 - (source - center[..., None]).abs_().div_(support[..., None])).clamp_(min=0)
+        weights = weights / weights.sum(-1, keepdim=True)
+
+        # Resizing is linear: each output is the grid weighted by its row's and its column's weights
+        weights = (weights[..., 0, :, None] * weights[..., 1, None, :]).flatten(-2)
+        flat_embeddings = positional_embeddings.reshape(-1, positional_embeddings.shape[-1])
+        resized_embeddings = weights.to(flat_embeddings.device) @ flat_embeddings.float()
         return resized_embeddings.to(positional_embeddings.dtype)
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        spatial_shapes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.Tensor`):
@@ -205,7 +191,7 @@ class Siglip2VisionEmbeddings(nn.Module):
             self.position_embedding_size, self.position_embedding_size, -1
         )
         resized_positional_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, spatial_shapes, max_length=pixel_values.shape[1], **kwargs
+            positional_embeddings, spatial_shapes, max_length=pixel_values.shape[1]
         )
 
         # Add positional embeddings to patch embeddings
@@ -552,7 +538,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled features
         ```
         """
-        hidden_states = self.embeddings(pixel_values, spatial_shapes, **kwargs)
+        hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
