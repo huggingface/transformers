@@ -980,7 +980,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         matching_scores_0, max_indices_0 = masked_scores.max(1)
         matching_scores_1, max_indices_1 = masked_scores.max(2)
 
-        matching_indices = torch.cat([max_indices_0, max_indices_1]).reshape(batch_size, 2, -1)
+        matching_indices = torch.stack([max_indices_0, max_indices_1], dim=1)
         matching_scores = torch.stack([matching_scores_0, matching_scores_1], dim=1)
 
         # For the keypoints not meeting the threshold score, set the indices to -1 which corresponds to no matches found
@@ -1175,7 +1175,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         )
 
         heatmap = fine_confidence.reshape(batch_size, num_keypoints, 3, 3)
-        fine_coordinates_normalized = spatial_expectation2d(heatmap, True)[0]
+        fine_coordinates_normalized = spatial_expectation2d(heatmap, True)
 
         fine_matches_0 = fine_matches[:, 0]
         fine_matches_1 = fine_matches[:, 1] + (fine_coordinates_normalized * (3 // 2) * fine_scale)
