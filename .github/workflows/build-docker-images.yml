@@ -6,8 +6,21 @@ on:
       - build_ci_docker_image*
   repository_dispatch:
   workflow_dispatch:
+    inputs:
+      deepspeed_only:
+        description: 'Build only the DeepSpeed image'
+        type: boolean
+        default: false
+      image_postfix:
+        description: 'Image suffix or tag, for example :cu132-validation'
+        type: string
+        default: ''
   workflow_call:
     inputs:
+      deepspeed_only:
+        required: false
+        type: boolean
+        default: false
       image_postfix:
         required: true
         type: string
@@ -23,6 +36,7 @@ permissions: {}
 
 jobs:
   latest-docker:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "Latest PyTorch [dev]"
@@ -69,6 +83,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   flash-attn-ci-image:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "PyTorch with Flash Attn [dev]"
@@ -150,7 +165,7 @@ jobs:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-contexts: gpu-common=./docker/gpu-common
           build-args: |
-            REF=main
+            REF=${{ github.sha }}
             PYTHON_VERSION=${{ steps.python.outputs.version }}
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
@@ -165,6 +180,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   doc-builder:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "Doc builder"
@@ -209,6 +225,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-pytorch-amd:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "Latest PyTorch (AMD) [dev]"
@@ -249,6 +266,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   cache-latest-pytorch-amd:
+    if: ${{ !inputs.deepspeed_only }}
     permissions: {}
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
@@ -281,6 +299,7 @@ jobs:
           echo "Cache populated successfully at ${final_path}"
 
   latest-pytorch-deepspeed-amd:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "PyTorch + DeepSpeed (AMD) [dev]"
@@ -327,6 +346,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-quantization-torch-docker:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "Latest Pytorch + Quantization [dev]"
@@ -373,6 +393,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   xpu-ci-image:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "PyTorch XPU"
@@ -410,6 +431,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   intel-cpu:
+    if: ${{ !inputs.deepspeed_only }}
     permissions:
       contents: read
     name: "Intel CPU"
