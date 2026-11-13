@@ -369,6 +369,7 @@ class GotOcr2Processor(ProcessorMixin):
         if image_sizes is not None:
             merged_kwargs = self._merge_kwargs(**kwargs)
             images_kwargs = merged_kwargs["images_kwargs"]
+            # `images_kwargs` has priority for backwards compatibility, as in `__call__`. Remove in v5.29.0.
             num_image_tokens = images_kwargs.get("num_image_tokens", merged_kwargs["num_image_tokens"])
 
             num_image_patches = [
