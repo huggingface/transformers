@@ -205,7 +205,7 @@ class Dots3NoteTextConfig(PreTrainedConfig):
     """
 
     model_type = "dots3_note_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.k_rope_only_layernorm": "replicated_with_grad_allreduce",
@@ -395,7 +395,7 @@ class Dots3NoteConfig(PreTrainedConfig):
         "vision_config": Dots3NoteVisionConfig,
         "audio_config": Dots3NoteAudioConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | Dots3NoteTextConfig | None = None
     vision_config: dict | Dots3NoteVisionConfig | None = None
