@@ -118,7 +118,6 @@ class Lfm2VlModel(LlavaModel):
         pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -128,9 +127,8 @@ class Lfm2VlModel(LlavaModel):
             The spatial shapes of the input images.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
             The pixel attention mask of the input images.
-        return_flat (`bool`, *optional*, defaults to `False`):
-            Whether to return the features of all images as one tensor instead of one tensor per image.
         """
+        return_flat = kwargs.pop("return_flat", False)
         factor = self.config.downsample_factor
         unshuffle_index = get_vision_unshuffle_index(
             spatial_shapes, pixel_attention_mask.shape[-1], factor, kwargs=kwargs
