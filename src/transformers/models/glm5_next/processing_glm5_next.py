@@ -29,6 +29,70 @@ from ...utils.deprecation import deprecate_attr
 logger = logging.get_logger(__name__)
 
 
+def _tool_result_id(obj) -> str:
+    """The id the chat template matches tool results with: `tool_call_id`, else `id`, as text."""
+    if not isinstance(obj, dict):
+        return ""
+    for key in ("tool_call_id", "id"):
+        if obj.get(key):
+            return str(obj[key])
+    return ""
+
+
+def _split_tool_results(message: dict) -> list[dict]:
+    """
+    Splits an aggregated tool message (`content=[{"id": ..., "output": [...]}, ...]`) into one message per result,
+    holding the content parts of its `output`, which the chat template renders like a message's content.
+    """
+    content = message.get("content")
+    if not (isinstance(content, list) and content and isinstance(content[0], dict) and "output" in content[0]):
+        return [message]
+    results = []
+    for entry in content:
+        result = {key: entry[key] for key in ("tool_call_id", "id") if key in entry} if isinstance(entry, dict) else {}
+        output = entry.get("output") if isinstance(entry, dict) else None
+        has_parts = isinstance(output, (list, tuple)) and not (
+            output and isinstance(output[0], dict) and output[0].get("type") == "tool_reference"
+        )
+        result["content"] = [part for part in output if isinstance(part, dict) and "type" in part] if has_parts else []
+        results.append(result)
+    return results
+
+
+def _tool_results_in_template_order(conversation: list[dict]) -> list[dict]:
+    """
+    Lays out each block of consecutive tool messages in the order the chat template renders the results: one
+    message per result, sorted by the `tool_calls` of the preceding assistant message when every result matches
+    exactly one call (all ids present and unique), else in message order.
+    """
+    laid_out, start = [], 0
+    while start < len(conversation):
+        if conversation[start].get("role") != "tool":
+            laid_out.append(conversation[start])
+            start += 1
+            continue
+        end = start
+        while end < len(conversation) and conversation[end].get("role") == "tool":
+            end += 1
+        results = [result for message in conversation[start:end] for result in _split_tool_results(message)]
+        previous = conversation[start - 1] if start > 0 else {}
+        tool_calls = (previous.get("tool_calls") if previous.get("role") == "assistant" else None) or []
+        call_ids = [_tool_result_id(call) for call in tool_calls]
+        result_ids = [_tool_result_id(result) for result in results]
+        if (
+            call_ids
+            and all(call_ids)
+            and all(result_ids)
+            and len(set(call_ids)) == len(call_ids)
+            and len(set(result_ids)) == len(result_ids)
+            and set(result_ids) <= set(call_ids)
+        ):
+            results.sort(key=lambda result: call_ids.index(_tool_result_id(result)))
+        laid_out.extend(results)
+        start = end
+    return laid_out
+
+
 @auto_docstring
 class Glm5NextProcessor(ProcessorMixin):
     return_mm_token_type_ids = True
@@ -181,6 +245,20 @@ class Glm5NextProcessor(ProcessorMixin):
 
     def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
         return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{timestamp_sec:.1f} seconds"
+
+    def _multimodal_inputs_from_conversations(
+        self,
+        conversations: list[list[dict[str, str]]],
+        audio_loading_params: dict,
+        load_audio_from_video: bool = False,
+    ):
+        # The chat template renders a block of tool results in the order of the calls that requested them, and the
+        # media nested in aggregated results, so media are collected in that order to match their placeholders.
+        # Only the order of collection changes, the template still renders the conversation as passed.
+        conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+        return super()._multimodal_inputs_from_conversations(
+            conversations, audio_loading_params, load_audio_from_video
+        )
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Glm5NextProcessorKwargs": (ProcessingKwargs, "5.29.0")})
