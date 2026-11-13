@@ -708,6 +708,102 @@ class TestDataCollatorForSeq2Seq(DataCollatorTestMixin, unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["labels"].shape, (2, 6))
 
+    def test_array_labels_match_lists(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        conversions = {
+            "numpy_int32": lambda values: np.asarray(values, dtype=np.int32),
+            "numpy_strided": lambda values: np.repeat(values, 2)[::2],
+            "torch_strided": lambda values: torch.tensor(values).repeat_interleave(2)[::2],
+        }
+        padding_options = [
+            {},
+            {"padding": "max_length", "max_length": 8},
+            {"pad_to_multiple_of": 8},
+            {"padding": False},
+        ]
+        for padding_side in ("left", "right"):
+            tokenizer.padding_side = padding_side
+            for options in padding_options:
+                reference_features = self._get_features()
+                if options.get("padding") is False:
+                    reference_features = [reference_features[0], copy.deepcopy(reference_features[0])]
+                collator = DataCollatorForSeq2Seq(tokenizer, **options)
+                expected = collator(reference_features)
+                for name, convert in conversions.items():
+                    with self.subTest(padding_side=padding_side, options=options, representation=name):
+                        features = [
+                            {"input_ids": row["input_ids"], "labels": convert(row["labels"])}
+                            for row in reference_features
+                        ]
+                        batch = collator(features)
+                        self.assertEqual(batch["labels"].dtype, torch.int64)
+                        for key in expected:
+                            torch.testing.assert_close(batch[key], expected[key], rtol=0, atol=0)
+                        # A returned tensor must own its batch storage, including when no padding is needed.
+                        batch["labels"].fill_(123)
+                        for feature, reference in zip(features, reference_features):
+                            self.assertEqual(feature["labels"].tolist(), reference["labels"])
+                        torch.testing.assert_close(collator(features)["labels"], expected["labels"], rtol=0, atol=0)
+
+    def test_array_label_alias_and_numpy_output(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": [0, 1], "label": np.array([2, 3], dtype=np.int32)}]
+        collator = DataCollatorForSeq2Seq(tokenizer, return_tensors="np")
+        batch = collator(features)
+        self.assertEqual(batch["labels"].dtype, np.int64)
+        np.testing.assert_array_equal(batch["labels"], [[2, 3]])
+        torch_batch = collator(features, return_tensors="pt")
+        torch.testing.assert_close(torch_batch["labels"], torch.tensor([[2, 3]]), rtol=0, atol=0)
+        with torch.device("meta"):
+            meta_batch = collator(features, return_tensors="pt")
+        self.assertEqual(meta_batch["labels"].device.type, "meta")
+        self.assertEqual(meta_batch["labels"].device, meta_batch["input_ids"].device)
+        batch["labels"].fill(7)
+        np.testing.assert_array_equal(features[0]["label"], [2, 3])
+
+    def test_array_labels_t5_training_matches_lists(self):
+        from transformers import T5Config, T5ForConditionalGeneration
+
+        set_seed(42)
+        config = T5Config(
+            vocab_size=32,
+            d_model=32,
+            d_kv=8,
+            d_ff=64,
+            num_layers=2,
+            num_heads=4,
+            dropout_rate=0.0,
+            decoder_start_token_id=0,
+        )
+        reference_model = T5ForConditionalGeneration(config)
+        model = copy.deepcopy(reference_model)
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [
+            {"input_ids": [5, 6, 1], "labels": [7, 8, 1]},
+            {"input_ids": [9, 10, 11, 1], "labels": [12, 13, 14, 1]},
+        ]
+        array_features = [{**feature, "labels": np.array(feature["labels"])} for feature in features]
+        reference_collator = DataCollatorForSeq2Seq(tokenizer, model=reference_model, pad_to_multiple_of=8)
+        collator = DataCollatorForSeq2Seq(tokenizer, model=model, pad_to_multiple_of=8)
+        reference_optimizer = torch.optim.SGD(reference_model.parameters(), lr=0.01)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        for _ in range(2):
+            reference_batch, batch = reference_collator(features), collator(array_features)
+            for key in reference_batch:
+                torch.testing.assert_close(batch[key], reference_batch[key], rtol=0, atol=0)
+            reference_optimizer.zero_grad()
+            optimizer.zero_grad()
+            reference_loss, loss = reference_model(**reference_batch).loss, model(**batch).loss
+            torch.testing.assert_close(loss, reference_loss, rtol=0, atol=0)
+            reference_loss.backward()
+            loss.backward()
+            for parameter, reference_parameter in zip(model.parameters(), reference_model.parameters()):
+                torch.testing.assert_close(parameter.grad, reference_parameter.grad, rtol=0, atol=0)
+            reference_optimizer.step()
+            optimizer.step()
+            for parameter, reference_parameter in zip(model.parameters(), reference_model.parameters()):
+                torch.testing.assert_close(parameter, reference_parameter, rtol=0, atol=0)
+
     def test_immutability(self):
         """Test that collation does not mutate input data."""
         tokenizer = BertTokenizer(self.vocab_file)
