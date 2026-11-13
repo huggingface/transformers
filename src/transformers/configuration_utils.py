@@ -320,6 +320,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
       sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
       (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
+    - **base_model_cp_plan** (`dict[str, str]`) -- A dict that maps sub-modules of a base model to a context parallel
+      style, e.g. `"layers.*": "cp_split_sequence"` to keep this rank's slice of the sequence in the decoder layers
+      and `"layers.*.self_attn": "cp_ulysses"` to give their attention the whole sequence with Ulysses.
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
@@ -399,6 +402,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
+    }
+    base_model_cp_plan: ClassVar[dict[str, str]] = {
+        "layers.*": "cp_split_sequence",
+        "layers.*.self_attn": "cp_ulysses",
     }
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
@@ -1426,6 +1433,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "base_model_tp_plan",
             "base_model_pp_plan",
             "base_model_fsdp_plan",
+            "base_model_cp_plan",
             "distributed_config",
         ]:
             d.pop(key_to_remove, None)

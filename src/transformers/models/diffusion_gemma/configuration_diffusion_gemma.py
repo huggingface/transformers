@@ -60,6 +60,8 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers.*.experts.down_proj": "rowwise",
         "layers.*.experts": "moe_tp_experts",
     }
+    # the decoder layers also take per-layer inputs of the whole sequence, which context parallelism does not cut
+    base_model_cp_plan = None
     base_model_ep_plan = {
         # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
         "layers.*.mlp.gate_proj": "colwise",

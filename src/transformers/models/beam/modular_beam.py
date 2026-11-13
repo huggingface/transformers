@@ -89,6 +89,8 @@ class BeamConfig(Qwen3MoeConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    # the attention scaling computed from the positions of the whole sequence is applied to each rank's queries
+    base_model_cp_plan = None
 
     hidden_size: int = 5120
     intermediate_size: int = 20480

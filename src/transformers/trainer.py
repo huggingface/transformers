@@ -467,6 +467,12 @@ class Trainer:
         # Sharded at load time by `from_pretrained(distributed_config=...)`, whatever the parallelism: the model owns
         # its placement and gradient reduction, so Accelerate must not wrap or shard it again.
         self.is_distributed_loading_by_transformers = getattr(model, "is_distributed_loading_by_transformers", False)
+        model_distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
+        if model_distributed_config is not None and model_distributed_config.cp_size > 1:
+            raise ValueError(
+                "Context parallelism (`cp_size > 1`) is not supported by `Trainer` yet: its dataloader would give a "
+                "different batch to the ranks of a cp group, which need the same one. Use a plain training loop."
+            )
 
         self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
         if args.fsdp:

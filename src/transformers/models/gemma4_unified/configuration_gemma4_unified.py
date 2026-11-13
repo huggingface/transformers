@@ -114,6 +114,8 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    # the decoder layers also take per-layer inputs of the whole sequence, which context parallelism does not cut
+    base_model_cp_plan = None
     base_model_ep_plan = None  # No MoE
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

@@ -24,13 +24,16 @@ from parameterized import parameterized
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import (
+    AutoModelForCausalLM,
     DynamicCache,
+    Gemma3TextConfig,
     LlamaConfig,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaModel,
     MistralConfig,
 )
+from transformers.distributed import DistributedConfig
 from transformers.distributed.context_parallel import (
     ALL_CP_STYLES,
     ContextParallelAttention,
@@ -39,13 +42,16 @@ from transformers.distributed.context_parallel import (
     UlyssesAttention,
     apply_context_parallelism,
 )
+from transformers.distributed.utils import gather_full_state_dict
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.loss.loss_utils import ForCausalLMLoss
 from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import is_fsdp_test
+from transformers.utils import is_torch_greater_or_equal
 
 from ..distributed_testing_utils import run_distributed
+from ..test_fsdp_mixin import _deterministic_init_model_dir, _distributed_tmpdir
 
 
 class _MeshStub:
@@ -586,3 +592,368 @@ class TestContextParallelStyles(unittest.TestCase):
         self.assertIsInstance(ALL_CP_STYLES["cp_model"], ModelContextParallel)
         self.assertIsInstance(ALL_CP_STYLES["cp_split_sequence"], SplitSequenceParallel)
         self.assertIsInstance(ALL_CP_STYLES["cp_ulysses"], UlyssesAttention)
+
+
+# =============================================================================
+# A model sharded with context parallelism, against the same weights on full sequences
+# =============================================================================
+
+CP_RTOL = 1e-5
+CP_ATOL = 1e-5
+
+
+def _tiny_batch(config, batch_size, seq_len, packed=False, seed=0):
+    """A batch every rank builds alike, with `batch_size` rows for each data parallel rank."""
+    generator = torch.Generator().manual_seed(seed)
+    input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len), generator=generator)
+    if not packed:
+        return input_ids, None
+    # two documents back to back, which `position_ids` has to describe for the whole sequence
+    first = seq_len // 2
+    position_ids = torch.cat([torch.arange(first), torch.arange(seq_len - first)]).expand(batch_size, -1)
+    return input_ids, position_ids
+
+
+def _local(tensor):
+    """The full value of a tensor FSDP2 holds as a `DTensor`, or `tensor` itself."""
+    return tensor.full_tensor() if hasattr(tensor, "full_tensor") else tensor
+
+
+def _data_parallel_rank_and_group(model, distributed_config):
+    """
+    Which rows of the batch this rank holds, and the group whose FSDP2 gradient contributions add up to the batch.
+
+    The cp ranks of a cp group hold the same rows: they are part of the averaging group but not of the row split.
+    """
+    mesh_manager = model._mesh_manager
+    fsdp_size, dp_replicate_size = distributed_config.fsdp_size, distributed_config.dp_replicate_size
+    cp_size = distributed_config.cp_size
+    dp_rank = 0
+    if dp_replicate_size > 1:
+        dp_rank = mesh_manager.get_mesh("dp_replicate").get_local_rank() * fsdp_size
+    if fsdp_size > 1:
+        dp_rank += mesh_manager.get_mesh("fsdp").get_local_rank()
+
+    group_size = dp_replicate_size * fsdp_size
+    if distributed_config.cp_size > 1:
+        dims = ("dp_replicate", "fsdp_cp") if dp_replicate_size > 1 else "fsdp_cp"
+        mesh = mesh_manager.get_mesh(dims)
+        return dp_rank, [mesh.get_group(dim) for dim in mesh.mesh_dim_names], group_size * cp_size
+
+    if group_size == 1:
+        return dp_rank, [], 1
+    mesh = mesh_manager.get_mesh("dp_replicate" if dp_replicate_size > 1 else "fsdp")
+    return dp_rank, [mesh.get_group(dim) for dim in mesh.mesh_dim_names], group_size
+
+
+def _average_over_group(tensor, groups, group_size):
+    """Undo FSDP2's gradient averaging so the value covers the whole batch."""
+    for group in groups:
+        dist.all_reduce(tensor, group=group)
+    return tensor / group_size
+
+
+def _compare_with_unsharded(init_dir, batch, distributed_config, keep=None):
+    """
+    Run the full `batch` through an unsharded model and through the same weights sharded with context parallelism,
+    then compare the loss, the logits and every gradient.
+
+    `keep` is the 2D `attention_mask` of the unsharded batch: the logits of its padded positions are not part of what
+    the model is trained on.
+    """
+    tokens = batch["input_ids"] if batch.get("input_ids") is not None else batch["inputs_embeds"]
+
+    reference = AutoModelForCausalLM.from_pretrained(init_dir)
+    reference_output = reference(**batch)
+    reference_output.loss.backward()
+    reference_grads = {
+        name: param.grad.clone() for name, param in reference.named_parameters() if param.grad is not None
+    }
+    reference_loss, reference_logits = reference_output.loss.detach(), reference_output.logits.detach()
+    del reference
+
+    model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+    rows_per_rank = tokens.shape[0] // (distributed_config.fsdp_size * distributed_config.dp_replicate_size)
+    dp_rank, groups, group_size = _data_parallel_rank_and_group(model, distributed_config)
+    rows = slice(dp_rank * rows_per_rank, (dp_rank + 1) * rows_per_rank)
+    # every entry is a full-sequence tensor on its first, batch dimension, apart from the flags
+    local_batch = {name: value[rows] if isinstance(value, torch.Tensor) else value for name, value in batch.items()}
+
+    output = model(**local_batch)
+    output.loss.backward()
+
+    # every rank computed the loss of the full sequences, and its own slice of the logits of the padded sequence: the
+    # padding at the end of the last rank's slice has no counterpart in the unsharded run
+    cp_rank = model._mesh_manager.get_mesh("cp").get_local_rank()
+    local_seq = output.logits.shape[1]
+    start = cp_rank * local_seq
+    # the real positions of this rank's slice, which can be none of them when the padding fills it
+    real = max(0, min(local_seq, reference_logits.shape[1] - start))
+    expected_logits = reference_logits[rows][:, start : start + real]
+    logits = _local(output.logits)[:, :real]
+    if keep is not None:
+        keep = (keep[:, start : start + real] == 1)[..., None]
+        expected_logits, logits = expected_logits * keep, logits * keep
+    torch.testing.assert_close(logits, expected_logits, rtol=CP_RTOL, atol=CP_ATOL, msg="Logits mismatch")
+
+    loss = _average_over_group(output.loss.detach(), groups, group_size)
+    torch.testing.assert_close(loss, reference_loss, rtol=CP_RTOL, atol=CP_ATOL, msg="Loss mismatch")
+
+    for name, param in model.named_parameters():
+        grad = None if param.grad is None else _local(param.grad).float()
+        expected = reference_grads.get(name)
+        if grad is None or expected is None:
+            assert grad is None and expected is None, f"Only one of the two runs has a gradient for {name}"
+            continue
+        grad = _average_over_group(grad, groups, group_size)
+        torch.testing.assert_close(grad, expected, rtol=CP_RTOL, atol=CP_ATOL, msg=f"Gradient mismatch for {name}")
+
+
+def _test_matches_unsharded(rank, cp_size, fsdp_size, dp_replicate_size, packed, seq_len=8):
+    config = _tiny_config()
+    if cp_size > 2:  # Ulysses splits the heads over the ranks, so four ranks need four key/value heads
+        config.num_key_value_heads = 4
+    batch_size = 2
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, position_ids = _tiny_batch(config, batch_size * fsdp_size * dp_replicate_size, seq_len, packed)
+        distributed_config = DistributedConfig(
+            cp_size=cp_size, fsdp_size=fsdp_size, dp_replicate_size=dp_replicate_size
+        )
+        batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
+        if position_ids is not None:
+            batch["position_ids"] = position_ids
+        _compare_with_unsharded(init_dir, batch, distributed_config)
+        # `init_dir` is rank 0's temporary directory: wait for the other ranks before it is removed
+        dist.barrier()
+
+
+def _test_padded(rank, cp_size, config=None, packed=False, seq_len=8):
+    """Left and right padding through a 2D `attention_mask`; the padded positions carry no label."""
+    config = config or _tiny_config()
+    batch_size = 2
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, position_ids = _tiny_batch(config, batch_size, seq_len, packed)
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[0, -3:] = 0  # right padding
+        attention_mask[1, :2] = 0  # left padding
+        batch = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": input_ids.masked_fill(attention_mask == 0, -100),
+            "use_cache": False,
+        }
+        if position_ids is not None:
+            batch["position_ids"] = position_ids
+        _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size), keep=attention_mask)
+        dist.barrier()
+
+
+def _test_inputs_embeds(rank, cp_size, seq_len=8):
+    """`inputs_embeds` is sharded along its sequence dim, not along its last, hidden one."""
+    config = _tiny_config()
+    if cp_size > 2:
+        config.num_key_value_heads = 4
+    batch_size = 2
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, _ = _tiny_batch(config, batch_size, seq_len)
+        reference = AutoModelForCausalLM.from_pretrained(init_dir)
+        inputs_embeds = reference.get_input_embeddings()(input_ids).detach()
+        del reference
+
+        batch = {"inputs_embeds": inputs_embeds, "labels": input_ids.clone(), "use_cache": False}
+        _compare_with_unsharded(init_dir, batch, DistributedConfig(cp_size=cp_size))
+        dist.barrier()
+
+
+class _CountingUlysses(UlyssesAttention):
+    """An Ulysses style that counts the attention calls routed through it."""
+
+    def __init__(self):
+        self.attention_calls = 0
+
+    def attention(self, *args, **kwargs):
+        self.attention_calls += 1
+        return super().attention(*args, **kwargs)
+
+
+def _test_custom_attention_style(rank, cp_size):
+    """A registered attention style runs the attention when the plan names it; an unknown style is refused."""
+    config = _tiny_config()
+    counting = _CountingUlysses()
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        with mock.patch.dict(ALL_CP_STYLES, {"cp_counting": counting}):
+            distributed_config = DistributedConfig(
+                cp_size=cp_size, cp_plan={"model.layers.*.self_attn": "cp_counting"}
+            )
+            model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+
+        input_ids, _ = _tiny_batch(config, 2, 8)
+        model(input_ids=input_ids, labels=input_ids, use_cache=False)
+        # every attention module runs through the style, once per forward
+        assert counting.attention_calls == len(model.model.layers), counting.attention_calls
+
+        unknown = DistributedConfig(cp_size=cp_size, cp_plan={"model.layers.*.self_attn": "cp_missing"})
+        with pytest.raises(ValueError, match="Unsupported `cp_plan` styles"):
+            AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=unknown)
+        dist.barrier()
+
+
+def _test_save_pretrained(rank, cp_size):
+    """Weights saved from a context parallel model reload without a distributed config, unchanged."""
+    config = _tiny_config()
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        reference = AutoModelForCausalLM.from_pretrained(init_dir)
+        expected = {name: value.clone() for name, value in reference.state_dict().items()}
+        del reference
+
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(cp_size=cp_size))
+        with _distributed_tmpdir(rank) as save_dir:
+            model.save_pretrained(save_dir, is_main_process=(rank == 0))
+            dist.barrier()
+            reloaded = AutoModelForCausalLM.from_pretrained(save_dir)
+            # rank 0 removes `save_dir` when it leaves this block
+            dist.barrier()
+
+        for name, value in reloaded.state_dict().items():
+            torch.testing.assert_close(value, expected[name], rtol=0, atol=0, msg=f"Weight mismatch for {name}")
+        dist.barrier()
+
+
+def _test_save_load_distributed_checkpoint(rank, cp_size):
+    """A rank-local checkpoint written by a context parallel model loads back into the same sharding."""
+    config = _tiny_config()
+    distributed_config = DistributedConfig(cp_size=cp_size)
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+        before = gather_full_state_dict(model)
+        with _distributed_tmpdir(rank) as save_dir:
+            model.save_pretrained(save_dir, is_main_process=(rank == 0), distributed_checkpoint=True)
+            dist.barrier()
+            reloaded = AutoModelForCausalLM.from_pretrained(save_dir, distributed_config=distributed_config)
+            dist.barrier()
+        after = gather_full_state_dict(reloaded)
+
+        for name, value in before.items():
+            torch.testing.assert_close(value, after[name], rtol=0, atol=0, msg=f"Weight mismatch for {name}")
+        dist.barrier()
+
+
+@unittest.skipUnless(is_torch_greater_or_equal("2.10"), "Context parallelism requires torch>=2.10")
+class TestContextParallelConfig(unittest.TestCase):
+    def test_refuses_other_parallelisms(self):
+        for other in ({"pp_size": 2}, {"tp_size": 2}, {"ep_size": 2}):
+            with self.subTest(**other), self.assertRaisesRegex(ValueError, "not supported yet with"):
+                DistributedConfig(cp_size=2, **other)
+
+    def test_refuses_a_model_without_a_cp_plan(self):
+        config = _tiny_config()
+        config.base_model_cp_plan = None
+        model = LlamaForCausalLM(config)
+        with self.assertRaisesRegex(ValueError, r"`cp_size=2` was requested, but `LlamaForCausalLM` has no `cp_plan`"):
+            model._resolve_parallel_plans(DistributedConfig(cp_size=2))
+
+
+@unittest.skipUnless(is_torch_greater_or_equal("2.10"), "Context parallelism requires torch>=2.10")
+class TestContextParallelPlan(unittest.TestCase):
+    def test_resolves_the_default_plan(self):
+        model = LlamaForCausalLM(_tiny_config())
+        _, _, _, cp_plan = model._resolve_parallel_plans(DistributedConfig(cp_size=2))
+        expected = {}
+        for layer in range(model.config.num_hidden_layers):
+            expected[f"model.layers.{layer}"] = "cp_split_sequence"
+            expected[f"model.layers.{layer}.self_attn"] = "cp_ulysses"
+        self.assertEqual(cp_plan, expected)
+
+    def test_refuses_a_plan_missing_a_style(self):
+        for base_model_cp_plan, missing in (
+            ({"layers.*": "cp_split_sequence"}, ["cp_ulysses"]),
+            ({"layers.*.self_attn": "cp_ulysses"}, ["cp_split_sequence"]),
+        ):
+            config = _tiny_config()
+            config.base_model_cp_plan = base_model_cp_plan
+            model = LlamaForCausalLM(config)
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, rf"has no `{missing[0]}` rule"):
+                model._resolve_parallel_plans(DistributedConfig(cp_size=2))
+
+
+@is_fsdp_test
+class TestContextParallelModel(unittest.TestCase):
+    """A model sharded with context parallelism reproduces the same run on the full sequences."""
+
+    def setUp(self):
+        if torch._C._get_accelerator().type == "mps":
+            self.skipTest("Distributed meshes are built on the default accelerator, which MPS cannot back")
+        if not is_torch_greater_or_equal("2.10"):
+            self.skipTest("Context parallelism requires torch>=2.10")
+
+    def test_matches_unsharded(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed)
+
+    def test_matches_unsharded_with_fsdp(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 2, 1, False)
+
+    def test_matches_unsharded_with_hsdp(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 1, 2, False)
+
+    def test_padded(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_padded)(2, None, packed)
+
+    def test_padded_sequences(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed, 7)
+
+    def test_padded_sequences_with_four_ranks(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(4, 1, 1, False, 5)
+
+    def test_padded_sequences_with_a_padding_mask(self):
+        run_distributed(world_size=2, backend="gloo")(_test_padded)(2, None, False, 7)
+
+    def test_padded_inputs_embeds(self):
+        run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2, 7)
+
+    def test_sliding_window(self):
+        config = MistralConfig(
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            vocab_size=99,
+            sliding_window=4,
+            attn_implementation="sdpa",
+        )
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=2, backend="gloo")(_test_padded)(2, config, packed)
+
+    def test_sliding_window_and_full_layers(self):
+        config = Gemma3TextConfig(
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=99,
+            sliding_window=4,
+            sliding_window_pattern=2,
+            attn_implementation="sdpa",
+        )
+        run_distributed(world_size=2, backend="gloo")(_test_padded)(2, config, False)
+
+    def test_inputs_embeds(self):
+        run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2)
+
+    def test_custom_attention_style(self):
+        run_distributed(world_size=2, backend="gloo")(_test_custom_attention_style)(2)
+
+    def test_save_pretrained(self):
+        run_distributed(world_size=2, backend="gloo")(_test_save_pretrained)(2)
+
+    def test_save_load_distributed_checkpoint(self):
+        run_distributed(world_size=2, backend="gloo")(_test_save_load_distributed_checkpoint)(2)
