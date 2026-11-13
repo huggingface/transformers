@@ -145,6 +145,7 @@ PRIVATE_MODELS = [
     "Kosmos2VisionTransformer",
     "Kosmos2_5TextTransformer",
     # end of should have beens
+    "VoxCPM2BackboneModel",  # Internal decoder backbone exercised through VoxCPM2Model.
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
