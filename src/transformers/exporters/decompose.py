@@ -240,7 +240,8 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
     Components, named as Optimum Intel names them: `text_embeddings_model`, one `<modality>_embeddings_model` per
     modality present (`get_<modality>_features`), and `language_model`: `model` itself on `inputs_embeds`, so its head
-    and anything after the text stack stay in the graph. The `masked_scatter` merge stays outside the graphs.
+    and anything after the text stack stay in the graph. The `masked_scatter` merge stays outside the graphs. A model
+    that reads its modality inputs without any getter (a contrastive one: SigLIP2, CLIP) stays whole, as `model`.
 
     Raises:
         `ValueError`: if no known multi-modal submodules are found on the model.
@@ -271,6 +272,8 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
         raise RuntimeError(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
+    if active_modalities and not any(captured_features.values()):
+        return {"model": Component(model, inputs)}
 
     components = (
         {"language_model": Component(model, _main_inputs(model, inputs, decoder_calls[-1]))} if decoder_calls else {}
