@@ -173,6 +173,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
             The pixel attention mask of the input images.
         """
+        return_flat = kwargs.pop("return_flat", False)
         image_outputs = self.vision_tower(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
@@ -201,7 +202,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
             image_features.append(img_embedding)
 
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = torch.cat(image_features) if return_flat else image_features
         return image_outputs
 
     def get_placeholder_mask(
