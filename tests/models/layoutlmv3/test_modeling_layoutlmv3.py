@@ -364,6 +364,31 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
+    def test_relative_position_bias_lookup(self):
+        # The biases are gathered from per-distance tables, check them against bucketing every (query, key) pair
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        encoder = LayoutLMv3Model(config).encoder.to(torch_device)
+        position_ids = torch.arange(600, device=torch_device).repeat(2, 1)
+        bbox = ids_tensor([2, 600, 4], 1000)
+
+        def pairwise_bias(positions, bias, num_buckets, max_distance):
+            buckets = encoder.relative_position_bucket(
+                positions.unsqueeze(-2) - positions.unsqueeze(-1), num_buckets=num_buckets, max_distance=max_distance
+            )
+            return bias.weight.t()[buckets].permute(0, 3, 1, 2)
+
+        rel_pos = pairwise_bias(position_ids, encoder.rel_pos_bias, config.rel_pos_bins, config.max_rel_pos)
+        rel_pos_x = pairwise_bias(bbox[:, :, 0], encoder.rel_pos_x_bias, config.rel_2d_pos_bins, config.max_rel_2d_pos)
+        rel_pos_y = pairwise_bias(bbox[:, :, 3], encoder.rel_pos_y_bias, config.rel_2d_pos_bins, config.max_rel_2d_pos)
+        torch.testing.assert_close(encoder._cal_1d_pos_emb(position_ids), rel_pos, rtol=0, atol=0)
+        torch.testing.assert_close(encoder._cal_2d_pos_emb(bbox), rel_pos_x + rel_pos_y, rtol=0, atol=0)
+
+    @unittest.skip(
+        reason="LayoutLMv3 adds its relative position biases as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/layoutlmv3-base"
