@@ -27,6 +27,7 @@ from unittest.mock import patch
 import numpy as np
 from parameterized import parameterized
 
+from transformers import AutoImageProcessor
 from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
     AudioKwargs,
@@ -1793,13 +1794,19 @@ class ProcessorTesterMixin:
         self.assertIsInstance(result_none, list)
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
-        "Tests that the helper used internally in vLLM works correctly"
+        "Tests that the helper used internally in vLLM works correctly with every image processor backend"
 
-        processor = self.get_processor()
-
-        if not hasattr(processor, "_get_num_multimodal_tokens"):
+        if not hasattr(self.processor_class, "_get_num_multimodal_tokens"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
 
+        for backend in ("torchvision", "pil"):
+            with self.subTest(backend=backend):
+                # Only image processors have both backends, so don't apply it to the other components
+                image_processor = AutoImageProcessor.from_pretrained(self.tmpdirname, backend=backend)
+                processor = self.processor_class.from_pretrained(self.tmpdirname, image_processor=image_processor)
+                self._check_num_image_tokens_match_processor_call(processor)
+
+    def _check_num_image_tokens_match_processor_call(self, processor):
         if processor.tokenizer.pad_token_id is None:
             processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
