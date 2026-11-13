@@ -1291,9 +1291,9 @@ class MuseSparkModel(MuseSparkPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,

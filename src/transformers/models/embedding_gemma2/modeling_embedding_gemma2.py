@@ -665,7 +665,6 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -677,6 +676,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 "Image features were requested, but the model was initialized without a vision_config. "
                 "Cannot process images without a vision tower and vision embedder."
             )
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             pixel_position_ids=image_position_ids,
@@ -888,7 +888,6 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -906,6 +905,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 "Video features were requested, but the model was initialized without a vision_config. "
                 "Cannot process video without a vision tower and vision embedder."
             )
+        return_flat = kwargs.pop("return_flat", False)
         if num_frames_per_video is None:
             raise ValueError(
                 "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "

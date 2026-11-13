@@ -588,7 +588,6 @@ class EmbeddingGemma2Model(Gemma4Model):
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -600,9 +599,7 @@ class EmbeddingGemma2Model(Gemma4Model):
                 "Image features were requested, but the model was initialized without a vision_config. "
                 "Cannot process images without a vision tower and vision embedder."
             )
-        return super().get_image_features(
-            pixel_values=pixel_values, image_position_ids=image_position_ids, return_flat=return_flat, **kwargs
-        )
+        return super().get_image_features(pixel_values=pixel_values, image_position_ids=image_position_ids, **kwargs)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
@@ -611,7 +608,6 @@ class EmbeddingGemma2Model(Gemma4Model):
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -633,7 +629,6 @@ class EmbeddingGemma2Model(Gemma4Model):
             pixel_values_videos=pixel_values_videos,
             video_position_ids=video_position_ids,
             num_frames_per_video=num_frames_per_video,
-            return_flat=return_flat,
             **kwargs,
         )
 

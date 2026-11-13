@@ -1973,13 +1973,6 @@ class ConfigArgs:
 
 
 class ModelArgs:
-    return_flat = {
-        "description": """
-    Whether to return `pooler_output` as one `(num_tokens, hidden_size)` tensor rather than one tensor per image or
-    video. A traced graph can't return a variable number of tensors, so exporters ask for it.
-    """,
-    }
-
     image_grid_thw = {
         "description": """
     The temporal, height and width of feature shape of each image in LLM.

@@ -576,13 +576,13 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,

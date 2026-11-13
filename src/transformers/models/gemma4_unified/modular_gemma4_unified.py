@@ -1035,13 +1035,13 @@ class Gemma4UnifiedModel(Gemma4Model):
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.embed_vision(pixel_values, image_position_ids, **kwargs)
 
         # Strip padding patches before scattering into text sequence.
@@ -1066,7 +1066,6 @@ class Gemma4UnifiedModel(Gemma4Model):
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -1078,6 +1077,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
             Number of frames belonging to each video, used to split the flat frame sequence back per video.
         """
+        return_flat = kwargs.pop("return_flat", False)
         if num_frames_per_video is None:
             raise ValueError(
                 "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "

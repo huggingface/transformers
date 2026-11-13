@@ -149,9 +149,9 @@ class LlavaModel(LlavaPreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         image_sizes: torch.Tensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
             kwargs["image_sizes"] = image_sizes
         image_outputs = self.vision_tower(
