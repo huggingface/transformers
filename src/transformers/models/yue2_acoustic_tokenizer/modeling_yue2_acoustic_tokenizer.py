@@ -53,11 +53,11 @@ class YuE2AcousticTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class YuE2AcousticTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
+    audio_values (`torch.Tensor`  of shape `(batch_size, input_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of YuE2AcousticTokenizer.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 @auto_docstring

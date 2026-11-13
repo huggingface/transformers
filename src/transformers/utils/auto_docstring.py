@@ -87,7 +87,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
-    "yue2-acoustic-tokenizer": "YuE2AcousticTokenizerConfig",   # to use model type of the original checkpoint (`yue2_vae`)
+    "yue2-acoustic-tokenizer": "YuE2AcousticTokenizerConfig",  # to use model type of the original checkpoint (`yue2_vae`)
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")

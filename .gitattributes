@@ -645,6 +645,7 @@ src/transformers/models/xlm_roberta_xl/modeling_*.py linguist-generated=true
 src/transformers/models/yolos/image_*.py linguist-generated=true
 src/transformers/models/youtu/configuration_*.py linguist-generated=true
 src/transformers/models/youtu/modeling_*.py linguist-generated=true
+src/transformers/models/yue2_acoustic_tokenizer/modeling_*.py linguist-generated=true
 src/transformers/models/zamba2/modeling_*.py linguist-generated=true
 src/transformers/models/zaya/configuration_*.py linguist-generated=true
 src/transformers/models/zaya/modeling_*.py linguist-generated=true
