@@ -121,7 +121,14 @@ _MODALITY_SPECS = (
     ModalitySpec(
         "vision_embeddings_model",
         "get_image_features",
-        ("pixel_values", "pixel_values_images", "flattened_patches", "image_patches"),
+        (
+            "pixel_values",
+            "pixel_values_images",
+            "flattened_patches",
+            "image_patches",
+            "pixel_values_local",
+            "high_res_pixel_values",
+        ),
         (
             "image_patches_indices",
             "image_embeds_position_mask",
@@ -130,6 +137,17 @@ _MODALITY_SPECS = (
             "image_position_ids",
             "batch_num_images",
             "spatial_shapes",
+            "pixel_mask",
+            "image_grids",
+            "image_token_pooling",
+            "image_merge_sizes",
+            "image_grid_hw",
+            "num_local_patches",
+            "patches_grid",
+            "images_per_sample",
+            "qformer_input_ids",
+            "qformer_attention_mask",
+            "tile_fine_mask",
         ),
         "image_grid_thw",
         "image_token_id",
@@ -138,7 +156,16 @@ _MODALITY_SPECS = (
         "video_embeddings_model",
         "get_video_features",
         ("pixel_values_videos",),
-        ("target_sizes_videos", "video_position_ids", "num_frames_per_video"),
+        (
+            "target_sizes_videos",
+            "video_position_ids",
+            "num_frames_per_video",
+            "video_grids",
+            "video_token_pooling",
+            "video_merge_sizes",
+            "qformer_input_ids",
+            "qformer_attention_mask",
+        ),
         "video_grid_thw",
         "video_token_id",
     ),
@@ -146,7 +173,15 @@ _MODALITY_SPECS = (
         "audio_embeddings_model",
         "get_audio_features",
         ("input_features", "audio_input_ids", "input_values"),
-        ("padding_mask", "input_features_mask"),
+        (
+            "padding_mask",
+            "input_features_mask",
+            "feature_attention_mask",
+            "audio_feature_lengths",
+            "input_values_mask",
+            "audio_input_ids_mask",
+            "chunk_sample_lengths",
+        ),
         None,
         "audio_token_id",
     ),
@@ -234,7 +269,8 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
     Components, named as Optimum Intel names them: `text_embeddings_model`, one `<modality>_embeddings_model` per
     modality present (`get_<modality>_features`), and `language_model`: `model` itself on `inputs_embeds`, so its head
-    and anything after the text stack stay in the graph. The `masked_scatter` merge stays outside the graphs.
+    and anything after the text stack stay in the graph. The `masked_scatter` merge stays outside the graphs. A model
+    that reads its modality inputs without any getter (a contrastive one: SigLIP2, CLIP) stays whole, as `model`.
 
     Raises:
         `ValueError`: if no known multi-modal submodules are found on the model.
@@ -265,6 +301,8 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
         raise RuntimeError(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
+    if active_modalities and not any(captured_features.values()):
+        return {"model": Component(model, inputs)}
 
     components = (
         {"language_model": Component(model, _main_inputs(model, inputs, decoder_calls[-1]))} if decoder_calls else {}

@@ -68,7 +68,7 @@ class CohereCompassTextConfig(PreTrainedConfig):
     """
 
     model_type = "cohere_compass_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -166,7 +166,7 @@ class CohereCompassConfig(PreTrainedConfig):
         "vision_config": CohereCompassVisionConfig,
         "text_config": CohereCompassTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

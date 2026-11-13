@@ -471,6 +471,57 @@ class DecomposeMultimodalTest(unittest.TestCase):
         }
         self.assertEqual(sorted(embedded_inputs(inputs, {})), ["attention_mask", "inputs_embeds"])
 
+    def test_modality_specs_cover_every_getter_only_input(self):
+        """Every `forward` input a multimodal model reads only to compute its features belongs to a modality in
+        `_MODALITY_SPECS`: the language model would otherwise keep it as a graph input, which a text-only call can't
+        give. Checked on the source of each model that scatters features into its embeddings, since the processor
+        inputs that hit it (LLaVA-OneVision's `batch_num_images`) are rarely in a model tester's."""
+        import ast
+
+        import transformers.models
+        from transformers.exporters.decompose import _MODALITY_SPECS
+
+        getters = {"get_image_features", "get_video_features", "get_audio_features"}
+        merges = {"get_placeholder_mask", "masked_scatter"}
+        # Settings rather than tensors, and the anyres image sizes, which only the runtime reads
+        not_graph_inputs = {
+            "vision_feature_layer",
+            "vision_feature_select_strategy",
+            "interpolate_pos_encoding",
+            "downsample_mode",
+            "sample",
+            "image_sizes",
+        }
+        known = {key for spec in _MODALITY_SPECS for key in (*spec.input_keys, spec.grid_key)} | not_graph_inputs
+        missing = []
+        for path in sorted(Path(transformers.models.__path__[0]).glob("*/modeling_*.py")):
+            for cls in [node for node in ast.parse(path.read_text()).body if isinstance(node, ast.ClassDef)]:
+                for forward in [
+                    node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "forward"
+                ]:
+                    attributes = {node.attr for node in ast.walk(forward) if isinstance(node, ast.Attribute)}
+                    if not (attributes & getters and attributes & merges):
+                        continue
+                    getter_calls = [
+                        node
+                        for node in ast.walk(forward)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in getters
+                    ]
+                    in_getters = {id(node) for call in getter_calls for node in ast.walk(call)}
+                    for argument in forward.args.args[1:] + forward.args.kwonlyargs:
+                        reads = [
+                            node
+                            for node in ast.walk(forward)
+                            if isinstance(node, ast.Name)
+                            and node.id == argument.arg
+                            and isinstance(node.ctx, ast.Load)
+                        ]
+                        if reads and argument.arg not in known and all(id(node) in in_getters for node in reads):
+                            missing.append(f"{cls.name}.{argument.arg}")
+        self.assertEqual(missing, [], "add these inputs to their modality in `exporters.decompose._MODALITY_SPECS`")
+
     def test_export_multimodal_exports_each_component(self):
         from transformers.exporters import DynamoExporter
 
