@@ -901,6 +901,40 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             {"role": "assistant", "metadata": {"name": "alice", "age": "30"}},
         )
 
+    def test_json_string_delims(self):
+        quoted = {"string_delims": [["'", "'"]]}
+        escaped = {**quoted, "backslash_escapes": True}
+        gemma = {"string_delims": [['<|"|>', '<|"|>']], "unquoted_keys": True}
+        cases = [
+            # Escapes are only honoured and decoded with `backslash_escapes`
+            (quoted, r"'C:\Users'", "C:\\Users"),
+            (escaped, r"'Saint-Jean-d\'Angély'", "Saint-Jean-d'Angély"),
+            (escaped, r"'Paris\nFrance'", "Paris\nFrance"),
+            (escaped, r"'C:\\Users\\'", "C:\\Users\\"),
+            (escaped, r"'regex \d+'", r"regex \d+"),
+            (
+                escaped,
+                r"""{"city": 'd\'Angély', "tags": ["don't", 'it\'s']}""",
+                {"city": "d'Angély", "tags": ["don't", "it's"]},
+            ),
+            # Delimiters and bare keys inside standard JSON strings are left alone
+            (quoted, """{"q": "don't", "r": "it's"}""", {"q": "don't", "r": "it's"}),
+            (gemma, '{a:"k,v:w",b:<|"|>x<|"|>}', {"a": "k,v:w", "b": "x"}),
+        ]
+        for content_args, raw, expected in cases:
+            with self.subTest(raw=raw):
+                template_spec = {
+                    "defaults": {"role": "assistant"},
+                    "start_anchor": "<|assistant|>",
+                    "fields": {
+                        "args": {"open": "<args>", "close": "</args>", "content": "json", "content_args": content_args}
+                    },
+                }
+                self.assertEqual(
+                    parse_response(f"<args>{raw}</args>", template_spec, prefix=""),
+                    {"role": "assistant", "args": expected},
+                )
+
     def test_unknown_content_parser_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
