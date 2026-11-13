@@ -265,8 +265,10 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            merge_size = round(1 / images_kwargs.get("downsample_ratio", self.image_processor.downsample_ratio))
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            merge_size = round(1 / images_kwargs["downsample_ratio"])
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs, len(image_sizes))

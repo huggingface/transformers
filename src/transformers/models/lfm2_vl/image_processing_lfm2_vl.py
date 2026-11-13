@@ -440,23 +440,23 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         Returns:
             `tuple[int, int, int, int]`: The `(num_rows, num_cols, resized_height, resized_width)` of the image.
         """
-        images_kwargs = images_kwargs or {}
-        min_tiles = images_kwargs.get("min_tiles", self.min_tiles)
-        max_tiles = images_kwargs.get("max_tiles", self.max_tiles)
-        if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        min_tiles = images_kwargs["min_tiles"]
+        max_tiles = images_kwargs["max_tiles"]
+        if not images_kwargs["do_image_splitting"]:
             min_tiles = max_tiles = 1
 
         _, num_rows, num_cols, new_height, new_width = self._get_split_layout(
             height,
             width,
-            downsample_factor=images_kwargs.get("downsample_factor", self.downsample_factor),
+            downsample_factor=images_kwargs["downsample_factor"],
             min_tiles=min_tiles,
             max_tiles=max_tiles,
-            min_image_tokens=images_kwargs.get("min_image_tokens", self.min_image_tokens),
-            max_image_tokens=images_kwargs.get("max_image_tokens", self.max_image_tokens),
-            encoder_patch_size=images_kwargs.get("encoder_patch_size", self.encoder_patch_size),
-            tile_size=images_kwargs.get("tile_size", self.tile_size),
-            max_pixels_tolerance=images_kwargs.get("max_pixels_tolerance", self.max_pixels_tolerance),
+            min_image_tokens=images_kwargs["min_image_tokens"],
+            max_image_tokens=images_kwargs["max_image_tokens"],
+            encoder_patch_size=images_kwargs["encoder_patch_size"],
+            tile_size=images_kwargs["tile_size"],
+            max_pixels_tolerance=images_kwargs["max_pixels_tolerance"],
         )
         return num_rows, num_cols, new_height, new_width
 
@@ -474,10 +474,10 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of tiles per image, including the thumbnail.
         """
-        images_kwargs = images_kwargs or {}
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
         num_rows, num_cols, _, _ = self.get_image_layout(height, width, images_kwargs)
         num_tiles = num_rows * num_cols
-        if num_tiles > 1 and images_kwargs.get("use_thumbnail", self.use_thumbnail):
+        if num_tiles > 1 and images_kwargs["use_thumbnail"]:
             num_tiles += 1
         return num_tiles
 

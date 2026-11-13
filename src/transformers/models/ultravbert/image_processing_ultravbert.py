@@ -535,12 +535,12 @@ class UltraVBertImageProcessor(TorchvisionBackend):
         Returns:
             `tuple[int, int, int]`: Number of patches per image, and the number of rows and columns they form.
         """
-        images_kwargs = images_kwargs or {}
-        if not images_kwargs.get("do_image_splitting", self.do_image_splitting):
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        if not images_kwargs["do_image_splitting"]:
             return 0, 0, 0
-        size = images_kwargs.get("size", self.size)
-        tile_size = images_kwargs.get("max_image_size", self.max_image_size)["longest_edge"]
-        max_image_tiles = images_kwargs.get("max_image_tiles", self.max_image_tiles)
+        size = images_kwargs["size"]
+        tile_size = images_kwargs["max_image_size"]["longest_edge"]
+        max_image_tiles = images_kwargs["max_image_tiles"]
         longest_edge = get_capped_longest_edge(height, width, size["longest_edge"], tile_size, max_image_tiles)
         num_rows, num_cols = get_tile_grid(height, width, longest_edge, tile_size)
         if num_rows * num_cols == 1:

@@ -216,12 +216,12 @@ class Ovis2ImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        use_covering_area_grid = images_kwargs.get("use_covering_area_grid", self.use_covering_area_grid)
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        crop_to_patches = images_kwargs["crop_to_patches"]
+        min_patches = images_kwargs["min_patches"]
+        max_patches = images_kwargs["max_patches"]
+        use_covering_area_grid = images_kwargs["use_covering_area_grid"]
+        size = images_kwargs["size"]
 
         if not crop_to_patches or max_patches <= 1:
             return 1

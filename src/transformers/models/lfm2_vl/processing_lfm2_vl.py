@@ -261,9 +261,10 @@ class Lfm2VlProcessor(ProcessorMixin):
                 - tokens_per_tile: tokens for each tile in multi-tile mode
                 - tokens_for_image: tokens for the resized image (single-tile) or thumbnail (multi-tile)
         """
-        tile_size = images_kwargs.get("tile_size", self.image_processor.tile_size)
-        downsample_factor = images_kwargs.get("downsample_factor", self.image_processor.downsample_factor)
-        encoder_patch_size = images_kwargs.get("encoder_patch_size", self.image_processor.encoder_patch_size)
+        images_kwargs = self.image_processor._merge_and_standardize_kwargs(**images_kwargs)
+        tile_size = images_kwargs["tile_size"]
+        downsample_factor = images_kwargs["downsample_factor"]
+        encoder_patch_size = images_kwargs["encoder_patch_size"]
 
         tokens_per_tile = self._compute_tokens_per_tile(tile_size, encoder_patch_size, downsample_factor)
         tokens_for_image = self._compute_tokens_for_image(image_size, encoder_patch_size, downsample_factor)
@@ -285,8 +286,10 @@ class Lfm2VlProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            use_thumbnail = images_kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            use_thumbnail = images_kwargs["use_thumbnail"]
 
             num_image_tokens = []
             for image_size in image_sizes:

@@ -111,8 +111,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = merged_kwargs["images_kwargs"]
-            crop_size = images_kwargs.get("crop_size", None) or self.image_processor.crop_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            crop_size = images_kwargs["crop_size"]
             num_image_tokens = (crop_size["height"] // self.patch_size) * (crop_size["width"] // self.patch_size)
             num_image_tokens += self.num_additional_image_tokens
             if self.vision_feature_select_strategy == "default":
@@ -123,8 +123,8 @@ class VideoLlavaProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = merged_kwargs["videos_kwargs"]
-            crop_size = videos_kwargs.get("crop_size", None) or self.video_processor.crop_size
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            crop_size = videos_kwargs["crop_size"]
             num_frame_tokens = (crop_size["height"] // self.patch_size) * (crop_size["width"] // self.patch_size)
             num_frame_tokens += self.num_additional_image_tokens
             vision_data["num_video_tokens"] = [num_frames * num_frame_tokens for num_frames, _, _ in video_sizes]

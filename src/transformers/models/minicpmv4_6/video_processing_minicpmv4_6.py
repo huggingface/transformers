@@ -310,10 +310,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
 
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+        kwargs = self._merge_and_standardize_kwargs(**kwargs)
 
         input_data_format = kwargs.pop("input_data_format")
         do_sample_frames = kwargs.pop("do_sample_frames")
@@ -333,7 +330,6 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             device=device,
         )
 
-        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess

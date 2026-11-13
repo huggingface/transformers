@@ -708,13 +708,12 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def get_image_grid_and_crops(self, height: int, width: int, images_kwargs=None) -> tuple[list[int], int]:
         """Return the `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled grid and the crop count for one image."""
-        if images_kwargs is None:
-            images_kwargs = {}
-        max_crops = images_kwargs.get("max_crops", self.max_crops)
-        overlap_margins = images_kwargs.get("overlap_margins", self.overlap_margins)
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        pooling_size = images_kwargs.get("pooling_size", self.pooling_size)
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        max_crops = images_kwargs["max_crops"]
+        overlap_margins = images_kwargs["overlap_margins"]
+        patch_size = images_kwargs["patch_size"]
+        pooling_size = images_kwargs["pooling_size"]
+        size = images_kwargs["size"]
 
         base_h = size["height"] if isinstance(size, dict) else size.height
         base_w = size["width"] if isinstance(size, dict) else size.width

@@ -272,9 +272,10 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         Returns:
             `int`: Number of image patches per image.
         """
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
+        max_image_tokens = images_kwargs["max_image_tokens"]
 
         resized_height, resized_width = smart_resize(
             height=height,

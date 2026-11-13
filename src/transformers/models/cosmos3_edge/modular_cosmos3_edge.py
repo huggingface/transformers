@@ -1033,11 +1033,11 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
         vision_data = {}
-        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
-        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
+        images_kwargs = self.image_processor._merge_and_standardize_kwargs(**dict(kwargs.get("images_kwargs", kwargs)))
+        videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**dict(kwargs.get("videos_kwargs", kwargs)))
 
         if image_sizes is not None:
-            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
+            merge_size = images_kwargs["merge_size"]
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
@@ -1046,7 +1046,7 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
-            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
+            merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes
