@@ -62,11 +62,12 @@ class DistributedConfig:
         cp_size (`int`, *optional*):
             Number of devices that split each sequence (context parallelism). The ranks of a cp group get the same
             batch, and each runs on a contiguous slice of every sequence, padded at its end to a multiple of `cp_size`.
-            Requires `torch>=2.10`.
+            The ranks of a tp group get the same batch and the same slice. Requires `torch>=2.10`.
         cp_plan (`dict[str, str]`, *optional*):
             Context parallel plan. Leave as `None` to use the model's predefined `base_model_cp_plan` and class-level
             `_cp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept, so
             `{"model.layers.*.self_attn": "cp_ring"}` only changes the attention style. Applied only when `cp_size > 1`.
+            `"cp_ulysses"` needs `cp_size * tp_size` to divide the number of attention and key/value heads.
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
         ep_size (`int`, *optional*):
@@ -204,10 +205,10 @@ class DistributedConfig:
         if self.cp_size > 1:
             if not is_torch_greater_or_equal("2.10"):
                 raise OSError("Context parallelism requires `torch>=2.10` (`DeviceMesh._unflatten`).")
-            if unsupported := [name for name in ("pp_size", "tp_size", "ep_size") if getattr(self, name) > 1]:
+            if unsupported := [name for name in ("pp_size", "ep_size") if getattr(self, name) > 1]:
                 raise ValueError(
                     f"Context parallelism (`cp_size={self.cp_size}`) is not supported yet with `{unsupported[0]}`. "
-                    "Use `DistributedConfig(fsdp_size=N, cp_size=M)`."
+                    "Use `DistributedConfig(fsdp_size=N, tp_size=T, cp_size=M)`."
                 )
 
         if self.dp_size > 1 and self.pp_size > 1:
