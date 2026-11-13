@@ -35,9 +35,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     apply_rotary_pos_emb_interleave,
 )
+from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -53,7 +53,7 @@ class Mistral4RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Mistral4RotaryEmbedding(LlamaRotaryEmbedding):
+class Mistral4RotaryEmbedding(GlmRotaryEmbedding):
     pass
 
 
