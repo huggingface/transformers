@@ -692,13 +692,21 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 # (a symbolic query axis — continuation-from-past, or a plain prefill on an empty cache) rather than the
 # single-token step, since a single-token axis can't stay symbolic.
 _EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
-_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
+_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static"), GenerationConfig(num_beams=2)]
+
+
+def _generation_config_name(generation_config) -> str:
+    if generation_config is None:
+        return ""
+    if generation_config.cache_implementation is not None:
+        return f"_{generation_config.cache_implementation}_cache"
+    return f"_{generation_config.num_beams}_beams"
+
 
 GENERATE_EXPORT_PARAMS = parameterized.expand(
     list(itertools.product(_EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
     name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
-        + (f"_{p.args[1].cache_implementation}_cache" if p.args[1] is not None else "")
+        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}" + _generation_config_name(p.args[1])
     ),
 )
 
@@ -728,9 +736,7 @@ EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
         )
     ],
     name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
-        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
-        + f"_{p.args[0]}"
+        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}" + _generation_config_name(p.args[2]) + f"_{p.args[0]}"
     ),
 )
 
@@ -1342,7 +1348,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             max_new_tokens=4,
             min_new_tokens=4,
             do_sample=False,
-            num_beams=1,
             eos_token_id=-1,
             output_scores=True,
             return_dict_in_generate=True,

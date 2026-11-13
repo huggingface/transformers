@@ -285,6 +285,10 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         return mask.to(getattr(torch, dtype))
 
 
+# What the prompt's embedding consumes: laid out by item (image, video, audio clip), not by prompt
+_MODALITY_INPUTS = {key for spec in _MODALITY_SPECS for key in (*spec.input_keys, spec.grid_key)} | {"image_sizes"}
+
+
 class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM):
     """A multimodal causal LM's generation export: the prompt's token ids are embedded and each modality's features
     scattered into their placeholder rows, as [`ExportedMultimodalModel`] does, before the decode graph runs on
@@ -305,9 +309,28 @@ class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM):
 
     def _validate_model_kwargs(self, model_kwargs: dict):
         """Also accept the modality inputs, which the prompt's embedding consumes."""
-        consumed = {key for spec in _MODALITY_SPECS for key in (*spec.input_keys, spec.grid_key)}
-        consumed |= {"image_sizes", "mm_token_type_ids"}
+        consumed = _MODALITY_INPUTS | {"mm_token_type_ids"}
         super()._validate_model_kwargs({key: value for key, value in model_kwargs.items() if key not in consumed})
+
+    def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
+        """Embeds the prompt before `generate` repeats it for each beam or returned sequence: the modality inputs are
+        laid out by item (an image's patches, a grid per image), not by prompt, so only their embeddings repeat."""
+        if expand_size > 1 and input_ids is not None and model_kwargs.get("inputs_embeds") is None:
+            embedded, _ = self.embedder.embed(input_ids=input_ids, **model_kwargs)
+            model_kwargs = {key: value for key, value in model_kwargs.items() if key not in _MODALITY_INPUTS}
+
+            def repeat_rows(features):
+                # Deepstack features cover every `(prompt, position)` row: `generate` only repeats top-level tensors.
+                features = features.unflatten(0, (input_ids.shape[0], -1)).repeat_interleave(expand_size, dim=0)
+                return features.flatten(0, 1)
+
+            for key, value in embedded.items():
+                if isinstance(value, dict):
+                    value = {layer: repeat_rows(features) for layer, features in value.items()}
+                elif isinstance(value, list):
+                    value = [repeat_rows(features) for features in value]
+                model_kwargs[key] = value
+        return super()._expand_inputs_for_generation(expand_size, is_encoder_decoder, input_ids, **model_kwargs)
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         """M-RoPE positions for the prompt, as a VLM's own override builds them; `generate` advances them per step."""
