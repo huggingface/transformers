@@ -71,7 +71,8 @@ class YuE2AcousticTokenizerModelTester:
             "downsampling_ratios": self.downsampling_ratios,
             "latent_dim": self.latent_dim,
         }
-        return YuE2AcousticTokenizerConfig(encoder_config=half_config, decoder_config=half_config)
+        encoder_config = {**half_config, "latent_dim": 2 * self.latent_dim}
+        return YuE2AcousticTokenizerConfig(encoder_config=encoder_config, decoder_config=half_config)
 
     def prepare_config_and_inputs(self):
         config = self.get_config()

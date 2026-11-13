@@ -140,7 +140,7 @@ class YuE2AcousticTokenizerEncoderModel(YuE2AcousticTokenizerPreTrainedModel):
             ]
         )
         self.snake1 = YuE2AcousticTokenizerSnakeBeta(hidden_sizes[-1])
-        self.conv2 = nn.Conv1d(hidden_sizes[-1], 2 * config.latent_dim, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(hidden_sizes[-1], config.latent_dim, kernel_size=3, padding=1)
         self.post_init()
 
     @can_return_tuple

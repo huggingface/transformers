@@ -35,9 +35,9 @@ class YuE2AcousticTokenizerEncoderConfig(PreTrainedConfig):
         block.
     downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2, 4, 4, 5, 6]`):
         Strides of the encoder blocks. Their product is the number of audio samples per latent frame (`hop_length`).
-    latent_dim (`int`, *optional*, defaults to 64):
-        Dimension of the continuous latents. The encoder outputs twice as many channels, the mean and the scale of the
-        posterior.
+    latent_dim (`int`, *optional*, defaults to 128):
+        Number of output channels of the encoder: the mean and the scale of the posterior, so twice the dimension of
+        the continuous latents (the `latent_dim` of [`YuE2AcousticTokenizerDecoderConfig`]).
 
     Example:
 
@@ -61,22 +61,20 @@ class YuE2AcousticTokenizerEncoderConfig(PreTrainedConfig):
     audio_channels: int = positive_int_field(default=2)
     hidden_sizes: list[int] | tuple[int, ...] = (64, 64, 128, 256, 512, 1024, 2048)
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5, 6)
-    latent_dim: int = positive_int_field(default=64)
+    latent_dim: int = positive_int_field(default=128)
 
     def __post_init__(self, **kwargs):
         # handling of the original checkpoint (m-a-p/YuE2-Vae)
         if "in_channels" in kwargs:
-            self.audio_channels = kwargs.pop("in_channels")
-            # the original counts the channels of both the mean and the scale of the posterior
-            self.latent_dim //= 2
+            self.audio_channels = kwargs["in_channels"]
+
         if "c_mults" in kwargs:
-            channels = kwargs.pop("channels")
-            self.hidden_sizes = [channels * multiplier for multiplier in [1, *kwargs.pop("c_mults")]]
-            self.downsampling_ratios = kwargs.pop("strides")
-            if not kwargs.pop("use_snake", True):
-                raise ValueError("Only the released variant, with SnakeBeta activations, is supported.")
+            self.hidden_sizes = [kwargs["channels"] * multiplier for multiplier in [1, *kwargs["c_mults"]]]
+            self.downsampling_ratios = kwargs["strides"]
+
         self.hidden_sizes = list(self.hidden_sizes)
         self.downsampling_ratios = list(self.downsampling_ratios)
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -133,18 +131,15 @@ class YuE2AcousticTokenizerDecoderConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         # handling of the original checkpoint (m-a-p/YuE2-Vae)
         if "out_channels" in kwargs:
-            self.audio_channels = kwargs.pop("out_channels")
-            if kwargs.pop("final_tanh", False) or kwargs.pop("use_filter", False):
-                raise ValueError("Only the released variant, without final `tanh` nor filter, is supported.")
-            kwargs.pop("snake_type", None)
+            self.audio_channels = kwargs["out_channels"]
+
         if "c_mults" in kwargs:
-            channels = kwargs.pop("channels")
-            self.hidden_sizes = [channels * multiplier for multiplier in [1, *kwargs.pop("c_mults")]]
-            self.downsampling_ratios = kwargs.pop("strides")
-            if not kwargs.pop("use_snake", True):
-                raise ValueError("Only the released variant, with SnakeBeta activations, is supported.")
+            self.hidden_sizes = [kwargs["channels"] * multiplier for multiplier in [1, *kwargs["c_mults"]]]
+            self.downsampling_ratios = kwargs["strides"]
+
         self.hidden_sizes = list(self.hidden_sizes)
         self.downsampling_ratios = list(self.downsampling_ratios)
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -204,22 +199,24 @@ class YuE2AcousticTokenizerConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         # handling of the original checkpoint (m-a-p/YuE2-Vae)
         if "sample_rate" in kwargs:
-            self.sampling_rate = kwargs.pop("sample_rate")
-            for key in (
-                "audio_channels",
-                "latent_dim",
-                "downsampling_ratio",
-                "release_variant",
-                "decode_core_frames",
-                "decode_halo_frames",
-            ):
-                kwargs.pop(key, None)
+            self.sampling_rate = kwargs["sample_rate"]
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         if self.encoder_config is None and self.decoder_config is None:
             raise ValueError(
                 "YuE2AcousticTokenizer needs an encoder, a decoder, or both: `encoder_config` and `decoder_config` are None."
+            )
+
+        if (
+            self.encoder_config is not None
+            and self.decoder_config is not None
+            and self.encoder_config.latent_dim != 2 * self.decoder_config.latent_dim
+        ):
+            raise ValueError(
+                f"The encoder outputs the mean and the scale of the posterior, so its `latent_dim` "
+                f"({self.encoder_config.latent_dim}) must be twice the decoder's ({self.decoder_config.latent_dim})."
             )
 
     @property
