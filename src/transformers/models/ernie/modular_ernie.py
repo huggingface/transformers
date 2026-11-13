@@ -245,6 +245,7 @@ class ErnieModel(BertModel):
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
+            position_ids=position_ids,
         )
 
         encoder_outputs = self.encoder(
