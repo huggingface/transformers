@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -50,11 +51,11 @@ logger = logging.get_logger(__name__)
 @dataclass
 class GraniteSpeechModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
+    audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
     """
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -65,25 +66,25 @@ class GraniteSpeechModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        `cache` input) to speed up sequential decoding.
+    audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    audio_hidden_states: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    cache: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 ### Projector
@@ -368,7 +369,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
         return audio_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -423,15 +424,16 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteSpeechModelOutputWithPast:
@@ -473,7 +475,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -481,7 +483,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
 
         return GraniteSpeechModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
@@ -517,15 +519,16 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -542,7 +545,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             input_features_mask=input_features_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -573,7 +576,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         return GraniteSpeechCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,

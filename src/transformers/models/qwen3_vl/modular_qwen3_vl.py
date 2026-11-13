@@ -27,11 +27,12 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, is_torchvision_available, logging
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
     merge_with_config_defaults,
 )
@@ -46,7 +47,6 @@ from ...vision_utils import (
 from ..auto.modeling_auto import AutoModel
 from ..glm4v.video_processing_glm4v import smart_resize
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLVisionBlock,
@@ -55,7 +55,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     Qwen2VLModel,
-    Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
     TransformersKwargs,
     VisionAttention,
@@ -82,11 +81,11 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     r"""
-    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+    deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
     """
 
-    deepstack_features: list[torch.FloatTensor] | None = None
+    deepstack_features: list[torch.Tensor] | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -104,7 +103,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -194,7 +193,7 @@ class Qwen3VLConfig(PreTrainedConfig):
         "vision_config": Qwen3VLVisionConfig,
         "text_config": Qwen3VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -298,12 +297,13 @@ class Qwen3VLTextAttention(Qwen3Attention):
         super().__init__(config, layer_idx)
         del self.sliding_window
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -316,8 +316,8 @@ class Qwen3VLTextAttention(Qwen3Attention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -344,13 +344,14 @@ class Qwen3VLTextDecoderLayer(Qwen3DecoderLayer):
         super().__init__(config, layer_idx)
         del self.attention_type
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -359,14 +360,10 @@ class Qwen3VLTextDecoderLayer(Qwen3DecoderLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
-
-
-class Qwen3VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
-    pass
 
 
 class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
@@ -386,7 +383,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         "attentions": Qwen3VLVisionAttention,
     }
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3VLVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -510,13 +507,14 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         # args for deepstack
         visual_pos_masks: torch.Tensor | None = None,
@@ -535,15 +533,15 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         # torch.jit.trace() doesn't support cache objects in the output
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None and not torch.jit.is_tracing():
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
@@ -559,7 +557,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=text_position_ids,
         )
 
@@ -574,7 +572,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=text_position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -592,13 +590,13 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3VLConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -642,7 +640,7 @@ class Qwen3VLModel(Qwen2VLModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -660,28 +658,29 @@ class Qwen3VLModel(Qwen2VLModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         # Same implementation as for images
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3VLModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -759,7 +758,7 @@ class Qwen3VLModel(Qwen2VLModel):
                 video_grid_thw=video_grid_thw,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 mm_token_type_ids=mm_token_type_ids,
             )
 
@@ -767,21 +766,14 @@ class Qwen3VLModel(Qwen2VLModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             visual_pos_masks=visual_pos_masks,
             deepstack_visual_embeds=deepstack_visual_embeds,
             **kwargs,
         )
 
-        return Qwen3VLModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
-    pass
+        return outputs
 
 
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
@@ -793,23 +785,24 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_video_features(**super_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3VLCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -856,7 +849,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             video_grid_thw=video_grid_thw,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -874,28 +867,22 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Qwen3VLCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
 
-class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Qwen3VLProcessor(Qwen2VLProcessor):
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template, **kwargs)
         self.vision_start_token = (
@@ -919,6 +906,8 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
         merge_length = self.video_processor.merge_size**2
         num_frames = video_inputs["video_grid_thw"][video_idx][0]
         frame_seqlen = video_inputs["video_grid_thw"][video_idx][1:].prod() // merge_length
+        if "video_metadata" not in video_inputs:
+            raise ValueError("The frame timestamps need the video metadata, `return_metadata=False` is not supported")
         metadata = video_inputs["video_metadata"][video_idx]
         video_placeholder = ""
 
@@ -1144,6 +1133,8 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
 
         return indices
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Qwen3VLConfig",

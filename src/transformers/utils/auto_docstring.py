@@ -76,12 +76,14 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
     "inkling": "InklingConfig",
+    "inkling2": "Inkling2Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "granite-speech5": "GraniteSpeech5CTCConfig",
+    "nemotron3-5-transcribe": "Nemotron3_5TranscribeConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
@@ -435,6 +437,28 @@ class ProcessorArgs:
     - `'np'`: Return NumPy `np.ndarray` objects.
     """,
         "shape": None,
+    }
+
+    return_mm_token_type_ids = {
+        "description": """
+    Whether to return multimodal token type ids indicating multimodal placeholder token positions.
+    """,
+        "type": "bool",
+    }
+
+    return_text_replacement_offsets = {
+        "description": """
+    Whether to return character offsets for each multimodal placeholder and its replacement.
+    """,
+        "type": "bool",
+    }
+
+    load_audio_from_video = {
+        "description": """
+    Whether to load the audio track of the input videos. The audio tokens are interleaved with the video tokens
+    if the model supports it.
+    """,
+        "type": "bool",
     }
 
     # Standard tokenizer arguments
@@ -2001,7 +2025,7 @@ class ModelArgs:
     into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
     (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
     To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-    into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
+    into a tensor of type `torch.Tensor`. See [`{processor_class}.__call__`] for details.
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
     }
@@ -2115,18 +2139,18 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
-    past_key_values = {
+    cache = {
         "description": """
     Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-    blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+    blocks) that can be used to speed up sequential decoding. This typically consists in the `cache`
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
     Only [`~cache_utils.Cache`] instance is allowed as input, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-    If no `past_key_values` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
+    If no `cache` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
 
     The model will output the same cache format that is fed as input.
 
-    If `past_key_values` are used, the user is expected to input only unprocessed `input_ids` (those that don't
+    If `cache` are used, the user is expected to input only unprocessed `input_ids` (those that don't
     have their past key value states given to this model) of shape `(batch_size, unprocessed_length)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
     """,
@@ -2157,8 +2181,8 @@ class ModelArgs:
     decoder_inputs_embeds = {
         "description": """
     Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-    representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-    input (see `past_key_values`). This is useful if you want more control over how to convert
+    representation. If `cache` is used, optionally only the last `decoder_inputs_embeds` have to be
+    input (see `cache`). This is useful if you want more control over how to convert
     `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
     If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
@@ -2169,8 +2193,8 @@ class ModelArgs:
 
     use_cache = {
         "description": """
-    If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-    `past_key_values`).
+    If set to `True`, `cache` key value states are returned and can be used to speed up decoding (see
+    `cache`).
     """,
         "shape": None,
     }
@@ -2208,6 +2232,27 @@ class ModelArgs:
     Whether to interpolate the pre-trained position encodings.
     """,
         "shape": None,
+    }
+
+    marks = {
+        "description": """
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
+    """,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in `Question.questions_types`.
+    """,
+        "shape": "of shape `(num_questions,)`",
     }
 
     position_embeddings = {
@@ -2392,6 +2437,24 @@ class ModelForArgs:
             "type": "torch.LongTensor",
         }
 
+    class ForCausalLM:
+        labels = {
+            "description": """
+    Labels for computing the causal language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+    The labels are **shifted internally** so that `labels[..., 1:]` are used to predict `logits[..., :-1, :]`.
+    Pass unshifted labels matching `input_ids` (i.e. `labels = input_ids`). Do **not** shift the labels
+    yourself before passing them.
+
+    If the labels are already shifted (for example with sequence parallelism), pass them as the `shift_labels`
+    keyword argument and they are used as is. `labels` must still be passed for the loss to be computed.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
     class ForImageClassification:
         labels = {
             "description": """
@@ -2430,7 +2493,7 @@ class ModelForArgs:
     Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
     following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
     respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-    in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+    in the image,)` and the boxes a `torch.Tensor` of shape `(number of bounding boxes in the image, 4)`.
     """,
             "shape": "of len `(batch_size,)`",
             "type": "list[Dict]",
@@ -2464,12 +2527,12 @@ class ModelOutputArgs:
         "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
     }
 
-    past_key_values = {
+    cache = {
         "description": """
     It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
     Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
     input) to speed up sequential decoding.
     """,
         "shape": None,
@@ -2478,7 +2541,7 @@ class ModelOutputArgs:
 
     hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -2489,7 +2552,7 @@ class ModelOutputArgs:
 
     attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -2508,7 +2571,7 @@ class ModelOutputArgs:
 
     cross_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
@@ -2520,7 +2583,7 @@ class ModelOutputArgs:
 
     decoder_hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
@@ -2531,7 +2594,7 @@ class ModelOutputArgs:
 
     decoder_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
@@ -2550,7 +2613,7 @@ class ModelOutputArgs:
 
     encoder_hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
@@ -2561,7 +2624,7 @@ class ModelOutputArgs:
 
     encoder_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
@@ -2573,7 +2636,7 @@ class ModelOutputArgs:
 
     router_logits = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
     Router logits of the model, useful to compute the auxiliary loss for Mixture of Experts models.
     """,
@@ -2583,7 +2646,7 @@ class ModelOutputArgs:
 
     router_probs = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
     Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
     loss and the z_loss for Mixture of Experts models.
@@ -4219,7 +4282,7 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
             additional_info = param_info.get("additional_info", "")
 
             # Handle types with unbalanced backticks due to nested parentheses
-            # The parse_docstring function splits types like `tuple(torch.FloatTensor)` incorrectly
+            # The parse_docstring function splits types like `tuple(torch.Tensor)` incorrectly
             # so we need to reconstruct the complete type by grabbing the closing part from additional_info
             if param_type.startswith("`") and not param_type.endswith("`"):
                 # Find the closing backtick in additional_info
@@ -4767,9 +4830,9 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         Using `custom_args` to define reusable arguments:
         ```python
         VISION_ARGS = r'''
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel values of the input images.
-        image_features (`torch.FloatTensor`, *optional*):
+        image_features (`torch.Tensor`, *optional*):
             Pre-computed image features for efficient processing.
         '''
 
@@ -4781,7 +4844,7 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         Combining `custom_intro` and `custom_args`:
         ```python
         MULTIMODAL_ARGS = r'''
-        vision_features (`torch.FloatTensor`, *optional*):
+        vision_features (`torch.Tensor`, *optional*):
             Pre-extracted vision features from the vision encoder.
         fusion_strategy (`str`, *optional*, defaults to "concat"):
             Strategy for fusing text and vision modalities.
@@ -4809,19 +4872,19 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
-            loss (`torch.FloatTensor`, *optional*):
+            loss (`torch.Tensor`, *optional*):
                 The loss of the model.
-            custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
                 A custom output field specific to this model.
             '''
 
             # Standard fields like hidden_states, logits, attentions etc. can be automatically documented
             # However, given that the loss docstring is often different per model, you should document it above
-            loss: Optional[torch.FloatTensor] = None
-            logits: Optional[torch.FloatTensor] = None
-            hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-            attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-            custom_field: Optional[torch.FloatTensor] = None
+            loss: Optional[torch.Tensor] = None
+            logits: Optional[torch.Tensor] = None
+            hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+            attentions: Optional[tuple[torch.Tensor, ...]] = None
+            custom_field: Optional[torch.Tensor] = None
         ```
 
     Args:

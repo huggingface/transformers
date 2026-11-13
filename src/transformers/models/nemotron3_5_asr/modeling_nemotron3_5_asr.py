@@ -45,13 +45,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     r"""
-    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor`, *optional*, returned when `labels` is provided):
         RNN-T transducer loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, encoder_length, decoder_length, vocab_size + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, encoder_length, decoder_length, vocab_size + 1)`):
         Joint-network scores over the vocabulary plus the blank symbol, for every encoder/decoder frame pair.
     decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*):
         Updated decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
@@ -59,11 +59,11 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None  # noqa: F821
 
 
@@ -288,7 +288,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(torch.Tensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
         num_lookahead_tokens (`int`, *optional*):
             Right attention context (lookahead, in subsampled encoder frames) forwarded to the encoder.
@@ -344,7 +344,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
         )
 

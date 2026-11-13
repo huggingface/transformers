@@ -40,9 +40,11 @@ from ...utils import (
     no_inherit_decorator,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
+from ..clip.modeling_clip import CLIPAttention
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
@@ -59,14 +61,9 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLRMSNorm,
     MiniMaxM3VLSparseMoeBlock,
     MiniMaxM3VLTopKRouter,
-    MiniMaxM3VLVisionAttention,
     MiniMaxM3VLVisionMLP,
 )
-
-# Unused here, but load-bearing: `Step3p7VisionAttention` inherits `MiniMaxM3VLVisionAttention`, so
-# without this import the converter would pull MiniMax's 3-axis `apply_rotary_pos_emb_vision` into the
-# generated file. This tower is 2-D (t=1, spatial_merge_size=1), so it needs Qwen2-VL's 2-axis one.
-from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision  # noqa: F401
+from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
 
@@ -90,6 +87,22 @@ __all__ = [
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7VisionConfig(SiglipVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import Step3p7VisionConfig, Step3p7VisionModel
+
+    >>> # Initializing a Step3p7VisionConfig with google/step3p7-base-patch16-224 style configuration
+    >>> configuration = Step3p7VisionConfig()
+
+    >>> # Initializing a Step3p7VisionModel (with random weights) from the google/step3p7-base-patch16-224 style configuration
+    >>> model = Step3p7VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
@@ -107,6 +120,8 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     layer_scale_init_value: float = 0.1
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
+
+    vision_use_head = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.hidden_size = kwargs.pop("width", self.hidden_size)
@@ -589,16 +604,51 @@ class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_hw = freq.flatten(1)
-        return torch.cat((freq_hw, freq_hw), dim=-1)
+        freq_wh = freq.flip(1).flatten(1)
+        return torch.cat((freq_wh, freq_wh), dim=-1)
 
 
 class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
     pass
 
 
-class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
-    pass
+class Step3p7VisionAttention(CLIPAttention):
+    def __init__(self, config: Step3p7VisionConfig):
+        super().__init__(config)
+        self.num_key_value_groups = 1
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape)
+        keys = self.k_proj(hidden_states).view(hidden_shape)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
+        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.out_proj(attn_output), attn_weights
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
@@ -676,7 +726,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Step3p7VisionEncoderLayer", "Step3p7DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -827,12 +877,13 @@ class Step3p7Attention(LagunaAttention):
         super().__init__(config, layer_idx, num_heads)
         self.scaling = config.query_pre_attn_scalar**-0.5
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -846,8 +897,8 @@ class Step3p7Attention(LagunaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -922,13 +973,14 @@ class Step3p7TextModel(Gemma3TextModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -938,11 +990,11 @@ class Step3p7TextModel(Gemma3TextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -953,7 +1005,7 @@ class Step3p7TextModel(Gemma3TextModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             sliding_mask_kwargs = mask_kwargs.copy()
@@ -980,7 +1032,7 @@ class Step3p7TextModel(Gemma3TextModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -988,7 +1040,7 @@ class Step3p7TextModel(Gemma3TextModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

@@ -34,6 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -212,6 +213,7 @@ class LasrEncoderAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -540,7 +542,7 @@ class LasrEncoder(LasrPreTrainedModel):
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -570,22 +572,22 @@ class LasrCTCGenerateOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor
-    logits: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    logits: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
 
 
 class LasrEncoderCTCHead(nn.Conv1d):

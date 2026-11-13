@@ -42,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "Dots3NoteAudioConfig": ["feature_size"],  # used in __post_init__ to compute conv_output_size
     "NemotronH_Omni_Reasoning_V3_Config": [
         "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
     ],
@@ -151,6 +152,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "rms_norm_eps_moe_gate",
         "shared_expert_sink",
     ],
+    # Consumed by config logic: `mlp_ratio` sets `intermediate_size`.
+    "Inkling2VisionConfig": ["mlp_ratio"],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
@@ -234,6 +237,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "MistralLarge4TextConfig": ["layer_types", "first_k_dense_replace", "kv_source_layers"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
@@ -320,6 +324,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
     "GlmgaConfig": ["vision_config"],
+    # Use the Llama implementation, which the auto mappings point to
+    "InternLM3Config": True,
+    "IQuestCoderConfig": True,
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
@@ -386,6 +393,7 @@ ATTRIBUTES_TO_ALLOW = (
     "num_mtp_layers",  # for MTP, not used by main model architecture
     # used by GenericForTokenClassification in modeling_layers.py via getattr
     "token_classification_bias",
+    "num_kv_shared_layers",  # used to derive other config properties that are used
 )
 
 

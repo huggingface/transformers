@@ -23,6 +23,7 @@ from ...generation.logits_process import (
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
     LogitsProcessorList,
+    RepetitionPenaltyLogitsProcessor,
     TemperatureLogitsWarper,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -32,6 +33,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -84,6 +86,13 @@ class DiaGenerationMixin(GenerationMixin):
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
+
+        # Dia expand inputs and thus cannot use tensor `prompt_ignore_length` correctly
+        for processor in merged_processors:
+            if isinstance(processor, RepetitionPenaltyLogitsProcessor) and isinstance(
+                getattr(processor, "prompt_ignore_length", None), torch.Tensor
+            ):
+                processor.prompt_ignore_length = None
 
         # Custom processors we need at specific positions
         if original_guidance_scale is not None and original_guidance_scale != 1:
@@ -353,7 +362,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
-        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - different models have a different cache name expected by the model (default = "cache")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
         if (
@@ -406,6 +415,8 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         inputs: torch.Tensor | None = None,

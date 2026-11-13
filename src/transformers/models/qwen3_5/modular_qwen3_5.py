@@ -27,10 +27,15 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -58,7 +63,6 @@ from ..qwen3_next.modeling_qwen3_next import (
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLForConditionalGeneration,
-    Qwen3VLModelOutputWithPast,
     Qwen3VLTextRotaryEmbedding,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
@@ -222,10 +226,11 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def fix_query_key_value_ordering(self):
         raise AttributeError("Not needed for Qwen3.5 Series")
 
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -234,9 +239,9 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -249,7 +254,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
@@ -259,10 +264,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.activation,
             )
         else:
-            if cache_params is not None:
-                mixed_qkv = cache_params.update_conv_state(
-                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-                )
+            if cache is not None:
+                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
 
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
@@ -273,7 +276,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             )
 
             # Drop the additional previous states
-            if cache_params is not None:
+            if cache is not None:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -294,9 +297,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
-            query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
-            key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
         if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
@@ -306,7 +306,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=cache_params is not None,
+                output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
@@ -319,15 +319,15 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=cache_params is not None,
+                output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 
         # Update cache
-        if cache_params is not None:
-            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
+        if cache is not None:
+            cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
@@ -367,15 +367,16 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -384,7 +385,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         if self.block_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
-                cache_params=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -394,7 +395,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -437,7 +438,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
     config: Qwen3_5VisionConfig
     _no_split_modules = ["Qwen3_5VisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3_5VisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         del self.deepstack_visual_indexes
         del self.deepstack_merger_list
@@ -491,10 +492,6 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         )
 
 
-class Qwen3_5ModelOutputWithPast(Qwen3VLModelOutputWithPast):
-    pass
-
-
 class Qwen3_5TextModel(Qwen3NextModel):
     config: Qwen3_5TextConfig
 
@@ -502,13 +499,14 @@ class Qwen3_5TextModel(Qwen3NextModel):
         super().__init__(config)
         self.rotary_emb = Qwen3_5TextRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -518,12 +516,12 @@ class Qwen3_5TextModel(Qwen3NextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
@@ -541,7 +539,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": text_position_ids,
             }
             # Create the masks
@@ -559,16 +557,16 @@ class Qwen3_5TextModel(Qwen3NextModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=text_position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
 
-        return Qwen3_5ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -576,7 +574,7 @@ class Qwen3_5Model(Qwen2VLModel):
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5Config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -620,7 +618,7 @@ class Qwen3_5Model(Qwen2VLModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -632,7 +630,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.model = Qwen3_5TextModel(config)
 
@@ -657,15 +655,16 @@ class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwe
 
 
 class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -675,7 +674,7 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,

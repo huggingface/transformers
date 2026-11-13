@@ -40,6 +40,7 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_big_bird import BigBirdConfig
@@ -87,9 +88,7 @@ class BigBirdEmbeddings(nn.Module):
         self.rescale_embeddings = config.rescale_embeddings
         self.hidden_size = config.hidden_size
 
-    def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, cache_length=0):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -98,7 +97,7 @@ class BigBirdEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, cache_length : seq_length + cache_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -150,13 +149,14 @@ class BigBirdSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -166,18 +166,18 @@ class BigBirdSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
-        if is_cross_attention and past_key_values is not None and past_key_values.get_seq_length(self.layer_idx) > 0:
+        if is_cross_attention and cache is not None and cache.get_seq_length(self.layer_idx) > 0:
             # reuse k,v, cross_attentions
-            key_layer = past_key_values.layers[self.layer_idx].keys
-            value_layer = past_key_values.layers[self.layer_idx].values
+            key_layer = cache.layers[self.layer_idx].keys
+            value_layer = cache.layers[self.layer_idx].values
         else:
             kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
             key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
             value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                key_layer, value_layer = past_key_values.update(
+                key_layer, value_layer = cache.update(
                     key_layer,
                     value_layer,
                     self.layer_idx,
@@ -1102,13 +1102,14 @@ class BigBirdAttention(nn.Module):
         if not self.training:
             self.self.eval()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         # block_sparse config
         band_mask=None,
         from_mask=None,
@@ -1130,7 +1131,7 @@ class BigBirdAttention(nn.Module):
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
         else:
@@ -1206,6 +1207,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             self.crossattention.set_attention_type(value, layer_idx=layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
@@ -1216,7 +1218,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         from_mask=None,
         to_mask=None,
         blocked_encoder_mask=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -1225,7 +1227,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             band_mask=band_mask,
             from_mask=from_mask,
             to_mask=to_mask,
@@ -1245,7 +1247,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
                 attention_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -1284,13 +1286,14 @@ class BigBirdEncoder(nn.Module):
         for i, layer in enumerate(self.layer):
             layer.set_attention_type(value, layer_idx=i)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         use_cache=None,
         band_mask=None,
         from_mask=None,
@@ -1298,8 +1301,8 @@ class BigBirdEncoder(nn.Module):
         blocked_encoder_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         for layer_module in self.layer:
             hidden_states = layer_module(
@@ -1311,13 +1314,13 @@ class BigBirdEncoder(nn.Module):
                 from_mask=from_mask,
                 to_mask=to_mask,
                 blocked_encoder_mask=blocked_encoder_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1424,21 +1427,21 @@ class BigBirdPreTrainedModel(PreTrainedModel):
 @dataclass
 class BigBirdForPreTrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         Total loss as the sum of the masked language modeling loss and the next sequence prediction
         (classification) loss.
-    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    prediction_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+    seq_relationship_logits (`torch.Tensor` of shape `(batch_size, 2)`):
         Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
         before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    prediction_logits: torch.FloatTensor | None = None
-    seq_relationship_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    prediction_logits: torch.Tensor | None = None
+    seq_relationship_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -1449,18 +1452,18 @@ class BigBirdForPreTrainingOutput(ModelOutput):
 @dataclass
 class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, 1)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, 1)`):
         pooler output from BigBigModel
     """
 
-    loss: torch.FloatTensor | None = None
-    start_logits: torch.FloatTensor | None = None
-    end_logits: torch.FloatTensor | None = None
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    start_logits: torch.Tensor | None = None
+    end_logits: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -1477,7 +1480,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BigBirdConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -1528,16 +1531,17 @@ class BigBirdModel(BigBirdPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
-        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndCrossAttentions:
@@ -1557,10 +1561,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        cache_length = 0 if cache is None else cache.get_seq_length()
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length + cache_length)), device=device)
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
@@ -1614,7 +1618,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
+            cache_length=cache_length,
         )
 
         if self.attention_type == "block_sparse":
@@ -1633,7 +1637,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values if self.config.is_decoder else None,
+                cache=cache if self.config.is_decoder else None,
             )
         else:
             raise ValueError(
@@ -1653,7 +1657,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             band_mask=band_mask,
             from_mask=from_mask,
@@ -1673,7 +1677,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooler_output,
-            past_key_values=encoder_outputs.past_key_values,
+            cache=encoder_outputs.cache,
         )
 
     @staticmethod
@@ -1764,7 +1768,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         self.bert = BigBirdModel(config, add_pooling_layer=True)
@@ -1785,11 +1789,11 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         next_sentence_label: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BigBirdForPreTrainingOutput:
@@ -1859,7 +1863,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1886,12 +1890,12 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedLMOutput:
@@ -1975,7 +1979,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1996,16 +2000,17 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
-        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -2025,7 +2030,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -2041,7 +2046,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
@@ -2079,7 +2084,7 @@ class BigBirdClassificationHead(nn.Module):
     """
 )
 class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -2094,10 +2099,10 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
@@ -2182,7 +2187,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         self.bert = BigBirdModel(config)
@@ -2197,10 +2202,10 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MultipleChoiceModelOutput:
@@ -2225,7 +2230,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -2272,7 +2277,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForTokenClassification(BigBirdPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -2291,10 +2296,10 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
@@ -2345,7 +2350,7 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
 
 @auto_docstring
 class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=False):
+    def __init__(self, config: BigBirdConfig, add_pooling_layer=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -2367,11 +2372,11 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         question_lengths: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

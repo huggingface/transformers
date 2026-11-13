@@ -38,6 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -190,7 +191,7 @@ class PeAudioContrastiveHead(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.FloatTensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.proj(self.layer_norm(x))
 
 
@@ -393,6 +394,7 @@ class PeAudioEncoderAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -457,12 +459,13 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = PeAudioEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PeAudioEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -474,7 +477,7 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -495,7 +498,7 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     base_model_prefix = "audio_model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -539,16 +542,16 @@ class PeAudioPreTrainedModel(PreTrainedModel):
 @dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    codec_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Features extracted from the codec encoder, used as intermediate representations before the main encoder
         processing.
-    output_mask (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+    output_mask (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` masks corresponding to the encoder outputs, used to avoid performing attention
         on padded regions.
     """
 
-    codec_features: torch.FloatTensor | None = None
-    output_mask: tuple[torch.FloatTensor] | None = None
+    codec_features: torch.Tensor | None = None
+    output_mask: tuple[torch.Tensor] | None = None
 
 
 class PeAudioEncoderRotaryEmbedding(nn.Module):
@@ -679,14 +682,14 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
 @dataclass
 class PeAudioOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Contrastive loss computed between audio and text representations.
-    logits_audio_text (`torch.FloatTensor` of shape `(batch_size, batch_size)`, *optional*):
+    logits_audio_text (`torch.Tensor` of shape `(batch_size, batch_size)`, *optional*):
         Similarity logits between audio and text embeddings. [`PeAudioFrameLevelModel`] returns per-frame logits of
         shape `(batch_size, batch_size, sequence_length)` instead.
-    text_audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    text_audio_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Text embeddings projected to the audio-text space.
-    audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    audio_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Audio embeddings projected to the audio-text space. [`PeAudioFrameLevelModel`] returns per-frame embeddings of
         shape `(batch_size, sequence_length, hidden_size)` instead.
     text_outputs (`BaseModelOutputWithPooling`, *optional*):
@@ -695,10 +698,10 @@ class PeAudioOutput(ModelOutput):
         Model outputs for the audio encoder, including last hidden state and pooled output.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_audio_text: torch.FloatTensor | None = None
-    text_audio_embeds: torch.FloatTensor | None = None
-    audio_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_audio_text: torch.Tensor | None = None
+    text_audio_embeds: torch.Tensor | None = None
+    audio_embeds: torch.Tensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     audio_outputs: BaseModelOutputWithPooling = None
 
@@ -765,7 +768,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             input_values=input_values, padding_mask=padding_mask, **kwargs
         )
 
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.pooler_output
@@ -831,7 +834,7 @@ class PeAudioFrameLevelModel(PeAudioModel):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values, padding_mask=padding_mask, **kwargs
         )
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.last_hidden_state

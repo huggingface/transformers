@@ -22,6 +22,7 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_torchcodec_usable,
 )
 
 
@@ -105,17 +106,17 @@ def test_is_package_available_unmapped_distribution_does_not_import():
 
     with (
         patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
-        patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {}),
+        patch("transformers.utils.import_utils._package_distribution_mapping", return_value={}),
         patch("transformers.utils.import_utils.importlib.metadata.version", return_value="1.2.3") as version,
         patch("transformers.utils.import_utils.importlib.import_module") as import_module,
     ):
         assert _is_package_available(pkg_name, return_version=True) == (True, "1.2.3")
-        version.assert_called_once_with(pkg_name.replace("_", "-"))
+        version.assert_called_once_with(pkg_name)
         import_module.assert_not_called()
 
 
 def test_candidate_distribution_names():
-    with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {"PIL": ["pillow"]}):
+    with patch("transformers.utils.import_utils._package_distribution_mapping", return_value={"PIL": ["pillow"]}):
         # A mapped import name prefers its distribution, but keeps the import name as a fallback.
         assert _candidate_distribution_names("PIL") == ["pillow", "PIL"]
         # An unmapped import name falls back on itself, normalized first, without duplicates.
@@ -160,7 +161,9 @@ def mock_flash_attn_env(
     try:
         with (
             patch("transformers.utils.import_utils._is_package_available", side_effect=fake_is_package_available),
-            patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
+            patch(
+                "transformers.utils.import_utils._package_distribution_mapping", return_value=fake_distribution_mapping
+            ),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
             patch("transformers.utils.import_utils.is_torch_musa_available", return_value=False),
@@ -485,3 +488,62 @@ def test_legacy_fast_image_processor_module_alias():
     # Only paths that actually existed are aliased.
     with pytest.raises(ModuleNotFoundError):
         import transformers.models.aria.image_processing_pil_aria_fast  # noqa: F401
+
+
+@contextmanager
+def mock_torchcodec_env(load_error=None, ffmpeg_major_version=7):
+    """
+    Mocks an installed torchcodec that fails to load its native library because of `load_error`, or that loaded
+    FFmpeg `ffmpeg_major_version` (`None`: FFmpeg not found).
+    """
+    fake_torchcodec = ModuleType("torchcodec")
+    fake_torchcodec.ffmpeg_major_version = ffmpeg_major_version
+    real_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "torchcodec" and load_error is not None:
+            # Like torchcodec: a generic error wrapping the real cause
+            raise OSError("Could not load this library: libtorchcodec_core.so") from OSError(load_error)
+        return real_import(name, *args, **kwargs)
+
+    is_torchcodec_usable.cache_clear()
+    logging.warning_once.cache_clear()
+    try:
+        with (
+            patch("transformers.utils.import_utils.is_torchcodec_available", return_value=True),
+            patch("transformers.utils.import_utils.is_torchcodec_greater_or_equal", return_value=True),
+            patch.dict(sys.modules, {"torchcodec": fake_torchcodec}),
+            patch("builtins.__import__", side_effect=fake_import),
+        ):
+            yield
+    finally:
+        is_torchcodec_usable.cache_clear()
+
+
+@parameterized.expand(
+    [
+        # (case, mock_torchcodec_env kwargs, expected usable, expected ffmpeg_usable, expected warning)
+        (
+            "build_mismatch",
+            {"load_error": "libnvrtc.so.13: cannot open shared object file"},
+            False,
+            False,
+            "libnvrtc.so.13",
+        ),
+        ("no_ffmpeg", {"ffmpeg_major_version": None}, True, False, "could not load FFmpeg"),
+        ("with_ffmpeg", {"ffmpeg_major_version": 7}, True, True, None),
+    ]
+)
+def test_torchcodec_usability(_, env, usable, ffmpeg_usable, warning):
+    logger = logging.get_logger("transformers.utils.import_utils")
+    with mock_torchcodec_env(**env), CaptureLogger(logger) as captured_logs:
+        for _ in range(2):  # results are cached: the second round must not warn again
+            assert is_torchcodec_usable(decode="image") == usable
+            assert is_torchcodec_usable(decode="audio") == ffmpeg_usable
+            assert is_torchcodec_usable(decode="video") == ffmpeg_usable
+
+    if warning is None:
+        assert captured_logs.out == ""
+    else:
+        assert warning in captured_logs.out  # for a failed load, the innermost cause, not the generic wrapper
+        assert captured_logs.out.count("torchcodec#installing-torchcodec") == 1

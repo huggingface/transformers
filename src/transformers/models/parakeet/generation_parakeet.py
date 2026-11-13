@@ -18,6 +18,7 @@ import torch
 
 from ...generation import GenerationMixin, StoppingCriteria
 from ...utils import ModelOutput
+from ...utils.deprecation import deprecate_kwarg
 
 
 class ParakeetRNNTDecoderCache:
@@ -98,16 +99,16 @@ class ParakeetRNNTGenerateOutput(ModelOutput):
             Per-step durations in frames. Combined with `sequences`, this is sufficient
             to reconstruct full timestamp information (frame indices are the cumulative sum
             of durations).
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*):
             Encoder attention weights per layer.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*):
             Encoder hidden states per layer.
     """
 
     sequences: torch.LongTensor
     durations: torch.LongTensor | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
 
 
 class EncoderExhaustedCriteria(StoppingCriteria):
@@ -192,7 +193,7 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     def _prepare_model_inputs(self, *args, **kwargs):
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
         explicit = {"input_features", "attention_mask", "output_attention_mask"}
-        irrelevant_prefix = ("decoder_", "cross_attn", "use_cache", "past_key_values", "cache_params")
+        irrelevant_prefix = ("decoder_", "cross_attn", "use_cache", "cache")
         encoder_kwargs = {
             key: value
             for key, value in model_kwargs.items()
@@ -247,6 +248,8 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
 
         return model_inputs
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(self, inputs=None, generation_config=None, **kwargs):
         # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
         self._encoder_finished = None

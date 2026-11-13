@@ -32,6 +32,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
@@ -87,6 +88,7 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
         "layers.*.block_sparse_moe.experts": "moe_tp_experts",
@@ -171,13 +173,14 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -189,11 +192,11 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -203,7 +206,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -226,7 +229,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=layer_position_embeddings,
                 **kwargs,
@@ -236,7 +239,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

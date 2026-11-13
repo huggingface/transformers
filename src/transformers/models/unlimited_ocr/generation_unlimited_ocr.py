@@ -45,7 +45,7 @@ class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(NoRepeatNGramLogitsP
         self.window_size = window_size
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         return super().__call__(input_ids[:, -self.window_size :], scores)
 
 
@@ -69,10 +69,10 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
     ):
         # A prefill can span several forward passes when chunked, which the cache layers cannot tell apart from
         # decode steps, so declare its length before the first one.
-        past_key_values = model_kwargs.get("past_key_values")
-        if past_key_values is not None and past_key_values.get_seq_length() == 0:
+        cache = model_kwargs.get("cache")
+        if cache is not None and cache.get_seq_length() == 0:
             prefill_length = self._get_prefill_length(input_ids, model_kwargs)
-            for layer in past_key_values.layers:
+            for layer in cache.layers:
                 if layer._layer_type == "reference_sliding_attention":
                     layer.set_prefill_length(prefill_length)
 

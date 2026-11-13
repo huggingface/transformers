@@ -112,6 +112,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
 
     test_resize_embeddings = False
+    model_split_percents = [0.5, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -158,7 +159,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip(reason="The XcodecModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):

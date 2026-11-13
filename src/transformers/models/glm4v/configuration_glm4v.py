@@ -49,7 +49,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
     model_type = "glm4v_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 24
     hidden_size: int = 1536
@@ -90,7 +90,7 @@ class Glm4vTextConfig(PreTrainedConfig):
 
     model_type = "glm4v_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `Glm4v`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -160,7 +160,7 @@ class Glm4vConfig(PreTrainedConfig):
         "vision_config": Glm4vVisionConfig,
         "text_config": Glm4vTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

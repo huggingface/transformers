@@ -16,6 +16,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
+from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -541,9 +542,10 @@ class Wav2Vec2BertEncoder(nn.Module):
 
         for layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            skip_the_layer = False
+            if self.training and self.config.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 hidden_states = layer(
@@ -592,9 +594,12 @@ class Wav2Vec2BertAdapter(nn.Module):
             sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(hidden_states.device)
 
         for layer in self.layers:
-            layerdrop_prob = torch.rand([])
             sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
-            if not self.training or (layerdrop_prob > self.layerdrop):
+            to_drop = False
+            if self.training and self.layerdrop > 0.0:
+                layerdrop_prob = torch.rand([])
+                to_drop = layerdrop_prob <= self.layerdrop
+            if not to_drop:
                 hidden_states = layer(
                     hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths, **kwargs
                 )
@@ -608,12 +613,12 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
     stops at the corresponding element in `seq_lens`.
     Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+        hidden_states (`torch.Tensor` of shape `(batch, seq_len, *)`):
             The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
         seq_lens (`torch.Tensor` of shape `(batch)`:
             Each element represents the length of the sequence at the same index in `hidden_states`
     Returns:
-        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
+        `torch.Tensor`: The float attention mask of shape `(batch, seq_len)`
     """
     batch_size, mask_seq_len = hidden_states.shape[:2]
 
@@ -960,8 +965,8 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
 
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -1011,7 +1016,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         self,
         input_features: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Wav2Vec2BertBaseModelOutput:
         r"""
@@ -1051,7 +1056,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
     """
 )
 class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2BertConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1141,7 +1146,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
     """
 )
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1225,7 +1230,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
 
 @auto_docstring
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1331,6 +1336,8 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
+    # `self.kernel` weights are used directly in `F.conv1d` below, so its hooks have to be fired explicitly
+    @force_accelerate_hooks("kernel")
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if is_peft_available():
             from peft.tuners.lora import LoraLayer
@@ -1358,7 +1365,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
         self.wav2vec2_bert = Wav2Vec2BertModel(config)

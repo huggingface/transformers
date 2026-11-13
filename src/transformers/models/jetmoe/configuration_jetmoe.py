@@ -44,7 +44,7 @@ class JetMoeConfig(PreTrainedConfig):
     """
 
     model_type = "jetmoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"head_dim": "kv_channels"}
 
     vocab_size: int = 32000

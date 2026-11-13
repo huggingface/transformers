@@ -18,8 +18,8 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils.import_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
 if is_torch_available():
@@ -43,6 +43,9 @@ if is_vision_available():
         to_channel_dimension_format,
         to_pil_image,
     )
+
+if is_torchvision_available():
+    from transformers.image_processing_backends import TorchvisionBackend
 
 
 def get_random_image(height, width, num_channels=3, channels_first=True):
@@ -602,6 +605,24 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
+
+        # Test valid float RGBA in [0, 1]
+        valid_float_image = np.array([[[1.0, 0.0, 0.0, 0.5]]], dtype=np.float32)
+        rgb_float = convert_to_rgb(valid_float_image, return_numpy=True, input_data_format="channels_last")
+        self.assertEqual(rgb_float.shape, (1, 1, 3))
+        self.assertTrue(np.allclose(rgb_float, np.array([[[1.0, 0.5, 0.5]]], dtype=np.float32)))
+
+        # Test out-of-range float RGBA raises ValueError
+        invalid_float_image = np.array([[[1.0, 2.0, 3.0, 128.0]]], dtype=np.float32)
+        with self.assertRaises(ValueError):
+            convert_to_rgb(invalid_float_image, return_numpy=True, input_data_format="channels_last")
+
+    @require_torchvision
+    def test_convert_to_rgb_torchvision_out_of_range(self):
+        backend = TorchvisionBackend()
+        invalid_tensor = torch.tensor([[[1.0]], [[2.0]], [[3.0]], [[128.0]]], dtype=torch.float32)
+        with self.assertRaises(ValueError):
+            backend.convert_to_rgb(invalid_tensor)
 
     @parameterized.expand(["RGB", "L", "P"])
     def test_convert_to_rgb_png_transparency(self, mode):

@@ -13,9 +13,9 @@
 # limitations under the License.
 from __future__ import annotations
 
+import importlib
 import json
 import os
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -28,7 +28,11 @@ from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.modeling_auto import (
+    MODEL_FOR_DECISION_MAPPING,
+    AutoModelForDepthEstimation,
+    AutoModelForImageToImage,
+)
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..models.auto.video_processing_auto import AutoVideoProcessor
@@ -38,17 +42,12 @@ from ..utils import (
     CONFIG_NAME,
     find_adapter_config_file,
     hf_api,
-    is_kenlm_available,
     is_peft_available,
-    is_pyctcdecode_available,
     is_torch_available,
     logging,
     resolve_revision,
 )
 from ..video_processing_utils import BaseVideoProcessor
-from .any_to_any import AnyToAnyPipeline
-from .audio_classification import AudioClassificationPipeline
-from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
     CsvPipelineDataFormat,
@@ -61,32 +60,51 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
-from .depth_estimation import DepthEstimationPipeline
-from .document_question_answering import DocumentQuestionAnsweringPipeline
-from .feature_extraction import FeatureExtractionPipeline
-from .fill_mask import FillMaskPipeline
-from .image_classification import ImageClassificationPipeline
-from .image_feature_extraction import ImageFeatureExtractionPipeline
-from .image_segmentation import ImageSegmentationPipeline
-from .image_text_to_text import ImageTextToTextPipeline
-from .keypoint_matching import KeypointMatchingPipeline
-from .mask_generation import MaskGenerationPipeline
-from .object_detection import ObjectDetectionPipeline
-from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
-from .text_classification import TextClassificationPipeline
-from .text_generation import TextGenerationPipeline
-from .text_to_audio import TextToAudioPipeline
-from .token_classification import (
-    AggregationStrategy,
-    NerPipeline,
-    TokenClassificationArgumentHandler,
-    TokenClassificationPipeline,
-)
-from .video_classification import VideoClassificationPipeline
-from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
-from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
-from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
-from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
+
+
+# Map each public pipeline class name to its submodule, used by __getattr__ and _resolve_impl.
+# This replaces 27 eager submodule imports so that only the submodule(s) actually needed at
+# runtime are loaded (e.g. only TextClassificationPipeline when running text-classification).
+_PIPELINE_CLASS_TO_MODULE = {
+    "AggregationStrategy": "transformers.pipelines.token_classification",
+    "AnyToAnyPipeline": "transformers.pipelines.any_to_any",
+    "AudioClassificationPipeline": "transformers.pipelines.audio_classification",
+    "AutomaticSpeechRecognitionPipeline": "transformers.pipelines.automatic_speech_recognition",
+    "DecisionPipeline": "transformers.pipelines.decision",
+    "DepthEstimationPipeline": "transformers.pipelines.depth_estimation",
+    "DocumentQuestionAnsweringPipeline": "transformers.pipelines.document_question_answering",
+    "FeatureExtractionPipeline": "transformers.pipelines.feature_extraction",
+    "FillMaskPipeline": "transformers.pipelines.fill_mask",
+    "ImageClassificationPipeline": "transformers.pipelines.image_classification",
+    "ImageFeatureExtractionPipeline": "transformers.pipelines.image_feature_extraction",
+    "ImageSegmentationPipeline": "transformers.pipelines.image_segmentation",
+    "ImageTextToTextPipeline": "transformers.pipelines.image_text_to_text",
+    "KeypointMatchingPipeline": "transformers.pipelines.keypoint_matching",
+    "MaskGenerationPipeline": "transformers.pipelines.mask_generation",
+    "NerPipeline": "transformers.pipelines.token_classification",
+    "ObjectDetectionPipeline": "transformers.pipelines.object_detection",
+    "TableQuestionAnsweringArgumentHandler": "transformers.pipelines.table_question_answering",
+    "TableQuestionAnsweringPipeline": "transformers.pipelines.table_question_answering",
+    "TextClassificationPipeline": "transformers.pipelines.text_classification",
+    "TextGenerationPipeline": "transformers.pipelines.text_generation",
+    "TextToAudioPipeline": "transformers.pipelines.text_to_audio",
+    "TokenClassificationArgumentHandler": "transformers.pipelines.token_classification",
+    "TokenClassificationPipeline": "transformers.pipelines.token_classification",
+    "VideoClassificationPipeline": "transformers.pipelines.video_classification",
+    "ZeroShotAudioClassificationPipeline": "transformers.pipelines.zero_shot_audio_classification",
+    "ZeroShotClassificationArgumentHandler": "transformers.pipelines.zero_shot_classification",
+    "ZeroShotClassificationPipeline": "transformers.pipelines.zero_shot_classification",
+    "ZeroShotImageClassificationPipeline": "transformers.pipelines.zero_shot_image_classification",
+    "ZeroShotObjectDetectionPipeline": "transformers.pipelines.zero_shot_object_detection",
+}
+
+
+def _resolve_impl(impl):
+    """Resolve a pipeline impl: dotted-path string -> class, or pass through a class unchanged."""
+    if isinstance(impl, str):
+        module_path, cls_name = impl.rsplit(".", 1)
+        return getattr(importlib.import_module(module_path), cls_name)
+    return impl
 
 
 if is_torch_available():
@@ -97,6 +115,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDecision,
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
@@ -126,6 +145,31 @@ if is_torch_available():
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_tokenizers import PreTrainedTokenizerFast
+    from .any_to_any import AnyToAnyPipeline
+    from .audio_classification import AudioClassificationPipeline
+    from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
+    from .decision import DecisionPipeline
+    from .depth_estimation import DepthEstimationPipeline
+    from .document_question_answering import DocumentQuestionAnsweringPipeline
+    from .feature_extraction import FeatureExtractionPipeline
+    from .fill_mask import FillMaskPipeline
+    from .image_classification import ImageClassificationPipeline
+    from .image_feature_extraction import ImageFeatureExtractionPipeline
+    from .image_segmentation import ImageSegmentationPipeline
+    from .image_text_to_text import ImageTextToTextPipeline
+    from .keypoint_matching import KeypointMatchingPipeline
+    from .mask_generation import MaskGenerationPipeline
+    from .object_detection import ObjectDetectionPipeline
+    from .table_question_answering import TableQuestionAnsweringPipeline
+    from .text_classification import TextClassificationPipeline
+    from .text_generation import TextGenerationPipeline
+    from .text_to_audio import TextToAudioPipeline
+    from .token_classification import TokenClassificationPipeline
+    from .video_classification import VideoClassificationPipeline
+    from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
+    from .zero_shot_classification import ZeroShotClassificationPipeline
+    from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+    from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -137,69 +181,71 @@ TASK_ALIASES = {
     "ner": "token-classification",
     "text-to-speech": "text-to-audio",
 }
+# Note: `["impl"]` values are dotted-path strings (e.g. "transformers.pipelines.text_classification.TextClassificationPipeline"),
+# not class objects — resolved lazily at call time via `_resolve_impl()` to avoid eagerly importing all pipeline submodules.
 SUPPORTED_TASKS = {
     "audio-classification": {
-        "impl": AudioClassificationPipeline,
+        "impl": "transformers.pipelines.audio_classification.AudioClassificationPipeline",
         "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
         "default": {"model": ("superb/wav2vec2-base-superb-ks", "372e048")},
         "type": "audio",
     },
     "automatic-speech-recognition": {
-        "impl": AutomaticSpeechRecognitionPipeline,
+        "impl": "transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline",
         "pt": (AutoModelForCTC, AutoModelForTDT, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": ("facebook/wav2vec2-base-960h", "22aad52")},
         "type": "multimodal",
     },
     "text-to-audio": {
-        "impl": TextToAudioPipeline,
+        "impl": "transformers.pipelines.text_to_audio.TextToAudioPipeline",
         "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else (),
         "default": {"model": ("suno/bark-small", "1dbd7a1")},
         "type": "text",
     },
     "feature-extraction": {
-        "impl": FeatureExtractionPipeline,
+        "impl": "transformers.pipelines.feature_extraction.FeatureExtractionPipeline",
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilbert-base-cased", "6ea8117")},
         "type": "text",
     },
     "text-classification": {
-        "impl": TextClassificationPipeline,
+        "impl": "transformers.pipelines.text_classification.TextClassificationPipeline",
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "714eb0f")},
         "type": "text",
     },
     "token-classification": {
-        "impl": TokenClassificationPipeline,
+        "impl": "transformers.pipelines.token_classification.TokenClassificationPipeline",
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {"model": ("dbmdz/bert-large-cased-finetuned-conll03-english", "4c53496")},
         "type": "text",
     },
     "table-question-answering": {
-        "impl": TableQuestionAnsweringPipeline,
+        "impl": "transformers.pipelines.table_question_answering.TableQuestionAnsweringPipeline",
         "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
         "default": {"model": ("google/tapas-base-finetuned-wtq", "e3dde19")},
         "type": "text",
     },
     "document-question-answering": {
-        "impl": DocumentQuestionAnsweringPipeline,
+        "impl": "transformers.pipelines.document_question_answering.DocumentQuestionAnsweringPipeline",
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "default": {"model": ("impira/layoutlm-document-qa", "beed3c4")},
         "type": "multimodal",
     },
     "fill-mask": {
-        "impl": FillMaskPipeline,
+        "impl": "transformers.pipelines.fill_mask.FillMaskPipeline",
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilroberta-base", "fb53ab8")},
         "type": "text",
     },
     "text-generation": {
-        "impl": TextGenerationPipeline,
+        "impl": "transformers.pipelines.text_generation.TextGenerationPipeline",
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
         "default": {"model": ("HuggingFaceTB/SmolLM3-3B", "a07cc9a")},
         "type": "text",
     },
     "zero-shot-classification": {
-        "impl": ZeroShotClassificationPipeline,
+        "impl": "transformers.pipelines.zero_shot_classification.ZeroShotClassificationPipeline",
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": ("facebook/bart-large-mnli", "d7645e1"),
@@ -208,79 +254,87 @@ SUPPORTED_TASKS = {
         "type": "text",
     },
     "zero-shot-image-classification": {
-        "impl": ZeroShotImageClassificationPipeline,
+        "impl": "transformers.pipelines.zero_shot_image_classification.ZeroShotImageClassificationPipeline",
         "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {"model": ("openai/clip-vit-base-patch32", "3d74acf")},
         "type": "multimodal",
     },
     "zero-shot-audio-classification": {
-        "impl": ZeroShotAudioClassificationPipeline,
+        "impl": "transformers.pipelines.zero_shot_audio_classification.ZeroShotAudioClassificationPipeline",
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("laion/clap-htsat-fused", "cca9e28")},
         "type": "multimodal",
     },
     "image-classification": {
-        "impl": ImageClassificationPipeline,
+        "impl": "transformers.pipelines.image_classification.ImageClassificationPipeline",
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": ("google/vit-base-patch16-224", "3f49326")},
         "type": "image",
     },
     "image-feature-extraction": {
-        "impl": ImageFeatureExtractionPipeline,
+        "impl": "transformers.pipelines.image_feature_extraction.ImageFeatureExtractionPipeline",
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("google/vit-base-patch16-224", "3f49326")},
         "type": "image",
     },
     "image-segmentation": {
-        "impl": ImageSegmentationPipeline,
+        "impl": "transformers.pipelines.image_segmentation.ImageSegmentationPipeline",
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": ("facebook/detr-resnet-50-panoptic", "d53b52a")},
         "type": "multimodal",
     },
     "image-text-to-text": {
-        "impl": ImageTextToTextPipeline,
+        "impl": "transformers.pipelines.image_text_to_text.ImageTextToTextPipeline",
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
         "default": {"model": ("Qwen/Qwen3-VL-2B-Instruct", "8964489")},
         "type": "multimodal",
     },
     "object-detection": {
-        "impl": ObjectDetectionPipeline,
+        "impl": "transformers.pipelines.object_detection.ObjectDetectionPipeline",
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": ("facebook/detr-resnet-50", "1d5f47b")},
         "type": "multimodal",
     },
     "zero-shot-object-detection": {
-        "impl": ZeroShotObjectDetectionPipeline,
+        "impl": "transformers.pipelines.zero_shot_object_detection.ZeroShotObjectDetectionPipeline",
         "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
         "default": {"model": ("google/owlvit-base-patch32", "cbc355f")},
         "type": "multimodal",
     },
+    "decision": {
+        "impl": "transformers.pipelines.decision.DecisionPipeline",
+        "pt": (AutoModelForDecision, AutoModelForImageTextToText, AutoModelForCausalLM)
+        if is_torch_available()
+        else (),
+        "default": {"model": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae5576")},
+        "type": "multimodal",
+    },
     "depth-estimation": {
-        "impl": DepthEstimationPipeline,
+        "impl": "transformers.pipelines.depth_estimation.DepthEstimationPipeline",
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
         "default": {"model": ("Intel/dpt-large", "bc15f29")},
         "type": "image",
     },
     "video-classification": {
-        "impl": VideoClassificationPipeline,
+        "impl": "transformers.pipelines.video_classification.VideoClassificationPipeline",
         "pt": (AutoModelForVideoClassification,) if is_torch_available() else (),
         "default": {"model": ("MCG-NJU/videomae-base-finetuned-kinetics", "488eb9a")},
         "type": "video",
     },
     "mask-generation": {
-        "impl": MaskGenerationPipeline,
+        "impl": "transformers.pipelines.mask_generation.MaskGenerationPipeline",
         "pt": (AutoModelForMaskGeneration,) if is_torch_available() else (),
         "default": {"model": ("facebook/sam-vit-huge", "87aecf0")},
         "type": "multimodal",
     },
     "keypoint-matching": {
-        "impl": KeypointMatchingPipeline,
+        "impl": "transformers.pipelines.keypoint_matching.KeypointMatchingPipeline",
         "pt": (AutoModelForKeypointMatching,) if is_torch_available() else (),
         "default": {"model": ("magic-leap-community/superglue_outdoor", "f4041f8")},
         "type": "image",
     },
     "any-to-any": {
-        "impl": AnyToAnyPipeline,
+        "impl": "transformers.pipelines.any_to_any.AnyToAnyPipeline",
         "tf": (),
         "pt": (AutoModelForMultimodalLM,) if is_torch_available() else (),
         "default": {
@@ -363,6 +417,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
             - `"audio-classification"`
             - `"automatic-speech-recognition"`
             - `"conversational"`
+            - `"decision"`
             - `"depth-estimation"`
             - `"document-question-answering"`
             - `"feature-extraction"`
@@ -423,6 +478,8 @@ def pipeline(task: Literal["any-to-any"], model: str | PreTrainedModel | None = 
 def pipeline(task: Literal["audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AudioClassificationPipeline: ...
 @overload
 def pipeline(task: Literal["automatic-speech-recognition"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AutomaticSpeechRecognitionPipeline: ...
+@overload
+def pipeline(task: Literal["decision"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DecisionPipeline: ...
 @overload
 def pipeline(task: Literal["depth-estimation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DepthEstimationPipeline: ...
 @overload
@@ -618,7 +675,7 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
         return
 
     try:
-        import kenlm  # to trigger `ImportError` if not installed
+        import kenlm  # noqa: F401  # to trigger `ImportError` if not installed
         from pyctcdecode import BeamSearchDecoderCTC
 
         if os.path.isdir(model_name) or os.path.isfile(model_name):
@@ -631,12 +688,11 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
 
         kwargs["decoder"] = decoder
     except ImportError as error:
-        logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {error}")
-        if not is_kenlm_available():
-            logger.warning("Try to install `kenlm`: `pip install kenlm")
-
-        if not is_pyctcdecode_available():
-            logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+        logger.warning_once(
+            f"`{model_name}` ships an n-gram language model, but decoding falls back to greedy CTC ({error}), so "
+            "transcriptions can differ from previous versions. See: "
+            "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+        )
 
 
 def _resolve_feature_extractor(
@@ -743,6 +799,7 @@ def pipeline(
 
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
+            - `"decision"`: will return a [`DecisionPipeline`].
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
@@ -1001,6 +1058,8 @@ def pipeline(
                     " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
                     " set the option `trust_remote_code=True` to remove this error."
                 )
+            # Custom pipeline impls are "module.Class" strings inside the Hub repo, which only
+            # get_class_from_dynamic_module can resolve, so we pass them through unchanged
             class_ref = targeted_task["impl"]
             pipeline_class = get_class_from_dynamic_module(
                 class_ref,
@@ -1012,7 +1071,7 @@ def pipeline(
         task = _resolve_deprecated_task(task)
         normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
-            pipeline_class = targeted_task["impl"]
+            pipeline_class = _resolve_impl(targeted_task["impl"])
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
@@ -1070,6 +1129,10 @@ def pipeline(
     # Load the correct model if possible
     if isinstance(model, str):
         model_classes = targeted_task["pt"]
+        # A decision model reading the checkpoint, which builds its config from the files of the checkpoint itself
+        if task == "decision" and type(config) in MODEL_FOR_DECISION_MAPPING:
+            model_classes = (MODEL_FOR_DECISION_MAPPING[type(config)],)
+            hub_kwargs.pop("code_revision", None)  # for remote code, which only the auto classes read
         model = load_model(
             adapter_path if adapter_path is not None else model,
             model_classes=model_classes,
@@ -1160,3 +1223,12 @@ def pipeline(
         kwargs["processor"] = processor
 
     return pipeline_class(model=model, task=task, **kwargs)
+
+
+def __getattr__(name):
+    if name in _PIPELINE_CLASS_TO_MODULE:
+        module = importlib.import_module(_PIPELINE_CLASS_TO_MODULE[name])
+        value = getattr(module, name)
+        globals()[name] = value  # cache so subsequent accesses skip __getattr__
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

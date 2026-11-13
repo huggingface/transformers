@@ -40,6 +40,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nomic_bert import NomicBertConfig
@@ -64,7 +65,7 @@ class NomicBertEmbeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         embeddings = inputs_embeds
         if inputs_embeds is None:
@@ -209,6 +210,7 @@ class NomicBertAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -278,7 +280,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
         attention_output, _ = self.self_attn(
             hidden_states,
@@ -360,7 +362,7 @@ class NomicBertPooler(nn.Module):
 class NomicBertModel(NomicBertPreTrainedModel):
     _no_split_modules = ["NomicBertEmbeddings", "NomicBertLayer"]
 
-    def __init__(self, config, add_pooling_layer=False):
+    def __init__(self, config: NomicBertConfig, add_pooling_layer=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `False`):
             Whether to add a pooling layer.
@@ -393,7 +395,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -478,7 +480,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
 
         self.nomic_bert = NomicBertModel(config)
@@ -539,7 +541,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
     """
 )
 class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -613,7 +615,7 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
 
 @auto_docstring
 class NomicBertForTokenClassification(NomicBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

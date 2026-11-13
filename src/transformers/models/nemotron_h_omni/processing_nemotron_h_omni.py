@@ -18,11 +18,13 @@ from typing import Union
 
 import numpy as np
 
+from ...audio_utils import load_audio
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
@@ -32,12 +34,6 @@ if is_torch_available():
 
 # Audio input type - file paths, numpy arrays, or torch tensors (or lists thereof).
 AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
-
-
-class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: ImagesKwargs
-    videos_kwargs: VideosKwargs
-    _defaults = {}
 
 
 @auto_docstring
@@ -91,10 +87,9 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            NemotronH_Omni_Reasoning_V3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -223,7 +218,7 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         num_tokens = []
         for audio_item in audio:
             if isinstance(audio_item, str):
-                waveform = self._load_audio(audio_item, sampling_rate)
+                waveform = load_audio(audio_item, sampling_rate=sampling_rate)
             elif is_torch_available() and isinstance(audio_item, torch.Tensor):
                 waveform = audio_item.numpy() if audio_item.dim() == 1 else audio_item.squeeze().numpy()
             elif isinstance(audio_item, np.ndarray):
@@ -255,35 +250,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             length = (length + add_pad) // stride + 1
         return length
 
-    def _load_audio(self, audio_path: str, target_sr: int) -> np.ndarray:
-        """Load (and resample) audio from a file path, using librosa or soundfile if available."""
-        try:
-            import librosa
-
-            waveform, _ = librosa.load(audio_path, sr=target_sr, mono=True)
-            return waveform
-        except ImportError:
-            pass
-
-        try:
-            import soundfile as sf
-
-            waveform, sr = sf.read(audio_path)
-            if waveform.ndim > 1:
-                waveform = waveform.mean(axis=1)
-            if sr != target_sr:
-                import scipy.signal
-
-                num_samples = int(len(waveform) * target_sr / sr)
-                waveform = scipy.signal.resample(waveform, num_samples)
-            return waveform.astype(np.float32)
-        except ImportError:
-            pass
-
-        raise ImportError(
-            "Audio loading requires either librosa or soundfile. Install with: pip install librosa soundfile"
-        )
-
     def batch_decode(self, *args, **kwargs):
         """Forward to the tokenizer's [`~PreTrainedTokenizer.batch_decode`]."""
         return self.tokenizer.batch_decode(*args, **kwargs)
@@ -309,5 +275,9 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
+
+__getattr__ = deprecate_attr(
+    __name__, rename={"NemotronH_Omni_Reasoning_V3ProcessorKwargs": (ProcessingKwargs, "5.29.0")}
+)
 
 __all__ = ["NemotronH_Omni_Reasoning_V3Processor"]

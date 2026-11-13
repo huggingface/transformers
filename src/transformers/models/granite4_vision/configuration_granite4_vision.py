@@ -47,7 +47,7 @@ class Granite4VisionTextConfig(PreTrainedConfig):
     """
 
     model_type = "granite4_vision_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `Granite4VisionTextModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -123,7 +123,7 @@ class Granite4VisionConfig(PreTrainedConfig):
     model_type = "granite4_vision"
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite4_vision_text"),
+        "text_config": Granite4VisionTextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
         "qformer_config": SubConfigSpec(
             config_class=AutoConfig,

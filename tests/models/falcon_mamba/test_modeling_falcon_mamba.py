@@ -199,7 +199,7 @@ class FalconMambaModelTester:
         outputs = model(
             input_ids[:, -1:],
             use_cache=True,
-            cache_params=outputs.cache_params,
+            cache=outputs.cache,
         )
         output_two = outputs.last_hidden_state
 
@@ -216,10 +216,10 @@ class FalconMambaModelTester:
         input_ids = input_ids.to("cpu")
 
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         # create cache
-        cache = model(input_ids, use_cache=True).cache_params
+        cache = model(input_ids, use_cache=True).cache
         cache.reset()
 
         # use cache
@@ -237,7 +237,7 @@ class FalconMambaModelTester:
         model = FalconMambaForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())

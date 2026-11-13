@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
@@ -61,6 +62,7 @@ class MiniCPMV4_6VisionConfig(SiglipVisionConfig):
     model_type = "minicpmv4_6_vision"
     insert_layer_id: int = 6
     window_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    vision_use_head = AttributeError()
 
     @property
     def window_hidden_size(self) -> int:
@@ -120,7 +122,7 @@ class MiniCPMV4_6Config(PreTrainedConfig):
 class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         target_sizes: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -543,7 +545,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -577,13 +579,13 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     )
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
+        pixel_values_videos (`torch.Tensor` of shape `(1, channels, patch_size, seq_len)`):
             NaViT-packed pixel patches for all video frames. The video processor concatenates
             every frame's patches along the last dimension into a single sequence with dim-0 = 1,
             identical to the image packing format.
@@ -608,8 +610,8 @@ class MiniCPMV4_6Model(Lfm2VlModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
+        features: torch.Tensor,
         token_id: int,
     ):
         if input_ids is None:
@@ -631,28 +633,29 @@ class MiniCPMV4_6Model(Lfm2VlModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -703,7 +706,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         output = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -725,17 +728,18 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
@@ -743,11 +747,11 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -762,7 +766,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             target_sizes_videos=target_sizes_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -782,7 +786,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -797,10 +801,11 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
     def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
         return self.model.get_video_features(*args, **kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         inputs_embeds=None,
         pixel_values=None,
@@ -813,7 +818,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             is_first_iteration=is_first_iteration,

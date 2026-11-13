@@ -49,7 +49,7 @@ class BloomConfig(PreTrainedConfig):
     ```"""
 
     model_type = "bloom"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_hidden_layers": "n_layer",
         "num_attention_heads": "n_head",

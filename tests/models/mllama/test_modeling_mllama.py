@@ -25,7 +25,6 @@ from transformers import (
     MllamaForConditionalGeneration,
     MllamaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.cache_utils import Cache, StaticCache, StaticLayer
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
@@ -48,9 +47,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class MllamaText2TextModelTester:
@@ -138,7 +134,7 @@ class MllamaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=4,
+        image_token_id=4,
         seq_length=7,
         is_training=True,
         text_config={
@@ -177,7 +173,7 @@ class MllamaVisionText2TextModelTester:
         self.parent = parent
         self.is_training = is_training
         self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -199,7 +195,7 @@ class MllamaVisionText2TextModelTester:
         return MllamaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -229,8 +225,8 @@ class MllamaVisionText2TextModelTester:
             (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles), device=torch_device
         )
 
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, 1] = config.image_token_index
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, 1] = config.image_token_id
         inputs_dict = {
             "pixel_values": pixel_values,
             "aspect_ratio_ids": aspect_ratio_ids,
@@ -285,7 +281,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):
@@ -309,7 +305,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertTrue("loss" in output)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # Mllama has cross attention layers and those have a different shape than normal attention layers
         self.assertIsInstance(attentions, tuple)
@@ -319,8 +315,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
-        use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+        use_cache = decoder_cache is not None
+        has_static_cache = isinstance(decoder_cache, StaticCache)
 
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -336,7 +332,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                     key_length = self.model_tester.image_length
                 elif has_static_cache:
                     # a static cache is preallocated, so attention spans the whole cache
-                    key_length = decoder_past_key_values.get_max_length(layer_idx)
+                    key_length = decoder_cache.get_max_length(layer_idx)
                 else:
                     key_length = prompt_length + generated_length
                 expected_shapes.append((batch_size, config.num_attention_heads, model_input_length, key_length))
@@ -391,20 +387,20 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     # overridden because mllama has special cache for self and cross attentions
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, Cache)
 
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 
-        for layer_idx in range(len(past_key_values)):
+        for layer_idx in range(len(cache)):
             if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
                 expected_shape = (batch_size, num_heads, self.model_tester.image_length, head_dim)
             else:
                 expected_shape = (batch_size, num_heads, seq_length, head_dim)
             # check shape key, value
-            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_shape)
-            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_shape)
+            self.assertEqual(cache.layers[layer_idx].keys.shape, expected_shape)
+            self.assertEqual(cache.layers[layer_idx].values.shape, expected_shape)
 
     def test_generate_text_only_with_cache(self):
         """
@@ -447,12 +443,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 return_dict_in_generate=True,
             )
 
-            past_key_values = output.past_key_values
-            self.assertIsInstance(past_key_values, StaticCache)
-            self.assertTrue(past_key_values.is_compileable)
+            cache = output.cache
+            self.assertIsInstance(cache, StaticCache)
+            self.assertTrue(cache.is_compileable)
             # `generate` sizes the static cache to `max_length - 1`
             max_cache_len = inputs["input_ids"].shape[1] + 4 - 1
-            for layer_idx, layer in enumerate(past_key_values.layers):
+            for layer_idx, layer in enumerate(cache.layers):
                 self.assertIsInstance(layer, StaticLayer)
                 expected_length = (
                     self.model_tester.image_length if layer_idx in cross_attention_layers else max_cache_len
@@ -629,6 +625,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 (None, None): torch.tensor([6.9375, 4.4688, 3.4531, 0.1973, 1.9766], dtype=actual_logits.dtype),
+                ("cuda", (8, 6)): torch.tensor(
+                    [6.78125, 4.4375, 3.34375, 0.1298828125, 1.9140625], dtype=actual_logits.dtype
+                ),
             }
         )
 

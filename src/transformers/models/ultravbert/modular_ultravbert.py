@@ -316,7 +316,7 @@ class UltraVBertModel(ModernVBertModel):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
         return super().forward(**super_kwargs)
@@ -348,7 +348,7 @@ class UltraVBertForMaskedLM(ModernVBertForMaskedLM):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
         return super().forward(**super_kwargs)
@@ -365,7 +365,7 @@ class UltraVBertForSequenceClassification(ModernVBertForSequenceClassification):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
         return super().forward(**super_kwargs)
@@ -382,7 +382,7 @@ class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
         return super().forward(**super_kwargs)

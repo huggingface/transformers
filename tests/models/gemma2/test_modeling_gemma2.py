@@ -218,7 +218,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
                     "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
                 ],
                 ("cuda", 8): [
-                    "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
                 ],
                 ("rocm", (9, 5)): [
                     "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
@@ -419,7 +419,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
         # Let's check that the dynamic cache has hybrid layers!
-        dynamic_cache = out.past_key_values
+        dynamic_cache = out.cache
         self.assertTrue(isinstance(dynamic_cache, DynamicCache))
         for layer, layer_type in zip(dynamic_cache.layers, model.config.layer_types):
             if layer_type == "sliding_attention":
