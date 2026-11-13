@@ -41,7 +41,7 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
         images = [np.random.randint(255, size=(h, w, 3), dtype=np.uint8) for h, w in image_sizes]
         text = [f"This is an image {processor.image_token}"] * len(images)
-        tiling_kwargs = dict(max_patches=4, size={"height": 56, "width": 56})
+        tiling_kwargs = {"max_patches": 4, "size": {"height": 56, "width": 56}}
         inputs = processor(
             text=text,
             images=images,
