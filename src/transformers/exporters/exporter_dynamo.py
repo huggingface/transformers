@@ -43,7 +43,7 @@ import copy
 import inspect
 import sys
 import types
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -700,9 +700,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
     - Scalars / None → None (no dynamic dims).
     - Registered pytree nodes (ModelOutput, Cache, …) → list of one spec per child of the
       registered flatten, recursed, matching the ``TreeSpec(list, …)`` torch.export compares against.
-    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Lists / tuples → same container type, recursed element-wise.
-    - Plain dicts → recursed dict of specs.
+    - Dicts and other mappings (a processor's `BatchFeature`) → recursed dict of specs.
+    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
@@ -721,6 +721,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
         # against -- flattening it to tensors hands over a flat spec where nested children are expected.
         children, _ = node.flatten_fn(inputs)
         return [get_auto_dynamic_shapes(child) for child in children]
+    if isinstance(inputs, Mapping):
+        # A processor's `BatchFeature`, which `torch.export` takes as the dict of its items
+        return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
     if hasattr(inputs, "__dict__"):
         leaves, _ = _pytree_flatten(inputs)
         return get_auto_dynamic_shapes(leaves)
