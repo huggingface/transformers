@@ -153,6 +153,7 @@ if TYPE_CHECKING:
     from .esmc import *
     from .esmfold2 import *
     from .eurobert import *
+    from .evo2 import *
     from .evolla import *
     from .exaone4 import *
     from .exaone4_5 import *

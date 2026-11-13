@@ -201,6 +201,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("esmc", "EsmcConfig"),
         ("esmfold2", "EsmFold2Config"),
         ("eurobert", "EuroBertConfig"),
+        ("evo2", "Evo2Config"),
         ("evolla", "EvollaConfig"),
         ("exaone4", "Exaone4Config"),
         ("exaone4_5", "Exaone4_5_Config"),
