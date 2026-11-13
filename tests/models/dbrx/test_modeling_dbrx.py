@@ -99,6 +99,10 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_cpu_offload(self):
         pass
 
+    @unittest.skip(reason="DbrxConfig rejects `tie_word_embeddings=True`, so the head is never tied")
+    def test_tied_weights_are_sharded_together(self):
+        pass
+
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_disk_offload_safetensors(self):
         pass

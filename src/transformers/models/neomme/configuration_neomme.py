@@ -59,6 +59,8 @@ class NeoMMEConfig(PreTrainedConfig):
 
     model_type = "neomme"
     base_model_tp_plan = {
+        # The embedding is wrapped, so it doesn't get the automatic `embed_tokens` rule; the tied `lm_head` needs it
+        "embed_tokens.word_embeddings": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
