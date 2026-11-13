@@ -1159,6 +1159,37 @@ class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
+    def test_iterable_evaluation_loss_uses_actual_batch_size(self):
+        for dispatch in (False, True):
+            for accumulation in (None, 1):
+                for batch_size in (1, 3, 8):
+                    with self.subTest(dispatch=dispatch, accumulation=accumulation, batch_size=batch_size):
+                        dataset = SampleIterableDataset(length=7)
+                        trainer = get_regression_trainer(
+                            a=1.5,
+                            b=2.5,
+                            output_dir=self.get_auto_remove_tmp_dir(),
+                            use_cpu=True,
+                            per_device_eval_batch_size=batch_size,
+                            eval_accumulation_steps=accumulation,
+                            accelerator_config={"dispatch_batches": dispatch},
+                            report_to=[],
+                        )
+                        x, y = dataset.dataset.x, dataset.dataset.ys[0]
+                        expected_predictions = 1.5 * x + 2.5
+                        expected_loss = ((expected_predictions - y) ** 2).mean()
+                        map_result = trainer.evaluate(dataset.dataset)
+                        iterable_result = trainer.evaluate(dataset)
+                        prediction = trainer.predict(dataset)
+                        for result, prefix in (
+                            (map_result, "eval"),
+                            (iterable_result, "eval"),
+                            (prediction.metrics, "test"),
+                        ):
+                            self.assertAlmostEqual(result[f"{prefix}_loss"], expected_loss, places=6)
+                        np.testing.assert_allclose(prediction.predictions, expected_predictions)
+                        np.testing.assert_array_equal(prediction.label_ids, y)
+
     def test_predict_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
