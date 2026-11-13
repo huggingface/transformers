@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Llava-OneVision-1.5 model."""
 
 import copy
+import json
 import tempfile
 import unittest
 
@@ -101,6 +102,57 @@ class LlavaOnevision15ModelTester(VLMModelTester):
 @require_torch
 class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = LlavaOnevision15ModelTester
+
+    def test_tied_checkpoint_roundtrip(self):
+        """Root-level tying must survive saving a checkpoint with a shared output head."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        values = config.to_dict()
+        values.pop("transformers_version", None)
+        values["tie_word_embeddings"] = True
+        values["text_config"]["tie_word_embeddings"] = False
+        config = LlavaOnevision15Config.from_dict(values)
+        self.assertTrue(config.tie_word_embeddings)
+        model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
+        self.assertIs(model.lm_head.weight, model.get_input_embeddings().weight)
+        with torch.no_grad():
+            expected = model(**inputs).logits
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            reloaded, info = LlavaOnevision15ForConditionalGeneration.from_pretrained(
+                directory, output_loading_info=True
+            )
+            self.assertFalse(any(info.values()), info)
+            self.assertIs(reloaded.lm_head.weight, reloaded.get_input_embeddings().weight)
+            reloaded = reloaded.to(torch_device).eval()
+            with torch.no_grad():
+                torch.testing.assert_close(reloaded(**inputs).logits, expected)
+        values["transformers_version"] = "4.58.0"
+        self.assertFalse(LlavaOnevision15Config.from_dict(values).tie_word_embeddings)
+
+    def test_vision_loading_from_full_checkpoint(self):
+        """Extract the vision tower from a full checkpoint using the published legacy config type."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            config_path = f"{directory}/config.json"
+            with open(config_path, encoding="utf-8") as f:
+                values = json.load(f)
+            values["vision_config"]["model_type"] = "rice_vit"
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(values, f)
+            vision, info = LlavaOnevision15VisionModel.from_pretrained(directory, output_loading_info=True)
+            self.assertEqual(vision.config.model_type, "llava_onevision1_5_vision")
+            self.assertFalse(info["missing_keys"], info)
+            self.assertFalse(info["mismatched_keys"], info)
+            self.assertFalse(info["error_msgs"], info)
+            for name, parameter in model.model.visual.state_dict().items():
+                torch.testing.assert_close(vision.state_dict()[name].to(torch_device), parameter)
+            vision = vision.to(torch_device).eval()
+            with torch.no_grad():
+                expected = model.model.visual(inputs["pixel_values"], inputs["image_grid_thw"]).pooler_output
+                actual = vision(inputs["pixel_values"], inputs["image_grid_thw"]).pooler_output
+            torch.testing.assert_close(actual, expected)
 
     def test_generate_multiple_sequences_preserves_image_features(self):
         """Beam and sample expansion must preserve the image features associated with each prompt."""

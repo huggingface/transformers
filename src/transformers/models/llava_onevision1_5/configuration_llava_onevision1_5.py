@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from huggingface_hub.dataclasses import strict
+from packaging import version
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
@@ -57,6 +58,12 @@ class LlavaOnevision15VisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     initializer_factor: float = 1.0
 
+    def __post_init__(self, **kwargs):
+        # Published checkpoints predate the separate vision model type.
+        if kwargs.get("model_type") in ("rice_vit", "llava_onevision1_5"):
+            kwargs["model_type"] = type(self).model_type
+        super().__post_init__(**kwargs)
+
     def validate_architecture(self):
         if self.temporal_patch_size != 1:
             raise ValueError("LLaVA-OneVision-1.5 requires vision_config.temporal_patch_size=1")
@@ -92,17 +99,14 @@ class LlavaOnevision15Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") in (
-            "rice_vit",
-            "llava_onevision1_5",
-        ):
-            # Published checkpoints predate the separate vision model type.
-            self.vision_config = {**self.vision_config, "model_type": LlavaOnevision15VisionConfig.model_type}
         if isinstance(self.text_config, dict) and self.text_config.get("model_type") == "LLaVAOneVision1_5_text":
             self.text_config = {**self.text_config, "model_type": "qwen3"}
         super().__post_init__(**kwargs)
-        # Published checkpoints use the text backbone's weight-tying setting.
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
+        # Pre-v5 checkpoints could serialize a root tying value different from the text backbone's actual setting.
+        if self.transformers_version is not None and version.parse(self.transformers_version) < version.parse("5.0.0"):
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
+        else:
+            self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
     def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:

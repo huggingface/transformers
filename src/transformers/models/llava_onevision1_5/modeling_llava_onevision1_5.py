@@ -356,6 +356,7 @@ def get_vision_frame_lengths(grid_thw: torch.Tensor, kwargs: dict | None = None)
 @auto_docstring
 class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
     config: LlavaOnevision15VisionConfig
+    base_model_prefix = "visual"
     input_modalities = ("image", "video")
     _input_embed_layer = "patch_embed"
     _can_record_outputs = {
