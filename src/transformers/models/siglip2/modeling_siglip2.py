@@ -111,7 +111,7 @@ class Siglip2Output(ModelOutput):
         return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
-def get_vision_position_embedding_weights(
+def get_vision_position_interpolation_weights(
     spatial_shapes: torch.LongTensor, position_embedding_size: int, max_length: int, kwargs: dict | None = None
 ) -> torch.Tensor:
     """`(num_images, max_length, position_embedding_size**2)` weights resizing the position-embedding grid to each
@@ -119,7 +119,7 @@ def get_vision_position_embedding_weights(
     Popped from `kwargs` when precomputed, so the embeddings avoid a per-image `spatial_shapes.tolist()` loop under
     export.
     """
-    if kwargs is not None and (weights := kwargs.pop("position_embedding_weights", None)) is not None:
+    if kwargs is not None and (weights := kwargs.pop("position_interpolation_weights", None)) is not None:
         return weights
     num_positions = position_embedding_size**2
     # Interpolation is linear: resizing each one-hot grid gives the weight of that position in every output
@@ -159,7 +159,7 @@ class Siglip2VisionEmbeddings(nn.Module):
         positional_embeddings: torch.Tensor,
         spatial_shapes: torch.LongTensor,
         max_length: int,
-        weights: torch.Tensor | None = None,
+        interpolation_weights: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Resize positional embeddings to image-specific size and pad to a fixed size.
@@ -171,23 +171,25 @@ class Siglip2VisionEmbeddings(nn.Module):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
             max_length (`int`):
                 Maximum length of the positional embeddings to pad resized positional embeddings to
-            weights (`torch.Tensor`, *optional*):
-                The resizing weights from `get_vision_position_embedding_weights`, computed when not given.
+            interpolation_weights (`torch.Tensor`, *optional*):
+                The weights from `get_vision_position_interpolation_weights`, computed when not given.
 
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
-        if weights is None:
-            weights = get_vision_position_embedding_weights(spatial_shapes, positional_embeddings.shape[0], max_length)
+        if interpolation_weights is None:
+            interpolation_weights = get_vision_position_interpolation_weights(
+                spatial_shapes, positional_embeddings.shape[0], max_length
+            )
         positional_embeddings = positional_embeddings.reshape(-1, positional_embeddings.shape[-1])
-        resized_embeddings = weights.to(positional_embeddings.device) @ positional_embeddings.float()
+        resized_embeddings = interpolation_weights.to(positional_embeddings.device) @ positional_embeddings.float()
         return resized_embeddings.to(positional_embeddings.dtype)
 
     def forward(
         self,
         pixel_values: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        position_embedding_weights: torch.Tensor | None = None,
+        position_interpolation_weights: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -206,7 +208,10 @@ class Siglip2VisionEmbeddings(nn.Module):
             self.position_embedding_size, self.position_embedding_size, -1
         )
         resized_positional_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, spatial_shapes, max_length=pixel_values.shape[1], weights=position_embedding_weights
+            positional_embeddings,
+            spatial_shapes,
+            max_length=pixel_values.shape[1],
+            interpolation_weights=position_interpolation_weights,
         )
 
         # Add positional embeddings to patch embeddings
@@ -553,10 +558,10 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled features
         ```
         """
-        position_embedding_weights = get_vision_position_embedding_weights(
+        position_interpolation_weights = get_vision_position_interpolation_weights(
             spatial_shapes, self.embeddings.position_embedding_size, pixel_values.shape[1], kwargs=kwargs
         )
-        hidden_states = self.embeddings(pixel_values, spatial_shapes, position_embedding_weights)
+        hidden_states = self.embeddings(pixel_values, spatial_shapes, position_interpolation_weights)
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,

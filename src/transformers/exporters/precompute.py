@@ -325,16 +325,16 @@ def _prepare_unshuffle_index(config: Any, inputs: dict[str, Any]) -> None:
 
 
 @register_export_input_preparer("spatial_shapes", "pixel_values")
-def _prepare_siglip2_position_embedding_weights(config: Any, inputs: dict[str, Any]) -> None:
+def _prepare_siglip2_position_interpolation_weights(config: Any, inputs: dict[str, Any]) -> None:
     """The weights resizing a SigLIP2 tower's position embeddings to each image (LFM2-VL), from `spatial_shapes`."""
     vision_config = getattr(config, "vision_config", None) or config
     if getattr(vision_config, "model_type", None) != "siglip2_vision_model":
         return
-    from ..models.siglip2.modeling_siglip2 import get_vision_position_embedding_weights
+    from ..models.siglip2.modeling_siglip2 import get_vision_position_interpolation_weights
 
     position_embedding_size = int(vision_config.num_patches**0.5)
     max_length = inputs["pixel_values"].shape[1]
-    inputs["position_embedding_weights"] = get_vision_position_embedding_weights(
+    inputs["position_interpolation_weights"] = get_vision_position_interpolation_weights(
         inputs["spatial_shapes"], position_embedding_size, max_length
     )
 
