@@ -115,7 +115,7 @@ The system is built around several key components defined in [`core_model_loadin
 
 **Phase 2 — Per-mapping processing** (iterates over collected mappings):
 
-1. **Dequantize/deserialize** (pre-quantized checkpoints only).
+1. **Dequantize/deserialize** (pre-quantized checkpoints only). Deserialize ops only run on converters the quantizer adds, and dequantize ops also run first on the model's converters.
 2. **Apply [`ConversionOps`] chain**: `Chunk`, `Concatenate`, `MergeModulelist`, `Transpose`, etc.
 3. **Quantize** on-the-fly (if not pre-quantized).
 4. **Set parameter** on model.
@@ -330,6 +330,7 @@ After Concatenate(dim=1):
 ### Pattern matching rules
 
 - Source patterns are full regexes evaluated with `re.search()`. `^` anchors to the start of the **scoped** key (after `scope_prefix` stripping).
+- A pattern that ends in a letter or digit matches up to the end of a name only. `weight` matches `q_proj.weight` but not `q_proj.weight_scale_inv`. A pattern that ends in `_` matches the start of a name.
 - `*` is a per-index wildcard that collects all matching tensors under the same source pattern (preserving checkpoint order for correct concatenation).
 - Capturing groups in source patterns can be referenced as `\1`, `\2`, ... in target patterns to keep parts of the original key (e.g. layer indices).
 - Scoped transforms (`scope_prefix` set) only match keys that start with `f"{scope_prefix}."`.
@@ -448,12 +449,13 @@ if matched_tp_pattern := tp_plan_alt.search(renamed_key):
 
 ## Quantization integration
 
-Quantization hooks into the loading pipeline in two ways, depending on whether the checkpoint is already quantized:
+A quantizer adds operations to the loading pipeline in three cases.
 
-- **Pre-quantized checkpoints**: The quantizer provides [`WeightConverter`] instances (via `get_weight_conversions()`) that deserialize quantized tensors. Checkpoint dtypes are preserved to avoid unwanted casts.
-- **On-the-fly quantization**: The quantizer provides a quantization operation that is applied after conversion ops, quantizing weights as they are loaded.
+- Deserialize runs on a pre-quantized checkpoint whose tensors need to be rebuilt. It runs on parameters that the model's conversion mapping doesn't match.
+- Dequantize runs on a pre-quantized checkpoint loaded with `dequantize=True`. It runs before the model's conversion ops, so per-expert scales apply before a merge op combines the experts.
+- Quantize runs on a full-precision checkpoint. It runs after the model's conversion ops, on the final parameter.
 
-The quantizer can also rewrite the entire conversion list at the end of [`get_model_conversion_mapping`] via `update_weight_conversions(...)` — for example, the FP8 dequantizer prepends a `Fp8Dequantize` op to every existing converter so per-block scales are applied *before* any expert-merge / concat ops flatten the per-expert structure.
+The quantizer declares the names a parameter is saved under in `serialized_names`. At the end of [`get_model_conversion_mapping`], `update_weight_conversions` uses those names to extend the model's converters and to add the deserialize or dequantize converters. See [Choose how weights load](./quantization/contribute#choose-how-weights-load) to implement each case.
 
 ## Fast and efficient model loading
 
