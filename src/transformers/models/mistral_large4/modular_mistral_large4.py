@@ -229,9 +229,8 @@ class MistralLarge4TextRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, config: MistralLarge4TextConfig) -> None:
         super().__init__(config)
-        self.alpha = nn.Buffer(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
+        self.alpha = nn.Parameter(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         scaled_inv_freq = (
@@ -571,12 +570,13 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cos: torch.Tensor,
+        sin: torch.Tensor,
         shared_kv_states: KVSharingDict,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
         use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -585,7 +585,7 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
         # Self Attention
         hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
+            position_embeddings=(cos, sin),
             attention_mask=attention_mask,
             shared_kv_states=shared_kv_states,  # the forward is overloaded to pass this args
             position_ids=position_ids,
@@ -686,8 +686,8 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
+                *position_embeddings,
                 attention_mask=causal_mask,
-                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 cache=cache,
                 shared_kv_states=shared_kv_states,
