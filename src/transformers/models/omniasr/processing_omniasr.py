@@ -96,14 +96,14 @@ class OmniASRProcessor(ProcessorMixin):
         self,
         audio: AudioInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        output_labels: bool | None = False,
+        output_labels: bool | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         text (`str`, `list[str]`, *optional*):
             The prompt(s) rendered by [`~OmniASRProcessor.apply_chat_template`], each holding one `audio_token` per
             audio input; prefer [`~OmniASRProcessor.apply_transcription_request`].
-        output_labels (`bool`, *optional*, defaults to `False`):
+        output_labels (`bool`, *optional*):
             Whether to return `labels` for training, which only cover what follows each prompt's closing BOS, i.e.
             the assistant's transcription and its EOS.
 
