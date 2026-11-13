@@ -798,11 +798,17 @@ else:
         )
 
 
-_HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
+_HUB_KERNEL_MAPPING: dict[str, dict[str, str | int | bool]] = {
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
+    "nvfp4-sm121": {
+        "repo_id": "Atlas-Inference/nvfp4-dense-gemm",
+        "revision": "9ce7aeb06629b83ccb57568b975dc4eecb37f476",
+        # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
+        "trust_remote_code": True,
+    },
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -916,7 +922,8 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             if version is None and revision is None:
                 version = 1
 
-            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS)
+            trust_remote_code = _HUB_KERNEL_MAPPING[kernel_name].get("trust_remote_code", ALLOW_ALL_KERNELS)
+            kernel = get_kernel(repo_id, revision=revision, version=version, trust_remote_code=trust_remote_code)
             mapping[kernel_name] = kernel
         except FileNotFoundError as e:
             mapping[kernel_name] = None
