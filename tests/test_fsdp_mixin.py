@@ -129,11 +129,12 @@ def _distributed_tmpdir(rank):
 
 
 @contextmanager
-def _deterministic_init_model_dir(rank, config, dtype):
+def _deterministic_init_model_dir(rank, config, dtype, model_class=None):
     with _distributed_tmpdir(rank) as model_dir:
         if rank == 0:
             set_seed(SEED)
-            model = AutoModelForCausalLM.from_config(config).to(dtype)
+            model = AutoModelForCausalLM.from_config(config) if model_class is None else model_class(config)
+            model = model.to(dtype)
             model.save_pretrained(model_dir)
             del model
         dist.barrier()
