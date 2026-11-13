@@ -75,24 +75,6 @@ class Lfm2VlMultiModalProjector(nn.Module):
         return hidden_states
 
 
-def get_vision_unshuffle_index(
-    spatial_shapes: torch.Tensor, num_patches: int, factor: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index over the `(num_images * num_patches)` padded patch rows: one `(factor, num_tokens * factor)` patch
-    grid holding each projected token's `factor x factor` block, all images' tokens in order, which the projector's
-    `pixel_unshuffle` takes as one image. Popped from `kwargs` when precomputed, so the encoder avoids a per-image
-    `spatial_shapes.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("unshuffle_index", None)) is not None:
-        return index
-    blocks = []
-    for image, (height, width) in enumerate(spatial_shapes.tolist()):
-        index = torch.arange(height * width, device=spatial_shapes.device) + image * num_patches
-        index = index.reshape(height // factor, factor, width // factor, factor).permute(1, 0, 2, 3)
-        blocks.append(index.reshape(factor, -1))
-    return torch.cat(blocks, dim=1)
-
-
 class Lfm2VlPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
     base_model_prefix = "model"
@@ -129,10 +111,6 @@ class Lfm2VlModel(LlavaModel):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
             The pixel attention mask of the input images.
         """
-        factor = self.config.downsample_factor
-        unshuffle_index = get_vision_unshuffle_index(
-            spatial_shapes, pixel_attention_mask.shape[-1], factor, kwargs=kwargs
-        )
         image_outputs = self.vision_tower(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
@@ -141,7 +119,23 @@ class Lfm2VlModel(LlavaModel):
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state
-        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[unshuffle_index]
+        num_images, num_patches, _ = last_hidden_state.shape
+        factor = self.config.downsample_factor
+
+        # Each image's tokens, padded to the most an image can have: its `factor x factor` block of patch rows
+        widths = spatial_shapes[:, 1, None]
+        blocks_per_row = widths // factor
+        num_tokens = (spatial_shapes[:, 0, None] // factor) * blocks_per_row
+        token = torch.arange(num_patches // factor**2, device=last_hidden_state.device)[None]
+        block_offset = torch.arange(factor, device=last_hidden_state.device)
+        rows = (token // blocks_per_row * factor)[..., None, None] + block_offset[:, None]
+        columns = (token % blocks_per_row * factor)[..., None, None] + block_offset
+        image_offset = torch.arange(num_images, device=last_hidden_state.device)[:, None, None, None] * num_patches
+        patch_index = image_offset + rows * widths[..., None, None] + columns
+
+        # The real tokens, all images' side by side in one patch grid, which the projector unshuffles as one image
+        patch_index = patch_index[token < num_tokens].permute(1, 0, 2).reshape(factor, -1)
+        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
         image_features = image_features.reshape(-1, image_features.shape[-1])
         split_sizes = (spatial_shapes // factor).prod(-1).tolist()
