@@ -226,3 +226,17 @@ class Seq2seqTrainerTester(TestCasePlus):
                 compute_metrics=lambda x: {"samples": x[0].shape[0]},
             )
         self.assertIn("Fix these issues to train your model", str(exc.exception))
+
+    @require_torch
+    def test_load_generation_config_from_dict(self):
+        gen_config = Seq2SeqTrainer.load_generation_config({"num_beams": 3, "max_length": 7})
+        self.assertIsInstance(gen_config, GenerationConfig)
+        self.assertEqual(gen_config.num_beams, 3)
+        self.assertEqual(gen_config.max_length, 7)
+
+    @require_torch
+    def test_load_generation_config_from_bad_dict_fail_early(self):
+        # Same bad combination as in `test_bad_generation_config_fail_early`
+        with self.assertRaises(ValueError) as exc:
+            Seq2SeqTrainer.load_generation_config({"do_sample": False, "top_p": 0.9})
+        self.assertIn("Fix these issues to train your model", str(exc.exception))
