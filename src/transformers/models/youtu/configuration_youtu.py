@@ -49,7 +49,7 @@ class YoutuConfig(PreTrainedConfig):
     ```"""
 
     model_type = "youtu"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",

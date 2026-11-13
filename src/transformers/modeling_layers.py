@@ -38,6 +38,7 @@ from .modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_
 from .models.auto import AutoModel
 from .processing_utils import Unpack
 from .utils import ContextManagers, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from .utils.deprecation import deprecate_kwarg
 from .utils.loading_report import log_state_dict_report
 
 
@@ -102,9 +103,9 @@ class GradientCheckpointingLayer(nn.Module):
 
                 if not self._can_checkpoint_with_cache:
                     # different names for the same thing in different layers
-                    if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                        kwargs["past_key_values"] = None
-                        message += " `past_key_values=None`,"
+                    if "cache" in kwargs and kwargs["cache"] is not None:
+                        kwargs["cache"] = None
+                        message += " `cache=None`,"
                         do_warn = True
 
                     if "layer_past" in kwargs and kwargs["layer_past"] is not None:
@@ -137,6 +138,7 @@ class GenericForSequenceClassification:
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -144,7 +146,7 @@ class GenericForSequenceClassification:
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -154,7 +156,7 @@ class GenericForSequenceClassification:
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -192,7 +194,7 @@ class GenericForSequenceClassification:
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
@@ -217,6 +219,7 @@ class GenericForQuestionAnswering:
     def set_input_embeddings(self, value):
         getattr(self, self.base_model_prefix).embed_tokens = value
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -224,7 +227,7 @@ class GenericForQuestionAnswering:
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
@@ -234,7 +237,7 @@ class GenericForQuestionAnswering:
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
@@ -284,6 +287,7 @@ class GenericForTokenClassification:
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -291,7 +295,7 @@ class GenericForTokenClassification:
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -301,7 +305,7 @@ class GenericForTokenClassification:
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -340,6 +344,7 @@ class MtpLayer(nn.Module):
         self.mtp_block = decoder_layer_cls(config, layer_idx)
         self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps) if use_post_norm else None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         inputs_embeds: torch.Tensor,
@@ -347,7 +352,7 @@ class MtpLayer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Some checkpoints (e.g. Inkling :eyes:) order the projection input as [hidden, embeds] instead
@@ -361,7 +366,7 @@ class MtpLayer(nn.Module):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         if self.use_post_norm:
@@ -458,7 +463,7 @@ class MtpModel(PreTrainedModel):
             "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
-            "past_key_values": mtp_cache,
+            "cache": mtp_cache,
             "position_ids": position_ids,
             # Force the mask function to look at this current idx in the mtp_cache to account for positions offset of mtp layers
             "layer_idx": layer_idx,
@@ -600,7 +605,7 @@ class MtpModel(PreTrainedModel):
             last_hidden_states,
             position_embeddings=position_embeddings,
             position_ids=position_ids,
-            past_key_values=mtp_cache,
+            cache=mtp_cache,
             **masks,
             **kwargs,
         )

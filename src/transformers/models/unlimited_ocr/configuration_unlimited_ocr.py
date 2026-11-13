@@ -163,7 +163,7 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "unlimited_ocr_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Override DeepseekV2's MLA TP plan with standard MHA projections
     base_model_tp_plan = {
