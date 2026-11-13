@@ -30,8 +30,8 @@ layers. The attention layers apply an RMSNorm to the query and key heads and gat
 Full-attention layers use partial rotary embeddings, sliding-window layers use their own RoPE base, and every layer
 applies a sandwich norm to the operator and feed-forward outputs before the residual addition.
 
-The short convolution runs in PyTorch, since the Hub `causal-conv1d` kernels only serve widths 2 to 4 and LFM3 uses 7.
-Packing (padding-free training) is not supported yet.
+The short convolution uses the Hub `causal-conv1d` kernels with `use_kernels=True`, which also keep packed sequences
+apart via `seq_idx` ([padding-free training](../padding_free)). Without kernels it falls back to PyTorch.
 
 ## Example
 
