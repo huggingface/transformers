@@ -126,6 +126,11 @@ class OptimumIntelTest(unittest.TestCase):
         multimodal split (an int4 export, so it answers rather than matching eager's logits)."""
         _check_names_the_cats(self, "OpenVINO/gemma-3-4b-it-int4-cw-ov", "optimum-intel", "google/gemma-3-4b-it")
 
+    def test_multimodal_with_a_vision_merger(self):
+        """Qwen2.5-VL's vision tower, split in two graphs, is fused into one, its merger fed the rotary embeddings,
+        attention masks and window index the image grid gives."""
+        _check_names_the_cats(self, "OpenVINO/Qwen2.5-VL-7B-Instruct-int4-ov", "optimum-intel")
+
     def test_multimodal_split_into_more_graphs_is_refused(self):
         with self.assertRaisesRegex(ValueError, "more graphs than one per modality"):
             ExportedModel.from_pretrained("OpenVINO/Qwen3-VL-2B-Instruct-fp16-ov", device="cpu")

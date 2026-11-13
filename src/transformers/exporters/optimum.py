@@ -20,19 +20,20 @@ a warning saying so. What a graph takes that `generate` doesn't give it is suppl
 - An encoder-decoder runs through `generate` too: optimum-intel's (Whisper's, T5's), optimum-onnx's (an encoder and a
   merged decoder) and optimum-executorch's (`encoder` and `text_decoder` methods).
 - A multimodal model runs as the multimodal split when it is laid out as one: optimum-intel's with text embeddings, one
-  graph per modality taking only its data, and the language model (Gemma 3's), and optimum-executorch's
-  (`token_embedding`, `vision_encoder` or `audio_encoder`, then `text_decoder`).
+  graph per modality taking only its data, and the language model (Gemma 3's, Pixtral's), or with its vision tower
+  split in two graphs (Qwen2-VL's, Qwen2.5-VL's), fused into one here and fed the rotary embeddings, attention masks and
+  window index the image grid gives; and optimum-executorch's (`token_embedding`, `vision_encoder` or `audio_encoder`,
+  then `text_decoder`).
 - An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
   returns a dict by its output names.
 
 Refused, saying why, as their graphs are laid out differently from this runtime's:
 
-- optimum-intel multimodal exports whose vision tower is split into more graphs than one per modality (Qwen2-VL's and
-  Qwen2.5-VL's merger, Qwen3-VL's position embeddings, Phi's projections): what flows between them (rotary embeddings,
-  attention masks, window indices) is computed in Python by code specific to each model, where this runtime keeps the
-  tower in one graph fed the grid's indices by helpers shared across models; whose vision graph takes more than its
-  data (MiniCPM-V 4.7's position and window indices); or whose crops are packed with a weight no graph returns
-  (LLaVA-NeXT's `image_newline`).
+- optimum-intel multimodal exports whose vision tower is split into more graphs than a merger fed by the image grid
+  (Qwen3-VL's and Qwen3.5's position-embedding graph, Phi's projections, MiniCPM-V 4.5's resampler): what flows between
+  them is computed in Python by code specific to each model, where this runtime keeps the tower in one graph fed the
+  grid's indices by helpers shared across models; whose vision graph takes more than its data (MiniCPM-V 4.7's position
+  and window indices); or whose crops are packed with a weight no graph returns (LLaVA-NeXT's `image_newline`).
 - optimum-onnx decoders split in two graphs, the prompt's and the steps', each holding the weights.
 - optimum-executorch encoders: no published export to check their inputs against.
 """
@@ -105,6 +106,10 @@ _OPENVINO_MODALITY_INPUTS = {
     "vision_embeddings_model": ("pixel_values",),
     "audio_embeddings_model": ("input_features",),
 }
+# A vision tower split in two graphs (Qwen2-VL's, Qwen2.5-VL's): the patch embeddings, then a merger taking what the
+# image grid gives (rotary embeddings, attention masks, window index), computed here; fused into one graph
+OPENVINO_VISION_MERGER = "vision_embeddings_merger_model"
+_OPENVINO_MERGER_GLUE = {"attention_mask", "rotary_pos_emb", "window_index", "window_attention_mask"}
 
 
 def _read_openvino(pretrained_model_name_or_path, file: str, **kwargs) -> openvino.Model:
@@ -136,6 +141,52 @@ def _openvino_metadata(config, kwargs: dict[str, Any], outputs: Any, stateful: b
     )
 
 
+def _fuse_openvino_vision(embeddings: openvino.Model, merger: openvino.Model) -> openvino.Model:
+    """One vision graph from a tower split in two: the merger's `hidden_states` input fed the embeddings' output, and
+    the embeddings' input named `pixel_values`, as the runtime feeds it."""
+    import openvino
+
+    hidden_states = merger.input("hidden_states").get_node()
+    source = embeddings.get_results()[0].input_value(0)
+    for target in hidden_states.output(0).get_target_inputs():
+        target.replace_source_output(source)
+    embeddings.input(0).get_tensor().set_names({"pixel_values"})
+    parameters = [*embeddings.get_parameters(), *(p for p in merger.get_parameters() if p is not hidden_states)]
+    return openvino.Model(merger.get_results(), parameters, "vision_embeddings_model")
+
+
+def _vision_glue(config, grid_thw: torch.Tensor, traced: dict) -> dict[str, torch.Tensor]:
+    """What a fused Qwen-VL merger takes besides the patches, from the image grid: rotary embeddings, the attention
+    masks keeping each image (and window) to itself, and the window order, as optimum-intel computes them."""
+    from ..vision_utils import get_vision_attention_seqlens, get_vision_position_ids, get_vision_window_index
+
+    vision = config.vision_config
+    merge_size = vision.spatial_merge_size
+    width = getattr(vision, "embed_dim", None) or vision.hidden_size
+    dim = width // vision.num_heads // 2
+    inv_freq = 1.0 / 10000 ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim)
+    positions = get_vision_position_ids(grid_thw, merge_size)
+    cu_seqlens, _ = get_vision_attention_seqlens(grid_thw, config)
+    length = int(cu_seqlens[-1])
+
+    def block_mask(boundaries: torch.Tensor) -> torch.Tensor:
+        block = torch.bucketize(torch.arange(length), boundaries[1:], right=True)
+        mask = torch.zeros(1, length, length)
+        return mask.masked_fill(block[:, None] != block[None, :], float("-inf"))
+
+    glue = {
+        "rotary_pos_emb": (positions[..., None].float() * inv_freq).flatten(1),
+        "attention_mask": block_mask(cu_seqlens),
+    }
+    if "window_index" in traced:
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw, merge_size, vision.window_size, vision.patch_size
+        )
+        glue["window_index"] = window_index
+        glue["window_attention_mask"] = block_mask(torch.unique_consecutive(cu_window_seqlens))
+    return {name: value for name, value in glue.items() if name in traced}
+
+
 def _load_openvino_multimodal(
     pretrained_model_name_or_path, config, **kwargs
 ) -> tuple[dict[str, ExportedComponent], bool]:
@@ -154,6 +205,14 @@ def _load_openvino_multimodal(
         if file.startswith("openvino_") and file.endswith("_model.xml")
     }
     reason = None
+    merger = None
+    if OPENVINO_VISION_MERGER in graphs:
+        merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_MERGER}.xml", **kwargs)
+        glue = {port.get_any_name() for port in merger.inputs} - {"hidden_states"}
+        if glue <= _OPENVINO_MERGER_GLUE:
+            graphs = graphs - {OPENVINO_VISION_MERGER}
+        else:
+            merger = None
     if extra := sorted(graphs - {"text_embeddings_model", "language_model", *_OPENVINO_MODALITY_INPUTS}):
         reason = (
             f"its vision side is split into more graphs than one per modality ({', '.join(extra)}), with what flows "
@@ -170,12 +229,15 @@ def _load_openvino_multimodal(
         if reason is not None or name not in graphs:
             continue
         program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
+        if name == "vision_embeddings_model" and merger is not None:
+            program = _fuse_openvino_vision(program, merger)
         port_names = [port.get_any_name() for port in program.inputs]
-        if port_names != list(input_names):
+        data_ports = [port for port in port_names if merger is None or port not in _OPENVINO_MERGER_GLUE]
+        if data_ports != list(input_names):
             reason = f"its {name} takes {port_names}, not just {list(input_names)}"
             break
         metadata = _openvino_metadata(
-            config, {input_name: program.input(input_name) for input_name in input_names}, torch.zeros(1), False
+            config, {port: program.input(port) for port in port_names}, torch.zeros(1), False
         )
         components[name] = ExportedComponent(program, metadata)
     if reason is not None:
@@ -607,7 +669,14 @@ class _OptimumGenerationMixin:
     """What an optimum export's decode graph takes that `generate` doesn't give it: an all-ones padding mask, which
     `generate` drops (optimum-intel's and optimum-onnx's causal LMs take one), and `cache_position`, which it no longer
     passes (optimum-executorch's graphs take one). And the cross-attention cache an optimum-onnx merged decoder returns
-    placeholders for once it has one."""
+    placeholders for once it has one, and what a fused Qwen-VL vision graph takes from the image grid."""
+
+    def _features(self, spec, runner, kwargs: dict):
+        """A fused Qwen-VL vision graph also takes what its image grid gives (`_vision_glue`)."""
+        traced = runner.metadata.kwargs
+        if "rotary_pos_emb" in traced and kwargs.get(spec.grid_key) is not None:
+            kwargs = {**kwargs, **_vision_glue(self.config, kwargs[spec.grid_key], traced)}
+        return super()._features(spec, runner, kwargs)
 
     def _call(self, **kwargs) -> Any:
         outputs = super()._call(**kwargs)
