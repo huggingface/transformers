@@ -708,6 +708,10 @@ class TrainingArguments:
                 - min_num_params (`int`, *optional*, defaults to `0`):
                     Minimum number of parameters per module for size-based auto-wrapping (used with
                     `auto_wrap_policy="SIZE_BASED_WRAP"`).
+                - ignored_modules (`str` or `Iterable[torch.nn.Module]`, *optional*):
+                    Regex string or iterable of `torch.nn.Module` objects to ignore during sharding
+                    (leaves them unsharded). Note that when configuring via JSON or CLI, regex strings
+                    (e.g., `"lm_head"`) are recommended.
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. Experimental.
                 - xla_fsdp_settings (`dict`, *optional*):
@@ -2829,6 +2833,9 @@ class TrainingArguments:
         # Shared (v1 + v2) plugin args.
         if self.fsdp_config.get("cpu_offload", False):
             fsdp_plugin_args["cpu_offload"] = True
+
+        if "ignored_modules" in self.fsdp_config:
+            fsdp_plugin_args["ignored_modules"] = self.fsdp_config["ignored_modules"]
 
         auto_wrap_policy = self.fsdp_config.get("auto_wrap_policy", FSDP_AUTO_WRAP_POLICY[0])
         if auto_wrap_policy not in FSDP_AUTO_WRAP_POLICY:
