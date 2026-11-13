@@ -26,6 +26,7 @@ if is_torch_available():
 
     from transformers import AfmoeForCausalLM, AfmoeModel, AutoTokenizer
     from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers.models.afmoe.modeling_afmoe import AfmoeRMSNorm
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -110,14 +111,15 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
         {"feature-extraction": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
     )
 
-    def test_keep_in_fp32_source_values(self):
+    def test_expert_bias_precision_on_low_precision_load(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
-            keep_fp32 = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
-            self.assertIn("expert_bias", keep_fp32)
+            norm_weights = {
+                f"{name}.weight" for name, module in model.named_modules() if isinstance(module, AfmoeRMSNorm)
+            }
             for name, parameter in model.named_parameters():
-                if keep_fp32.intersection(name.split(".")):
+                if name in norm_weights or name.endswith(("expert_bias", "router.gate.weight")):
                     # Ones and zero biases would hide rounding during checkpoint loading.
                     with torch.no_grad():
                         parameter.fill_(0.0012345 if "expert_bias" in name else 1.0001234)
@@ -130,7 +132,11 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
                             loaded = model_class.from_pretrained(directory, dtype=dtype, local_files_only=True)
                             for name, parameter in loaded.named_parameters():
                                 expected = original[name]
-                                if not keep_fp32.intersection(name.split(".")):
+                                # Norms follow BF16 loads; retain the existing FP16 norm policy.
+                                keep_fp32 = name.endswith("expert_bias") or (
+                                    dtype == torch.float16 and name in norm_weights
+                                )
+                                if not keep_fp32:
                                     expected = expected.to(dtype)
                                 torch.testing.assert_close(parameter, expected, rtol=0, atol=0)
 
