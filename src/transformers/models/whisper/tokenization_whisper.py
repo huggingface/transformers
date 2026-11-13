@@ -552,7 +552,7 @@ class WhisperTokenizer(TokenizersBackend):
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -574,13 +574,37 @@ class WhisperTokenizer(TokenizersBackend):
             writer.write("#version: 0.2\n")
             writer.writelines(" ".join(merge_pair) + "\n" for merge_pair in self._merges)
 
+        files = (vocab_file, merge_file)
         if self.english_spelling_normalizer is not None:
             with open(normalizer_file, "w", encoding="utf-8") as f:
                 f.write(
                     json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                 )
+            files += (normalizer_file,)
 
-        return (vocab_file, merge_file, normalizer_file)
+        return files
+
+    def _save_pretrained(
+        self,
+        save_directory: str | os.PathLike,
+        file_names: tuple[str, ...],
+        legacy_format: bool | None = None,
+        filename_prefix: str | None = None,
+    ) -> tuple[str, ...]:
+        file_names = super()._save_pretrained(save_directory, file_names, legacy_format, filename_prefix)
+        # `tokenizer.json` does not carry the spelling map, so `normalize` needs this file after a reload.
+        if self.english_spelling_normalizer is not None:
+            normalizer_file = os.path.join(
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["normalizer_file"],
+            )
+            with open(normalizer_file, "w", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+                )
+            file_names += (normalizer_file,)
+
+        return file_names
 
     def set_prefix_tokens(
         self, language: str | None = None, task: str | None = None, predict_timestamps: bool | None = None
