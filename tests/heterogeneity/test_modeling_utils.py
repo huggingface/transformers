@@ -802,7 +802,7 @@ class TestHeterogeneousCache(unittest.TestCase):
         torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
     def test_assisted_generation_attention_outputs_with_skipped_attention(self):
-        # Skipping layer 0 means the first layer returns no attentions, while the others still do
+        # A skipped attention adds no entry to the attentions, like a layer that has no attention
         config = tiny_llama_config(
             num_hidden_layers=3, per_layer_config={0: {"skip": ["attention"]}}, pad_token_id=0, eos_token_id=None
         )
@@ -825,9 +825,9 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         self.assertEqual(len(actual.attentions), 5)
         for step, attentions in enumerate(actual.attentions):
-            self.assertEqual(len(attentions), 3)
-            self.assertIsNone(attentions[0])
+            # Only layers 1 and 2 have an attention
+            self.assertEqual(len(attentions), 2)
             query_length = input_ids.shape[1] if step == 0 else 1
             expected_shape = (1, config.num_attention_heads, query_length, input_ids.shape[1] + step)
-            for layer_idx in (1, 2):
-                self.assertEqual(attentions[layer_idx].shape, expected_shape)
+            for layer_attentions in attentions:
+                self.assertEqual(layer_attentions.shape, expected_shape)
