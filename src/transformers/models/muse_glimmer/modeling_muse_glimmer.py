@@ -921,6 +921,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -929,6 +930,9 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
+        if return_flat:
+            vision_outputs.pooler_output = vision_features
+            return vision_outputs
         split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
         return vision_outputs

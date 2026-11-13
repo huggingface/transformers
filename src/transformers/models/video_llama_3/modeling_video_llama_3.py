@@ -583,6 +583,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -593,6 +594,9 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = image_embeds
+            return vision_outputs
         split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
         return vision_outputs

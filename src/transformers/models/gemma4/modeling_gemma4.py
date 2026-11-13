@@ -2270,6 +2270,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             pixel_position_ids=image_position_ids,
@@ -2278,6 +2279,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
         last_hidden_state = vision_outputs.last_hidden_state
         pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
         non_pad_mask = (image_position_ids != -1).all(dim=-1)
@@ -2570,6 +2574,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
             Number of frames belonging to each video, used to split the flat frame sequence back per video.
         """
+        return_flat = kwargs.pop("return_flat", False)
         if num_frames_per_video is None:
             raise ValueError(
                 "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
@@ -2585,6 +2590,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
         last_hidden_state = vision_outputs.last_hidden_state
         pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         k_squared = self.config.vision_config.pooling_kernel_size**2
         non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
         num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared

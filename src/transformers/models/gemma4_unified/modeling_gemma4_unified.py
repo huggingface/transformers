@@ -980,6 +980,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.embed_vision(pixel_values, image_position_ids, **kwargs)
 
         # Strip padding patches before scattering into text sequence.
@@ -990,6 +991,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
         pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         split_sizes = non_pad_mask.sum(dim=-1).tolist()
         vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
@@ -1257,6 +1261,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
             Number of frames belonging to each video, used to split the flat frame sequence back per video.
         """
+        return_flat = kwargs.pop("return_flat", False)
         if num_frames_per_video is None:
             raise ValueError(
                 "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
@@ -1272,6 +1277,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         # Flatten valid patches: keep only non-padding patches across all frames
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         num_tokens_per_frame = non_pad_mask.sum(dim=-1)
         split_sizes = [
             int(video_frames.sum())

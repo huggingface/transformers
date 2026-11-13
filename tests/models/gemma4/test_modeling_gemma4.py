@@ -344,6 +344,14 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_features_return_flat(self):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_return_flat(self):
+        pass
+
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
@@ -614,6 +622,10 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_return_flat(self):
         pass
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")

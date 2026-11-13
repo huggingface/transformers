@@ -1917,6 +1917,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
     ) -> tuple | BaseModelOutputWithPast:
         # Same as in `Glm46V`
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
+        return_flat = kwargs.pop("return_flat", False)
         t = video_grid_thw[:, 0]
         hw = video_grid_thw[:, 1:]
         # repeat each (h,w) row `t` times
@@ -1926,6 +1927,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
 
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
+        if return_flat:
+            return vision_outputs
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
@@ -1939,8 +1942,11 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        if return_flat:
+            return vision_outputs
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
