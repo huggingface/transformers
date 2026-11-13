@@ -2996,7 +2996,8 @@ class Trainer:
 
             # Update containers
             if losses is not None:
-                losses = self.gather_function(losses.repeat(batch_size))
+                loss_batch_size = observed_batch_size if observed_batch_size is not None else batch_size
+                losses = self.gather_function(losses.repeat(loss_batch_size))
                 all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
