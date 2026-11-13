@@ -114,6 +114,8 @@ _OPENVINO_MODALITY_INPUTS = {
 # A vision tower split in two graphs (Qwen2-VL's, Qwen2.5-VL's): the patch embeddings, then a merger taking what the
 # image grid gives (rotary embeddings, attention masks, window index), computed here; fused into one graph
 OPENVINO_VISION_MERGER = "vision_embeddings_merger_model"
+# A vision graph run per crop (MiniCPM-V 4.7's), taking each crop's position, window and merge order
+_OPENVINO_CROP_GLUE = {"position_ids", "window_index", "merge_index"}
 # Qwen3-VL's third vision graph: the learned position embeddings it interpolates to each image's grid
 OPENVINO_VISION_POSITIONS = "vision_embeddings_pos_model"
 _OPENVINO_MERGER_GLUE = {
@@ -262,6 +264,44 @@ def _raster_features(config, runner, pixel_values: torch.Tensor, grid_thw: torch
     return torch.cat(features)
 
 
+def _crop_features(config, runner, pixel_values: torch.Tensor, target_sizes: torch.Tensor) -> torch.Tensor:
+    """Features from a vision graph run per crop (MiniCPM-V 4.7's) on the processor's NaViT-packed patches
+    `[1, channels, patch, patches * patch]`, each crop fed its nearest-neighbour position ids, window order and merge
+    order, as optimum-intel computes them."""
+    from ..vision_utils import get_vision_nearest_position_ids, get_vision_window_index
+
+    vision = config.vision_config
+    patch = vision.patch_size
+    window_height, window_width = vision.window_kernel_size
+    merge_height, merge_width = config.merge_kernel_size
+    features, start = [], 0
+    for height, width in target_sizes.tolist():
+        crop = pixel_values[:1, ..., start * patch : (start + height * width) * patch]
+        start += height * width
+        size = torch.tensor([[height, width]])
+        window_index, _ = get_vision_window_index(
+            torch.nn.functional.pad(size, (1, 0), value=1),
+            spatial_merge_size=1,
+            window_size=window_height,
+            patch_size=1,
+        )
+        # The window merger leaves a `(height / window, width / window)` grid, regrouped so each merge block is
+        # contiguous
+        rows, columns = height // window_height, width // window_width
+        merge_index = torch.arange(rows * columns).view(
+            rows // merge_height, merge_height, columns // merge_width, merge_width
+        )
+        crop_features = runner(
+            pixel_values=crop.float(),
+            position_ids=get_vision_nearest_position_ids(size, vision.image_size // patch),
+            window_index=window_index,
+            merge_index=merge_index.permute(0, 2, 1, 3).reshape(-1),
+            share_outputs=True,
+        )
+        features.append(crop_features.reshape(-1, crop_features.shape[-1]))
+    return torch.cat(features)
+
+
 def _load_openvino_multimodal(
     pretrained_model_name_or_path, config, **kwargs
 ) -> tuple[dict[str, ExportedComponent], bool]:
@@ -316,9 +356,10 @@ def _load_openvino_multimodal(
             if port.get_any_name() == "image_grid_thw":
                 port.get_tensor().set_names({"grid_thw"})
         port_names = [port.get_any_name() for port in program.inputs]
-        data_ports = [
-            port for port in port_names if port != "grid_thw" and (merger is None or port not in _OPENVINO_MERGER_GLUE)
-        ]
+        glue_ports = {"grid_thw"} | (_OPENVINO_MERGER_GLUE if merger is not None else set())
+        if set(port_names) >= _OPENVINO_CROP_GLUE:
+            glue_ports |= _OPENVINO_CROP_GLUE
+        data_ports = [port for port in port_names if port not in glue_ports]
         if data_ports != list(input_names):
             reason = f"its {name} takes {port_names}, not just {list(input_names)}"
             break
@@ -774,6 +815,8 @@ class _OptimumGenerationMixin:
         if "rotary_pos_emb" in traced and grid is not None:
             kwargs = {**kwargs, **_vision_glue(self.config, grid, traced)}
         pixel_values = kwargs.get("pixel_values")
+        if "merge_index" in traced and kwargs.get("target_sizes") is not None:
+            return _crop_features(self.config, runner, pixel_values, kwargs["target_sizes"]), None
         if traced.get("pixel_values", {}).get("rank") == 4 and grid is not None and pixel_values.dim() == 2:
             return _raster_features(self.config, runner, pixel_values, grid), None
         features, layers = super()._features(spec, runner, kwargs)

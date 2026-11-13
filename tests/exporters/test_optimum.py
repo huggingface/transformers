@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Loading the optimum libraries' exports from the Hub with `ExportedModel.from_pretrained`: optimum-intel's OpenVINO
-IRs, optimum-onnx's ONNX graphs and optimum-executorch's programs, against the eager models they were exported from (or, for
-tiny random ONNX graphs, the tokens ONNX Runtime generates from them)."""
+IRs, optimum-onnx's ONNX graphs and optimum-executorch's programs, against the eager models they were exported from."""
 
+import tempfile
 import unittest
 
 import numpy as np
+from huggingface_hub import snapshot_download
 from parameterized import parameterized
 
 from transformers import (
@@ -143,12 +144,13 @@ class OptimumIntelTest(unittest.TestCase):
 
     def test_multimodal_with_raster_patches(self):
         """LFM3-VL's vision graph, run per image on its patches in raster order (its processor is remote code)."""
-        repo = "OpenVINO/LFM3-VL-2B-int4-gq-ov"
-        _check_names_the_cats(self, repo, "optimum-intel", max_new_tokens=60, trust_remote_code=True)
+        _check_names_the_cats(
+            self, "OpenVINO/LFM3-VL-2B-int4-gq-ov", "optimum-intel", max_new_tokens=60, trust_remote_code=True
+        )
 
-    def test_multimodal_vision_graph_taking_indices_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "not just"):
-            ExportedModel.from_pretrained("OpenVINO/MiniCPM-V-4.7-1B-int4-ov", device="cpu")
+    def test_multimodal_with_crops_glue(self):
+        """MiniCPM-V 4.7's vision graph, taking the position, window and merge indices of each image's crops."""
+        _check_names_the_cats(self, "OpenVINO/MiniCPM-V-4.7-1B-int4-ov", "optimum-intel", max_new_tokens=60)
 
 
 @slow
@@ -158,26 +160,35 @@ class OptimumIntelTest(unittest.TestCase):
 class OptimumOnnxTest(unittest.TestCase):
     @parameterized.expand(
         [
-            # One graph taking and returning the cache, its weights split over several `model.onnx_data*` files
-            (
-                "onnx-internal-testing/tiny-random-LlamaForCausalLM-ONNX_external",
-                [19053, 25470, 2323, 21742, 13486, 13934],
-            ),
-            ("onnx-internal-testing/tiny-random-GPT2LMHeadModel-ONNX", [13, 13, 882, 882, 882, 882]),
-            # A merged decoder, taking a `use_cache_branch` flag
-            ("fxmarty/onnx-tiny-random-gpt2-with-merge", [13, 13, 13, 13, 13, 469]),
+            # One graph taking and returning the cache, its weights in an external `model.onnx_data`
+            ("onnx-community/Qwen3-0.6B-ONNX", "Qwen/Qwen3-0.6B"),
+            ("HuggingFaceTB/SmolLM2-135M-Instruct", "HuggingFaceTB/SmolLM2-135M-Instruct"),
         ]
     )
-    def test_causal_lm(self, repo, expected):
-        """Tokens a plain ONNX Runtime loop generates from the graph, feeding the cache back by optimum-onnx's names."""
+    def test_causal_lm(self, repo, eager_repo):
         model = _load(self, repo, "optimum-onnx")
         self.assertIsInstance(model, ExportedModelForCausalLM)
-        input_ids = torch.tensor([[1, 5, 7, 9, 11, 13]])
-        generation_config = GenerationConfig(max_new_tokens=6, do_sample=False, eos_token_id=None)
-        generated = model.generate(
-            input_ids=input_ids, attention_mask=torch.ones_like(input_ids), generation_config=generation_config
-        )
-        self.assertEqual(generated[0, 6:].tolist(), expected)
+        self._check_generates_as_eager(model, eager_repo)
+
+    def test_causal_lm_merged_decoder(self):
+        """A merged decoder, taking a `use_cache_branch` flag (alone, as the repo also holds a `model.onnx`)."""
+        with tempfile.TemporaryDirectory() as directory:
+            snapshot_download(
+                "Xenova/distilgpt2",
+                local_dir=directory,
+                allow_patterns=["config.json", "generation_config.json", "onnx/decoder_model_merged.onnx"],
+            )
+            model = _load(self, directory, "optimum-onnx")
+            self._check_generates_as_eager(model, "distilbert/distilgpt2")
+
+    def _check_generates_as_eager(self, model, eager_repo):
+        tokenizer = AutoTokenizer.from_pretrained(eager_repo)
+        inputs = tokenizer(["The capital of France is"], return_tensors="pt")
+        generation_config = GenerationConfig(max_new_tokens=8, do_sample=False)
+        eager = AutoModelForCausalLM.from_pretrained(eager_repo, dtype=torch.float32).eval()
+        with torch.no_grad():
+            expected = eager.generate(**inputs, generation_config=generation_config)
+        self.assertEqual(model.generate(**inputs, generation_config=generation_config).tolist(), expected.tolist())
 
     def test_encoder(self):
         _check_encoder(self, "Xenova/bge-base-en-v1.5", "optimum-onnx")
