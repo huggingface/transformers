@@ -44,6 +44,7 @@ from ...utils import (
     is_torch_available,  # noqa: F401 -- used by the inherited feature extractor
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     merge_with_config_defaults,
@@ -416,7 +417,7 @@ class Dots3NoteConfig(PreTrainedConfig):
         "vision_config": Dots3NoteVisionConfig,
         "audio_config": Dots3NoteAudioConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | Dots3NoteTextConfig | None = None
     vision_config: dict | Dots3NoteVisionConfig | None = None
@@ -494,12 +495,13 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
             Dots3NoteTextIndexer(config, layer_idx) if config.layer_types[layer_idx] == "indexed_attention" else None
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -525,8 +527,8 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         q_rot, k_rot = q_rot.to(q_dtype), k_rot.to(k_dtype)
 
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states, value_states = self.expand_kv(k_pass, k_rot)
@@ -539,7 +541,7 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
                 position_embeddings,
                 attention_mask[:, 0],
                 position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
-                past_key_values=past_key_values,
+                cache=cache,
             )
             if self.config._attn_implementation in ("eager", "sdpa"):
                 index_mask = (
@@ -622,12 +624,13 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel, DeepseekV32Model):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -638,11 +641,11 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel, DeepseekV32Model):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_len = cache.get_seq_length() if cache is not None else 0
             position_ids = (torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_len).unsqueeze(0)
 
         position_embeddings = {
@@ -659,7 +662,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel, DeepseekV32Model):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             mask_functions = {
@@ -677,7 +680,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel, DeepseekV32Model):
                 attention_mask=layer_mask,
                 position_embeddings=position_embeddings[self.config.layer_types[layer_idx]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -685,7 +688,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel, DeepseekV32Model):
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1049,12 +1052,13 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.Tensor | None = None,
@@ -1112,7 +1116,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
         return self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
@@ -1172,13 +1176,14 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForCond
         model_kwargs.update(audio_inputs)
         return input_ids, model_kwargs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1201,7 +1206,7 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForCond
             input_features=input_features,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             pixel_values=pixel_values,
@@ -1225,7 +1230,7 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForCond
         return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

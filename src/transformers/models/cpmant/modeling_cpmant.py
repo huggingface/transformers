@@ -27,6 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_cpmant import CpmAntConfig
 
 
@@ -79,6 +80,7 @@ class CpmAntAttention(nn.Module):
         else:
             self.dropout = None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_q: torch.Tensor,
@@ -86,7 +88,7 @@ class CpmAntAttention(nn.Module):
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
         output_attentions: bool | None = False,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ):
@@ -102,11 +104,11 @@ class CpmAntAttention(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Cache`, *optional*):
+            cache (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
@@ -120,8 +122,8 @@ class CpmAntAttention(nn.Module):
         key = key.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
         value = value.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
 
-        if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx)
+        if cache is not None:
+            key, value = cache.update(key, value, self.layer_idx, kwargs=kwargs)
             len_k = key.size(-2)
 
         # (batch_size, num_heads, len_q, dim_head) @ (batch_size, num_heads, dim_head, len_k) -> (batch_size, num_heads, len_q, len_k)
@@ -169,13 +171,14 @@ class CpmAntSelfAttentionBlock(nn.Module):
         else:
             self.dropout = None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor | None = None,
         output_attentions: bool | None = False,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ):
@@ -189,11 +192,11 @@ class CpmAntSelfAttentionBlock(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Cache`, *optional*):
+            cache (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
         outputs = self.layernorm_before_attention(hidden_states)
         outputs, attn_weights = self.self_attention(
@@ -202,7 +205,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
             attention_mask,
             position_bias,
             output_attentions,
-            past_key_values,
+            cache,
             use_cache,
         )
 
@@ -292,13 +295,14 @@ class CpmAntTransformerBlock(nn.Module):
         self.self_att = CpmAntSelfAttentionBlock(config, layer_idx=layer_idx)
         self.ffn = CpmAntFFNBlock(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor | None = None,
         output_attentions: bool | None = False,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ):
@@ -312,18 +316,18 @@ class CpmAntTransformerBlock(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Cache`, *optional*):
+            cache (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
         hidden_states, attn_weights = self.self_att(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             output_attentions=output_attentions,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
         )
 
@@ -339,6 +343,7 @@ class CpmAntEncoder(nn.Module):
 
         self.output_layernorm = CpmAntLayerNorm(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -346,7 +351,7 @@ class CpmAntEncoder(nn.Module):
         position_bias: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ):
@@ -362,11 +367,11 @@ class CpmAntEncoder(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            past_key_values (`Cache`, *optional*):
+            cache (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -379,7 +384,7 @@ class CpmAntEncoder(nn.Module):
                 attention_mask,
                 position_bias,
                 output_attentions=output_attentions,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
             )
             hidden_states, attn_weights = layer_outputs
@@ -572,12 +577,13 @@ class CpmAntModel(CpmAntPreTrainedModel):
         return attention_mask
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
@@ -622,10 +628,10 @@ class CpmAntModel(CpmAntPreTrainedModel):
         position = torch.arange(seq_length, dtype=dtype, device=device).repeat(batch, 1)
         span = torch.full((batch, seq_length), 0, dtype=dtype, device=device)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_length = cache.get_seq_length() if cache is not None else 0
         input_ids = input_ids.contiguous()
         hidden_states = self.input_embedding(input_ids)
         segment_states = self.segment_embedding(segment)
@@ -647,7 +653,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
             position_bias,
             output_attentions,
             output_hidden_states,
-            past_key_values,
+            cache,
             use_cache,
         )
 
@@ -666,13 +672,11 @@ class CpmAntModel(CpmAntPreTrainedModel):
                 all_hidden_states = new_hidden_states
 
         if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
-            )
+            return tuple(v for v in [hidden_states, cache, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
@@ -701,10 +705,11 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -747,7 +752,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             input_ids,
             output_attentions,
             output_hidden_states,
-            past_key_values,
+            cache,
             use_cache,
             return_dict,
         )
@@ -767,7 +772,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=model_output.past_key_values,
+            cache=model_output.cache,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
         )

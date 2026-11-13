@@ -38,7 +38,7 @@ class HeliumConfig(PreTrainedConfig):
     ```"""
 
     model_type = "helium"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 100000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

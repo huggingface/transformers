@@ -47,7 +47,7 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2_5_vl_vision"),
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="hyperclovax"),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
