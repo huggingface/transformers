@@ -28,9 +28,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer
 from ..glm5_next.modeling_glm5_next import Glm5NextTextMLP
+from ..hunyuan_vl.modeling_hunyuan_vl import apply_rotary_pos_emb
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaPreTrainedModel,
