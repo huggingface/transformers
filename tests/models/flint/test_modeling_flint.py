@@ -71,9 +71,11 @@ class FlintModelTest(CausalLMModelTest, unittest.TestCase):
         input_ids = inputs["input_ids"][:1]
         position_ids = torch.arange(input_ids.shape[1], device=torch_device)[None]
         with torch.no_grad():
-            output = model(input_ids, position_ids=position_ids).last_hidden_state
+            # An explicit mask keeps the non-contiguous doubled ids from being read as packed sequences
+            attention_mask = torch.ones_like(input_ids)
+            output = model(input_ids, attention_mask=attention_mask, position_ids=position_ids).last_hidden_state
             # Doubling changes relative distances; rotary embeddings would not see a uniform shift
-            doubled = model(input_ids, position_ids=2 * position_ids).last_hidden_state
+            doubled = model(input_ids, attention_mask=attention_mask, position_ids=2 * position_ids).last_hidden_state
         torch.testing.assert_close(output, doubled)
 
     def test_checkpoint_format_round_trip(self):
