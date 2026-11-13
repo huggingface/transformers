@@ -588,6 +588,19 @@ class ExportedMultimodalModelTest(unittest.TestCase):
 
         self._check_runs_like_eager(OnnxExporter(), OnnxConfig(), atol=1e-3, device="cpu")
 
+    @pytest.mark.torch_export_test
+    def test_refuses_a_modality_without_its_graph(self):
+        """An export traced on text only has no vision graph, so it refuses images rather than skip them."""
+        from tests.exporters.test_utils import _tiny_llava
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        model, inputs = _tiny_llava()
+        text_inputs = {"input_ids": inputs["input_ids"][:, 25:], "attention_mask": inputs["attention_mask"][:, 25:]}
+        exported = DynamoExporter().export_multimodal(model, text_inputs, DynamoConfig(dynamic=True))
+        self.assertNotIn("vision_embeddings_model", exported.components)
+        with self.assertRaisesRegex(ValueError, "no `vision_embeddings_model`"):
+            exported(**inputs)
+
     @require_openvino
     @pytest.mark.openvino_export_test
     def test_openvino(self):

@@ -57,9 +57,15 @@ class ExportedMultimodalModel(ExportedModel):
         inputs_embeds = embedded["inputs_embeds"] if isinstance(embedded, dict) else embedded
         features, deepstack = {}, []
         for spec in _MODALITY_SPECS:
-            runner = self.runners.get(spec.component)
-            if runner is None or all(kwargs.get(key) is None for key in spec.feature_keys):
+            given = [key for key in spec.feature_keys if kwargs.get(key) is not None]
+            if not given:
                 continue
+            runner = self.runners.get(spec.component)
+            if runner is None:
+                raise ValueError(
+                    f"Got `{given[0]}`, but this export has no `{spec.component}`: export the model with inputs that "
+                    "include this modality to run it."
+                )
             features[spec.component], layers = self._features(spec, runner, kwargs)
             mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
             if features[spec.component] is None:
