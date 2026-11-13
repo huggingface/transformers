@@ -347,6 +347,7 @@ if TYPE_CHECKING:
     from .musicgen_melody import *
     from .mvp import *
     from .myt5 import *
+    from .nanbeige import *
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
