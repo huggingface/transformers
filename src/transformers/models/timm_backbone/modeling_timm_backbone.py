@@ -20,12 +20,13 @@ from ... import initialization as init
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, logging, requires_backends
+from ...utils import is_timm_available, is_torchvision_available, logging, requires_backends
 from ...utils.generic import can_return_tuple
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
-if is_timm_available():
+# timm requires torchvision under the hood, in CI we force remove torchvision for some tests
+if is_timm_available() and is_torchvision_available():
     import timm
 
 
