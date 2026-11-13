@@ -36,9 +36,6 @@ You can find all the original NLLB checkpoints under the [AI at Meta](https://hu
 
 The example below demonstrates how to translate text with the [`AutoModel`] class.
 
-<hfoptions id="usage">
-<hfoption id="AutoModel">
-
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -54,10 +51,6 @@ translated_tokens = model.generate(
 )
 print(tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 ```
-
-</hfoption>
-</hfoptions>
-
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.

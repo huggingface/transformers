@@ -35,9 +35,6 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 
 The example below demonstrates how to translate text with the [`AutoModel`] class.
 
-<hfoptions id="usage">
-<hfoption id="AutoModel">
-
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -52,10 +49,6 @@ encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
 generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
 print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ```
-
-</hfoption>
-</hfoptions>
-
 ## Notes
 
 - You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.

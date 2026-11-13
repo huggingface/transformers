@@ -37,9 +37,6 @@ You can find all the original MarianMT checkpoints under the [Language Technolog
 
 The example below demonstrates how to translate text with the [`AutoModel`] class.
 
-<hfoptions id="usage">
-<hfoption id="AutoModel">
-
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -51,10 +48,6 @@ inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
-
-</hfoption>
-</hfoptions>
-
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```python
