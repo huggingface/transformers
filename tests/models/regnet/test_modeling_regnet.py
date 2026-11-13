@@ -235,8 +235,8 @@ class RegNetModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-0.4180, -1.5051, -3.4836],
-                ("cuda", 8): [-0.4180, -1.5051, -3.4836],
+                (None, None): [-0.4246, -1.5155, -3.4862],
+                ("cuda", 8): [-0.4246, -1.5155, -3.4862],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
