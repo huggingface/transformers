@@ -130,6 +130,8 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
+    "soundfile>=0.13.0",  # first version with wheels on every supported platform and Python
+    "soxr>=0.5.0",  # first version with wheels on every supported platform and Python
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -142,7 +144,7 @@ _deps = [
     "torchaudio",
     "torchvision",
     "tqdm>=4.60",
-    "transformers-mic[runtime]",
+    "transformers-mic[runtime]>=0.1.2",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -167,7 +169,7 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate", "kernels")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "librosa", "phonemizer")
+extras["audio"] = deps_list("torchaudio", "soundfile", "soxr")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
@@ -212,6 +214,8 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests
+        "librosa",  # reference implementation in audio tests
+        "phonemizer",  # Wav2Vec2Phoneme / VITS tokenizer tests (also needs the system `espeak-ng`)
         "nltk",
         "sacremoses",
         "rjieba",
