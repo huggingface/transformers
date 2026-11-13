@@ -22,6 +22,7 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    BertModel,
     GenerationConfig,
     GgufConfig,
     Lfm2ForCausalLM,
@@ -501,6 +502,46 @@ class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
     prompt = "The capital of France is Paris. The capital of Germany is"
     expected_completion = " Berlin"
+
+
+@slow
+class BertGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    """An encoder: small enough for the CPU, and with nothing to generate, so its embeddings are compared instead."""
+
+    gguf_repo = "leliuga/all-MiniLM-L6-v2-GGUF"
+    gguf_file = "all-MiniLM-L6-v2.F32.gguf"
+    quantized_gguf_file = "all-MiniLM-L6-v2.Q8_0.gguf"
+    reference_repo = "sentence-transformers/all-MiniLM-L6-v2"
+    model_class = BertModel
+
+    prompt = "The capital of France is Paris. The capital of Germany is Berlin."
+
+    @classmethod
+    def load_gguf_model(cls, gguf_file, dtype=None, **kwargs):
+        # llama.cpp keeps the encoder alone, so there is no pooler to load
+        return super().load_gguf_model(gguf_file, dtype=dtype, add_pooling_layer=False, **kwargs)
+
+    def reference_model(self, dtype=torch.float32):
+        return BertModel.from_pretrained(self.reference_repo, dtype=dtype, add_pooling_layer=False)
+
+    def reference_state_dict(self):
+        return self.reference_model().state_dict()
+
+    def assert_completes(self, model):
+        """The sentence embedding, the mean of the token states, points where the reference's does."""
+        inputs = self.reference_tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        with torch.inference_mode():
+            embedding = model(**inputs).last_hidden_state[0].float().mean(0).cpu()
+            expected = self.reference_model()(**inputs.to("cpu")).last_hidden_state[0].mean(0)
+        self.assertGreater(torch.nn.functional.cosine_similarity(embedding, expected, dim=0).item(), 0.999)
+
+    def test_hidden_states_match_transformers(self):
+        """The f32 file holds the checkpoint's own values, so the forward pass is the reference's."""
+        inputs = self.reference_tokenizer([self.prompt, "a pair", "of sentences"], padding=True, return_tensors="pt")
+        with torch.inference_mode():
+            actual = self.model(**inputs.to(self.model.device)).last_hidden_state.cpu()
+            expected = self.reference_model()(**inputs.to("cpu")).last_hidden_state
+        torch.testing.assert_close(actual, expected, rtol=0, atol=1e-5)
 
 
 @slow

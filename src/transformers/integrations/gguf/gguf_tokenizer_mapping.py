@@ -31,6 +31,7 @@ from functools import partial
 from tokenizers import AddedToken, Regex, Tokenizer, normalizers, pre_tokenizers
 
 from ...convert_slow_tokenizer import bytes_to_unicode
+from ...models.bert.tokenization_bert import BertTokenizer
 from ...models.gemma.tokenization_gemma import GemmaTokenizer
 from ...models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ...models.llama.tokenization_llama import LlamaTokenizer
@@ -58,6 +59,8 @@ GGUF_TOKENIZER_MAPPING = {
         "ggml.unknown_token_id": "unk_token_id",
         "ggml.padding_token_id": "pad_token_id",
         "ggml.add_space_prefix": "add_prefix_space",
+        "ggml.normalizer.lowercase": "do_lower_case",
+        "ggml.normalizer.strip_accents": "strip_accents",
     },
     "tokenizer_config": {
         "chat_template": "chat_template",
@@ -72,6 +75,16 @@ _SPECIAL_TOKENS = {
     "eos_token": "eos_token_id",
     "unk_token": "unknown_token_id",
     "pad_token": "padding_token_id",
+}
+
+# What a WordPiece file names instead. llama.cpp writes `[CLS]` / `[SEP]` as BOS / EOS too, which BERT has
+# none of: its tokenizer adds them itself, so they are not read as such.
+_WORDPIECE_SPECIAL_TOKENS = {
+    "unk_token": "unknown_token_id",
+    "pad_token": "padding_token_id",
+    "cls_token": "cls_token_id",
+    "sep_token": "seperator_token_id",  # sic: llama.cpp's spelling
+    "mask_token": "mask_token_id",
 }
 
 
@@ -96,6 +109,18 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
         # The flag is set, but the reference tokenizer adds no BOS because the chat template writes `<bos>` itself.
         # llama.cpp forces BOS on here (ggml-org/llama.cpp#21500); we follow the reference.
         tokenizer_config["add_bos_token"] = False
+
+    if tokenizer_type == "bert":
+        # `[CLS]` and `[SEP]` are added by the tokenizer's own template, whatever the flags say. A marker the
+        # file does not state keeps `BertTokenizer`'s default, which is the one llama.cpp assumes too.
+        tokenizer_config.pop("add_bos_token", None)
+        tokenizer_config.pop("add_eos_token", None)
+        if (clean_spaces := metadata.get("tokenizer.ggml.clean_spaces")) is not None:
+            tokenizer_config["clean_up_tokenization_spaces"] = clean_spaces
+        for name, key in _WORDPIECE_SPECIAL_TOKENS.items():
+            if (token_id := metadata.get(f"tokenizer.ggml.{key}")) is not None:
+                tokenizer_config[name] = tokenizer["tokens"][token_id]
+        return architecture, tokenizer, tokenizer_config
 
     for name, key in _SPECIAL_TOKENS.items():
         token_id = metadata.get(f"tokenizer.ggml.{key}")
@@ -175,6 +200,28 @@ def unigram_tokenizer(tokenizer_dict):
     for offset, index in enumerate(blanks[:count]):
         tokens[index] = f"<extra_id_{count - 1 - offset}>"
     return T5Tokenizer(vocab=list(zip(tokens, tokenizer_dict["scores"])))
+
+
+def wordpiece_tokenizer(tokenizer_dict):
+    """WordPiece, as BERT has it.
+
+    llama.cpp respells the vocabulary: a word-initial piece gains a leading `\u2581` and a continuation loses
+    its `##`, control tokens like `[CLS]` aside. We spell it back. Lowercasing is stated in recent files;
+    older ones say nothing, and llama.cpp lowercases those, as `BertTokenizer` does by default.
+    """
+    vocab = {}
+    for index, (token, token_type) in enumerate(zip(tokenizer_dict["tokens"], tokenizer_dict["token_type"])):
+        if token_type != 3:  # 3 is CONTROL
+            token = token[1:] if token.startswith("\u2581") else f"##{token}"
+        vocab[token] = index
+    lowercase = tokenizer_dict.get("do_lower_case", True)
+    unk_id = tokenizer_dict.get("unk_token_id")
+    return BertTokenizer(
+        vocab=vocab,
+        do_lower_case=lowercase,
+        strip_accents=tokenizer_dict.get("strip_accents", lowercase),
+        unk_token=tokenizer_dict["tokens"][unk_id] if unk_id is not None else "[UNK]",
+    )
 
 
 def get_merges(tokenizer_dict, vocab_scores=None):
@@ -302,5 +349,6 @@ GGUF_TOKENIZER_TYPES = {
     "gpt2": byte_level_tokenizer,
     "llama": sentencepiece_tokenizer,
     "t5": unigram_tokenizer,
+    "bert": wordpiece_tokenizer,
     "gemma4": partial(sentencepiece_tokenizer, tokenizer_class=GemmaTokenizer),
 }

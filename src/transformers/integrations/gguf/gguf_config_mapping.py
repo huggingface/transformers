@@ -117,10 +117,34 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def _bert_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """BERT: a bidirectional encoder, for embeddings. llama.cpp keeps the encoder and drops the pooler and heads."""
+    key = lambda name: metadata[f"bert.{name}"]  # noqa: E731
+
+    return {
+        "model_type": "bert",
+        "architectures": ["BertModel"],
+        "max_position_embeddings": key("context_length"),
+        "hidden_size": key("embedding_length"),
+        "intermediate_size": key("feed_forward_length"),
+        "num_hidden_layers": key("block_count"),
+        "num_attention_heads": key("attention.head_count"),
+        "layer_norm_eps": key("attention.layer_norm_epsilon"),
+        # not in the file: llama.cpp runs every BERT with GELU
+        "hidden_act": "gelu",
+        # the token type (segment) vocabulary is stated with the tokenizer
+        "type_vocab_size": metadata.get("tokenizer.ggml.token_type_count", 2),
+        # `read_gguf_metadata` leaves the vocabulary as its length
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
     "lfm2": _lfm2_config,
+    "bert": _bert_config,
 }
 
 
