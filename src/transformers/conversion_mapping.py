@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 _MODEL_TO_CONVERSION_PATTERN = {
     # Mixtral-style MoE
     "minimax": "mixtral",
+    "minimax_vl_01_text": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
     "Dots3NoteTextModel": "qwen2_moe",
@@ -111,6 +112,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
+    "minimax_vl_01": "llava_next",
     # class-based mappings
     "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
@@ -124,6 +126,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "LlavaNextModel": "LlavaModel",
     "LlavaNextVideoModel": "LlavaModel",
     "LlavaOnevisionModel": "LlavaModel",
+    "MiniMaxVL01Model": "LlavaModel",
     "FuyuModel": "LlavaModel",
     "MllamaModel": "LlavaModel",
     "VoxtralModel": "Qwen2AudioModel",
