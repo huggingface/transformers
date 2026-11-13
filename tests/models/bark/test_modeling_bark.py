@@ -154,7 +154,7 @@ class BarkSemanticModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -165,9 +165,7 @@ class BarkSemanticModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "logits"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["logits"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -181,10 +179,10 @@ class BarkSemanticModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["logits"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+        output_from_past = model(next_tokens, cache=cache)["logits"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
@@ -287,7 +285,7 @@ class BarkCoarseModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -298,9 +296,7 @@ class BarkCoarseModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "logits"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["logits"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -314,10 +310,10 @@ class BarkCoarseModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["logits"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+        output_from_past = model(next_tokens, cache=cache)["logits"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
@@ -424,7 +420,7 @@ class BarkFineModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -435,9 +431,7 @@ class BarkFineModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "logits"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["logits"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -451,10 +445,10 @@ class BarkFineModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["logits"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+        output_from_past = model(next_tokens, cache=cache)["logits"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()

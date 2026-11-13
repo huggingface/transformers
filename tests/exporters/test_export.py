@@ -24,7 +24,6 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.base import ExportArtifacts
 from transformers.exporters.decompose import (
     decode_graph_name,
     decompose_for_generation,
@@ -35,8 +34,14 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
-from transformers.exporters.quantizers.utils import openvino_feed
-from transformers.exporters.utils import cast_leaf_tensors, get_leaf_tensors, module_device, module_dtype
+from transformers.exporters.multimodal import ExportedMultimodalModel
+from transformers.exporters.utils import (
+    cast_leaf_tensors,
+    get_leaf_tensors,
+    module_device,
+    module_dtype,
+    openvino_feed,
+)
 from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
@@ -139,7 +144,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "cross-attention mask doesn't flow through the generate decomposition correctly."
         ),
         "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "Exported prefill drops `cache.*.{keys,values,_sliding_window_tensor}` "
             "tensors that eager returns. Plain forward exports work. "
             "TODO: align generate-decomposition path with the realtime KV-cache shape."
         ),
@@ -209,6 +214,18 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "SeamlessM4TForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
         "SeamlessM4Tv2ForSpeechToSpeech": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
         "SeamlessM4Tv2ForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
+    },
+    # torch.export, dynamic shapes: vision towers looping over images in Python, so the export only takes the traced
+    # image count and fails on new inputs with another one
+    "dynamo.dynamic": {
+        "Lfm2VlModel": "The getter and the SigLIP2 tower loop over images until #50734 and #50736.",
+        "Lfm2VlForConditionalGeneration": "Same per-image loops as `Lfm2VlModel`.",
+        "Mistral3Model": (
+            "`image_sizes` becomes a list of ints for Pixtral's per-image crops, so the image count is in the "
+            "export's input structure."
+        ),
+        "Mistral3ForConditionalGeneration": "Same `image_sizes` list as `Mistral3Model`.",
+        "Siglip2VisionModel": "The position embeddings are resized in a loop over images until #50736.",
     },
     # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
@@ -786,19 +803,6 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
-
-    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
-    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
-    """
-    set_seed(1234)
-    onnx_inputs = get_leaf_tensors(inputs)
-    onnx_outputs = onnx_program(**onnx_inputs)
-    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
-    return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
-
-
 def _run_openvino_model(ov_model, inputs) -> dict:
     """Compile an OpenVINO model and run it, returning outputs as a `{name: torch.Tensor}` dict.
 
@@ -850,7 +854,7 @@ def _run_executorch_program(exported, inputs):
     XNNPACK-delegate failure): a runtime limitation, not a transformers export defect."""
     set_seed(1234)
     try:
-        return get_leaf_tensors(exported.runtime()(**inputs))
+        return get_leaf_tensors(exported(**inputs))
     except (RuntimeError, MemoryError) as e:
         if _is_executorch_runtime_limit(e):
             return None
@@ -988,7 +992,7 @@ class ExportTesterMixin:
         scopes = ["exactness" if scope == "all" else f"{scope}.exactness" for scope in scopes]
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class, device=torch_device, return_model=False):
+    def _prepare_export_model_and_inputs(self, model_class, device=torch_device, dynamic=False, return_model=False):
         """Create model and forward inputs ready for export.
 
         ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
@@ -996,57 +1000,82 @@ class ExportTesterMixin:
         assert during tracing would otherwise poison the whole xdist worker's CUDA context).
 
         Returns:
-            `{name: (model, inputs)}`: one entry per component (a whole model, or decomposed submodels
-            for a multimodal model), each paired with its forward inputs. With ``return_model``, also the
-            whole model and its inputs: `(components, model, inputs)`.
+            `(components, new_inputs)`: `{name: (model, inputs)}`, one entry per component (a whole model, or
+            decomposed submodels for a multimodal model), each paired with the forward inputs to export it with; and
+            `{name: inputs}`, new ones to run the export on, drawn again from the model tester with the same sizes, or
+            other sizes when `dynamic`.
+            With ``return_model``, also the whole model and its inputs: `(components, new_inputs, model, inputs)`.
         """
-        if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-        else:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
+        config, inputs_dict = self._model_tester_inputs(model_class, self.model_tester)
 
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(device)
         set_model_for_less_flaky_test(model)
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
+        components = self._split_for_export(model, inputs_dict)
+        new_inputs = {name: inputs for name, (_, inputs) in self._new_inputs(model_class, model, dynamic).items()}
+        return (components, new_inputs, model, inputs_dict) if return_model else (components, new_inputs)
 
+    def _new_inputs(self, model_class, model, dynamic):
+        """`{name: (model, inputs)}` on inputs drawn again from the model tester: the same sizes, or other sizes when
+        `dynamic`."""
+        model_tester = self.model_tester
+        if dynamic:
+            model_tester = copy.copy(model_tester)
+            # Whisper's encoder input length is the config's
+            sizes = ("batch_size",) if model.config.model_type == "whisper" else ("batch_size", "seq_length")
+            for size in sizes:
+                if isinstance(vars(model_tester).get(size), int):
+                    setattr(model_tester, size, getattr(model_tester, size) + 1)
+        _, inputs_dict = self._model_tester_inputs(model_class, model_tester)
+        return self._split_for_export(model, inputs_dict)
+
+    def _model_tester_inputs(self, model_class, model_tester):
+        """`model_tester`'s config and forward inputs for `model_class`, cleaned for export."""
+        if hasattr(model_tester, "prepare_config_and_inputs_for_model_class"):
+            config, inputs_dict = model_tester.prepare_config_and_inputs_for_model_class(model_class)
+        else:
+            config, inputs_dict = model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+        return config, _clean_inputs_for_export(inputs_dict, config)
+
+    def _split_for_export(self, model, inputs_dict):
+        """`{name: (model, inputs)}`: `model` on `inputs_dict`, decomposed into its components when multimodal."""
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
         if is_multimodal(model):
             components = decompose_multimodal(model, inputs_dict)
-            components = {name: (component.module, component.inputs) for name, component in components.items()}
-        else:
-            components = {"model": (model, inputs_dict)}
-        return (components, model, inputs_dict) if return_model else components
+            return {name: (component.module, component.inputs) for name, component in components.items()}
+        return {"model": (model, inputs_dict)}
 
-    def _collect_eager_outputs(self, components, output_types=None):
-        """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict. When given,
-        ``output_types`` is filled with each component's output class."""
-        eager_outputs = {}
-        for name, (model, inputs) in components.items():
+    def _collect_eager_outputs(self, components, inputs=None):
+        """Run eager forward for each component and return its leaf tensors and output class, as
+        ``({name: leaf_tensors}, {name: output_class})``. `inputs`, by component, replace the components' own."""
+        eager_outputs, eager_types = {}, {}
+        for name, (model, component_inputs) in components.items():
             with torch.no_grad():
                 set_seed(1234)
-                outputs = model(**copy.deepcopy(inputs))
-                eager_outputs[name] = get_leaf_tensors(outputs)
-                assert eager_outputs[name], f"Eager outputs are empty for {name}."
-            if output_types is not None:
-                output_types[name] = type(outputs)
-        return eager_outputs
+                outputs = model(**copy.deepcopy(inputs[name] if inputs is not None else component_inputs))
+            eager_outputs[name] = get_leaf_tensors(outputs)
+            eager_types[name] = type(outputs)
+            assert eager_outputs[name], f"Eager outputs are empty for {name}."
+        return eager_outputs, eager_types
 
     def _check_multimodal_runtime(self, exporter, exported, model, inputs, atol, rtol, check_exactness, check_device):
         """The components of a multimodal model, exported one by one, run end to end through the runtime like the
         whole model."""
         if "text_embeddings_model" not in exported or "language_model" not in exported:
             return
-        artifacts = ExportArtifacts(
-            {name: artifacts["model"] for name, artifacts in exported.items()}, exporter.export_format, model.config
+        multimodal = ExportedMultimodalModel(
+            {name: component.components["model"] for name, component in exported.items()},
+            exporter.export_format,
+            model.config,
         )
         with torch.no_grad():
             set_seed(1234)
             expected = model(**copy.deepcopy(inputs))
         set_seed(1234)
-        outputs = artifacts.runtime()(**copy.deepcopy(inputs))
+        outputs = multimodal(**copy.deepcopy(inputs))
         self.assertIs(type(outputs), type(expected))
         if check_exactness:
             self._check_outputs_close(
@@ -1058,8 +1087,8 @@ class ExportTesterMixin:
                 inputs=inputs,
             )
 
-    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None):
-        """Assert outputs are close, allowing up to 5% element-level mismatch.
+    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None, msg=None):
+        """Assert outputs are close, allowing up to 5% element-level mismatch. `msg` prefixes the failure.
 
         When `inputs` carries an `attention_mask`, the positions it masks out are zeroed on both sides
         first. A fully-masked row has no defined value -- attention over it is a softmax with nothing to
@@ -1090,7 +1119,9 @@ class ExportTesterMixin:
                 mismatched, total = map(int, mismatched_percentage[0])
                 if mismatched / total < 0.05:
                     return  # allow up to 5%
-            raise e
+            if msg is None:
+                raise e
+            raise AssertionError(f"{msg}: {e}") from e
 
     # ──────────────────── torch.export tests ─────────────────────
 
@@ -1111,28 +1142,51 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
-            components, full_model, full_inputs = self._prepare_export_model_and_inputs(model_class, return_model=True)
-            eager_types = {}
-            eager_outputs = self._collect_eager_outputs(components, eager_types)
+            components, new_inputs, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, dynamic=dynamic, return_model=True
+            )
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
+            new_eager_outputs, new_eager_types = self._collect_eager_outputs(components, new_inputs)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic)
             exported = {}
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported[name] = exporter.export(model, inputs, config=config)
-                    runtime = exported[name].runtime()
+                    runtime = exported[name]
 
                     set_seed(1234)
                     outputs = runtime(**copy.deepcopy(inputs))
                     self.assertIs(type(outputs), eager_types[name])
                     exported_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
+                    if check_exactness:
+                        self._check_outputs_close(
+                            exported_outputs,
+                            eager_outputs[name],
+                            atol=atol,
+                            rtol=rtol,
+                            inputs=inputs,
+                            msg=f"{name} differs from eager on the inputs it was exported with",
+                        )
 
-                    if not self._should_skip_exactness(model_class, dynamic=dynamic):
-                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    set_seed(1234)
+                    outputs = runtime(**copy.deepcopy(new_inputs[name]))
+                    self.assertIs(type(outputs), new_eager_types[name])
+                    new_exported_outputs = get_leaf_tensors(outputs)
+                    self.assertTrue(new_exported_outputs, f"Exported outputs on new inputs are empty for {name}.")
+                    if check_exactness:
+                        self._check_outputs_close(
+                            new_exported_outputs,
+                            new_eager_outputs[name],
+                            atol=atol,
+                            rtol=rtol,
+                            inputs=new_inputs[name],
+                            msg=f"{name} differs from eager on new inputs it never saw",
+                        )
 
             if len(components) > 1:
                 with self.subTest(f"{model_class.__name__}/end to end"):
-                    check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic)
                     self._check_multimodal_runtime(
                         exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=True
                     )
@@ -1157,31 +1211,34 @@ class ExportTesterMixin:
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
+            ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
-            components, full_model, full_inputs = self._prepare_export_model_and_inputs(model_class, return_model=True)
-            eager_types = {}
-            eager_outputs = self._collect_eager_outputs(components, eager_types)
+            components, _, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, return_model=True
+            )
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx")
             exported = {}
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported[name] = exporter.export(model, inputs, config=config)
-                    runtime = exported[name].runtime()
+                    runtime = exported[name]
                     set_seed(1234)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), eager_types[name])
                     onnx_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
-                    if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx"):
+                    if check_exactness:
                         self._check_outputs_close(
                             onnx_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
                         )
 
             if len(components) > 1:
                 with self.subTest(f"{model_class.__name__}/end to end"):
-                    check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx")
                     self._check_multimodal_runtime(
                         exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
                     )
@@ -1204,29 +1261,30 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
                 continue
 
-            components, full_model, full_inputs = self._prepare_export_model_and_inputs(model_class, return_model=True)
-            eager_types = {}
-            eager_outputs = self._collect_eager_outputs(components, eager_types)
+            components, _, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, return_model=True
+            )
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino")
             exported = {}
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported[name] = exporter.export(model, inputs, config=config)
-                    runtime = exported[name].runtime()
+                    runtime = exported[name]
                     set_seed(1234)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), eager_types[name])
                     ov_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
-                    if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino"):
+                    if check_exactness:
                         self._check_outputs_close(
                             ov_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
                         )
 
             if len(components) > 1:
                 with self.subTest(f"{model_class.__name__}/end to end"):
-                    check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino")
                     self._check_multimodal_runtime(
                         exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
                     )
@@ -1257,8 +1315,8 @@ class ExportTesterMixin:
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
-            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
-            eager_outputs = self._collect_eager_outputs(components)
+            components, _ = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
@@ -1349,14 +1407,17 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
+            check_exactness = not self._should_skip_exactness(
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
+            )
 
             for name, (model, inputs) in components.items():
                 if name == "prefill":
                     continue
-                runtime = exporter.export(model, copy.deepcopy(inputs), config=config).runtime()
+                exported = exporter.export(model, copy.deepcopy(inputs), config=config)
                 # A cache whose shared layers stay uninitialized keeps their `cumulative_length` on the CPU.
-                cache = inputs.get("past_key_values")
+                cache = inputs.get("cache")
                 check_device = not any(
                     hasattr(layer, "is_initialized")
                     and not layer.is_initialized
@@ -1366,11 +1427,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 for call, call_inputs in self._calls_served(components, name).items():
                     with self.subTest(f"{model_class.__name__}/{call}"):
                         set_seed(1234)
-                        exported_outputs = get_leaf_tensors(runtime(**copy.deepcopy(call_inputs)))
+                        exported_outputs = get_leaf_tensors(exported(**copy.deepcopy(call_inputs)))
                         self.assertEqual(set(exported_outputs), set(eager_outputs[call]))
-                        if not self._should_skip_exactness(
-                            model_class, generate=True, dynamic=dynamic, generation_config=generation_config
-                        ):
+                        if check_exactness:
                             self._check_outputs_close(
                                 exported_outputs, eager_outputs[call], atol=atol, rtol=rtol, check_device=check_device
                             )
@@ -1396,11 +1455,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             ):
                 continue
 
-            config = OnnxConfig(dynamic=dynamic, optimize=_onnx_optimize_enabled(model_class, dynamic))
+            optimize = _onnx_optimize_enabled(model_class, dynamic)
+            # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
+            ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 if name == "prefill":
@@ -1408,7 +1470,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 exported = exporter.export(model, copy.deepcopy(inputs), config=config)
                 for call, call_inputs in self._calls_served(components, name).items():
                     with self.subTest(f"{model_class.__name__}/{call}"):
-                        onnx_outputs = _run_onnx_program(exported.program, copy.deepcopy(call_inputs))
+                        set_seed(1234)
+                        onnx_outputs = get_leaf_tensors(exported(**copy.deepcopy(call_inputs)))
                         self.assertEqual(set(onnx_outputs), set(eager_outputs[call]))
 
     # ──────────────────── OpenVINO tests ─────────────────────────
@@ -1435,7 +1498,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 if name == "prefill":
@@ -1475,7 +1538,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, device="cpu", generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 if name == "prefill":

@@ -138,7 +138,7 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = []
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -222,6 +222,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         pixel_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask indicating padded regions in the image.
         """
+        return_flat = kwargs.pop("return_flat", False)
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
         pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
@@ -259,6 +260,9 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
+        if return_flat:
+            image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+            return image_outputs
         image_outputs.pooler_output = [
             f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
         ]

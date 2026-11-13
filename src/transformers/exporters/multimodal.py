@@ -15,10 +15,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from ...utils import is_torch_available
-from ..decompose import (
+from ..utils import is_torch_available
+from .base import ExportedModel
+from .decompose import (
     _MODALITY_SPECS,
     DEEPSTACK_INPUTS,
     ModalitySpec,
@@ -26,16 +27,13 @@ from ..decompose import (
     flatten_anyres_patches,
     pack_anyres_features,
 )
-from ..precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
-from ..utils import cast_leaf_tensors
-from .base import ExportedModel, ModelRunner
+from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
+from .runners.base import ModelRunner
+from .utils import cast_leaf_tensors
 
 
 if is_torch_available():
     import torch
-
-if TYPE_CHECKING:
-    from ...configuration_utils import PreTrainedConfig
 
 
 MULTIMODAL_COMPONENTS = frozenset(
@@ -49,23 +47,25 @@ class ExportedMultimodalModel(ExportedModel):
     result.
     """
 
-    def __init__(self, runners: dict[str, ModelRunner], config: PreTrainedConfig | None = None):
-        super().__init__(runners["language_model"], config)
-        self.text_runner = runners["text_embeddings_model"]
-        self.modality_runners = [
-            (spec, runners[spec.component]) for spec in _MODALITY_SPECS if spec.component in runners
-        ]
-
-    def __call__(self, **kwargs) -> Any:
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
+        """Run the components on a processor's whole output, returning what the source model returns.
+        `share_inputs` and `share_outputs` go to the `language_model` runner, as for [`ExportedModel.__call__`]."""
         input_ids = kwargs["input_ids"]
         # The embedder's and modality graphs' outputs are read within this call (what the model returns is copied
         # out), so a backend may hand out its own buffers.
-        embedded = self.text_runner(input_ids=input_ids, share_outputs=True)
+        embedded = self.runners["text_embeddings_model"](input_ids=input_ids, share_outputs=True)
         inputs_embeds = embedded["inputs_embeds"] if isinstance(embedded, dict) else embedded
         features, deepstack = {}, []
-        for spec, runner in self.modality_runners:
-            if all(kwargs.get(key) is None for key in spec.feature_keys):
+        for spec in _MODALITY_SPECS:
+            given = [key for key in spec.feature_keys if kwargs.get(key) is not None]
+            if not given:
                 continue
+            runner = self.runners.get(spec.component)
+            if runner is None:
+                raise ValueError(
+                    f"Got `{given[0]}`, but this export has no `{spec.component}`: export the model with inputs that "
+                    "include this modality to run it."
+                )
             features[spec.component], layers = self._features(spec, runner, kwargs)
             mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
             if features[spec.component] is None:
@@ -87,8 +87,13 @@ class ExportedMultimodalModel(ExportedModel):
             inputs["position_ids"] = rope_index[0]
         inputs["inputs_embeds"] = inputs_embeds
         inputs.update(self._deepstack_inputs(deepstack, inputs_embeds))
-        traced = self.runner.metadata.kwargs
-        outputs = self.runner(**{name: value for name, value in inputs.items() if name in traced})
+        language_model = self.runners["language_model"]
+        traced = language_model.metadata.kwargs
+        outputs = language_model(
+            share_inputs=share_inputs,
+            share_outputs=share_outputs,
+            **{name: value for name, value in inputs.items() if name in traced},
+        )
         # The model returns its image features too, which the language model never sees.
         if features.get("vision_embeddings_model") is not None and "image_hidden_states" in getattr(
             outputs, "__dataclass_fields__", {}
@@ -104,7 +109,7 @@ class ExportedMultimodalModel(ExportedModel):
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
         """What a deepstack decoder adds inside its layers, from each modality's `(rows, features by layer)`, in the
         dense form its graph was traced with (`dense_deepstack`): zeros on a step without images."""
-        traced = self.runner.metadata.kwargs
+        traced = self.runners["language_model"].metadata.kwargs
         for mask_name, spec in DEEPSTACK_INPUTS.items():
             if spec.features in traced:
                 recorded = traced[spec.features]

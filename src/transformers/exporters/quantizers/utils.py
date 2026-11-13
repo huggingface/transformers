@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Calibration helpers of the quantizers: per-component calibration inputs for `export_for_generation`, and the feeds
-that map a forward-kwargs sample to the inputs of the model each quantizer calibrates."""
+"""Calibration helpers of the quantizers: per-component calibration inputs, and traced inputs for FX-graph quantizers."""
 
 from __future__ import annotations
 
@@ -20,15 +19,7 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
-from ...utils.import_utils import is_torch_available
 from ..decompose import decode_graph_name, decompose_for_generation
-from ..utils import BATCH_INPUTS, get_leaf_tensors
-
-
-if is_torch_available():
-    import torch
 
 
 if TYPE_CHECKING:
@@ -75,52 +66,3 @@ def traced_inputs(sample: dict[str, Any], traced_names: list[str]) -> dict[str, 
             "takes generate kwargs)."
         )
     return copy.deepcopy({name: sample[name] for name in traced_names})
-
-
-def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
-    """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
-    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    paths = {name: name.removeprefix("input.") for name in input_names}
-    return {name: leaves[path] for name, path in paths.items() if path in leaves}
-
-
-def openvino_tensor(tensor: torch.Tensor) -> Any:
-    """`tensor` as an OpenVINO input value. NumPy has no bf16, so a bf16 tensor travels as an `openvino.Tensor` of its
-    raw bits."""
-    tensor = tensor.detach().cpu()
-    if tensor.dtype == torch.bfloat16:
-        import openvino
-
-        value = openvino.Tensor(openvino.Type.bf16, list(tensor.shape))
-        # The Python API exposes a bf16 tensor's buffer as float16: copy the bits in through an int16 view.
-        value.data.view(np.int16)[...] = tensor.view(torch.int16).numpy()
-        return value
-    return tensor.numpy()
-
-
-def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
-    """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
-    the identity `beam_idx`, and scalars as they are."""
-    leaves = {path: openvino_tensor(tensor) for path, tensor in get_leaf_tensors(sample).items()}
-    # Off a text input: the first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`.
-    batch_input = next((leaves[name] for name in BATCH_INPUTS if name in leaves), next(iter(leaves.values()), None))
-    batch = batch_input.shape[0] if batch_input is not None else 1
-
-    def port_value(name: str) -> Any:
-        path = name.removeprefix("input.")
-        if path in leaves:
-            return leaves[path]
-        if name == "beam_idx":
-            return np.arange(batch, dtype=np.int32)
-        if name in sample:
-            return np.array(sample[name])
-        return None
-
-    feed = {}
-    for port in ov_model.inputs:
-        # A port can carry several names: feed it under the first one that has a value
-        for name in port.get_names():
-            if (value := port_value(name)) is not None:
-                feed[name] = value
-                break
-    return feed

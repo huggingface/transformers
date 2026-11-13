@@ -124,7 +124,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
         for key, value in model_kwargs.items():  # deepcopy crashes if we attempt to copy encoder outputs with grads
-            if key not in ("encoder_outputs", "past_key_values"):
+            if key not in ("encoder_outputs", "cache"):
                 assistant_kwargs[key] = (
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
@@ -289,13 +289,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
     ) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
-        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
-        if has_past_key_values:
+        has_cache = self.assistant_kwargs.get("cache", None) is not None
+        if has_cache:
             target_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
-            current_cache_size = self.assistant_kwargs["past_key_values"].get_seq_length()
+            current_cache_size = self.assistant_kwargs["cache"].get_seq_length()
             tokens_to_remove = current_cache_size - target_cache_size
             if tokens_to_remove >= 0:
-                self.assistant_kwargs["past_key_values"].crop(-tokens_to_remove)
+                self.assistant_kwargs["cache"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
@@ -304,7 +304,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
 
-        return has_past_key_values
+        return has_cache
 
     def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> dict:
         """Prepare arguments for the generation call."""
@@ -319,7 +319,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
     def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, torch.Tensor | None]:
         """Generate candidate sequences using the assistant model."""
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
-        self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
+        self.assistant_kwargs["cache"] = assistant_output.cache
         if (
             is_sklearn_available()
             and self.assistant_generation_config.assistant_confidence_threshold
@@ -531,7 +531,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         # Update state
         self.prev_target_ids_len = input_ids.shape[1]
-        self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
+        self.assistant_kwargs["cache"] = assistant_output.cache
         self.prev_assistant_ids = assistant_output.sequences
 
         if self.prev_target_ids_len >= new_target_ids.shape[1]:
@@ -1634,7 +1634,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             context_hidden_states=context_hidden_states,
             position_ids=position_ids.to(self.device),
             attention_mask=attention_mask.to(self.device) if attention_mask is not None else None,
-            past_key_values=self.cache,
+            cache=self.cache,
         )
 
         # Once we arrive here the first time, it's no longer the case

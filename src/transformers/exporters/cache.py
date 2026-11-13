@@ -82,11 +82,11 @@ def mask_width(cache, query_length: int) -> int:
         return _cache_length(cache) + query_length
 
 
-def _mark_existing_states(past_key_values) -> None:
+def _mark_existing_states(cache) -> None:
     """Mark each layer's recurrent states as existing, exactly where they do.
 
     Those flags are pytree context the graph cannot flip; left unset, the cache no longer matches the traced spec."""
-    for layer in _self_attention_layers(past_key_values):
+    for layer in _self_attention_layers(cache):
         conv_states = getattr(layer, "conv_states", None)
         if isinstance(conv_states, dict):
             for key, conv in conv_states.items():
@@ -242,10 +242,9 @@ def materialize_cache_like(model, inputs: dict, reference_inputs: dict) -> None:
     Geometry, indexer slots and linear-attention states come from the reference cache, which holds what the model
     really writes; layers left empty there (hy_v4's shared indexers) stay empty so both take the same leaves.
     """
-    name = next((name for name in ("past_key_values", "cache_params") if inputs.get(name) is not None), None)
-    if name is None:
+    cache, reference = inputs.get("cache"), reference_inputs.get("cache")
+    if cache is None:
         return
-    cache, reference = inputs[name], reference_inputs.get(name)
     batch_size = next(t for t in inputs.values() if isinstance(t, torch.Tensor)).shape[0]
     materialize_cache_layers(
         cache,

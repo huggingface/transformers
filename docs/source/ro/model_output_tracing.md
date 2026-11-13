@@ -59,7 +59,7 @@ class MyModel(MyPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache = None,
+        cache: Cache = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
 
@@ -72,7 +72,7 @@ class MyModel(MyPreTrainedModel):
         # hidden_states/attentions/cross_attentions.
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values
+            cache=cache
         )
 ```
 

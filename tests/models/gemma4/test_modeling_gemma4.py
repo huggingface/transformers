@@ -344,6 +344,14 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_features_return_flat(self):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_return_flat(self):
+        pass
+
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
@@ -616,6 +624,10 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_return_flat(self):
+        pass
+
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
@@ -808,7 +820,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             config=config.text_config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
             block_sequence_ids=block_sequence_ids,
         )
@@ -852,7 +864,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
         model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
         batch_size, prompt_length = inputs_dict["input_ids"].shape
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=config.get_text_config(),
             max_batch_size=batch_size,
             max_cache_len=prompt_length + 8,  # longer than the sliding window
@@ -861,7 +873,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         )
 
         with torch.no_grad():
-            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+            model(**inputs_dict, cache=cache, use_cache=True)
 
 
 @slow
