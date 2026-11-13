@@ -371,7 +371,7 @@ class HfExporter(ABC):
             sample_inputs (`dict[str, torch.Tensor | Cache]`):
                 **Forward** kwargs — what you'd pass to `model(**sample_inputs)`. These are used
                 directly as the example inputs during tracing. For an autoregressive decode-step
-                export, this means you need to include `past_key_values`, `cache_position`, etc.
+                export, this means you need to include `cache`, etc.
                 If you only have generation-style inputs, use [`~HfExporter.export_for_generation`]
                 instead — it runs `model.generate` for you and exports each stage.
             config ([`~transformers.exporters.configs.ExportConfigMixin`]):

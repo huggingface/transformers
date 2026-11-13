@@ -139,7 +139,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "cross-attention mask doesn't flow through the generate decomposition correctly."
         ),
         "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "Exported prefill drops `cache.*.{keys,values,_sliding_window_tensor}` "
             "tensors that eager returns. Plain forward exports work. "
             "TODO: align generate-decomposition path with the realtime KV-cache shape."
         ),
@@ -1251,7 +1251,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 check_device = True
-                cache = inputs.get("past_key_values")
+                cache = inputs.get("cache")
                 # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
                 # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
                 if (

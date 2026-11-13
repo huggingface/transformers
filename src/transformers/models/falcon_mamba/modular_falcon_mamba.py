@@ -20,6 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
@@ -123,19 +124,20 @@ class FalconMambaMixer(MambaMixer):
         init.ones_(self.b_layernorm.weight)
         init.ones_(self.c_layernorm.weight)
 
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
         seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -144,7 +146,7 @@ class FalconMambaMixer(MambaMixer):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         A = -torch.exp(self.A_log.float())
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             fused_output = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
@@ -173,7 +175,7 @@ class FalconMambaMixer(MambaMixer):
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
-        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -182,8 +184,8 @@ class FalconMambaMixer(MambaMixer):
                 activation=self.activation,
             )
         else:
-            if cache_params is not None:
-                hidden_states_B_C = cache_params.update_conv_state(
+            if cache is not None:
+                hidden_states_B_C = cache.update_conv_state(
                     hidden_states_B_C,
                     self.layer_idx,
                     conv_kernel_size=self.conv_kernel_size,
@@ -197,7 +199,7 @@ class FalconMambaMixer(MambaMixer):
                 **kwargs,
             )
 
-            if cache_params is not None:
+            if cache is not None:
                 hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
 
         # 3. SSM transformation
@@ -238,7 +240,7 @@ class FalconMambaMixer(MambaMixer):
 
         # Full sequence form
         else:
-            output_final_state = cache_params is not None
+            output_final_state = cache is not None
             scan_result = mamba_selective_scan(
                 hidden_states_B_C.transpose(1, 2),
                 time_step,
@@ -256,7 +258,7 @@ class FalconMambaMixer(MambaMixer):
 
             if output_final_state:
                 scan_output, final_state = scan_result
-                cache_params.update_recurrent_state(final_state, self.layer_idx)
+                cache.update_recurrent_state(final_state, self.layer_idx)
             else:
                 scan_output = scan_result
 

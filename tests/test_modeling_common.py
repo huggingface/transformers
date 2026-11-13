@@ -2159,8 +2159,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -5611,6 +5611,29 @@ class ModelTesterMixin(ExportTesterMixin):
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
 
+    def _check_features_return_flat(self, modality, prepare_config_and_inputs):
+        """`return_flat=True` gives every item's features as one tensor: the per-item `pooler_output` concatenated."""
+        getter_name = f"get_{modality}_features"
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, getter_name):
+                continue
+            config, inputs_dict = prepare_config_and_inputs()
+            model = model_class(config).eval().to(torch_device)
+            owner = model.base_model if hasattr(model.base_model, getter_name) else model
+            if "return_flat" not in inspect.getsource(getattr(type(owner), getter_name)):
+                continue
+            getter = getattr(model, getter_name)
+            with torch.no_grad():
+                per_item = getter(**inputs_dict, return_dict=True).pooler_output
+                flat = getter(**inputs_dict, return_dict=True, return_flat=True).pooler_output
+            torch.testing.assert_close(flat, torch.cat(per_item), rtol=0, atol=0)
+
+    def test_get_image_features_return_flat(self):
+        self._check_features_return_flat("image", self._image_features_prepare_config_and_inputs)
+
+    def test_get_video_features_return_flat(self):
+        self._check_features_return_flat("video", self._video_features_prepare_config_and_inputs)
+
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
@@ -6707,6 +6730,57 @@ class ModelTesterMixin(ExportTesterMixin):
         model = base_model_class(config)
         model.to(torch_device).eval()
         model(**model_kwargs)
+
+    def test_bc_cache_name_forward(self):
+        """Test that BC is correctly handled in `forward` for the cache name."""
+        from transformers.cache_utils import DynamicCache, EncoderDecoderCache
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Copy to avoid polluting between iterations
+            local_inputs_dict = copy.deepcopy(inputs_dict)
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+                model.eval()
+
+                if "cache" not in inspect.signature(model.forward).parameters.keys():
+                    self.skipTest("Do not take a cache as input to forward")
+
+                if "use_cache" in inspect.signature(model.forward).parameters.keys():
+                    local_inputs_dict["use_cache"] = True
+                output = model(**local_inputs_dict)
+                if (
+                    not isinstance(output, ModelOutput)
+                    or "cache" not in output
+                    or type(output.cache) not in (DynamicCache, EncoderDecoderCache)
+                ):
+                    self.skipTest("Not returning cache or non standard Cache")
+
+                old_name = "cache_params" if all(output.cache.is_linear) else "past_key_values"
+                empty_cache = DynamicCache(config=config.get_text_config(decoder=True))
+                if isinstance(output.cache, EncoderDecoderCache):
+                    empty_cache = EncoderDecoderCache(empty_cache, copy.deepcopy(empty_cache))
+
+                local_inputs_dict[old_name] = copy.deepcopy(empty_cache)
+                # Make sure we raise the deprecation warning
+                with warnings.catch_warnings(record=True) as warning_list:
+                    output_old_name = model(**local_inputs_dict)
+                self.assertTrue(any(f"`{old_name}` is deprecated" in str(warn.message) for warn in warning_list))
+
+                local_inputs_dict.pop(old_name)
+                local_inputs_dict["cache"] = copy.deepcopy(empty_cache)
+                output_new_name = model(**local_inputs_dict)
+
+                self.assertTrue(output_old_name.cache is not None)
+                self.assertTrue(output_new_name.cache is not None)
+                # Usually the method to fully check the cache will exist, otherwise perform a very easy check to avoid
+                # duplicating code
+                if hasattr(self, "_check_caches_are_equal"):
+                    self._check_caches_are_equal(output_old_name.cache, output_new_name.cache)
+                else:
+                    self.assertEqual(output_old_name.cache.get_seq_length(), output_new_name.cache.get_seq_length())
+                    self.assertTrue(output_old_name.cache.get_seq_length() > 0)
 
 
 global_rng = random.Random()
