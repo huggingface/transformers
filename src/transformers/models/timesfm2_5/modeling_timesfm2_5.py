@@ -825,7 +825,7 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
             normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
             normalized_mean_preds = normalized_preds[:, :, decode_index]
             mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
-            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
+            quantile_indices = list(range(1, normalized_preds.shape[-1]))
             if quantile_indices:
                 index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
                 quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)

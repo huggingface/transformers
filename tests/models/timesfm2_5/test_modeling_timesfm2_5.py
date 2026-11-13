@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from parameterized import parameterized
 
 from transformers import TimesFm2_5Config, is_torch_available
@@ -148,6 +149,46 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict, window_size=3)
         batch_size = inputs_dict["past_values"].shape[0]
         self.assertEqual(results.mean_predictions.shape, torch.Size([batch_size, config.horizon_length]))
+
+    def test_loss_quantile_channel_alignment(self):
+        # Quantile loss should be computed across channels 1: (matching config.quantiles)
+        # rather than indexing channels != decode_index (which erroneously passed point forecast channel 0).
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        future_values = torch.randn(inputs_dict["past_values"].shape[0], config.horizon_length, device=torch_device)
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.eval()
+
+        orig_revin = model.model._revin
+        captured = {}
+
+        def spy_revin(hidden_states, loc, scale, reverse=False, mask=None):
+            if reverse and hidden_states.dim() == 3 and hidden_states.shape[-1] == len(config.quantiles) + 1:
+                captured["ff"] = hidden_states.detach().clone()
+                captured["mu"] = loc.detach().clone()
+                captured["sigma"] = scale.detach().clone()
+            return orig_revin(hidden_states, loc, scale, reverse=reverse, mask=mask)
+
+        model.model._revin = spy_revin
+
+        with torch.no_grad():
+            outputs = model(**inputs_dict, future_values=future_values)
+
+        self.assertIsNotNone(outputs.loss)
+
+        ff = captured["ff"][:, : config.horizon_length]
+        norm_targets = orig_revin(future_values, captured["mu"], captured["sigma"], reverse=False)
+        decode_index = min(config.decode_index, ff.shape[-1] - 1)
+        expected_mse = F.mse_loss(ff[:, :, decode_index], norm_targets)
+
+        expected_quantile_losses = []
+        for i, q in enumerate(config.quantiles):
+            pred_q = ff[..., i + 1]
+            err = norm_targets - pred_q
+            expected_quantile_losses.append(torch.max((q - 1) * err, q * err).mean())
+        expected_loss = expected_mse + torch.stack(expected_quantile_losses).mean()
+
+        torch.testing.assert_close(outputs.loss, expected_loss)
 
     @unittest.skip(reason="FA backend not yet supported because of forced masks")
     def test_sdpa_can_dispatch_on_flash(self):
