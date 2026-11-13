@@ -1331,6 +1331,8 @@
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
+      - local: model_doc/clm
+        title: CLM
       - local: model_doc/clvp
         title: CLVP
       - local: model_doc/cwm
