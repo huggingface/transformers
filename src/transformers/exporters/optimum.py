@@ -11,18 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Loading a model an optimum library exported: optimum-intel's OpenVINO IRs, optimum-onnx's ONNX graphs and optimum-executorch's
-programs. None writes export metadata, so it is rebuilt from the graphs and the model's config:
+"""Loading a model an optimum library exported: optimum-intel's OpenVINO IRs, optimum-onnx's ONNX graphs and
+optimum-executorch's programs. None writes export metadata, so it is rebuilt from the graphs and the model's config, with
+a warning saying so. What a graph takes that `generate` doesn't give it is supplied here, not in the runtime.
 
 - A causal LM runs through `generate`: optimum-intel's stateful one, optimum-onnx's taking and returning its cache
   (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
-- An optimum-intel encoder-decoder (Whisper's, T5's) runs through `generate` too.
+- An encoder-decoder runs through `generate` too: optimum-intel's (Whisper's, T5's), optimum-onnx's (an encoder and a
+  merged decoder) and optimum-executorch's (`encoder` and `text_decoder` methods).
+- An optimum-executorch multimodal model runs as the multimodal split (`token_embedding`, `vision_encoder` or
+  `audio_encoder`, then `text_decoder`).
 - An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
   returns a dict by its output names.
 
-Refused, as their graphs are laid out differently from this runtime's: multimodal exports (vision graphs split per
-model), optimum-onnx's encoder-decoders (separate decoder and cross caches) and decoders split in two graphs (each
-holding the weights), and optimum-executorch's other programs (no input names to bind).
+Refused, as their graphs are laid out differently from this runtime's: optimum-intel's multimodal exports (vision
+graphs split per model), optimum-onnx's decoders split in two graphs (each holding the weights), and optimum-executorch's
+other programs (encoders: no published export to check their inputs against).
 """
 
 from __future__ import annotations
@@ -168,13 +172,21 @@ def _load_openvino(pretrained_model_name_or_path, config, **kwargs) -> tuple[dic
 ONNX_FILES = tuple(
     f"{folder}{name}" for name in ("model.onnx", "decoder_model_merged.onnx") for folder in ("", "onnx/")
 )
-# An encoder-decoder's encoder: refused, its decoder's caches split differently from the runtime's.
+# An encoder-decoder's encoder, beside its merged decoder
 ONNX_ENCODER_FILES = ("encoder_model.onnx", "onnx/encoder_model.onnx")
 # A decoder split in two graphs, the prompt's and the steps', each holding the weights: refused.
 ONNX_SPLIT_FILES = ("decoder_with_past_model.onnx", "onnx/decoder_with_past_model.onnx")
 
-_ONNX_PAST = re.compile(r"past_key_values\.(\d+)\.(key|value)")
-_ONNX_PRESENT = re.compile(r"present\.(\d+)\.(key|value)")
+# A cache input or output, and for an encoder-decoder's, the half it belongs to; named as the runtime's cache flattens
+_ONNX_CACHE = re.compile(r"(past_key_values|present)\.(\d+)(?:\.(decoder|encoder))?\.(key|value)")
+_ONNX_CACHE_HALVES = {None: "cache.layers", "decoder": "cache.self_attention_cache.layers"}
+_ONNX_CACHE_HALVES["encoder"] = "cache.cross_attention_cache.layers"
+# An encoder-decoder's decoder inputs, under the names the runtime's decode graph takes
+_ONNX_DECODER_INPUTS = {
+    "input_ids": "decoder_input_ids",
+    "encoder_hidden_states": "encoder_outputs.last_hidden_state",
+    "encoder_attention_mask": "attention_mask",
+}
 
 
 def _read_onnx(pretrained_model_name_or_path, file: str, **kwargs: Unpack[DownloadKwargs]) -> onnx_ir.Model:
@@ -223,18 +235,27 @@ def _onnx_traced(value: onnx_ir.Value) -> dict[str, Any]:
 
 
 def _rename_onnx_cache(program: onnx_ir.Model) -> dict[int, tuple[int, int, int]]:
-    """Name the cache inputs and outputs as an export of the runtime does (`input.cache.layers.<i>.keys`, ...), and
-    return each layer's `(num_kv_heads, key_head_dim, value_head_dim)`."""
+    """Name the cache inputs and outputs as an export of the runtime does (`input.cache.layers.<i>.keys`, an
+    encoder-decoder's `input.cache.self_attention_cache.layers.<i>.keys` and `cross_attention_cache`), its outputs in
+    the order the runtime's cache flattens (an encoder-decoder's self-attention layers before its cross-attention
+    ones), and return each self-attention layer's `(num_kv_heads, key_head_dim, value_head_dim)`."""
+    graph = program.graph
     geometry: dict[int, list[int]] = {}
-    for value in program.graph.inputs:
-        if match := _ONNX_PAST.fullmatch(value.name):
-            index, kind = int(match.group(1)), match.group(2)
-            value.name = f"input.cache.layers.{index}.{kind}s"
-            heads, dim = value.shape[1], value.shape[3]
-            geometry.setdefault(index, [heads, dim, dim])[1 if kind == "key" else 2] = dim
-    for value in program.graph.outputs:
-        if match := _ONNX_PRESENT.fullmatch(value.name):
-            value.name = f"output.cache.layers.{match.group(1)}.{match.group(2)}s"
+    order = {}
+    for values, prefix in ((graph.inputs, "input"), (graph.outputs, "output")):
+        for value in values:
+            if (match := _ONNX_CACHE.fullmatch(value.name)) is None:
+                continue
+            _, index, half, kind = match.groups()
+            index = int(index)
+            value.name = f"{prefix}.{_ONNX_CACHE_HALVES[half]}.{index}.{kind}s"
+            order[value.name] = (half == "encoder", index, kind == "value")
+            if prefix == "input" and half != "encoder":
+                heads, dim = value.shape[1], value.shape[3]
+                geometry.setdefault(index, [heads, dim, dim])[1 if kind == "key" else 2] = dim
+    outputs = list(graph.outputs)
+    graph.outputs.clear()
+    graph.outputs.extend(sorted(outputs, key=lambda value: (value.name in order, order.get(value.name, ()))))
     return {index: tuple(shape) for index, shape in sorted(geometry.items())}
 
 
@@ -247,7 +268,7 @@ def _drop_use_cache_branch(program: onnx_ir.Model) -> None:
     flag = next((value for value in graph.inputs if value.name == "use_cache_branch"), None)
     if flag is None:
         return
-    past = next(value for value in graph.inputs if value.name == "input.cache.layers.0.keys")
+    past = next(value for value in graph.inputs if value.name.endswith("layers.0.keys") and "cross" not in value.name)
     # Shape + Gather rather than `Shape(start, end)`, which older opsets lack.
     shape = onnx_ir.node("Shape", [past])
     axis = onnx_ir.node("Constant", [], attributes={"value": onnx_ir.tensor(torch.tensor([2], dtype=torch.int64))})
@@ -259,20 +280,89 @@ def _drop_use_cache_branch(program: onnx_ir.Model) -> None:
     graph.inputs.remove(flag)
 
 
+def _cache_geometry(geometry: dict[int, tuple[int, int, int]]) -> dict[str, dict]:
+    return {"kv": {str(index): list(shape) for index, shape in geometry.items()}, "indexers": {}, "linear_states": {}}
+
+
+def _load_onnx_seq2seq(
+    pretrained_model_name_or_path, config, encoder_file: str, **kwargs
+) -> tuple[dict[str, ExportedComponent], bool]:
+    """An encoder-decoder: its encoder, and its merged decoder, which computes the cross-attention cache on the first
+    step (the runtime's cache starts with it empty) and takes it back after."""
+    from ..cache_utils import DynamicCache, EncoderDecoderCache
+    from ..modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
+    from .base import ExportedComponent
+    from .cache import materialize_cache_layers
+    from .exporter_dynamo import register_pytree_node
+
+    decoder_file = encoder_file.replace("encoder_model.onnx", "decoder_model_merged.onnx")
+    if _find(pretrained_model_name_or_path, (decoder_file,), **kwargs) is None:
+        raise ValueError(
+            f"{pretrained_model_name_or_path} is an optimum-onnx encoder-decoder whose decoder is split in two graphs, "
+            "the prompt's and the steps', each holding the weights, without the merged one: re-export it with "
+            "`OnnxExporter().export_for_generation`, whose one decode graph serves both."
+        )
+    hidden = BaseModelOutput(last_hidden_state=torch.zeros(1))
+    encoder = _read_onnx(pretrained_model_name_or_path, encoder_file, **kwargs)
+    encoder_inputs = [value.name for value in encoder.graph.inputs]
+    encoder_metadata = ExportMetadata(
+        architecture=_architecture(config),
+        export_dtype="float32",
+        export_device="cpu",
+        kwargs={value.name: _onnx_traced(value) for value in encoder.graph.inputs},
+        in_spec=treespec_dumps(tree_structure(((), dict.fromkeys(encoder_inputs, 0)))),
+        out_spec=treespec_dumps(tree_structure(hidden)),
+        export_config={"export_format": "onnx", "dynamic": True},
+    )
+
+    decoder = _read_onnx(pretrained_model_name_or_path, decoder_file, **kwargs)
+    geometry = _rename_onnx_cache(decoder)
+    for value in decoder.graph.inputs:
+        value.name = _ONNX_DECODER_INPUTS.get(value.name, value.name)
+    _drop_use_cache_branch(decoder)
+    past = next(value for value in decoder.graph.inputs if value.name.startswith("input.cache."))
+    dtype = getattr(torch, str(past.dtype.numpy()))
+    # The cache the runtime feeds, as it materializes it (the cross-attention half empty until the first step fills
+    # it): its pytree spec is the graph's.
+    cache = EncoderDecoderCache(DynamicCache(config=config), DynamicCache(config=config))
+    materialize_cache_layers(cache, 1, config, dtype, torch.device("cpu"), kv_geometry=geometry)
+    for cache_class in (EncoderDecoderCache, DynamicCache):
+        register_pytree_node(cache_class)
+    traced = {
+        name: _onnx_traced(value)
+        for value in decoder.graph.inputs
+        if (name := value.name) in ("attention_mask", "decoder_input_ids")
+    }
+    traced["encoder_outputs"] = {"container": "BaseModelOutput"}
+    traced["cache"] = {"container": "EncoderDecoderCache"}
+    decoder_inputs = {"attention_mask": 0, "decoder_input_ids": 0, "encoder_outputs": hidden, "cache": cache}
+    decoder_metadata = ExportMetadata(
+        architecture=_architecture(config),
+        export_dtype=str(dtype).removeprefix("torch."),
+        export_device="cpu",
+        kwargs=traced,
+        in_spec=treespec_dumps(tree_structure(((), decoder_inputs))),
+        out_spec=treespec_dumps(tree_structure(Seq2SeqLMOutput(logits=torch.zeros(1), cache=cache))),
+        export_config={"export_format": "onnx", "dynamic": True},
+        cache_geometry=_cache_geometry(geometry),
+    )
+    return {
+        "encoder_model": ExportedComponent(encoder, encoder_metadata),
+        "decoder_model": ExportedComponent(decoder, decoder_metadata),
+    }, True
+
+
 def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
     """A causal LM taking and returning its cache (inputs `input_ids`, `attention_mask`, maybe `position_ids`,
-    `past_key_values.*`; outputs `logits`, `present.*`), or an encoder."""
+    `past_key_values.*`; outputs `logits`, `present.*`), an encoder-decoder, or an encoder."""
     from ..cache_utils import DynamicCache
     from ..modeling_outputs import CausalLMOutputWithPast
     from .base import ExportedComponent
     from .cache import materialize_cache_layers
     from .exporter_dynamo import register_pytree_node
 
-    if _find(pretrained_model_name_or_path, ONNX_ENCODER_FILES, **kwargs) is not None:
-        raise ValueError(
-            f"{pretrained_model_name_or_path} is an optimum-onnx encoder-decoder, whose decoder's caches are split "
-            "differently from this runtime's: re-export it with `OnnxExporter().export_for_generation`."
-        )
+    if (encoder_file := _find(pretrained_model_name_or_path, ONNX_ENCODER_FILES, **kwargs)) is not None:
+        return _load_onnx_seq2seq(pretrained_model_name_or_path, config, encoder_file, **kwargs)
     file = _find(pretrained_model_name_or_path, ONNX_FILES, **kwargs)
     if file is None:
         raise ValueError(
@@ -322,11 +412,7 @@ def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[st
         in_spec=treespec_dumps(tree_structure(((), {**dict.fromkeys(inputs, 0), "cache": cache}))),
         out_spec=treespec_dumps(tree_structure(CausalLMOutputWithPast(logits=torch.zeros(1), cache=cache))),
         export_config=export_config,
-        cache_geometry={
-            "kv": {str(index): list(shape) for index, shape in geometry.items()},
-            "indexers": {},
-            "linear_states": {},
-        },
+        cache_geometry=_cache_geometry(geometry),
     )
     return {"model": ExportedComponent(program, metadata)}, True
 
@@ -445,7 +531,17 @@ def _load_executorch(pretrained_model_name_or_path, config, **kwargs) -> tuple[d
 class _OptimumGenerationMixin:
     """What an optimum export's decode graph takes that `generate` doesn't give it: an all-ones padding mask, which
     `generate` drops (optimum-intel's and optimum-onnx's causal LMs take one), and `cache_position`, which it no longer
-    passes (optimum-executorch's graphs take one)."""
+    passes (optimum-executorch's graphs take one). And the cross-attention cache an optimum-onnx merged decoder returns
+    placeholders for once it has one."""
+
+    def _call(self, **kwargs) -> Any:
+        outputs = super()._call(**kwargs)
+        given, cache = kwargs.get("cache"), getattr(outputs, "cache", None)
+        if hasattr(given, "cross_attention_cache") and hasattr(cache, "cross_attention_cache"):
+            for layer, given_layer in zip(cache.cross_attention_cache.layers, given.cross_attention_cache.layers):
+                if layer.keys.shape[0] == 0:
+                    layer.keys, layer.values = given_layer.keys, given_layer.values
+        return outputs
 
     def _validate_model_kwargs(self, model_kwargs: dict):
         """Also accept a processor's token types (Gemma 3's), which a graph with its attention built in doesn't take."""

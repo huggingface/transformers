@@ -141,9 +141,20 @@ class OptimumOnnxTest(unittest.TestCase):
     def test_encoder(self):
         _check_encoder(self, "Xenova/bge-base-en-v1.5", "optimum-onnx")
 
-    def test_encoder_decoder_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "encoder-decoder"):
-            ExportedModel.from_pretrained("onnx-internal-testing/tiny-random-T5ForConditionalGeneration-ONNX")
+    def test_encoder_decoder(self):
+        """An encoder and a merged decoder, which fills the cross-attention cache on the first step, through
+        `generate` as eager's."""
+        from transformers import T5ForConditionalGeneration
+
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        inputs = tokenizer(["translate English to German: The house is wonderful."], return_tensors="pt")
+        generation_config = GenerationConfig(max_new_tokens=16, do_sample=False, decoder_start_token_id=0)
+        model = _load(self, "Xenova/t5-small", "optimum-onnx")
+        self.assertIsInstance(model, ExportedModelForSeq2SeqLM)
+        eager = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").eval()
+        with torch.no_grad():
+            expected = GenerationMixin.generate(eager, **inputs, generation_config=generation_config)
+        self.assertEqual(model.generate(**inputs, generation_config=generation_config).tolist(), expected.tolist())
 
     def test_split_decoder_is_refused(self):
         with self.assertRaisesRegex(ValueError, "split in two graphs"):

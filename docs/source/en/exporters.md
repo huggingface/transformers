@@ -270,13 +270,14 @@ Hub. None writes export metadata, so it is rebuilt from the graphs and the model
 
 - A causal LM runs through `generate`: optimum-intel's stateful one, optimum-onnx's taking and returning its cache
   (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
-- An optimum-intel encoder-decoder (Whisper) runs through `generate` too.
+- An encoder-decoder (Whisper, T5) runs through `generate` too, from all three.
+- An optimum-executorch multimodal model (Gemma 3) runs as the multimodal split.
 - An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
   returns a dict by its output names.
 
-Multimodal exports, optimum-onnx's encoder-decoders and decoders split in two graphs, and optimum-executorch's other
-programs aren't read: their graphs are laid out differently. Re-export the model with [`OpenVINOExporter`],
-[`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
+optimum-intel's multimodal exports, optimum-onnx's decoders split in two graphs, and optimum-executorch's encoders
+aren't read: their graphs are laid out differently. Loading warns that the metadata was rebuilt: re-export the model
+with [`OpenVINOExporter`], [`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
 
 ```python
 model = ExportedModel.from_pretrained("OpenVINO/Qwen3-0.6B-int4-ov", device="cpu")  # an ExportedModelForCausalLM
