@@ -71,18 +71,19 @@ def _check_encoder(test, repo, library):
     test.assertGreater(torch.nn.functional.cosine_similarity(embedding, expected, dim=-1).item(), 0.999)
 
 
-def _check_names_the_cats(test, repo, library, processor_repo=None):
-    """A Gemma 3 export, asked what animal a COCO image shows, answers cats."""
+def _check_names_the_cats(test, repo, library, processor_repo=None, max_new_tokens=6, trust_remote_code=False):
+    """A multimodal export, asked what animal a COCO image shows, answers cats."""
     from transformers.image_utils import load_image
 
-    processor = AutoProcessor.from_pretrained(processor_repo or repo)
+    processor = AutoProcessor.from_pretrained(processor_repo or repo, trust_remote_code=trust_remote_code)
     image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
     content = [{"type": "image"}, {"type": "text", "text": "What animal is in this picture? Answer in one word."}]
     text = processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
     inputs = processor(text=text, images=image, return_tensors="pt")
     model = _load(test, repo, library)
     test.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
-    generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=6, do_sample=False))
+    generation_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False)
+    generated = model.generate(**inputs, generation_config=generation_config)
     answer = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     test.assertIn("cat", answer.lower())
 
@@ -131,13 +132,23 @@ class OptimumIntelTest(unittest.TestCase):
         attention masks and window index the image grid gives."""
         _check_names_the_cats(self, "OpenVINO/Qwen2.5-VL-7B-Instruct-int4-ov", "optimum-intel")
 
-    def test_multimodal_split_into_more_graphs_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "more graphs than one per modality"):
-            ExportedModel.from_pretrained("OpenVINO/Qwen3-VL-2B-Instruct-fp16-ov", device="cpu")
+    def test_multimodal_with_vision_position_embeddings(self):
+        """Qwen3-VL's vision tower, split in three graphs, is fused into one: its position embeddings at the bilinear
+        indices of the image grid, weighted and summed, and its merger's deepstack features fed to the language model."""
+        _check_names_the_cats(self, "OpenVINO/Qwen3-VL-2B-Instruct-int4-ov", "optimum-intel")
 
-    def test_multimodal_packing_crops_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "image_newline"):
-            ExportedModel.from_pretrained("OpenVINO/llava-v1.6-mistral-7b-hf-int4-ov", device="cpu")
+    def test_multimodal_packing_crops(self):
+        """LLaVA-NeXT's crops, packed with the `image_newline` its config holds."""
+        _check_names_the_cats(self, "OpenVINO/llava-v1.6-mistral-7b-hf-int4-ov", "optimum-intel")
+
+    def test_multimodal_with_raster_patches(self):
+        """LFM3-VL's vision graph, run per image on its patches in raster order (its processor is remote code)."""
+        repo = "OpenVINO/LFM3-VL-2B-int4-gq-ov"
+        _check_names_the_cats(self, repo, "optimum-intel", max_new_tokens=60, trust_remote_code=True)
+
+    def test_multimodal_vision_graph_taking_indices_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "not just"):
+            ExportedModel.from_pretrained("OpenVINO/MiniCPM-V-4.7-1B-int4-ov", device="cpu")
 
 
 @slow

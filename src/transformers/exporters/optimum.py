@@ -19,21 +19,19 @@ a warning saying so. What a graph takes that `generate` doesn't give it is suppl
   (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
 - An encoder-decoder runs through `generate` too: optimum-intel's (Whisper's, T5's), optimum-onnx's (an encoder and a
   merged decoder) and optimum-executorch's (`encoder` and `text_decoder` methods).
-- A multimodal model runs as the multimodal split when it is laid out as one: optimum-intel's with text embeddings, one
-  graph per modality taking only its data, and the language model (Gemma 3's, Pixtral's), or with its vision tower
-  split in two graphs (Qwen2-VL's, Qwen2.5-VL's), fused into one here and fed the rotary embeddings, attention masks and
-  window index the image grid gives; and optimum-executorch's (`token_embedding`, `vision_encoder` or `audio_encoder`,
-  then `text_decoder`).
+- A multimodal model runs as the multimodal split. optimum-intel's text embeddings, one graph per modality taking only
+  its data, and language model load as they are (Gemma 3's, Pixtral's); a vision tower split into more graphs is
+  fused into one here and fed what optimum-intel computes in Python between them (Qwen2-VL's and Qwen2.5-VL's merger,
+  Qwen3-VL's position embeddings too, with its deepstack features stacked as its language model takes them); LLaVA-NeXT's
+  crops are packed with the `image_newline` its config holds, and LFM3-VL's vision graph runs per image on raster
+  patches. optimum-executorch's take `token_embedding`, `vision_encoder` or `audio_encoder`, then `text_decoder`.
 - An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
   returns a dict by its output names.
 
 Refused, saying why, as their graphs are laid out differently from this runtime's:
 
-- optimum-intel multimodal exports whose vision tower is split into more graphs than a merger fed by the image grid
-  (Qwen3-VL's and Qwen3.5's position-embedding graph, Phi's projections, MiniCPM-V 4.5's resampler): what flows between
-  them is computed in Python by code specific to each model, where this runtime keeps the tower in one graph fed the
-  grid's indices by helpers shared across models; whose vision graph takes more than its data (MiniCPM-V 4.7's position
-  and window indices); or whose crops are packed with a weight no graph returns (LLaVA-NeXT's `image_newline`).
+- optimum-intel multimodal exports with graphs this runtime has no glue for (Phi-3.5/4's projections, MiniCPM-V 4.5's
+  resampler), or whose vision graph takes indices computed in Python besides its data (MiniCPM-V 4.7's).
 - optimum-onnx decoders split in two graphs, the prompt's and the steps', each holding the weights.
 - optimum-executorch encoders: no published export to check their inputs against.
 """
@@ -99,7 +97,14 @@ _OPENVINO_SEQ2SEQ_DECODER_INPUTS = {
     "input_ids": "decoder_input_ids",
     "encoder_hidden_states": "encoder_outputs.last_hidden_state",
 }
-_OPENVINO_DTYPES = {"i64": "int64", "i32": "int32", "f32": "float32", "f16": "float16", "bf16": "bfloat16"}
+_OPENVINO_DTYPES = {
+    "i64": "int64",
+    "i32": "int32",
+    "f32": "float32",
+    "f16": "float16",
+    "bf16": "bfloat16",
+    "boolean": "bool",
+}
 # A multimodal export's modality graphs, by the inputs the runtime feeds them: one graph per modality, whose features
 # scatter straight into the prompt's placeholder rows
 _OPENVINO_MODALITY_INPUTS = {
@@ -109,7 +114,16 @@ _OPENVINO_MODALITY_INPUTS = {
 # A vision tower split in two graphs (Qwen2-VL's, Qwen2.5-VL's): the patch embeddings, then a merger taking what the
 # image grid gives (rotary embeddings, attention masks, window index), computed here; fused into one graph
 OPENVINO_VISION_MERGER = "vision_embeddings_merger_model"
-_OPENVINO_MERGER_GLUE = {"attention_mask", "rotary_pos_emb", "window_index", "window_attention_mask"}
+# Qwen3-VL's third vision graph: the learned position embeddings it interpolates to each image's grid
+OPENVINO_VISION_POSITIONS = "vision_embeddings_pos_model"
+_OPENVINO_MERGER_GLUE = {
+    "attention_mask",
+    "rotary_pos_emb",
+    "window_index",
+    "window_attention_mask",
+    "position_index",
+    "position_weights",
+}
 
 
 def _read_openvino(pretrained_model_name_or_path, file: str, **kwargs) -> openvino.Model:
@@ -141,18 +155,62 @@ def _openvino_metadata(config, kwargs: dict[str, Any], outputs: Any, stateful: b
     )
 
 
-def _fuse_openvino_vision(embeddings: openvino.Model, merger: openvino.Model) -> openvino.Model:
-    """One vision graph from a tower split in two: the merger's `hidden_states` input fed the embeddings' output, and
-    the embeddings' input named `pixel_values`, as the runtime feeds it."""
+def _fuse_openvino_vision(
+    embeddings: openvino.Model, merger: openvino.Model, positions: openvino.Model | None = None
+) -> openvino.Model:
+    """One vision graph from a tower split in two or three: the merger's `hidden_states` input fed the embeddings'
+    output (plus, for Qwen3-VL, the position embeddings at the bilinear `position_index`, weighted by
+    `position_weights` and summed), and the embeddings' input named `pixel_values`, as the runtime feeds it."""
     import openvino
+    import openvino.opset13 as ops
 
     hidden_states = merger.input("hidden_states").get_node()
     source = embeddings.get_results()[0].input_value(0)
+    parameters = list(embeddings.get_parameters())
+    if positions is not None:
+        positions.input(0).get_tensor().set_names({"position_index"})
+        weights = ops.parameter([4, -1], openvino.Type.f32, name="position_weights")
+        weights.output(0).get_tensor().set_names({"position_weights"})
+        looked_up = positions.get_results()[0].input_value(0)
+        weighted = ops.multiply(looked_up, ops.unsqueeze(weights, ops.constant(-1)))
+        source = ops.add(source, ops.reduce_sum(weighted, ops.constant(0), keep_dims=False)).output(0)
+        parameters += [*positions.get_parameters(), weights]
     for target in hidden_states.output(0).get_target_inputs():
         target.replace_source_output(source)
     embeddings.input(0).get_tensor().set_names({"pixel_values"})
-    parameters = [*embeddings.get_parameters(), *(p for p in merger.get_parameters() if p is not hidden_states)]
+    parameters += [p for p in merger.get_parameters() if p is not hidden_states]
     return openvino.Model(merger.get_results(), parameters, "vision_embeddings_model")
+
+
+def _position_interpolation(vision_config, grid_thw: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Qwen3-VL's learned position embeddings, bilinearly interpolated to each image's grid: the 4 corner indices and
+    weights of every patch, `[4, patches]`, already in the order the merger takes patches (merge blocks)."""
+    side = int(vision_config.num_position_embeddings**0.5)
+    merge = vision_config.spatial_merge_size
+    indices, weights = [], []
+    for temporal, height, width in grid_thw.tolist():
+        rows, columns = torch.linspace(0, side - 1, height), torch.linspace(0, side - 1, width)
+        row_floor, column_floor = rows.int(), columns.int()
+        row_ceil, column_ceil = (row_floor + 1).clip(max=side - 1), (column_floor + 1).clip(max=side - 1)
+        row_fraction, column_fraction = rows - row_floor, columns - column_floor
+        corners = [
+            (row_floor, column_floor),
+            (row_floor, column_ceil),
+            (row_ceil, column_floor),
+            (row_ceil, column_ceil),
+        ]
+        image_indices = torch.stack([(r[:, None] * side + c[None]).flatten() for r, c in corners])
+        row_weights = [1 - row_fraction, 1 - row_fraction, row_fraction, row_fraction]
+        column_weights = [1 - column_fraction, column_fraction, 1 - column_fraction, column_fraction]
+        image_weights = torch.stack([(r[:, None] * c[None]).flatten() for r, c in zip(row_weights, column_weights)])
+
+        def merge_order(values):
+            values = values.repeat(1, temporal).view(4, temporal, height // merge, merge, width // merge, merge)
+            return values.permute(0, 1, 2, 4, 3, 5).flatten(1)
+
+        indices.append(merge_order(image_indices))
+        weights.append(merge_order(image_weights))
+    return torch.cat(indices, dim=1).long(), torch.cat(weights, dim=1).float()
 
 
 def _vision_glue(config, grid_thw: torch.Tensor, traced: dict) -> dict[str, torch.Tensor]:
@@ -178,6 +236,8 @@ def _vision_glue(config, grid_thw: torch.Tensor, traced: dict) -> dict[str, torc
         "rotary_pos_emb": (positions[..., None].float() * inv_freq).flatten(1),
         "attention_mask": block_mask(cu_seqlens),
     }
+    if "position_index" in traced:
+        glue["position_index"], glue["position_weights"] = _position_interpolation(vision, grid_thw)
     if "window_index" in traced:
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw, merge_size, vision.window_size, vision.patch_size
@@ -185,6 +245,21 @@ def _vision_glue(config, grid_thw: torch.Tensor, traced: dict) -> dict[str, torc
         glue["window_index"] = window_index
         glue["window_attention_mask"] = block_mask(torch.unique_consecutive(cu_window_seqlens))
     return {name: value for name, value in glue.items() if name in traced}
+
+
+def _raster_features(config, runner, pixel_values: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    """Features from a vision graph taking one image's patches in raster order, `[T, H, W, C]` (LFM3-VL's), run per
+    image on the processor's flattened patches, which come in merge-block order."""
+    merge = getattr(config, "vision_spatial_merge_size", None) or config.downsample_factor
+    features, offset = [], 0
+    for temporal, height, width in grid_thw.tolist():
+        patches = pixel_values[offset : offset + temporal * height * width]
+        offset += temporal * height * width
+        patches = patches.view(temporal, height // merge, width // merge, merge, merge, -1)
+        patches = patches.permute(0, 1, 3, 2, 4, 5).reshape(temporal, height, width, -1)
+        image_features = runner(pixel_values=patches.float(), share_outputs=True)
+        features.append(image_features.reshape(-1, image_features.shape[-1]))
+    return torch.cat(features)
 
 
 def _load_openvino_multimodal(
@@ -205,12 +280,17 @@ def _load_openvino_multimodal(
         if file.startswith("openvino_") and file.endswith("_model.xml")
     }
     reason = None
-    merger = None
+    merger = positions = None
     if OPENVINO_VISION_MERGER in graphs:
         merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_MERGER}.xml", **kwargs)
         glue = {port.get_any_name() for port in merger.inputs} - {"hidden_states"}
         if glue <= _OPENVINO_MERGER_GLUE:
             graphs = graphs - {OPENVINO_VISION_MERGER}
+            if OPENVINO_VISION_POSITIONS in graphs:
+                positions = _read_openvino(
+                    pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_POSITIONS}.xml", **kwargs
+                )
+                graphs = graphs - {OPENVINO_VISION_POSITIONS}
         else:
             merger = None
     if extra := sorted(graphs - {"text_embeddings_model", "language_model", *_OPENVINO_MODALITY_INPUTS}):
@@ -220,8 +300,8 @@ def _load_openvino_multimodal(
             "by code specific to the model, while this runtime takes one graph per modality, whose features scatter "
             "straight into the prompt"
         )
-    elif getattr(config, "image_grid_pinpoints", None) is not None:
-        reason = "its image crops are packed with an `image_newline` weight none of its graphs return"
+    elif getattr(config, "image_grid_pinpoints", None) is not None and getattr(config, "image_newline", None) is None:
+        reason = "its image crops are packed with an `image_newline` weight neither its graphs nor its config hold"
     elif getattr(config, "image_token_id", None) is None:
         reason = "its config names no image placeholder token for the features to fill"
     components = {}
@@ -230,15 +310,24 @@ def _load_openvino_multimodal(
             continue
         program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
         if name == "vision_embeddings_model" and merger is not None:
-            program = _fuse_openvino_vision(program, merger)
+            program = _fuse_openvino_vision(program, merger, positions)
+        for port in program.inputs:
+            # The image grid, which the runtime feeds a modality graph as `grid_thw`
+            if port.get_any_name() == "image_grid_thw":
+                port.get_tensor().set_names({"grid_thw"})
         port_names = [port.get_any_name() for port in program.inputs]
-        data_ports = [port for port in port_names if merger is None or port not in _OPENVINO_MERGER_GLUE]
+        data_ports = [
+            port for port in port_names if port != "grid_thw" and (merger is None or port not in _OPENVINO_MERGER_GLUE)
+        ]
         if data_ports != list(input_names):
             reason = f"its {name} takes {port_names}, not just {list(input_names)}"
             break
-        metadata = _openvino_metadata(
-            config, {port: program.input(port) for port in port_names}, torch.zeros(1), False
+        # A merger returning deepstack features too (Qwen3-VL's) returns them as the runtime reads them
+        outputs = [port.get_any_name() for port in program.outputs]
+        returns = (
+            torch.zeros(1) if len(outputs) == 1 else {"features": torch.zeros(1), "deepstack_features": torch.zeros(1)}
         )
+        metadata = _openvino_metadata(config, {port: program.input(port) for port in port_names}, returns, False)
         components[name] = ExportedComponent(program, metadata)
     if reason is not None:
         raise ValueError(
@@ -253,6 +342,11 @@ def _load_openvino_multimodal(
     language = _read_openvino(pretrained_model_name_or_path, OPENVINO_LANGUAGE_MODEL_FILE, **kwargs)
     inputs = {port.get_any_name(): port for port in language.inputs if port.get_any_name() != "beam_idx"}
     inputs["cache"] = {"container": "DynamicCache"}
+    if "deepstack_visual_embeds" in inputs:
+        # By layer, as the runtime builds them; `_OptimumGenerationMixin._call` stacks them as the graph takes them
+        layers = len(getattr(config.vision_config, "deepstack_visual_indexes", ()))
+        port = _openvino_traced(inputs["deepstack_visual_embeds"])
+        inputs["deepstack_visual_embeds"] = {"items": [{**port, "rank": 2, "shape": port["shape"][1:]}] * layers}
     metadata = _openvino_metadata(config, inputs, CausalLMOutputWithPast(logits=torch.zeros(1)), stateful=True)
     components["language_model"] = ExportedComponent(language, metadata)
     return components, True
@@ -672,13 +766,29 @@ class _OptimumGenerationMixin:
     placeholders for once it has one, and what a fused Qwen-VL vision graph takes from the image grid."""
 
     def _features(self, spec, runner, kwargs: dict):
-        """A fused Qwen-VL vision graph also takes what its image grid gives (`_vision_glue`)."""
+        """What an optimum-intel vision graph leaves around it: a fused Qwen-VL one also takes what its image grid gives
+        (`_vision_glue`), LFM3-VL's runs per image on raster patches (`_raster_features`), and LLaVA-NeXT's crops are
+        packed with the `image_newline` its config holds."""
         traced = runner.metadata.kwargs
-        if "rotary_pos_emb" in traced and kwargs.get(spec.grid_key) is not None:
-            kwargs = {**kwargs, **_vision_glue(self.config, kwargs[spec.grid_key], traced)}
-        return super()._features(spec, runner, kwargs)
+        grid = kwargs.get(spec.grid_key) if spec.grid_key is not None else None
+        if "rotary_pos_emb" in traced and grid is not None:
+            kwargs = {**kwargs, **_vision_glue(self.config, grid, traced)}
+        pixel_values = kwargs.get("pixel_values")
+        if traced.get("pixel_values", {}).get("rank") == 4 and grid is not None and pixel_values.dim() == 2:
+            return _raster_features(self.config, runner, pixel_values, grid), None
+        features, layers = super()._features(spec, runner, kwargs)
+        newline = getattr(self.config, "image_newline", None)
+        if newline is not None and kwargs.get("image_sizes") is not None and features.dim() == 3:
+            from .decompose import pack_anyres_features
+
+            features = pack_anyres_features(self.config, features, kwargs["image_sizes"], torch.tensor(newline))
+        return features, layers
 
     def _call(self, **kwargs) -> Any:
+        deepstack = kwargs.get("deepstack_visual_embeds")
+        if isinstance(deepstack, (list, tuple)) and self.export_format == "openvino":
+            # optimum-intel's language model takes the layers stacked
+            kwargs["deepstack_visual_embeds"] = torch.stack(list(deepstack))
         outputs = super()._call(**kwargs)
         given, cache = kwargs.get("cache"), getattr(outputs, "cache", None)
         if hasattr(given, "cross_attention_cache") and hasattr(cache, "cross_attention_cache"):
@@ -745,7 +855,12 @@ def optimum_library(pretrained_model_name_or_path, **kwargs: Unpack[DownloadKwar
 
 
 def load_optimum_export(
-    pretrained_model_name_or_path, cls: type, device=None, runner_kwargs=None, **kwargs: Unpack[DownloadKwargs]
+    pretrained_model_name_or_path,
+    cls: type,
+    device=None,
+    runner_kwargs=None,
+    trust_remote_code: bool = False,
+    **kwargs: Unpack[DownloadKwargs],
 ) -> ExportedModel:
     """An optimum export as an [`ExportedModel`] of `cls`, on `device`: its metadata rebuilt from its graphs and the
     model's config, with a warning that it is.
@@ -772,7 +887,7 @@ def load_optimum_export(
         f"output class, and it can't be saved again. Re-export the model with `{exporter}` (`export`, or "
         "`export_for_generation` for a generative model) and `save_pretrained` it for the full runtime."
     )
-    config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+    config = AutoConfig.from_pretrained(pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs)
     try:
         generation_config = GenerationConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
     except OSError:

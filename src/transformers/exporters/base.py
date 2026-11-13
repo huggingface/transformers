@@ -292,7 +292,9 @@ class ExportedModel(PushToHubMixin):
             # An optimum library's export, which writes no manifest, loads off its graphs
             from .optimum import load_optimum_export
 
-            return load_optimum_export(pretrained_model_name_or_path, cls, device, runner_kwargs, **download_kwargs)
+            return load_optimum_export(
+                pretrained_model_name_or_path, cls, device, runner_kwargs, trust_remote_code, **download_kwargs
+            )
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
         if manifest.get("schema_version", 1) > EXPORT_SCHEMA_VERSION:
             logger.warning(
