@@ -190,6 +190,18 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "SeamlessM4Tv2ForSpeechToSpeech": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
         "SeamlessM4Tv2ForSpeechToText": "Same `SymBool` `is_causal` as `SeamlessM4TForSpeechToSpeech`.",
     },
+    # torch.export, dynamic shapes: vision towers looping over images in Python, so the export only takes the traced
+    # image count and fails on new inputs with another one
+    "dynamo.dynamic": {
+        "Lfm2VlModel": "The getter and the SigLIP2 tower loop over images: the export keeps the traced image count.",
+        "Lfm2VlForConditionalGeneration": "Same per-image loops as `Lfm2VlModel`.",
+        "Mistral3Model": (
+            "`image_sizes` becomes a list of ints for Pixtral's per-image crops, so the image count is in the "
+            "export's input structure."
+        ),
+        "Mistral3ForConditionalGeneration": "Same `image_sizes` list as `Mistral3Model`.",
+        "Siglip2VisionModel": "The position embeddings are resized in a loop over images.",
+    },
     # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.

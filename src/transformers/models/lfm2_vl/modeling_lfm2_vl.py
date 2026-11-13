@@ -139,24 +139,6 @@ class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.Tensor | None = None
 
 
-def get_vision_unshuffle_index(
-    spatial_shapes: torch.Tensor, num_patches: int, factor: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index over the `(num_images * num_patches)` padded patch rows: one `(factor, num_tokens * factor)` patch
-    grid holding each projected token's `factor x factor` block, all images' tokens in order, which the projector's
-    `pixel_unshuffle` takes as one image. Popped from `kwargs` when precomputed, so the encoder avoids a per-image
-    `spatial_shapes.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("unshuffle_index", None)) is not None:
-        return index
-    blocks = []
-    for image, (height, width) in enumerate(spatial_shapes.tolist()):
-        index = torch.arange(height * width, device=spatial_shapes.device) + image * num_patches
-        index = index.reshape(height // factor, factor, width // factor, factor).permute(1, 0, 2, 3)
-        blocks.append(index.reshape(factor, -1))
-    return torch.cat(blocks, dim=1)
-
-
 @auto_docstring(
     custom_intro="""
     The Lfm2Vl model which consists of a vision backbone and a language model, without a language modeling head.
@@ -180,7 +162,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -190,13 +171,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             The spatial shapes of the input images.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
             The pixel attention mask of the input images.
-        return_flat (`bool`, *optional*, defaults to `False`):
-            Whether to return the features of all images as one tensor instead of one tensor per image.
         """
-        factor = self.config.downsample_factor
-        unshuffle_index = get_vision_unshuffle_index(
-            spatial_shapes, pixel_attention_mask.shape[-1], factor, kwargs=kwargs
-        )
         image_outputs = self.vision_tower(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
@@ -205,15 +180,27 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state
-        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[unshuffle_index]
-        image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
-        image_features = image_features.reshape(-1, image_features.shape[-1])
 
-        if return_flat:
-            image_outputs.pooler_output = image_features
-            return image_outputs
-        split_sizes = (spatial_shapes // factor).prod(-1).tolist()
-        image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
+        img_feature_lengths = pixel_attention_mask.sum(dim=1)
+        image_features = []
+
+        for img_idx in range(last_hidden_state.size(0)):
+            feature = last_hidden_state[img_idx]
+            # unpad the image representation
+            feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
+
+            # reshape to original height and width
+            feature_org_h, feature_org_w = spatial_shapes[img_idx]
+            feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
+
+            # project the image representation
+            img_embedding = self.multi_modal_projector(feature)
+
+            # flatten here to handle variable length in naflex
+            img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
+            image_features.append(img_embedding)
+
+        image_outputs.pooler_output = image_features
         return image_outputs
 
     def get_placeholder_mask(
