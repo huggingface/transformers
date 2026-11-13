@@ -266,10 +266,10 @@ class Olmo3Model(Olmo2Model):
                 "position_ids": position_ids,
             }
             # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
+            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
+            # full-attention-only configs (e.g. Bolmo-1B) have no `sliding_window`
+            if "sliding_attention" in self.config.layer_types:
+                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = {}
