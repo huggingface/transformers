@@ -664,6 +664,42 @@ class TestAppRoutes(unittest.TestCase):
         self.assertEqual(resp.headers["x-request-id"], "my-id")
 
 
+@require_serve
+class TestTranscriptionHandler(unittest.TestCase):
+    def _make_handler(self):
+        return TranscriptionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+
+    def test_missing_multipart_raises_import_error(self):
+        from transformers.utils.import_utils import is_multipart_available
+
+        handler = self._make_handler()
+        is_multipart_available.cache_clear()
+        try:
+            with patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=None):
+                with self.assertRaisesRegex(ImportError, "python-multipart"):
+                    asyncio.run(handler.handle_request(MagicMock()))
+        finally:
+            is_multipart_available.cache_clear()
+
+    def test_python_multipart_passes_availability_guard(self):
+        from transformers.utils.import_utils import is_multipart_available
+
+        handler = self._make_handler()
+        request = MagicMock()
+        request.form.return_value.__aenter__.side_effect = HTTPException(status_code=422, detail="sentinel")
+        is_multipart_available.cache_clear()
+        try:
+            with patch(
+                "transformers.utils.import_utils.importlib.util.find_spec",
+                side_effect=lambda name: object() if name == "python_multipart" else None,
+            ):
+                with self.assertRaises(HTTPException) as ctx:
+                    asyncio.run(handler.handle_request(request))
+                self.assertEqual(ctx.exception.detail, "sentinel")
+        finally:
+            is_multipart_available.cache_clear()
+
+
 @slow
 @require_serve
 class TestSystemOneEndpoint(ServeIntegrationTestCase):
