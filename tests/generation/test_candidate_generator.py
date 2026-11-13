@@ -136,9 +136,7 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
         )
 
         with torch.no_grad():
-            logits = assistant_model.get_output_embeddings()(
-                torch.tensor([[[1.0, 0, 0, 0]]], device=torch_device)
-            )
+            logits = assistant_model.get_output_embeddings()(torch.tensor([[[1.0, 0, 0, 0]]], device=torch_device))
         mapped_logits = translator.get_target_logits(logits)
         prompt = torch.tensor([[0]], device=torch_device)
         candidate = torch.cat((prompt, logits.argmax(-1)), dim=-1)
