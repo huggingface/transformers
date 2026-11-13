@@ -1086,6 +1086,42 @@ class TestDataCollatorForLanguageModelingWholeWordMask(DataCollatorTestMixin, un
         batch3 = collator3(features)
         self.assertFalse(np.all(batch1["input_ids"] == batch3["input_ids"]))
 
+    def test_seed_switch_return_tensors_preserves_rng_per_backend(self):
+        """Test switching between NumPy and PyTorch keeps separate seeded RNGs."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        input_tokens = [f"token_{i}" for i in range(998)]
+        tokenizer.add_tokens(input_tokens)
+        features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
+
+        collator = DataCollatorForLanguageModeling(tokenizer, seed=42)
+        np_ref = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors="np")
+        pt_ref = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors="pt")
+
+        # Switch np -> pt -> np -> pt via attribute mutation
+        collator.return_tensors = "np"
+        batch_np_1 = collator(features)
+        self.assertIsInstance(batch_np_1["input_ids"], np.ndarray)
+        np.testing.assert_array_equal(batch_np_1["input_ids"], np_ref(features)["input_ids"])
+
+        collator.return_tensors = "pt"
+        batch_pt_1 = collator(features)
+        self.assertIsInstance(batch_pt_1["input_ids"], torch.Tensor)
+        self.assertTrue(torch.equal(batch_pt_1["input_ids"], pt_ref(features)["input_ids"]))
+
+        # Switching back continues each backend's seeded sequence
+        batch_np_2 = collator(features, return_tensors="np")
+        self.assertIsInstance(batch_np_2["input_ids"], np.ndarray)
+        np.testing.assert_array_equal(batch_np_2["input_ids"], np_ref(features)["input_ids"])
+
+        batch_pt_2 = collator(features, return_tensors="pt")
+        self.assertIsInstance(batch_pt_2["input_ids"], torch.Tensor)
+        self.assertTrue(torch.equal(batch_pt_2["input_ids"], pt_ref(features)["input_ids"]))
+
+        # Explicit generator reset re-seeds from `seed`
+        collator.generator = None
+        batch_np_reset = collator(features, return_tensors="np")
+        np.testing.assert_array_equal(batch_np_reset["input_ids"], batch_np_1["input_ids"])
+
     def test_seed_multiworker_dataloader(self):
         """Test seed reproducibility with multi-worker DataLoader."""
         tokenizer = BertTokenizerFast(self.vocab_file)

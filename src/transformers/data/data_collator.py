@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import multiprocessing as mp
+import os
 import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -734,19 +735,22 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         self.random_replace_prob = float(self.random_replace_prob)
 
         self.generator = None
+        self._generators: dict[str, tuple[int, Any]] = {}
 
-    def get_generator(self, seed):
-        if self.return_tensors == "pt":
+    def get_generator(self, seed, return_tensors: str | None = None):
+        framework = return_tensors or self.return_tensors
+        if framework == "pt":
             import torch
 
             return torch.Generator().manual_seed(seed)
         else:
             return np.random.default_rng(seed)
 
-    def create_rng(self):
+    def create_rng(self, return_tensors: str | None = None):
+        framework = return_tensors or self.return_tensors
         if mp.current_process().name == "MainProcess":
             # If we are in the main process, we create a generator object with the seed
-            self.generator = self.get_generator(self.seed)
+            generator = self.get_generator(self.seed, return_tensors=framework)
         else:
             # If we are in a worker process (i.e using multiprocessing), we need to set a unique seed for each
             # worker's generator, generated as the main seed + the worker's ID.
@@ -764,15 +768,27 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 )
                 raise ValueError(error_string)
 
-            self.generator = self.get_generator(self.seed + worker_info.id)
+            generator = self.get_generator(self.seed + worker_info.id, return_tensors=framework)
+
+        self._generators[framework] = (os.getpid(), generator)
+        self.generator = generator
+
+    def _ensure_rng(self, framework: str) -> None:
+        if self.seed is None:
+            return
+        if self.generator is None:
+            self._generators.clear()
+        cached = self._generators.get(framework)
+        pid = os.getpid()
+        if cached is None or cached[0] != pid:
+            self.create_rng(return_tensors=framework)
+        else:
+            self.generator = cached[1]
 
     def torch_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed is not None and self.generator is None:
-            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
-            # If no seed supplied, we will use the global RNG
-            self.create_rng()
+        self._ensure_rng("pt")
 
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
@@ -863,10 +879,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed is not None and self.generator is None:
-            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
-            # If no seed supplied, we will use the global RNG
-            self.create_rng()
+        self._ensure_rng("np")
 
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
