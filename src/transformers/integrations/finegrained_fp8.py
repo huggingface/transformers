@@ -1146,14 +1146,10 @@ class Fp8Dequantize(ConversionOps):
                 # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
                 scale_rows, scale_cols = 1, 1
 
-            # Determine block size: check quantization config block size first if it matches
-            # the ceil convention (supporting partial last blocks like DeepSeek MLA kv_a_proj),
-            # falling back to grid division for exact divisions (mixed block shapes like MXFP4).
-            block = None
-            if self.hf_quantizer is not None and getattr(self.hf_quantizer, "quantization_config", None) is not None:
-                block = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
+            # Determine block size directly from the quantizer's configuration
+            block = self.hf_quantizer.quantization_config.weight_block_size
 
-    # Check if exact division applies (enabling the memory-efficient broadcast path)
+            # Check if exact division applies (enabling the memory-efficient broadcast path)
             is_exact_division = rows % scale_rows == 0 and cols % scale_cols == 0
 
             if (
@@ -1197,7 +1193,6 @@ class Fp8Dequantize(ConversionOps):
                 q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
                 s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
                 return (q * s).to(output_dtype).reshape(original_shape)
-
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:
             return None
