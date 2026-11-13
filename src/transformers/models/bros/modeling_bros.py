@@ -257,7 +257,6 @@ class BrosSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Bros
 class BrosSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -298,7 +297,6 @@ class BrosAttention(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Bros
 class BrosIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
