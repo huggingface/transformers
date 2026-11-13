@@ -198,7 +198,7 @@ class Mamba2ModelTester:
             input_ids[:, -1:],
             attention_mask=attention_mask[:, -1:],
             use_cache=True,
-            cache_params=outputs.cache_params,
+            cache=outputs.cache,
         )
         output_two = outputs.last_hidden_state
 
@@ -230,14 +230,14 @@ class Mamba2ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, cache_params=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, cache_params=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, cache_params=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, cache_params=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
