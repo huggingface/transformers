@@ -35,9 +35,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     apply_rotary_pos_emb_interleave,
 )
-from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -53,8 +53,27 @@ class Mistral4RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Mistral4RotaryEmbedding(GlmRotaryEmbedding):
-    pass
+class Mistral4RotaryEmbedding(LlamaRotaryEmbedding):
+    @staticmethod
+    def compute_default_rope_parameters(config: Mistral4Config, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation. As in the other MLA models,
+        RoPE is only applied to the `qk_rope_head_dim` channels of the queries and keys, so these are the frequencies'
+        dimension (`head_dim` is `qk_nope_head_dim + qk_rope_head_dim` for Mistral4).
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = config.qk_rope_head_dim
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
 
 
 class Mistral4MLP(Qwen2MoeMLP):
