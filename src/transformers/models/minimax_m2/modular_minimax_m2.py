@@ -34,12 +34,12 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRMSNorm,
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
 )
@@ -157,7 +157,7 @@ class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
         return hidden_states
 
 
-class MiniMaxM2RMSNorm(MixtralRMSNorm):
+class MiniMaxM2RMSNorm(LlamaRMSNorm):
     pass
 
 

@@ -1032,11 +1032,11 @@ class Gemma4TextAttention(nn.Module):
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         # Layers sharing kv states don't need any weight matrices
         if not self.is_kv_shared_layer:
-            self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(

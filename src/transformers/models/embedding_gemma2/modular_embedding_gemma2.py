@@ -50,12 +50,12 @@ from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3MLP, Gemma3TextModel, apply_rotary_pos_emb
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
     Gemma4Model,
     Gemma4MultimodalEmbedder,
     Gemma4PreTrainedModel,
-    Gemma4RMSNorm,
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
@@ -215,7 +215,7 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     initializer_range: float | None = 0.02
 
 
-class EmbeddingGemma2RMSNorm(Gemma4RMSNorm):
+class EmbeddingGemma2RMSNorm(Gemma3nRMSNorm):
     pass
 
 
@@ -326,9 +326,9 @@ class EmbeddingGemma2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,

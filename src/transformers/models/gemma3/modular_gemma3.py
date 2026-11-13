@@ -41,6 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -48,7 +49,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -245,9 +245,8 @@ class Gemma3MLP(Gemma2MLP):
         super().__init__(config)
 
 
-class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__(dim=dim, eps=eps)
+class Gemma3RMSNorm(GemmaRMSNorm):
+    pass
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -319,8 +318,8 @@ class Gemma3Attention(Gemma2Attention):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.is_causal = not self.config.use_bidirectional_attention
 
-        self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,

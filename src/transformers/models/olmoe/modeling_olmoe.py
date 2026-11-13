@@ -41,7 +41,7 @@ from .configuration_olmoe import OlmoeConfig
 
 @use_kernel_forward_from_hub("RMSNorm")
 class OlmoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-5) -> None:
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         OlmoeRMSNorm is equivalent to T5LayerNorm
         """

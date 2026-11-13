@@ -35,9 +35,9 @@ from ...utils.generic import TransformersKwargs, no_inherit_decorator
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..llama.modeling_llama import LlamaModel, eager_attention_forward
+from ..llama.modeling_llama import LlamaModel, LlamaRMSNorm, eager_attention_forward
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel, Qwen2MoeRMSNorm
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTopKRouter, apply_rotary_pos_emb
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts, Qwen3MoeSparseMoeBlock
 
@@ -179,7 +179,7 @@ class LagunaConfig(Qwen2MoeConfig):
             )
 
 
-class LagunaRMSNorm(Qwen2MoeRMSNorm):
+class LagunaRMSNorm(LlamaRMSNorm):
     pass
 
 

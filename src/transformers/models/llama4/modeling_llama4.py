@@ -105,16 +105,16 @@ class Llama4TextMLP(nn.Module):
 class Llama4TextL2Norm(torch.nn.Module):
     def __init__(self, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
 
 
 class Llama4TextRMSNorm(nn.Module):
@@ -123,18 +123,18 @@ class Llama4TextRMSNorm(nn.Module):
         Llama4RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.weight = nn.Parameter(torch.ones(hidden_size))
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Llama4Router(nn.Linear):

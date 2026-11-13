@@ -38,12 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_attr
+from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
     Cohere2MLP,
     eager_attention_forward,
 )
@@ -247,7 +247,7 @@ class CohereCompassMLP(Cohere2MLP):
     pass
 
 
-class CohereCompassLayerNorm(Cohere2LayerNorm):
+class CohereCompassLayerNorm(CohereLayerNorm):
     pass
 
 
