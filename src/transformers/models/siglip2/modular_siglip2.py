@@ -222,8 +222,6 @@ class Siglip2VisionEmbeddings(nn.Module):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
-            position_embedding_weights (`torch.Tensor`, *optional*):
-                The resizing weights from `get_vision_position_embedding_weights`, computed when not given.
         """
 
         # Apply patch embeddings to already patchified pixel values
