@@ -719,6 +719,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("xpu", 5): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("tpu", None): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
