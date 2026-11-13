@@ -120,7 +120,6 @@ class Data2VecAudioFeatureEncoder(Wav2Vec2FeatureEncoder):
             [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
         )
         self.gradient_checkpointing = False
-        self._requires_grad = True
 
 
 class Data2VecAudioFeatureProjection(Wav2Vec2FeatureProjection):

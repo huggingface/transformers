@@ -469,6 +469,18 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_training(*config_and_inputs)
 
+    @mark.torch_compile_test
+    def test_compile_feature_extractor_training(self):
+        # Regression test for #50527
+        torch.compiler.reset()
+        config, input_values, _ = self.model_tester.prepare_config_and_inputs()
+        model = Wav2Vec2Model(config).to(torch_device)
+        model.train()
+        compiled_fe = torch.compile(model.feature_extractor, fullgraph=True, backend="eager")
+        compiled_fe(input_values).sum().backward()
+        self.assertIsNotNone(model.feature_extractor.conv_layers[0].conv.weight.grad)
+        self.assertIsNotNone(model.feature_extractor.conv_layers[-1].conv.weight.grad)
+
     def test_seq_classifier_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
