@@ -33,27 +33,7 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-
-pipeline = pipeline(
-    task="translation",
-    model="facebook/mbart-large-50-many-to-many-mmt",
-    src_lang="en_XX",
-    tgt_lang="fr_XX",
-    device=0,
-)
-print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
-```
-
-</hfoption>
-<hfoption id="AutoModel">
+The example below demonstrates how to translate text with the [`AutoModel`] class.
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -69,10 +49,6 @@ encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
 generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
 print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ```
-
-</hfoption>
-</hfoptions>
-
 ## Notes
 
 - You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.

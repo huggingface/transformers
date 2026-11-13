@@ -35,22 +35,7 @@ You can find all the original MarianMT checkpoints under the [Language Technolog
 >
 > Click on the MarianMT models in the right sidebar for more examples of how to apply MarianMT to translation tasks.
 
-The example below demonstrates how to translate text using [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-
-pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", device=0)
-pipeline("Hello, how are you?")
-```
-
-</hfoption>
-
-<hfoption id="AutoModel">
+The example below demonstrates how to translate text with the [`AutoModel`] class.
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -63,10 +48,6 @@ inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
-
-</hfoption>
-</hfoptions>
-
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```python
