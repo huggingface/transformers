@@ -437,6 +437,28 @@ class ProcessorArgs:
         "shape": None,
     }
 
+    return_mm_token_type_ids = {
+        "description": """
+    Whether to return multimodal token type ids indicating multimodal placeholder token positions.
+    """,
+        "type": "bool",
+    }
+
+    return_text_replacement_offsets = {
+        "description": """
+    Whether to return character offsets for each multimodal placeholder and its replacement.
+    """,
+        "type": "bool",
+    }
+
+    load_audio_from_video = {
+        "description": """
+    Whether to load the audio track of the input videos. The audio tokens are interleaved with the video tokens
+    if the model supports it.
+    """,
+        "type": "bool",
+    }
+
     # Standard tokenizer arguments
     add_special_tokens = {
         "description": """
@@ -2210,6 +2232,27 @@ class ModelArgs:
         "shape": None,
     }
 
+    marks = {
+        "description": """
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
+    """,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in `Question.questions_types`.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
     position_embeddings = {
         "description": """
     Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
@@ -2387,6 +2430,24 @@ class ModelForArgs:
     Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
     config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
     loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForCausalLM:
+        labels = {
+            "description": """
+    Labels for computing the causal language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+    The labels are **shifted internally** so that `labels[..., 1:]` are used to predict `logits[..., :-1, :]`.
+    Pass unshifted labels matching `input_ids` (i.e. `labels = input_ids`). Do **not** shift the labels
+    yourself before passing them.
+
+    If the labels are already shifted (for example with sequence parallelism), pass them as the `shift_labels`
+    keyword argument and they are used as is. `labels` must still be passed for the loss to be computed.
     """,
             "shape": "of shape `(batch_size, sequence_length)`",
             "type": "torch.LongTensor",

@@ -148,6 +148,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("doge", "DogeModel"),
         ("donut-swin", "DonutSwinModel"),
         ("dots1", "Dots1Model"),
+        ("dots3_note", "Dots3NoteModel"),
+        ("dots3_note_text", "Dots3NoteTextModel"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("edgetam", "EdgeTamModel"),
@@ -243,6 +245,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gradium_phonon_tts", "GradiumPhononTTSModel"),
         ("granite", "GraniteModel"),
         ("granite4_vision", "Granite4VisionModel"),
+        ("granite_docling", "GraniteDoclingModel"),
+        ("granite_docling_text", "GraniteDoclingTextModel"),
+        ("granite_docling_vision", "GraniteDoclingVisionModel"),
         ("granite_speech", "GraniteSpeechModel"),
         ("granite_speech5_ctc", "GraniteSpeech5ForCTC"),
         ("granite_speech5_encoder", "GraniteSpeech5Encoder"),
@@ -283,8 +288,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("inkling_text", "InklingTextModel"),
         ("instructblip", "InstructBlipModel"),
         ("instructblipvideo", "InstructBlipVideoModel"),
+        ("internlm3", "LlamaModel"),
         ("internvl", "InternVLModel"),
         ("internvl_vision", "InternVLVisionModel"),
+        ("iquestcoder", "LlamaModel"),
         ("jais2", "Jais2Model"),
         ("jamba", "JambaModel"),
         ("janus", "JanusModel"),
@@ -308,6 +315,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("lfm2", "Lfm2Model"),
         ("lfm2_moe", "Lfm2MoeModel"),
         ("lfm2_vl", "Lfm2VlModel"),
+        ("lfm3", "Lfm3Model"),
+        ("lfm3_vl", "Lfm3VlModel"),
+        ("lfm3_vl_vision", "Lfm3VlVisionModel"),
         ("lightglue", "LightGlueForKeypointMatching"),
         ("lighton_ocr", "LightOnOcrModel"),
         ("lilt", "LiltModel"),
@@ -784,6 +794,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("diffllama", "DiffLlamaForCausalLM"),
         ("doge", "DogeForCausalLM"),
         ("dots1", "Dots1ForCausalLM"),
+        ("dots3_note", "Dots3NoteForCausalLM"),
+        ("dots3_note_text", "Dots3NoteForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("emu3", "Emu3ForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
@@ -838,6 +850,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("hy_v4", "HYV4ForCausalLM"),
         ("hyperclovax", "HyperCLOVAXForCausalLM"),
         ("inkling_text", "InklingForCausalLM"),
+        ("internlm3", "LlamaForCausalLM"),
+        ("iquestcoder", "LlamaForCausalLM"),
         ("jais2", "Jais2ForCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
@@ -846,6 +860,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("laguna", "LagunaForCausalLM"),
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
+        ("lfm3", "Lfm3ForCausalLM"),
         ("llama", "LlamaForCausalLM"),
         ("llama4", "Llama4ForCausalLM"),
         ("llama4_text", "Llama4ForCausalLM"),
@@ -1153,6 +1168,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl", "DeepseekVLForConditionalGeneration"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
         ("diffusion_gemma", "DiffusionGemmaForBlockDiffusion"),
+        ("dots3_note", "Dots3NoteForConditionalGeneration"),
         ("emu3", "Emu3ForConditionalGeneration"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeForConditionalGeneration"),
         ("evolla", "EvollaForProteinText2Text"),
@@ -1173,6 +1189,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("glmga", "Glm46VForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("granite4_vision", "Granite4VisionForConditionalGeneration"),
+        ("granite_docling", "GraniteDoclingForConditionalGeneration"),
         ("hunyuan_vl", "HunYuanVLForConditionalGeneration"),
         ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
@@ -1187,6 +1204,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("kosmos-2.5", "Kosmos2_5ForConditionalGeneration"),
         ("lfm2_vl", "Lfm2VlForConditionalGeneration"),
+        ("lfm3_vl", "Lfm3VlForConditionalGeneration"),
         ("lighton_ocr", "LightOnOcrForConditionalGeneration"),
         ("llama4", "Llama4ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
@@ -2121,6 +2139,18 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
+# EXPERIMENTAL: besides `jev`, the models whose checkpoints ship a JEV head next to their weights
+MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
+    [
+        ("gemma4", "JevForDecision"),
+        ("jev", "JevForDecision"),
+        ("qwen2", "JevForDecision"),
+        ("qwen3_5", "JevForDecision"),
+        ("qwen3_5_moe", "JevForDecision"),
+        ("qwen3_5_text", "JevForDecision"),
+    ]
+)
+
 MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES = OrderedDict(
     [
         ("sapiens2", "Sapiens2ForImageMatting"),
@@ -2263,6 +2293,8 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
 MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
+
+MODEL_FOR_DECISION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DECISION_MAPPING_NAMES)
 
 MODEL_FOR_IMAGE_MATTING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES)
 MODEL_FOR_NORMAL_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES)
@@ -2621,6 +2653,13 @@ AutoModelForAudioTokenization = auto_class_update(
 )
 
 
+class AutoModelForDecision(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DECISION_MAPPING
+
+
+AutoModelForDecision = auto_class_update(AutoModelForDecision, head_doc="decision")
+
+
 class AutoModelForImageMatting(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_MATTING_MAPPING
 
@@ -2658,6 +2697,7 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
+    "MODEL_FOR_DECISION_MAPPING",
     "MODEL_FOR_RNNT_MAPPING",
     "MODEL_FOR_TDT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
@@ -2712,6 +2752,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForDecision",
     "AutoModelForRNNT",
     "AutoModelForTDT",
     "AutoModelForDepthEstimation",

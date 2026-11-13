@@ -103,10 +103,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         renamings = get_model_conversion_mapping(model)
         remapped = []
         for name in skip:
-            renamed = name
+            # Renamings are written for weight names (`self_attn\.f_a_proj\.` for `self_attn.f_a_proj.weight`)
+            renamed = name + "."
             for rename in renamings:
                 renamed, _ = rename.rename_source_key(renamed)
-            remapped.append(renamed)
+            remapped.append(renamed.removesuffix("."))
         self.quantization_config.modules_to_not_convert = remapped
 
     def _process_model_before_weight_loading(
@@ -142,14 +143,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
-        from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, plan)
         # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) are scalars, not sharded
         scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
         plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
-        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
 
     def is_serializable(self):
         return True
