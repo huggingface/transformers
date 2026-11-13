@@ -20,7 +20,13 @@ Ray Tune (with client), W&B sweeps, and backend availability detection.
 import tempfile
 import unittest
 
-from transformers import GenerationConfig, Seq2SeqTrainer, Seq2SeqTrainingArguments, TrainingArguments
+from transformers import (
+    GenerationConfig,
+    Seq2SeqTrainer,
+    Seq2SeqTrainingArguments,
+    TrainerCallback,
+    TrainingArguments,
+)
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, HPSearchBackend
 from transformers.testing_utils import require_optuna, require_ray, require_torch, require_wandb, torch_device
 from transformers.trainer_utils import IntervalStrategy
@@ -31,6 +37,7 @@ from .trainer_test_utils import (
     RegressionModelConfig,
     RegressionPreTrainedModel,
     get_regression_trainer,
+    get_tiny_seq2seq_dataset,
     get_tiny_seq2seq_model,
 )
 
@@ -165,6 +172,46 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
                 hp_space=hp_space,
                 n_trials=2,
             )
+
+
+@require_torch
+@require_optuna
+class TrainerHyperParameterOptunaGenerationConfigTest(unittest.TestCase):
+    def test_hyperparameter_search_with_generation_config(self):
+        class GenerationConfigRecorder(TrainerCallback):
+            def __init__(self):
+                self.records = []
+
+            def on_evaluate(self, args, state, control, model=None, **kwargs):
+                self.records.append((state.trial_params["num_beams"], model.generation_config.num_beams))
+
+        def hp_space(trial):
+            return {"generation_config": GenerationConfig(num_beams=trial.suggest_int("num_beams", 2, 4))}
+
+        recorder = GenerationConfigRecorder()
+        dataset = get_tiny_seq2seq_dataset()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = Seq2SeqTrainingArguments(
+                tmp_dir,
+                max_steps=1,
+                eval_strategy="steps",
+                eval_steps=1,
+                save_strategy="no",
+                report_to="none",
+                disable_tqdm=True,
+            )
+            trainer = Seq2SeqTrainer(
+                model_init=get_tiny_seq2seq_model,
+                args=args,
+                train_dataset=dataset,
+                eval_dataset=dataset,
+                callbacks=[recorder],
+            )
+            trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, backend="optuna", n_trials=3)
+
+        self.assertGreaterEqual(len(recorder.records), 3)
+        for suggested_num_beams, used_num_beams in recorder.records:
+            self.assertEqual(used_num_beams, suggested_num_beams)
 
 
 @require_torch
