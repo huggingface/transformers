@@ -63,7 +63,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "exaone_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

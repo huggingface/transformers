@@ -65,11 +65,11 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
 class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MiMoV2FlashModelTester
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # SWA layers double the kv heads (see MiMoV2FlashAttention.__init__), so the per-layer
         # kv head count is layer-type dependent. Same override pattern as MiniMax.
         # Keys use `head_dim`, values use `v_head_dim` (MiMo asymmetry).
-        for layer_idx, layer in enumerate(past_key_values.layers):
+        for layer_idx, layer in enumerate(cache.layers):
             is_swa = config.layer_types[layer_idx] == "sliding_attention"
             num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
             self.assertEqual(layer.keys.shape, (batch_size, num_kv_heads, seq_length, config.head_dim))

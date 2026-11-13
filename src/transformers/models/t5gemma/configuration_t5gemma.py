@@ -49,7 +49,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5_gemma_module"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -127,7 +127,7 @@ class T5GemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5gemma"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "encoder": T5GemmaModuleConfig,
         "decoder": T5GemmaModuleConfig,

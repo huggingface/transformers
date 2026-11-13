@@ -42,7 +42,7 @@ class Starcoder2Config(PreTrainedConfig):
     """
 
     model_type = "starcoder2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `Starcoder2`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

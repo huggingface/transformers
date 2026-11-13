@@ -476,17 +476,17 @@ In the following, we will tell the LLM to make use of the key-value cache by ret
 In Transformers, we can retrieve the key-value cache by passing the `use_cache` flag to the `forward` call and can then pass it with the current token.
 
 ```python
-past_key_values = None # past_key_values is the key-value cache
+cache = None # cache is the key-value cache
 generated_tokens = []
 next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to(model.device)
 
 for _ in range(5):
-  next_logits, past_key_values = model(next_token_id, past_key_values=past_key_values, use_cache=True).to_tuple()
+  next_logits, cache = model(next_token_id, cache=cache, use_cache=True).to_tuple()
   next_logits = next_logits[:, -1:]
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", cache.get_seq_length())  # cache are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)
@@ -547,7 +547,7 @@ Two things should be noted here:
   1. Keeping all the context is crucial for LLMs deployed in chat so that the LLM understands all the previous context of the conversation. E.g. for the example above the LLM needs to understand that the user refers to the population when asking `"And how many are in Germany"`.
   2. The key-value cache is extremely useful for chat as it allows us to continuously grow the encoded chat history instead of having to re-encode the chat history again from scratch (as e.g. would be the case when using an encoder-decoder architecture).
 
-In `transformers`, a `generate` call will return `past_key_values` when `return_dict_in_generate=True` is passed, in addition to the default `use_cache=True`. Note that it is not yet available through the `pipeline` interface.
+In `transformers`, a `generate` call will return `cache` when `return_dict_in_generate=True` is passed, in addition to the default `use_cache=True`. Note that it is not yet available through the `pipeline` interface.
 
 ```python
 # Generation as usual
@@ -556,12 +556,12 @@ model_inputs = tokenizer(prompt, return_tensors='pt')
 generation_output = model.generate(**model_inputs, max_new_tokens=60, return_dict_in_generate=True)
 decoded_output = tokenizer.batch_decode(generation_output.sequences)[0]
 
-# Piping the returned `past_key_values` to speed up the next conversation round
+# Piping the returned `cache` to speed up the next conversation round
 prompt = decoded_output + "\nQuestion: How can I modify the function above to return Mega bytes instead?\n\nAnswer: Here"
 model_inputs = tokenizer(prompt, return_tensors='pt')
 generation_output = model.generate(
   **model_inputs,
-  past_key_values=generation_output.past_key_values,
+  cache=generation_output.cache,
   max_new_tokens=60,
   return_dict_in_generate=True
 )
