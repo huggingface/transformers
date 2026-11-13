@@ -684,6 +684,21 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
+    def test_fp8_dequantize_unquantized_weights_use_destination_dtype(self):
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        converter = Fp8Dequantize(SimpleNamespace())
+        for source_dtype, target_dtype in [(torch.float32, torch.bfloat16), (torch.bfloat16, torch.float32)]:
+            model = torch.nn.Linear(8, 8, bias=False, dtype=target_dtype)
+            weight = torch.ones(8, 8, dtype=source_dtype)
+            for key, value in [("weight", weight), ("experts.*.weight", [weight])]:
+                with self.subTest(source_dtype=source_dtype, target_dtype=target_dtype, key=key):
+                    converted = converter.convert({key: value}, full_layer_name="weight", model=model)[key]
+                    tensor = converted[0] if isinstance(converted, list) else converted
+                    self.assertEqual(tensor.dtype, target_dtype)
+                    model.weight = torch.nn.Parameter(tensor)
+                    self.assertTrue(torch.isfinite(model(torch.ones(1, 8, dtype=target_dtype))).all())
+
     def test_fp8_ue8m0_quantize_dequantize_round_trip(self):
         # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
         # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
