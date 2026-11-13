@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-11-06.*
+*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-11-13.*
 
 # OmniASR
 
@@ -250,7 +250,7 @@ with torch.inference_mode():
         static_cache.reset()
         _ = model.generate(
             **inputs, max_new_tokens=max_new_tokens, do_sample=False,
-            past_key_values=static_cache, compile_config=compile_config,
+            cache=static_cache, compile_config=compile_config,
         )
 torch.cuda.synchronize()
 
@@ -259,7 +259,7 @@ with torch.inference_mode():
     static_cache.reset()
     output_ids = model.generate(
         **inputs, max_new_tokens=max_new_tokens, do_sample=False,
-        past_key_values=static_cache, compile_config=compile_config,
+        cache=static_cache, compile_config=compile_config,
     )
 generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
 print(processor.decode(generated_ids, skip_special_tokens=True)[0])
