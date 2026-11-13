@@ -495,7 +495,7 @@ class MtpModel(PreTrainedModel):
             or layer_consumes_attention_masks(
                 generic_modeling_state=self.config._heterogeneity_spec.generic_modeling_state,
                 layer_idx=layer_idx,
-                past_key_values=mtp_cache,
+                cache=mtp_cache,
             )
         )
 

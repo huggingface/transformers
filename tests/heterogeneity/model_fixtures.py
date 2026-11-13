@@ -78,7 +78,7 @@ class SkipAwareLlamaDecoderLayer(LlamaDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values=None,
+        cache=None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
@@ -94,7 +94,7 @@ class SkipAwareLlamaDecoderLayer(LlamaDecoderLayer):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -130,7 +130,7 @@ class SkipAwareGptOssDecoderLayer(GptOssDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values=None,
+        cache=None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
@@ -146,7 +146,7 @@ class SkipAwareGptOssDecoderLayer(GptOssDecoderLayer):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -182,7 +182,7 @@ class SkipAwareLlama4TextDecoderLayer(Llama4TextDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values=None,
+        cache=None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
@@ -198,7 +198,7 @@ class SkipAwareLlama4TextDecoderLayer(Llama4TextDecoderLayer):
                 hidden_states=hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -230,7 +230,7 @@ class SkipAwareNemotronHBlock(NemotronHBlock):
     def forward(
         self,
         hidden_states,
-        past_key_values=None,
+        cache=None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
@@ -243,11 +243,11 @@ class SkipAwareNemotronHBlock(NemotronHBlock):
 
         if self.mixer is not None:
             if self.block_type == "linear_attention":
-                hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
+                hidden_states = self.mixer(hidden_states, cache=cache, attention_mask=attention_mask)
             elif self.block_type == "full_attention":
                 hidden_states, _ = self.mixer(
                     hidden_states=hidden_states,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     use_cache=use_cache,

@@ -123,18 +123,18 @@ def get_generic_heterogeneous_modeling_cache_layer_types(
     ]
 
 
-def validate_no_unwritten_caches(past_key_values: Cache, *, layer_idx: int, unwritten_caches: set[str]) -> None:
-    """Raise if `past_key_values` has a cache for layer `layer_idx`, but the layer never writes to it.
+def validate_no_unwritten_caches(cache: Cache, *, layer_idx: int, unwritten_caches: set[str]) -> None:
+    """Raise if `cache` holds a cache for layer `layer_idx` that the layer never writes to.
 
     `unwritten_caches` are the caches that the layer never writes. A `Cache` built from the model config doesn't hold
     them. Other `Cache` objects, like `DynamicCache()`, hold them and they stay empty, so methods like `get_seq_length`
     can return wrong values.
     """
-    if layer_idx < len(past_key_values.layers):
-        cache_layer_cls = type(past_key_values.layers[layer_idx])
-    elif past_key_values.layer_class_to_replicate is not None:
+    if layer_idx < len(cache.layers):
+        cache_layer_cls = type(cache.layers[layer_idx])
+    elif cache.layer_class_to_replicate is not None:
         # The cache adds its missing layers when a later layer is written
-        cache_layer_cls = past_key_values.layer_class_to_replicate
+        cache_layer_cls = cache.layer_class_to_replicate
     else:
         return
 

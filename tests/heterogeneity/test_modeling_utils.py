@@ -130,7 +130,7 @@ if is_torch_available():
     class _ToyPreTrainedModel(PreTrainedModel):
         config_class = LlamaConfig
 
-        def forward(self, hidden_states, past_key_values=None, use_cache=False):
+        def forward(self, hidden_states, cache=None, use_cache=False):
             return hidden_states
 
     class _ToyModel(_ToyPreTrainedModel):
@@ -594,11 +594,9 @@ class TestHeterogeneousCache(unittest.TestCase):
             expected_logits = model(input_ids, attention_mask=attention_mask, use_cache=False).logits[:, -2:]
             for cache_name, cache in caches.items():
                 with self.subTest(cache=cache_name):
-                    model(
-                        input_ids[:, :-2], attention_mask=attention_mask[:, :-2], past_key_values=cache, use_cache=True
-                    )
+                    model(input_ids[:, :-2], attention_mask=attention_mask[:, :-2], cache=cache, use_cache=True)
                     actual_logits = model(
-                        input_ids[:, -2:], attention_mask=attention_mask, past_key_values=cache, use_cache=True
+                        input_ids[:, -2:], attention_mask=attention_mask, cache=cache, use_cache=True
                     ).logits
                     torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
@@ -609,7 +607,10 @@ class TestHeterogeneousCache(unittest.TestCase):
         # Without the config, the cache fills layer 0 with a key/value cache that nothing writes, and positions would be
         # read from it
         with self.assertRaisesRegex(ValueError, "holds a key_value cache for layer 0"):
-            model(dummy_input_ids(), past_key_values=DynamicCache(), use_cache=True)
+            model(dummy_input_ids(), cache=DynamicCache(), use_cache=True)
+        # The layer's cache is found by its type, whatever the argument is called
+        with self.assertRaisesRegex(ValueError, "holds a key_value cache for layer 0"):
+            model.model.layers[0](torch.zeros(1, 2, config.hidden_size), kv_cache=DynamicCache())
 
     def test_layer_with_mask_consumer_and_no_key_value_cache_raises(self):
         config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
@@ -653,8 +654,8 @@ class TestHeterogeneousCache(unittest.TestCase):
         cache = DynamicCache(config=config)
         with torch.no_grad():
             expected_logits = model(input_ids, use_cache=False).logits[:, -2:]
-            model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
-            actual_logits = model(input_ids[:, -2:], past_key_values=cache, use_cache=True).logits
+            model(input_ids[:, :-2], cache=cache, use_cache=True)
+            actual_logits = model(input_ids[:, -2:], cache=cache, use_cache=True).logits
 
         torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-3)
 
@@ -734,8 +735,8 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         with torch.no_grad():
             expected_logits = model(input_ids, use_cache=False).logits[:, -2:]
-            model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
-            actual_logits = model(input_ids[:, -2:], past_key_values=cache, use_cache=True).logits
+            model(input_ids[:, :-2], cache=cache, use_cache=True)
+            actual_logits = model(input_ids[:, -2:], cache=cache, use_cache=True).logits
 
         torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-4, atol=1e-5)
 
@@ -785,12 +786,12 @@ class TestHeterogeneousCache(unittest.TestCase):
         with torch.no_grad():
             expected_logits = model(input_ids, use_cache=False).logits[:, -2:]
             # Prefill without compiling, like `generate` does, so the compiled steps see an initialized cache
-            model(input_ids[:, :-2], past_key_values=cache, use_cache=True)
+            model(input_ids[:, :-2], cache=cache, use_cache=True)
             torch.compiler.reset()
             with torch._dynamo.config.patch(error_on_recompile=True):
                 actual_logits = torch.cat(
                     [
-                        compiled_model(input_ids[:, [position]], past_key_values=cache, use_cache=True).logits
+                        compiled_model(input_ids[:, [position]], cache=cache, use_cache=True).logits
                         for position in (2, 3)
                     ],
                     dim=1,

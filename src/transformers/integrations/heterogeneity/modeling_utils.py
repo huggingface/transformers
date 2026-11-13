@@ -82,25 +82,13 @@ def _validate_layer_cache_entry(
     *,
     layer_idx: int,
     unwritten_caches: set[str],
-    past_key_values_position: int | None,
 ) -> None:
-    if past_key_values_position is not None and past_key_values_position < len(args):
-        past_key_values = args[past_key_values_position]
-    else:
-        past_key_values = kwargs.get("past_key_values")
-    if past_key_values is not None:
-        validate_no_unwritten_caches(past_key_values, layer_idx=layer_idx, unwritten_caches=unwritten_caches)
+    # Imported here because the core `cache_utils` module imports this package
+    from transformers.cache_utils import Cache
 
-
-def _get_argument_position(function: Callable, argument_name: str) -> int | None:
-    """Return the position of `argument_name` in the positional arguments of `function`, or `None` if it can't be
-    passed positionally. For a method, pass the bound method, so that `self` isn't counted."""
-    positional_names = [
-        name
-        for name, parameter in inspect.signature(function).parameters.items()
-        if parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-    ]
-    return positional_names.index(argument_name) if argument_name in positional_names else None
+    cache = next((argument for argument in (*args, *kwargs.values()) if isinstance(argument, Cache)), None)
+    if cache is not None:
+        validate_no_unwritten_caches(cache, layer_idx=layer_idx, unwritten_caches=unwritten_caches)
 
 
 def _register_layer_attention_mask_selection_hook(
@@ -116,12 +104,7 @@ def _register_layer_attention_mask_selection_hook(
 
 def _register_layer_cache_validation_hook(*, layer: nn.Module, layer_idx: int, unwritten_caches: set[str]) -> None:
     layer.register_forward_pre_hook(
-        partial(
-            _validate_layer_cache_entry,
-            layer_idx=layer_idx,
-            unwritten_caches=unwritten_caches,
-            past_key_values_position=_get_argument_position(layer.forward, "past_key_values"),
-        ),
+        partial(_validate_layer_cache_entry, layer_idx=layer_idx, unwritten_caches=unwritten_caches),
         with_kwargs=True,
     )
 

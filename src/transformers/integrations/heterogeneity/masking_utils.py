@@ -89,12 +89,12 @@ def _get_mask_layer_indices(config: PreTrainedConfig, create_mask_fn: Callable) 
     return [idx for idx, pattern in enumerate(layer_patterns) if pattern in matching_patterns]
 
 
-def _get_cache_geometry(*, past_key_values: Any, query_length: Any, layer_idx: int) -> tuple[Any, ...]:
-    if past_key_values is None:
+def _get_cache_geometry(*, cache: Any, query_length: Any, layer_idx: int) -> tuple[Any, ...]:
+    if cache is None:
         return ()
 
-    query_offset = past_key_values.get_query_offset(layer_idx)
-    key_value_length, key_value_offset = past_key_values.get_mask_sizes(query_length, layer_idx)
+    query_offset = cache.get_query_offset(layer_idx)
+    key_value_length, key_value_offset = cache.get_mask_sizes(query_length, layer_idx)
     if is_torch_tensor(query_offset):
         # An initialized `StaticLayer` returns its query offset as a device tensor. Comparing tensor values would force
         # a device sync, or a graph break under `torch.compile`. Instead, assume that these layers are all at the same
@@ -105,20 +105,18 @@ def _get_cache_geometry(*, past_key_values: Any, query_length: Any, layer_idx: i
 
 
 def layer_consumes_attention_masks(
-    *, generic_modeling_state: _GenericModelingState, layer_idx: int, past_key_values: Cache | None
+    *, generic_modeling_state: _GenericModelingState, layer_idx: int, cache: Cache | None
 ) -> bool:
     """Returns whether a member that uses the attention masks is left in layer `layer_idx` after its skips.
 
     Raises:
-        `ValueError`: If such a member is left and `past_key_values` is set, but the layer has no key/value cache.
+        `ValueError`: If such a member is left and `cache` is set, but the layer has no key/value cache.
     """
     if layer_idx in generic_modeling_state.unconsumed_attention_mask_layers:
         # The skips replaced every attention mask consumer of this layer, so nothing left in the layer needs a mask
         return False
 
-    if past_key_values is not None and KEY_VALUE_CACHE in (
-        generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())
-    ):
+    if cache is not None and KEY_VALUE_CACHE in (generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())):
         # An attention mask consumer remains in this layer. However, with a cache, the mask factories take the size
         # of each layer's mask from its key/value cache, and this layer has no key/value cache.
         raise ValueError(
@@ -143,13 +141,13 @@ def _create_attention_masks_by_layer_idx(
     # compiled graph depend on the exact cache length in the key, so the graph would recompile at every decoding step.
     # A comparison with `==` only depends on whether the lengths are equal.
     reuse_keys_and_layer_indices: list[tuple[tuple[Any, ...], int]] = []
-    past_key_values = kwargs.get("past_key_values")
+    cache = kwargs.get("cache")
     heterogeneity_spec = config._heterogeneity_spec
     generic_modeling_state = heterogeneity_spec.generic_modeling_state
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
         if not layer_consumes_attention_masks(
-            generic_modeling_state=generic_modeling_state, layer_idx=layer_idx, past_key_values=past_key_values
+            generic_modeling_state=generic_modeling_state, layer_idx=layer_idx, cache=cache
         ):
             attention_masks[layer_idx] = None
             continue
@@ -160,7 +158,7 @@ def _create_attention_masks_by_layer_idx(
         layer_kwargs = {**kwargs, "layer_idx": layer_idx}
 
         cache_geometry = _get_cache_geometry(
-            past_key_values=past_key_values,
+            cache=cache,
             query_length=layer_kwargs["inputs_embeds"].shape[1],
             layer_idx=layer_idx,
         )

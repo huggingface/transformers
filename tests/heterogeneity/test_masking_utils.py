@@ -76,7 +76,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
         create_mask = create_sliding_window_causal_mask if is_causal else create_bidirectional_sliding_window_mask
 
-        mask = create_mask(config, inputs_embeds, attention_mask=None, past_key_values=None)
+        mask = create_mask(config, inputs_embeds, attention_mask=None, cache=None)
         self.assertIsInstance(mask, AttentionMasksByLayerIdx)
         expected_masks = {
             0: torch.tensor(
@@ -156,7 +156,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             config,
             inputs_embeds=torch.randn(1, 1, config.hidden_size),
             attention_mask=None,
-            past_key_values=cache,
+            cache=cache,
             allow_is_causal_skip=False,
         )
 
@@ -184,7 +184,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
             for _ in range(3):
                 for layer_idx in range(config.num_hidden_layers):
                     cache.update(states, states, layer_idx=layer_idx)
-                mask = create_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
+                mask = create_mask(config, inputs_embeds, attention_mask=None, cache=cache)
 
         self.assertIs(mask[0], mask[1])
 
@@ -266,7 +266,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
         cache = DynamicCache(config=config)
 
-        mask = create_chunked_causal_mask(config, inputs_embeds, attention_mask=None, past_key_values=cache)
+        mask = create_chunked_causal_mask(config, inputs_embeds, attention_mask=None, cache=cache)
         self.assertIsInstance(mask, AttentionMasksByLayerIdx)
         expected_masks = {
             0: torch.tensor(
