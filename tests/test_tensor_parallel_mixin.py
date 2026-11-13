@@ -117,15 +117,15 @@ def _get_expert_weight_names(model):
     return names
 
 
-def _load_tp_and_reference_models(model_path, model_class):
-    """Load TP model and non-TP reference model for comparison.
+def _load_tp_and_reference_models(model_path, model_class, tp_plan=None):
+    """Load TP model and non-TP reference model for comparison. `tp_plan` overrides rules of the model's plan.
 
     Returns:
         tuple: (model_tp, model_ref, device)
     """
     model_tp = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size()),
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), tp_plan=tp_plan),
     )
     dist.barrier()
 
@@ -184,11 +184,11 @@ def _reference_grad_shard(name, grad, local_grad, rank, world_size, tp_plan, exp
     return grad
 
 
-def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol, tp_plan=None):
     """Implementation for comparing TP and non-TP model outputs."""
     set_seed(0)
 
-    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
+    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class, tp_plan)
 
     _verify_tp_sharding(_rank, model_tp, model)
 
@@ -211,11 +211,11 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
+def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol, tp_plan=None):
     """Implementation for comparing TP and non-TP model backward passes."""
     set_seed(0)
 
-    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
+    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class, tp_plan)
     model_tp.train()
     model.train()
 
@@ -247,8 +247,9 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
 
             # A sharded param's grad is a DTensor: take this rank's local shard, since a DTensor
             # reports the *global* shape and can't be compared against a plain tensor.
+            # Unit styles shard on a 2-D (units, replicas) mesh, where the rank isn't the shard index: gather those.
             if isinstance(grad_tp, DTensor):
-                grad_tp = grad_tp.to_local()
+                grad_tp = grad_tp.full_tensor() if grad_tp.device_mesh.ndim > 1 else grad_tp.to_local()
 
             grad = _reference_grad_shard(name, grad, grad_tp, rank, world_size, model_tp._tp_plan)
 
@@ -536,6 +537,33 @@ class TensorParallelTesterMixin(ABC):
             run_distributed(world_size=self.tensor_parallel_size)(_test_tp_backward_impl)(
                 tmp_dir, model_class, atol, rtol
             )
+
+    @is_tensor_parallel_test
+    def test_tp_unit_plan_forward_backward(self):
+        """`unit_colwise`/`unit_rowwise` on the attention projections must match the unsharded model, outputs and
+        gradients, including when ranks replicate heads (fewer KV heads than ranks)."""
+        self._skip_if_not_supported()
+
+        config = self._get_tp_config()
+        if hasattr(text_config := config.get_text_config(), "num_key_value_heads"):
+            text_config.num_key_value_heads = 1  # fewer KV heads than ranks: ranks replicate the head
+        model_class = self._get_tp_model_class()
+        expected = {"q_proj": "colwise", "k_proj": "colwise", "v_proj": "colwise", "o_proj": "rowwise"}
+        tp_plan = {}
+        for key, style in model_class(config).tp_plan.items():
+            name = key.rsplit(".", 1)[-1]
+            if expected.get(name) == style:
+                tp_plan[key] = f"unit_{style}"
+        if {key.rsplit(".", 1)[-1] for key in tp_plan} != set(expected):
+            self.skipTest("Attention is not a plain colwise q/k/v + rowwise o_proj")
+
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model_class(config).save_pretrained(tmp_dir, save_original_format=True)
+            for impl in (_test_tp_forward_impl, _test_tp_backward_impl):
+                run_distributed(world_size=self.tensor_parallel_size)(impl)(tmp_dir, model_class, atol, rtol, tp_plan)
 
     @is_tensor_parallel_test
     def test_tp_generation(self):

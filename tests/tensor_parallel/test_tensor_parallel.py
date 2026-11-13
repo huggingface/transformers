@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import tempfile
 from unittest.mock import patch
 
@@ -18,7 +19,7 @@ import torch
 import torch.distributed as dist
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM, LlamaModel
 from transformers.distributed import DistributedConfig, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
@@ -29,6 +30,7 @@ from transformers.distributed.tensor_parallel import (
     RowwiseParallel,
     get_kv_heads_per_rank,
 )
+from transformers.distributed.utils import TransformersDeviceMesh
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 from ..distributed_testing_utils import run_distributed
@@ -375,6 +377,119 @@ class TestTensorParallelLayer(TestCasePlus):
 
 
 @is_tensor_parallel_test
+class TestUnitParallel(TestCasePlus):
+    """`unit_colwise`/`unit_rowwise` must give every rank whole heads, and never split one."""
+
+    HEAD_DIM = 8
+    HIDDEN = 64
+
+    class FakeMesh:
+        """Enough of a DeviceMesh for `get_unit_mesh` to reshape, with no process groups."""
+
+        def __init__(self, ranks, rank=0):
+            self.mesh, self.rank = ranks, rank
+            self.device_type, self.mesh_dim_names = "cpu", None
+            self.ndim = ranks.ndim
+
+        def size(self):
+            return int(self.mesh.numel())
+
+        def get_local_rank(self):
+            return self.rank
+
+        def __getitem__(self, dims):
+            return self
+
+    def _manager(self, world_size):
+        """A `TransformersDeviceMesh` whose `tp` mesh is fake, and whose unit meshes are fake too."""
+        return TransformersDeviceMesh(self.FakeMesh(torch.arange(world_size)), None)
+
+    def _fake_device_mesh(self):
+        return patch(
+            "torch.distributed.device_mesh.DeviceMesh",
+            lambda device_type, mesh, mesh_dim_names=None: self.FakeMesh(mesh),
+        )
+
+    def _attention(self, num_heads, num_key_value_heads):
+        """A real attention layer from a one-layer Llama, with the config the styles read."""
+        config = LlamaConfig(
+            hidden_size=num_heads * self.HEAD_DIM,
+            intermediate_size=2 * num_heads * self.HEAD_DIM,
+            num_hidden_layers=1,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_key_value_heads,
+            head_dim=self.HEAD_DIM,
+            vocab_size=32,
+        )
+        attention = LlamaModel(config).layers[0].self_attn
+        for proj in (attention.q_proj, attention.k_proj, attention.v_proj, attention.o_proj):
+            proj.config = config  # `apply_tensor_parallelism` attaches this for `needs_config` styles
+        return attention
+
+    def _shard(self, module, name, style, manager):
+        """Shard one projection, returning the placements it asked for."""
+        module._mesh_manager = manager  # `apply_tensor_parallelism` attaches this for `needs_config` styles
+        with (
+            self._fake_device_mesh(),
+            patch.object(
+                tensor_parallel, "distribute_tensor", side_effect=lambda tensor, *a, **kw: tensor
+            ) as distribute,
+        ):
+            style.shard_param(module, name, manager.get_mesh("tp"))
+            return distribute.call_args.args[2]
+
+    @parameterized.expand(
+        [
+            (2, 2, 4),  # fewer heads than ranks -> replicated
+            (6, 6, 4),  # heads do not divide the world
+            (7, 7, 4),  # coprime -> fully replicated
+            (8, 8, 4),  # exact fit, no replication
+            (12, 12, 8),
+            (2, 2, 8),
+            (32, 8, 8),  # GQA
+            (32, 8, 16),  # GQA, more ranks than kv heads
+            (8, 1, 4),  # MQA
+        ]
+    )
+    def test_every_rank_owns_whole_heads(self, num_heads, num_key_value_heads, world_size):
+        manager = self._manager(world_size)
+        with self._fake_device_mesh():
+            for units in (num_heads, num_key_value_heads):
+                groups, replicas = manager.get_unit_mesh(units).mesh.shape
+                self.assertEqual(groups * replicas, world_size, "the mesh must cover every rank")
+                self.assertEqual(groups, math.gcd(units, world_size), "replication must be the least possible")
+                self.assertEqual(units % groups, 0, "a head may not be split across ranks")
+                self.assertGreaterEqual(units // groups, 1, "no rank may be left without a head")
+
+    @parameterized.expand([(2, 2, 4), (6, 6, 4), (8, 8, 4), (32, 8, 8), (32, 8, 16), (8, 1, 4)])
+    def test_projections_are_sharded_on_the_head_axis(self, num_heads, num_key_value_heads, world_size):
+        attention = self._attention(num_heads, num_key_value_heads)
+        manager = self._manager(world_size)
+        colwise, rowwise = ALL_PARALLEL_STYLES["unit_colwise"], ALL_PARALLEL_STYLES["unit_rowwise"]
+
+        for name, units in (("q_proj", num_heads), ("k_proj", num_key_value_heads), ("v_proj", num_key_value_heads)):
+            proj = getattr(attention, name)
+            placements = self._shard(proj, "weight", colwise, manager)
+            groups = math.gcd(units, world_size)
+            self.assertEqual(placements[0].dim, 0, f"{name} shards its output features")
+            self.assertTrue(placements[1].is_replicate(), f"{name} replicates along the second axis")
+            self.assertEqual(proj.weight.shape[0] // groups % self.HEAD_DIM, 0, f"{name} split a head")
+
+        placements = self._shard(attention.o_proj, "weight", rowwise, manager)
+        self.assertEqual(placements[0].dim, 1, "o_proj shards its input features")
+        self.assertTrue(placements[1].is_replicate())
+        self.assertEqual(attention.o_proj.weight.shape[1] // math.gcd(num_heads, world_size) % self.HEAD_DIM, 0)
+
+    @parameterized.expand([(2, 4), (6, 4), (8, 4), (12, 8), (32, 16)])
+    def test_colwise_and_rowwise_agree_on_the_mesh(self, num_heads, world_size):
+        """o_proj consumes q_proj's output, so the two must land on the same unit mesh."""
+        attention = self._attention(num_heads, num_heads)
+        manager = self._manager(world_size)
+        self._shard(attention.q_proj, "weight", ALL_PARALLEL_STYLES["unit_colwise"], manager)
+        self._shard(attention.o_proj, "weight", ALL_PARALLEL_STYLES["unit_rowwise"], manager)
+        self.assertIs(attention.q_proj._unit_mesh, attention.o_proj._unit_mesh, "the unit mesh is built once")
+
+
 class TestTensorParallelTiedWeights(TestCasePlus):
     @parameterized.expand([("equal", True), ("different", False)])
     def test_checkpoint_with_both_tied_keys_matches_tp1(self, _, equal):

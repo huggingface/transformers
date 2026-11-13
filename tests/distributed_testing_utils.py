@@ -102,6 +102,9 @@ def _worker_main(rank, world_size, master_port, backend, pipe):
         for group in list(_world.pg_map):
             if group is not GroupMember.WORLD:
                 dist.destroy_process_group(group)
+        # DTensor caches shardings with meshes compared by value: a new mesh would get the destroyed groups back
+        if hasattr(torch._C, "_clear_DTensor_sharding_propagator_cache"):
+            torch._C._clear_DTensor_sharding_propagator_cache()
         set_seed(42)
         try:
             func(rank, *args, **kwargs)
