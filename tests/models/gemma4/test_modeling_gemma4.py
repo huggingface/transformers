@@ -46,7 +46,7 @@ from transformers.utils import ModelOutput
 
 from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import floats_tensor, modality_independent, requires_modality
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -192,15 +192,25 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-class Gemma4Audio2TextModelTester(ALMModelTester):
+class Gemma4ModelTester(VLMModelTester, ALMModelTester):
+    """Tester for the full omni model: text + vision + audio towers in the same config.
+
+    Which inputs are built is chosen per run by the test class (`current_modalities`), see `MultiModalModelTest`.
+    """
+
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
     text_config_class = Gemma4TextConfig
+    vision_config_class = Gemma4VisionConfig
     audio_config_class = Gemma4AudioConfig
     audio_mask_key = "input_features_mask"
+    _required_attributes = VLMModelTester._required_attributes + ("audio_config_class",)
+    # Image and audio inputs can be built for the same sequence (see `place_audio_tokens`)
+    supports_mixed_modalities = True
 
     def __init__(self, parent, **kwargs):
+        # special tokens
         kwargs.setdefault("image_token_id", 4)
         kwargs.setdefault("boi_token_id", 5)
         kwargs.setdefault("eoi_token_id", 6)
@@ -209,9 +219,9 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("eoa_token_index", 9)
         kwargs.setdefault("video_token_id", 10)
         kwargs.setdefault("pad_token_id", 0)
+        # long enough for BOS + up to `feat_seq_length // 4` audio tokens
         kwargs.setdefault("seq_length", 50)
-        kwargs.setdefault("feat_seq_length", 96)
-        kwargs.setdefault("num_mel_bins", 16)
+        # text
         kwargs.setdefault("num_hidden_layers", 4)
         kwargs.setdefault("num_kv_shared_layers", 2)
         kwargs.setdefault(
@@ -222,6 +232,15 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("enable_moe_block", True)
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("top_k_experts", 2)
+        kwargs.setdefault("use_bidirectional_attention", "vision")
+        kwargs.setdefault("tie_word_embeddings", True)
+        # vision
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("pooling_kernel_size", 2)
+        kwargs.setdefault("num_image_tokens", 5)
+        # audio
+        kwargs.setdefault("feat_seq_length", 96)
+        kwargs.setdefault("num_mel_bins", 16)
         kwargs.setdefault("subsampling_conv_channels", [16, 8])
         kwargs.setdefault("conv_kernel_size", 3)
         kwargs.setdefault("attention_chunk_size", 4)
@@ -232,7 +251,6 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         # comparison logic (inf - inf = NaN). Disable for testing.
         kwargs.setdefault("use_clipped_linears", False)
         super().__init__(parent, **kwargs)
-        self.head_dim = self.hidden_size // self.num_attention_heads
         self.per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
@@ -241,15 +259,49 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
 
     @property
     def _special_token_ids(self):
-        return super()._special_token_ids | {self.image_token_id, self.video_token_id}
+        return super()._special_token_ids | {self.video_token_id}
 
     @property
     def text_config_args(self):
         return super().text_config_args + ["per_layer_config"]
 
+    def _build_modality_sub_configs(self):
+        return {"vision_config": self.get_vision_config(), "audio_config": self.get_audio_config()}
+
     def create_attention_mask(self, input_ids):
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
+    # -- vision --
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        # (num_images, max_num_patches, patch_size * patch_size * num_channels)
+        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
+        return floats_tensor([batch_size, num_patches, self.patch_size**2 * self.num_channels])
+
+    def create_image_position_ids(self, num_images):
+        # (num_images, max_num_patches, 2) grid of (x, y) coords for a non-square image
+        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
+        h = int(num_patches**0.5)
+        w = num_patches // h
+        xs = torch.arange(w).repeat(h)
+        ys = torch.arange(h).repeat_interleave(w)
+        position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
+        return position_ids.unsqueeze(0).repeat(num_images, 1, 1)
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        # Called by `_prepare_image_inputs` (with the `pixel_values` tensor) and by `_prepare_audio_inputs` (with the
+        # dict of audio inputs): only images need extra inputs.
+        if isinstance(modality_inputs, dict):
+            return {}
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == config.image_token_id] = 1
+        return {
+            "image_position_ids": self.create_image_position_ids(batch_size),
+            "mm_token_type_ids": mm_token_type_ids,
+        }
+
+    # -- audio --
     def create_audio_features(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         # (num_audios, num_frames, num_mel_bins)
@@ -262,65 +314,121 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         # Each of the two stride-2 subsampling convs keeps every other mask position
         return audio_mask[:, ::4]
 
+    def place_audio_tokens(self, input_ids, config, num_audio_tokens):
+        # When image inputs were built first, the image tokens occupy `[0, num_image_tokens)`: place the audio tokens
+        # right after them instead of after BOS
+        if not (input_ids == self.image_token_id).any():
+            return super().place_audio_tokens(input_ids, config, num_audio_tokens)
+        start = self.num_image_tokens
+        input_ids = input_ids.clone()
+        input_ids[input_ids == self.audio_token_id] = self.pad_token_id
+        for i in range(input_ids.shape[0]):
+            n = int(num_audio_tokens[i])
+            if start + n > self.seq_length:
+                raise ValueError(f"Cannot place {n} audio tokens after {start} image tokens in {self.seq_length}.")
+            input_ids[i, start : start + n] = self.audio_token_id
+        return input_ids
+
 
 @require_torch
-class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
-    model_tester_class = Gemma4Audio2TextModelTester
+class Gemma4ModelTest(VLMModelTest, ALMModelTest):
+    """One class for the full omni model. Tests depending on the inputs run once per modality: `[text]`, `[image]`,
+    `[audio]` (video inputs are not built by the tester yet); the others run once (`@modality_independent`)."""
 
-    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
-    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
-        pass
+    model_tester_class = Gemma4ModelTester
+    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
+    model_split_percents = [0.85, 0.9]
 
-    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    @requires_modality("image")
     def test_generate_from_multimodal_encoder_outputs(self):
-        pass
+        # mm-encoder-output doesn't support audio yet
+        super().test_generate_from_multimodal_encoder_outputs()
 
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_hidden_states(self):
-        pass
+    @requires_modality("image")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        # mm-encoder-output doesn't support audio yet
+        super().test_generate_from_multimodal_encoder_outputs_and_raw_data()
 
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_pooler_output(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
-
+    @modality_independent
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
 
+    @modality_independent
     @unittest.skip("Gemma4 needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    @modality_independent
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
+    @modality_independent
     @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @modality_independent
+    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
+    def test_flash_attn_3_inference_equivalence(self):
+        pass
+
+    @modality_independent
+    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        pass
+
+    @modality_independent
+    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
+    def test_flash_attn_4_inference_equivalence(self):
+        pass
+
+    @modality_independent
+    @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
+    @modality_independent
+    @unittest.skip(
+        "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
+    )
+    def test_cpu_offload(self):
+        pass
+
+    @modality_independent
+    @unittest.skip(
+        "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @modality_independent
+    @unittest.skip(
+        "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    def test_training(self):
+        # Overwrite to test training with text-only samples, should not raise errors
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        model = Gemma4ForConditionalGeneration(config)
+        model.to(torch_device)
+        model.train()
+        inputs = self._prepare_for_class(inputs_dict, Gemma4ForConditionalGeneration, return_labels=True)
+        loss = model(**inputs).loss
+        loss.backward()
+
+        # pop out image-related inputs and try to run forward
+        inputs.pop("mm_token_type_ids", None)
+        inputs.pop("pixel_values", None)
+        loss = model(**inputs).loss
+        loss.backward()
+
+    @modality_independent
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
         """Regression test for #45468; attention context size is properly read from config"""
         from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig
@@ -350,123 +458,8 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(pos, expected)
 
-
-class Gemma4Vision2TextModelTester(VLMModelTester):
-    base_model_class = Gemma4Model
-    conditional_generation_class = Gemma4ForConditionalGeneration
-    config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    vision_config_class = Gemma4VisionConfig
-
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("boi_token_id", 5)
-        kwargs.setdefault("eoi_token_id", 6)
-        kwargs.setdefault("video_token_id", 7)
-        kwargs.setdefault("audio_token_id", 8)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("pooling_kernel_size", 2)
-        kwargs.setdefault("num_image_tokens", 5)
-        kwargs.setdefault("seq_length", 25)
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("num_kv_shared_layers", 2)
-        kwargs.setdefault(
-            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
-        )
-        kwargs.setdefault("vocab_size_per_layer_input", 99)
-        kwargs.setdefault("hidden_size_per_layer_input", 16)
-        kwargs.setdefault("enable_moe_block", True)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("top_k_experts", 2)
-        kwargs.setdefault("use_bidirectional_attention", "vision")
-        kwargs.setdefault("tie_word_embeddings", True)
-        super().__init__(parent, **kwargs)
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
-            if layer_type == "full_attention"
-        }
-
-    @property
-    def _special_token_ids(self):
-        return super()._special_token_ids | {self.video_token_id, self.audio_token_id}
-
-    @property
-    def text_config_args(self):
-        return super().text_config_args + ["per_layer_config"]
-
-    def create_attention_mask(self, input_ids):
-        return input_ids.ne(self.pad_token_id).to(torch_device)
-
-    def create_pixel_values(self, batch_size: int | None = None):
-        batch_size = batch_size if batch_size is not None else self.batch_size
-        # (num_images, max_num_patches, patch_size * patch_size * num_channels)
-        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
-        return floats_tensor([batch_size, num_patches, self.patch_size**2 * self.num_channels])
-
-    def create_image_position_ids(self, num_images):
-        # (num_images, max_num_patches, 2) grid of (x, y) coords for a non-square image
-        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
-        h = int(num_patches**0.5)
-        w = num_patches // h
-        xs = torch.arange(w).repeat(h)
-        ys = torch.arange(h).repeat_interleave(w)
-        position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
-        return position_ids.unsqueeze(0).repeat(num_images, 1, 1)
-
-    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
-        batch_size = batch_size if batch_size is not None else self.batch_size
-        mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[input_ids == config.image_token_id] = 1
-        return {
-            "image_position_ids": self.create_image_position_ids(batch_size),
-            "mm_token_type_ids": mm_token_type_ids,
-        }
-
-
-@require_torch
-class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
-    model_tester_class = Gemma4Vision2TextModelTester
-    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
-    model_split_percents = [0.85, 0.9]
-
-    def setUp(self):
-        super().setUp()
-        self.skip_flash_attn_inference_equivalence_tests()
-
-    def skip_flash_attn_inference_equivalence_tests(self):
-        skippable_tests = [
-            "test_flash_attn_2_inference_equivalence",
-            "test_flash_attn_3_inference_equivalence",
-            "test_flash_attn_4_inference_equivalence",
-        ]
-        for test in skippable_tests:
-            if self._testMethodName.startswith(test):
-                self.skipTest(
-                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4"
-                )
-
-    def test_training(self):
-        # Overwrite to test training with text-only samples, should not raise errors
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        model = Gemma4ForConditionalGeneration(config)
-        model.to(torch_device)
-        model.train()
-        inputs = self._prepare_for_class(inputs_dict, Gemma4ForConditionalGeneration, return_labels=True)
-        loss = model(**inputs).loss
-        loss.backward()
-
-        # pop out image-related inputs and try to run forward
-        inputs.pop("mm_token_type_ids", None)
-        inputs.pop("pixel_values", None)
-        loss = model(**inputs).loss
-        loss.backward()
-
+    @modality_independent
     def test_vision_axial_rope(self):
-        # override -> model shipped weirdly to from the start, pos IDs have actual batch dim
-
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         rope_class = None
@@ -518,58 +511,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
         self.assertEqual(cos.shape[0], 3)  # angles presserve batch
 
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("We need 4 layers to correctly test cache sharing.")
-    def test_num_layers_is_small(self):
-        pass
-
-    @unittest.skip("Gemma4 needs correct embeddings for per-layer-input computation, random won't work!")
-    def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
-    )
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
+    @modality_independent
     def test_per_layer_inputs_are_correctly_forwarded(self):
         from transformers.models.gemma4.modeling_gemma4 import Gemma4TextModel
 
@@ -614,6 +556,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(counter["call_count"], 1)
 
     @parameterized.expand([True, False, None])
+    @requires_modality("image")
     def test_get_image_features_output(self, return_dict: bool | None):
         "Override to infer last hidden states' `batch_size` from image position ids"
         for model_class in self.all_model_classes:
@@ -717,6 +660,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             else:
                 self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
 
+    @modality_independent
     def test_attention_mask_composition(self):
         config = self.model_tester.get_config()
         config.text_config._attn_implementation = "eager"
@@ -767,6 +711,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
 
+    @requires_modality("image")
     def test_vision_mask_with_cache_beyond_sliding_window(self):
         """Regression test, see the Gemma 3 test of the same name.
 

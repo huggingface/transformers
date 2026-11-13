@@ -20,6 +20,7 @@ from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
     floats_tensor,
     is_torch_available,
+    requires_modality,
     torch_device,
 )
 
@@ -105,6 +106,10 @@ class VLMModelTester(MultiModalModelTester):
         return {"vision_config": self.get_vision_config()}
 
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
+        self._record_prepared_modality("image")
+        return self._prepare_image_inputs(input_ids, config, batch_size=batch_size)
+
+    def _prepare_image_inputs(self, input_ids, config, batch_size: int | None = None):
         pixel_values = self.create_pixel_values(batch_size=batch_size)
         input_ids = self.place_image_tokens(input_ids, config)
         additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values, batch_size=batch_size)
@@ -142,6 +147,7 @@ class VLMModelTest(MultiModalModelTest):
     # every subclass that does not set it itself.
     __test__ = False
 
+    @requires_modality("image")
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs throw an error with explicit message saying what is wrong

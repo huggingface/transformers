@@ -356,6 +356,25 @@ def pytest_addoption(parser):
     pytest_addoption_shared(parser)
 
 
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    # Guard for `MultiModalModelTest`'s per-modality runs: a test run with e.g. `[image]` that passed without ever
+    # building image inputs does not depend on the modality, so running it per modality is wasted -> fail with a hint.
+    report = yield
+    if report.when == "call" and report.passed:
+        modalities = getattr(getattr(item, "callspec", None), "params", {}).get("_mm_modalities")
+        if modalities:
+            tester = getattr(item.instance, "model_tester", None)
+            missing = set(modalities) - {"text"} - getattr(tester, "_prepared_modalities", set())
+            if missing:
+                report.outcome = "failed"
+                report.longrepr = (
+                    f"{item.nodeid} is run per input modality but never built {sorted(missing)} inputs: mark it with "
+                    "`@modality_independent` (or `@requires_modality(...)`) so it is not run once per modality."
+                )
+    return report
+
+
 def pytest_runtest_logreport(report):
     if report.when == "call":
         outcome = "PASSED" if report.passed else "FAILED" if report.failed else "SKIPPED"

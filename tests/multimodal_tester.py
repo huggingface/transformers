@@ -11,8 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
+import unittest
 from copy import deepcopy
 from inspect import signature
+
+import pytest
 
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
@@ -23,6 +27,7 @@ from .test_modeling_common import (
     ModelTesterMixin,
     ids_tensor,
     is_torch_available,
+    modality_independent,
     require_torch,
     torch_device,
 )
@@ -130,10 +135,40 @@ class MultiModalModelTester:
         """Create modality features, place modality placeholder tokens in ``input_ids``, and return:
 
         (input_ids_with_placeholders, modality_inputs_dict)
+
+        Used when the test class does not select modalities (i.e. ``parent.current_modalities`` is ``None``).
+        Per-modality inputs are built by ``_prepare_{modality}_inputs`` hooks with the same signature/return value.
         """
         raise NotImplementedError
 
     # -- End of overridable hooks -------------------------------------------------------------
+
+    @classmethod
+    def supported_modalities(cls):
+        """Non-text modalities this tester can build inputs for: declared by the model AND with a `_prepare_*_inputs` hook."""
+        model_modalities = getattr(cls.base_model_class, "input_modalities", ())
+        if isinstance(model_modalities, str):
+            model_modalities = (model_modalities,)
+        return tuple(
+            m for m in model_modalities if m != "text" and callable(getattr(cls, f"_prepare_{m}_inputs", None))
+        )
+
+    def _record_prepared_modality(self, modality):
+        # Read by the guard in `conftest.py` to detect tests that are run per modality without using its inputs
+        if not hasattr(self, "_prepared_modalities"):
+            self._prepared_modalities = set()
+        self._prepared_modalities.add(modality)
+
+    def _prepare_inputs_for_modalities(self, input_ids, config, modalities, batch_size: int | None = None):
+        """Build the inputs of each modality in `modalities` (`"text"` alone means no modality inputs)."""
+        modality_inputs = {}
+        for modality in modalities:
+            if modality == "text":
+                continue
+            input_ids, inputs = getattr(self, f"_prepare_{modality}_inputs")(input_ids, config, batch_size=batch_size)
+            modality_inputs.update(inputs)
+            self._record_prepared_modality(modality)
+        return input_ids, modality_inputs
 
     def _safe_token_id(self):
         """Smallest token ID that is not a special token. Used to scrub random ids_tensor outputs."""
@@ -154,7 +189,12 @@ class MultiModalModelTester:
         for token_id in self._special_token_ids:
             input_ids[input_ids == token_id] = safe_token_id
 
-        input_ids, modality_inputs = self._prepare_modality_inputs(input_ids, config)
+        # The test class selects the modalities of the current run (see `MultiModalModelTest._mm_modalities`)
+        modalities = getattr(self.parent, "current_modalities", None)
+        if modalities is None:
+            input_ids, modality_inputs = self._prepare_modality_inputs(input_ids, config)
+        else:
+            input_ids, modality_inputs = self._prepare_inputs_for_modalities(input_ids, config, modalities)
 
         # Create attention mask with final input_ids (after modality placeholders are placed) — important
         # for models that derive padding from token values.
@@ -234,6 +274,63 @@ class MultiModalModelTest(
     # Multimodal models are always composite
     _is_composite = True
 
+    # Modalities of the current run, set by `_mm_modalities` (e.g. `("image",)`). `None` -> the tester's default inputs.
+    current_modalities = None
+    # Non-text modalities the tester supports but that must not be run for this model (escape hatch)
+    skip_modalities = ()
+
+    @classmethod
+    def _supported_modalities(cls):
+        tester = cls.model_tester_class
+        if tester is None:
+            return []
+        return [m for m in tester.supported_modalities() if m not in cls.skip_modalities]
+
+    @classmethod
+    def _modality_runs(cls):
+        """A text-only run, one run per supported modality, and one with all of them if the tester can mix them."""
+        supported = cls._supported_modalities()
+        runs = [("text",)] + [(m,) for m in supported]
+        if len(supported) > 1 and getattr(cls.model_tester_class, "supports_mixed_modalities", False):
+            runs.append(tuple(supported))
+        return runs
+
+    def pytest_generate_tests(self, metafunc):
+        # Called by pytest at collection time, once per test, on an instance of the class being collected. Only for
+        # pure pytest classes: `unittest.TestCase` subclasses are not parametrized and keep running once, as before.
+        if "_mm_modalities" not in metafunc.fixturenames:
+            return
+        # Not a real test function, e.g. the leftover of `@pytest.mark.xxx` placed above `@parameterized.expand`
+        if not inspect.isfunction(inspect.unwrap(metafunc.function)):
+            return
+        definition = metafunc.definition
+        if definition.get_closest_marker("modality_independent"):
+            return
+        runs = self._modality_runs()
+        if required := definition.get_closest_marker("requires_modality"):
+            # exactly these modalities: such tests are about one modality and may break with others in the inputs
+            runs = [run for run in runs if set(run) - {"text"} == set(required.args)]
+        if definition.get_closest_marker("requires_all_modalities"):
+            runs = [run for run in runs if set(self._supported_modalities()) <= set(run)]
+        params = [
+            pytest.param(run, id="-".join(run), marks=[getattr(pytest.mark, m) for m in run if m != "text"])
+            for run in runs
+        ]
+        if not params:
+            # e.g. `requires_modality("video")` on a model whose tester cannot build video inputs
+            params = [pytest.param(None, id="unsupported", marks=pytest.mark.skip(reason="modality not supported"))]
+        metafunc.parametrize("_mm_modalities", params, indirect=True)
+
+    @pytest.fixture(autouse=True)
+    def _mm_modalities(self, request):
+        # `request.param` only exists for tests parametrized by `pytest_generate_tests` above
+        self.current_modalities = getattr(request, "param", None)
+
+    def setup_method(self, method=None):
+        # pytest also calls `setup_method` on `unittest.TestCase` subclasses (on top of `setUp`): only run it once
+        if not isinstance(self, unittest.TestCase):
+            self.setUp()
+
     def setUp(self):
         if self.model_tester_class is None:
             raise ValueError(
@@ -254,6 +351,7 @@ class MultiModalModelTest(
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
 
+    @modality_independent
     def test_config(self):
         """Test config common functionality."""
         self.config_tester.run_common_tests()

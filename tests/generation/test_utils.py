@@ -931,6 +931,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             self._check_generate_outputs(output_assisted, config, use_cache=True)
 
     @pytest.mark.generate
+    @pytest.mark.modality_independent
     def test_prompt_lookup_decoding_stops_at_eos(self):
         # This test ensures that the prompt lookup generation stops at eos token and does not suggest more tokens
         # (see https://github.com/huggingface/transformers/pull/31301)
@@ -2000,6 +2001,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     @pytest.mark.generate
+    @pytest.mark.modality_independent
     def test_inherits_generation_mixin(self):
         """
         Tests that the model class directly inherits `GenerationMixin`, as opposed to relying on `PreTrainedModel`

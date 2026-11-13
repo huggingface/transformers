@@ -96,6 +96,12 @@ markers = [
     "is_tensor_parallel_test: marks tests that use the TensorParallelTesterMixin (deselect with '-m \"not is_tensor_parallel_test\"')",
     "is_expert_parallel_test: marks tests that use the ExpertParallelTesterMixin (deselect with '-m \"not is_expert_parallel_test\"')",
     "is_fsdp_test: marks tests that use the FSDPTesterMixin (deselect with '-m \"not is_fsdp_test\"')",
+    "modality_independent: multimodal test run once, not once per input modality (see `MultiModalModelTest`)",
+    "requires_modality: multimodal test only run for the input modalities given as arguments",
+    "requires_all_modalities: multimodal test only run with all the input modalities of the model at once",
+    "image: multimodal test run with image inputs",
+    "video: multimodal test run with video inputs",
+    "audio: multimodal test run with audio inputs",
 ]
 log_cli = 1
 log_cli_level = "WARNING"

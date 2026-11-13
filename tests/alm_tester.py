@@ -22,6 +22,7 @@ from .test_modeling_common import (
     floats_tensor,
     ids_tensor,
     is_torch_available,
+    requires_modality,
     torch_device,
 )
 
@@ -128,6 +129,10 @@ class ALMModelTester(MultiModalModelTester):
         return {self.audio_config_key: self.get_audio_config()}
 
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
+        self._record_prepared_modality("audio")
+        return self._prepare_audio_inputs(input_ids, config, batch_size=batch_size)
+
+    def _prepare_audio_inputs(self, input_ids, config, batch_size: int | None = None):
         audio_features = self.create_audio_features(batch_size=batch_size)
         audio_mask = self.create_audio_mask(batch_size=batch_size)
         audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
@@ -186,6 +191,7 @@ class ALMModelTest(MultiModalModelTest):
         with patch.object(self.model_tester, "create_audio_mask", new=full_ones_mask):
             super().test_sdpa_can_dispatch_on_flash()
 
+    @requires_modality("audio")
     def test_mismatching_num_audio_tokens(self):
         """
         Tests that ALMs throw an error with explicit message saying what is wrong
