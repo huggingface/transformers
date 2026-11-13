@@ -66,6 +66,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
+        ("bevformer", "BevformerModel"),
         ("big_bird", "BigBirdModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("biogpt", "BioGptModel"),
@@ -1377,6 +1378,13 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_3D_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for 3D Object Detection mapping
+        ("bevformer", "BevformerFor3DObjectDetection"),
+    ]
+)
+
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for depth estimation mapping
@@ -2233,6 +2241,9 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODE
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES
 )
+MODEL_FOR_3D_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_3D_OBJECT_DETECTION_MAPPING_NAMES
+)
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
 MODEL_FOR_TEXT_RECOGNITION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES)
 MODEL_FOR_TABLE_RECOGNITION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TABLE_RECOGNITION_MAPPING_NAMES)
@@ -2527,6 +2538,13 @@ AutoModelForZeroShotObjectDetection = auto_class_update(
 )
 
 
+class AutoModelFor3DObjectDetection(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_3D_OBJECT_DETECTION_MAPPING
+
+
+AutoModelFor3DObjectDetection = auto_class_update(AutoModelFor3DObjectDetection, head_doc="3D object detection")
+
+
 class AutoModelForDepthEstimation(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
@@ -2749,6 +2767,8 @@ __all__ = [
     "MODEL_MAPPING",
     "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
     "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
+    "MODEL_FOR_3D_OBJECT_DETECTION_MAPPING",
+    "MODEL_FOR_3D_OBJECT_DETECTION_MAPPING_NAMES",
     "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
     "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
     "AutoModel",
@@ -2796,6 +2816,7 @@ __all__ = [
     "AutoModelForDocumentQuestionAnswering",
     "AutoModelForZeroShotImageClassification",
     "AutoModelForZeroShotObjectDetection",
+    "AutoModelFor3DObjectDetection",
     "AutoModelForImageTextToText",
     "AutoModelForImageMatting",
     "AutoModelForNormalEstimation",

@@ -53,6 +53,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
         ("bert-generation", "BertGenerationConfig"),
+        ("bevformer", "BevformerConfig"),
         ("big_bird", "BigBirdConfig"),
         ("bigbird_pegasus", "BigBirdPegasusConfig"),
         ("biogpt", "BioGptConfig"),
