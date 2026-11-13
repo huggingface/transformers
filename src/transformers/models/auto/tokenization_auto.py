@@ -122,6 +122,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("esm", "EsmTokenizer"),
         ("esmc", "EsmcTokenizer" if is_tokenizers_available() else None),
         ("esmfold2", "EsmcTokenizer" if is_tokenizers_available() else None),
+        ("evo2", "Evo2Tokenizer"),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
