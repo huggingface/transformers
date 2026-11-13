@@ -42,6 +42,7 @@ from transformers import (
     RobertaTokenizer,
     Siglip2Tokenizer,
     TokenizersBackend,
+    is_sentencepiece_available,
     is_tokenizers_available,
     logging,
 )
@@ -65,6 +66,7 @@ from transformers.testing_utils import (
     RequestCounter,
     require_mistral_common,
     require_sentencepiece,
+    require_tiktoken,
     require_tokenizers,
     slow,
 )
@@ -82,6 +84,9 @@ if is_tokenizers_available():
 
 if is_mistral_common_available():
     from transformers.tokenization_mistral_common import MistralCommonBackend
+
+if is_sentencepiece_available():
+    import sentencepiece as spm
 
 
 class AutoTokenizerTest(unittest.TestCase):
@@ -183,6 +188,59 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_tokenizer_from_type_incorrect_name(self):
         with pytest.raises(ValueError):
             AutoTokenizer.from_pretrained("./", tokenizer_type="xxx")
+
+    @require_tokenizers
+    @require_sentencepiece
+    @require_tiktoken
+    @require_mistral_common
+    @parameterized.expand(
+        [
+            ("hf-internal-testing/llama-tokenizer", "tokenizers"),
+            ("hf-internal-testing/llama-tokenizer", "sentencepiece"),
+            ("google-t5/t5-small", "tokenizers"),
+            ("google-t5/t5-small", "sentencepiece"),
+            ("hf-internal-testing/llama3-tokenizer-tiktoken", "tokenizers"),
+            ("mistralai/Ministral-8B-Instruct-2410", "tokenizers"),
+            ("mistralai/Ministral-8B-Instruct-2410", "mistral_common"),
+        ]
+    )
+    def test_backend_kwarg(self, repo_id, backend):
+        tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
+        self.assertEqual(tokenizer.backend, backend)
+
+        text = "This is a test 😊 I was born in 92000, and this is falsé."
+        if backend == "sentencepiece":
+            # The SentencePiece backend tokenizes exactly like the SentencePiece model
+            sp_model = spm.SentencePieceProcessor(model_file=tokenizer.vocab_file)
+            self.assertEqual(tokenizer.encode(text, add_special_tokens=False), sp_model.encode(text))
+        elif backend == "mistral_common":
+            # The mistral-common backend tokenizes like the tokenizers backend
+            tokenizers_tokenizer = AutoTokenizer.from_pretrained(repo_id, backend="tokenizers")
+            self.assertEqual(tokenizer.encode(text), tokenizers_tokenizer.encode(text))
+
+    @require_tokenizers
+    @require_tiktoken
+    @parameterized.expand(
+        [
+            ("google-bert/bert-base-cased", "sentencepiece", "has no SentencePiece model file"),
+            ("hf-internal-testing/llama3-tokenizer-tiktoken", "sentencepiece", "has no SentencePiece model file"),
+            ("google-bert/bert-base-cased", "pil", "not a tokenizer backend"),
+        ]
+    )
+    def test_backend_kwarg_falls_back_to_default_tokenizer(self, repo_id, backend, warning):
+        default_tokenizer = AutoTokenizer.from_pretrained(repo_id)
+
+        logger = logging.get_logger("transformers.models.auto.tokenization_auto")
+        with CaptureLogger(logger) as cl:
+            tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
+        self.assertIn(warning, cl.out)
+        self.assertIs(type(tokenizer), type(default_tokenizer))
+        self.assertEqual(tokenizer.backend, "tokenizers")
+
+        # The requested backend is not saved
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            self.assertNotIn("backend", get_tokenizer_config(tmp_dir))
 
     @require_tokenizers
     def test_tokenizer_identifier_with_correct_config(self):
