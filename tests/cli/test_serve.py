@@ -354,6 +354,42 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
                 self.assertEqual(video_item, {"type": "video", "url": video_src})
 
 
+def _write_synthetic_cached_model(
+    cache_dir: str,
+    repo_id: str,
+    config_dict: dict,
+    ref: str = "main",
+    commit_hash: str = "0123456789abcdef0123456789abcdef01234567",
+    gguf_files: list[str] | None = None,
+) -> None:
+    """Create a minimal HuggingFace Hub cache entry on disk for offline testing."""
+    from pathlib import Path
+
+    repo_folder = f"models--{repo_id.replace('/', '--')}"
+    repo_dir = Path(cache_dir) / repo_folder
+    snapshot_dir = repo_dir / "snapshots" / commit_hash
+    blobs_dir = repo_dir / "blobs"
+    refs_dir = repo_dir / "refs"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    blobs_dir.mkdir(parents=True, exist_ok=True)
+    refs_dir.mkdir(parents=True, exist_ok=True)
+
+    config_blob = blobs_dir / f"{commit_hash}-config"
+    config_blob.write_text(json.dumps(config_dict), encoding="utf-8")
+    config_link = snapshot_dir / "config.json"
+    if not config_link.exists():
+        config_link.symlink_to(config_blob)
+
+    for gguf_file in gguf_files or []:
+        gguf_blob = blobs_dir / f"{commit_hash}-{gguf_file}"
+        gguf_blob.write_bytes(b"GGUF")
+        gguf_link = snapshot_dir / gguf_file
+        if not gguf_link.exists():
+            gguf_link.symlink_to(gguf_blob)
+
+    (refs_dir / ref).write_text(commit_hash, encoding="utf-8")
+
+
 class TestGenerativeModelList(unittest.TestCase):
     def test_lists_only_generative_models(self):
         """Should list LLMs and VLMs but not non-generative models like BERT."""
@@ -366,7 +402,7 @@ class TestGenerativeModelList(unittest.TestCase):
             hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
             hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)
 
-            result = ModelManager.get_gen_models(cache_dir)
+            result = ModelManager().get_gen_models(cache_dir)
             model_ids = {r["id"] for r in result}
 
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
@@ -374,7 +410,6 @@ class TestGenerativeModelList(unittest.TestCase):
 
     def test_skips_null_architectures(self):
         """A cached config with `"architectures": null` must not break the listing."""
-        import json
         import tempfile
         from pathlib import Path
 
@@ -385,10 +420,96 @@ class TestGenerativeModelList(unittest.TestCase):
             config = Path(hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)).resolve()
             config.write_text(json.dumps({**json.loads(config.read_text()), "architectures": None}))
 
-            model_ids = {r["id"] for r in ModelManager.get_gen_models(cache_dir)}
+            model_ids = {r["id"] for r in ModelManager().get_gen_models(cache_dir)}
 
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
+
+    def test_missing_cache_dir_returns_empty_list(self):
+        """Non-existent cache_dir (CacheNotFound) should return an empty list instead of raising."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_cache = str(Path(tmp_dir) / "does_not_exist")
+            mm = ModelManager()
+            self.assertEqual(mm.get_gen_models(missing_cache), [])
+
+    def test_includes_loaded_models_when_cache_missing(self):
+        """Loaded models (local paths, revisions, GGUF) are included even when the Hub cache is missing."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_cache = str(Path(tmp_dir) / "does_not_exist")
+            mm = ModelManager()
+            self.addCleanup(mm.shutdown)
+
+            mm.loaded_models["/path/to/local/ckpt@main"] = TimedModel(MagicMock(), timeout_seconds=-1)
+            mm.loaded_models["org/custom-llm@dev"] = TimedModel(MagicMock(), timeout_seconds=-1)
+            mm.loaded_models["org/gguf-llm@main:q4_k_m.gguf"] = TimedModel(MagicMock(), timeout_seconds=-1)
+
+            result = mm.get_gen_models(missing_cache)
+            by_id = {entry["id"]: entry for entry in result}
+
+            self.assertEqual(
+                set(by_id),
+                {"/path/to/local/ckpt", "org/custom-llm@dev", "org/gguf-llm:q4_k_m.gguf"},
+            )
+            for entry in result:
+                self.assertEqual(set(entry), {"id", "object", "created", "owned_by"})
+                self.assertEqual(entry["object"], "model")
+                self.assertIsInstance(entry["created"], int)
+
+            self.assertEqual(by_id["/path/to/local/ckpt"]["owned_by"], "local")
+            self.assertEqual(by_id["org/custom-llm@dev"]["owned_by"], "org")
+            self.assertEqual(by_id["org/gguf-llm:q4_k_m.gguf"]["owned_by"], "org")
+
+    def test_deduplicates_cached_and_loaded_models(self):
+        """Models present in both scan_cache_dir and loaded_models should appear only once."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            _write_synthetic_cached_model(
+                cache_dir,
+                "Qwen/Qwen2.5-0.5B-Instruct",
+                {"architectures": ["Qwen2ForCausalLM"]},
+            )
+            _write_synthetic_cached_model(
+                cache_dir,
+                "org/gguf-repo",
+                {"architectures": ["Qwen2ForCausalLM"]},
+                commit_hash="fedcba9876543210fedcba9876543210fedcba98",
+                gguf_files=["model-q4.gguf"],
+            )
+
+            mm = ModelManager()
+            self.addCleanup(mm.shutdown)
+            mm.loaded_models["Qwen/Qwen2.5-0.5B-Instruct@main"] = TimedModel(MagicMock(), timeout_seconds=-1)
+            mm.loaded_models["org/gguf-repo@main:model-q4.gguf"] = TimedModel(MagicMock(), timeout_seconds=-1)
+            mm.loaded_models["/mnt/local/checkpoint@main"] = TimedModel(MagicMock(), timeout_seconds=-1)
+
+            result = mm.get_gen_models(cache_dir)
+            ids = [entry["id"] for entry in result]
+
+            self.assertEqual(ids.count("Qwen/Qwen2.5-0.5B-Instruct"), 1)
+            self.assertEqual(ids.count("org/gguf-repo:model-q4.gguf"), 1)
+            self.assertEqual(ids.count("/mnt/local/checkpoint"), 1)
+
+    def test_unloaded_timed_model_excluded(self):
+        """Once a TimedModel is unloaded, it should no longer appear in get_gen_models."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_cache = str(Path(tmp_dir) / "does_not_exist")
+            mm = ModelManager()
+            timed = TimedModel(MagicMock(), timeout_seconds=-1)
+            mm.loaded_models["/path/to/local/ckpt@main"] = timed
+
+            self.assertEqual(len(mm.get_gen_models(missing_cache)), 1)
+            timed.delete_model()
+            self.assertEqual(mm.get_gen_models(missing_cache), [])
 
 
 @require_serve
@@ -662,6 +783,123 @@ class TestAppRoutes(unittest.TestCase):
     def test_request_id_passthrough(self):
         resp = asyncio.run(self._request("GET", "/health", headers={"x-request-id": "my-id"}))
         self.assertEqual(resp.headers["x-request-id"], "my-id")
+
+
+@require_serve
+class TestModelsEndpoint(unittest.TestCase):
+    """FastAPI TestClient tests for GET /v1/models with a real ModelManager."""
+
+    def _build_client(self, model_manager: ModelManager):
+        from fastapi.testclient import TestClient
+
+        app = build_server(
+            model_manager=model_manager,
+            chat_handler=MagicMock(spec=ChatCompletionHandler),
+            completion_handler=MagicMock(spec=CompletionHandler),
+            response_handler=MagicMock(spec=ResponseHandler),
+            transcription_handler=MagicMock(spec=TranscriptionHandler),
+            systemone_handler=MagicMock(spec=SystemOneHandler),
+            generation_state=GenerationState(),
+        )
+        return TestClient(app)
+
+    def test_returns_200_empty_when_scan_cache_dir_raises_cache_not_found(self):
+        from pathlib import Path
+
+        from huggingface_hub import CacheNotFound
+
+        mm = ModelManager()
+        client = self._build_client(mm)
+        with patch(
+            "transformers.cli.serving.model_manager.scan_cache_dir",
+            side_effect=CacheNotFound("Cache directory not found", cache_dir=Path("/nonexistent")),
+        ):
+            resp = client.get("/v1/models")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"object": "list", "data": []})
+
+    def test_returns_200_empty_when_hf_hub_cache_points_to_missing_dir(self):
+        import os
+        import tempfile
+        from pathlib import Path
+
+        mm = ModelManager()
+        client = self._build_client(mm)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_dir = str(Path(tmp_dir) / "missing_hf_hub_cache")
+            with patch.dict(os.environ, {"HF_HUB_CACHE": missing_dir}):
+                resp = client.get("/v1/models")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"object": "list", "data": []})
+
+    def test_lists_force_model_local_path_when_cache_missing(self):
+        import os
+        import tempfile
+        from pathlib import Path
+
+        from openai.types import Model as OpenAIModel
+
+        with (
+            patch.object(ModelManager, "_load_processor", return_value=MagicMock()),
+            patch.object(ModelManager, "_load_model", return_value=MagicMock()),
+        ):
+            mm = ModelManager(force_model="/mnt/models/my-local-checkpoint")
+            self.addCleanup(mm.shutdown)
+
+        client = self._build_client(mm)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_dir = str(Path(tmp_dir) / "missing_hf_hub_cache")
+            with patch.dict(os.environ, {"HF_HUB_CACHE": missing_dir}):
+                resp = client.get("/v1/models")
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["object"], "list")
+        self.assertEqual(len(payload["data"]), 1)
+
+        entry = payload["data"][0]
+        parsed = OpenAIModel.model_validate(entry)
+        self.assertEqual(parsed.id, "/mnt/models/my-local-checkpoint")
+        self.assertEqual(parsed.object, "model")
+        self.assertEqual(parsed.owned_by, "local")
+
+    def test_deduplicates_cached_and_loaded_models_via_http(self):
+        import os
+        import tempfile
+
+        from openai.types import Model as OpenAIModel
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            _write_synthetic_cached_model(
+                cache_dir,
+                "Qwen/Qwen2.5-0.5B-Instruct",
+                {"architectures": ["Qwen2ForCausalLM"]},
+            )
+
+            with (
+                patch.object(ModelManager, "_load_processor", return_value=MagicMock()),
+                patch.object(ModelManager, "_load_model", return_value=MagicMock()),
+            ):
+                mm = ModelManager(force_model="Qwen/Qwen2.5-0.5B-Instruct")
+                self.addCleanup(mm.shutdown)
+                mm.loaded_models["HuggingFaceTB/SmolLM2-135M-Instruct@main"] = TimedModel(
+                    MagicMock(), timeout_seconds=-1
+                )
+
+            client = self._build_client(mm)
+            with patch.dict(os.environ, {"HF_HUB_CACHE": cache_dir}):
+                resp = client.get("/v1/models")
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["object"], "list")
+        models = [OpenAIModel.model_validate(item) for item in payload["data"]]
+        self.assertEqual(
+            [m.id for m in models],
+            ["Qwen/Qwen2.5-0.5B-Instruct", "HuggingFaceTB/SmolLM2-135M-Instruct"],
+        )
 
 
 @slow
