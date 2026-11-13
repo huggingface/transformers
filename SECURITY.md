@@ -29,7 +29,7 @@ protect yourself from updates on the repository.
 
 ## Supported Versions
 
-We ship security fixes in the latest release. Please reproduce on the current released version before reporting — we do not backport fixes to older releases.
+Security fixes ship in the latest release. Please reproduce on the current released version before reporting.
 
 ## Reporting a Vulnerability
 
@@ -121,9 +121,9 @@ We treat as vulnerabilities issues in the **published package code** — the lib
 
 The following are **not** treated as vulnerabilities in `transformers`. If your finding touches one of these, the report must explain why it is nonetheless a violation of a guarantee we make — otherwise it will be closed.
 
-- Issues that require loading an untrusted artifact and amount to the documented load-time risk above (code execution / file access on load of a malicious model, dataset, config, or pickle).
+- Issues that require loading an untrusted artifact and amount to the documented load-time risk above (code execution / file access on load of a malicious model, dataset, config, or pickle). An escape from the chat-template sandbox is the exception, see above.
 - Anything that requires `trust_remote_code=True`: running the repository's code is what that flag does.
-- Findings in `examples/`, `scripts/`, `utils/`, documentation, tests, or other non-packaged reference material.
+- Findings in the repository's top-level `examples/`, `scripts/` and `utils/` folders, documentation, tests, or other non-packaged reference material.
 - Local denial-of-service from feeding pathological input to a function on your own machine (high memory, slow parse, panic), absent a multi-tenant or remote-service impact.
 - Model behavior: jailbreaks, alignment failures, prompt injection, or harmful generations. Model weights are authored by their uploaders; report these to the model owner.
 - Vulnerabilities in third-party dependencies we do not vendor — report upstream (we'll bump once fixed).
