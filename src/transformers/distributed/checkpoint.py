@@ -17,6 +17,8 @@ import os
 import re
 from typing import TYPE_CHECKING
 
+from huggingface_hub import split_torch_state_dict_into_shards
+
 from ..utils import (
     is_torch_available,
     is_torch_greater_or_equal,
@@ -25,11 +27,16 @@ from ..utils import (
 from .utils import (
     _check_distributed_checkpointing_available,
     _distributed_barrier,
+    _get_torch_distributed_rank,
+    _get_torch_distributed_world_size,
+    _is_torch_distributed_initialized,
     is_dtensor,
 )
 
 
 if TYPE_CHECKING:
+    from huggingface_hub import StateDictSplit
+
     from ..quantizers import HfQuantizer
 
 
@@ -37,7 +44,10 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file as safe_save_file
     from torch.utils._pytree import tree_map
+
+    from ..core_model_loading import revert_weight_conversion
 
 if _check_distributed_checkpointing_available():
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader, HuggingFaceStorageWriter
@@ -139,6 +149,86 @@ def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike)
 
     # All ranks wait until the checkpoint is ready for loading or consolidation.
     _distributed_barrier()
+
+
+def save_sharded_state_dict(
+    model,
+    state_dict: dict[str, torch.Tensor],
+    save_directory: str | os.PathLike,
+    *,
+    filename_pattern: str,
+    max_shard_size: int | str,
+    metadata: dict[str, str],
+    save_original_format: bool,
+) -> tuple[StateDictSplit, dict[str, str]]:
+    """
+    Write a TP- or FSDP-sharded `state_dict` as regular safetensors files, with every rank writing some of the files.
+    Every rank must call this function.
+
+        1. The files are planned on meta tensors with the global shapes, so every rank gets the same plan without
+           moving any data.
+        2. File `i` is written by rank `i % world_size`, in rounds of `world_size` files: all ranks join the
+           `full_tensor()` gathers of the round and each owner keeps its file on CPU. Then all owners revert the
+           weight conversions and write their file in parallel. CPU memory per rank is bounded by one file.
+
+    Returns the split of the (non-reverted) state dict and the weight map of the files that were written.
+    """
+    if not _is_torch_distributed_initialized():
+        raise ValueError(
+            "Saving a TP- or FSDP-sharded model requires torch.distributed to be initialized. "
+            "Call save_pretrained from every rank after init_process_group."
+        )
+    rank = _get_torch_distributed_rank()
+    world_size = _get_torch_distributed_world_size()
+
+    meta_state_dict = {
+        name: torch.empty(tensor.shape, dtype=tensor.dtype, device="meta") for name, tensor in state_dict.items()
+    }
+    state_dict_split = split_torch_state_dict_into_shards(
+        meta_state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+    )
+    files = list(state_dict_split.filename_to_tensors.items())
+
+    # The final names of the weights in each file, after reverting the weight conversions.
+    weight_map = {}
+    for filename, names in files:
+        if save_original_format:
+            names = revert_weight_conversion(model, {name: meta_state_dict[name] for name in names})
+        weight_map.update(dict.fromkeys(names, filename))
+
+    with torch.no_grad():
+        for round_start in range(0, len(files), world_size):
+            owned_file = None
+            for owner, (filename, names) in enumerate(files[round_start : round_start + world_size]):
+                shard = {}
+                for name in names:
+                    tensor = state_dict[name]
+                    # Collective: every rank must gather, even if it does not own the file.
+                    if is_dtensor(tensor):
+                        tensor = tensor.full_tensor()
+                    if owner == rank:
+                        shard[name] = tensor.detach().cpu()
+                if owner == rank:
+                    owned_file = (filename, shard)
+
+            if owned_file is None:
+                continue
+            filename, shard = owned_file
+            if save_original_format:
+                shard = revert_weight_conversion(model, shard)
+            expected_names = {name for name, file in weight_map.items() if file == filename}
+            if set(shard) != expected_names:
+                raise RuntimeError(
+                    f"The weights reverted for {filename} do not match the ones planned on meta tensors: "
+                    f"{sorted(set(shard) ^ expected_names)}."
+                )
+            shard = {name: tensor.contiguous() for name, tensor in shard.items()}
+            safe_save_file(shard, os.path.join(save_directory, filename), metadata=metadata)
+            del shard, owned_file
+
+    # The files are only complete once every owner is done writing.
+    _distributed_barrier()
+    return state_dict_split, weight_map
 
 
 def consolidate_distributed_checkpoint(
