@@ -195,17 +195,18 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_mistral_common
     @parameterized.expand(
         [
-            ("hf-internal-testing/llama-tokenizer", "tokenizers"),
-            ("hf-internal-testing/llama-tokenizer", "sentencepiece"),
-            ("google-t5/t5-small", "tokenizers"),
-            ("google-t5/t5-small", "sentencepiece"),
-            ("hf-internal-testing/llama3-tokenizer-tiktoken", "tokenizers"),
-            ("mistralai/Ministral-8B-Instruct-2410", "tokenizers"),
-            ("mistralai/Ministral-8B-Instruct-2410", "mistral_common"),
+            ("hf-internal-testing/llama-tokenizer", "tokenizers", "TokenizersBackend"),
+            ("hf-internal-testing/llama-tokenizer", "sentencepiece", "SentencePieceBackend"),
+            ("google-t5/t5-small", "tokenizers", "TokenizersBackend"),
+            ("google-t5/t5-small", "sentencepiece", "SentencePieceBackend"),
+            ("hf-internal-testing/llama3-tokenizer-tiktoken", "tokenizers", "TokenizersBackend"),
+            ("mistralai/Ministral-8B-Instruct-2410", "tokenizers", "TokenizersBackend"),
+            ("mistralai/Ministral-8B-Instruct-2410", "mistral_common", "MistralCommonBackend"),
         ]
     )
-    def test_backend_kwarg(self, repo_id, backend):
+    def test_backend_kwarg(self, repo_id, backend, backend_class_name):
         tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
+        self.assertIsInstance(tokenizer, getattr(transformers, backend_class_name))
         self.assertEqual(tokenizer.backend, backend)
 
         text = "This is a test 😊 I was born in 92000, and this is falsé."
