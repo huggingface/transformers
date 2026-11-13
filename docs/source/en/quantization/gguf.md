@@ -55,14 +55,12 @@ moe_tokenizer = AutoTokenizer.from_pretrained(moe_model_id, gguf_file=moe_filena
 
 The packed path currently supports Qwen3.5, Qwen3.5 MoE, LFM2, and BERT. Packed loads use float32 automatically because it's faster on MPS. If you set another `dtype`, the loader returns a warning. Other architectures go through the legacy loader.
 
-BERT files hold the encoder alone, for embeddings: llama.cpp drops the pooler and the task heads when converting. Load them with [`AutoModel`] and `add_pooling_layer=False`.
+BERT files hold the encoder alone, for embeddings: llama.cpp drops the pooler and the task heads when converting. Load them with [`AutoModel`], which builds the model without a pooler to match, so `pooler_output` is `None`.
 
 ```py
 from transformers import AutoModel, AutoTokenizer
 
-model = AutoModel.from_pretrained(
-    "leliuga/all-MiniLM-L6-v2-GGUF", gguf_file="all-MiniLM-L6-v2.Q8_0.gguf", add_pooling_layer=False
-)
+model = AutoModel.from_pretrained("leliuga/all-MiniLM-L6-v2-GGUF", gguf_file="all-MiniLM-L6-v2.Q8_0.gguf")
 tokenizer = AutoTokenizer.from_pretrained("leliuga/all-MiniLM-L6-v2-GGUF", gguf_file="all-MiniLM-L6-v2.Q8_0.gguf")
 ```
 

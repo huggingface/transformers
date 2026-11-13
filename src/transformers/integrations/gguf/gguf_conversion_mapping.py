@@ -263,6 +263,12 @@ GGUF_ARCHS = {
     "bert": _bert,
 }
 
+# gguf `general.architecture` -> modules of the base model llama.cpp never writes. The model is built without
+# them, rather than with random weights: BERT files keep the encoder alone, for embeddings, and drop the pooler.
+GGUF_DROPPED_MODULES = {
+    "bert": ("pooler",),
+}
+
 
 class SubtractOne(ConversionOps):
     """Subtract `offset` from the tensor, in float32.

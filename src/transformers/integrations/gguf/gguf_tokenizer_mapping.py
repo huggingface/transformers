@@ -66,6 +66,7 @@ GGUF_TOKENIZER_MAPPING = {
         "chat_template": "chat_template",
         "ggml.add_bos_token": "add_bos_token",
         "ggml.add_eos_token": "add_eos_token",
+        "ggml.clean_spaces": "clean_up_tokenization_spaces",
     },
 }
 
@@ -77,11 +78,9 @@ _SPECIAL_TOKENS = {
     "pad_token": "padding_token_id",
 }
 
-# What a WordPiece file names instead. llama.cpp writes `[CLS]` / `[SEP]` as BOS / EOS too, which BERT has
-# none of: its tokenizer adds them itself, so they are not read as such.
-_WORDPIECE_SPECIAL_TOKENS = {
-    "unk_token": "unknown_token_id",
-    "pad_token": "padding_token_id",
+# The markers only encoders name. One the file leaves out keeps the tokenizer class's default rather than being
+# unset, as llama.cpp does too: many BERT files name `[SEP]` but not `[CLS]`, for one.
+_ENCODER_SPECIAL_TOKENS = {
     "cls_token": "cls_token_id",
     "sep_token": "seperator_token_id",  # sic: llama.cpp's spelling
     "mask_token": "mask_token_id",
@@ -101,6 +100,13 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
     }
     tokenizer, tokenizer_config = grouped["tokenizer"], grouped["tokenizer_config"]
 
+    for name, key in _SPECIAL_TOKENS.items():
+        token_id = metadata.get(f"tokenizer.ggml.{key}")
+        tokenizer_config[name] = tokenizer["tokens"][token_id] if token_id is not None else None
+    for name, key in _ENCODER_SPECIAL_TOKENS.items():
+        if (token_id := metadata.get(f"tokenizer.ggml.{key}")) is not None:
+            tokenizer_config[name] = tokenizer["tokens"][token_id]
+
     tokenizer_type = tokenizer.get("tokenizer_type")
     if tokenizer_type == "llama":
         # Older files have no flag, and llama.cpp adds BOS to a sentencepiece vocabulary that does not say otherwise.
@@ -109,22 +115,9 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
         # The flag is set, but the reference tokenizer adds no BOS because the chat template writes `<bos>` itself.
         # llama.cpp forces BOS on here (ggml-org/llama.cpp#21500); we follow the reference.
         tokenizer_config["add_bos_token"] = False
-
-    if tokenizer_type == "bert":
-        # `[CLS]` and `[SEP]` are added by the tokenizer's own template, whatever the flags say. A marker the
-        # file does not state keeps `BertTokenizer`'s default, which is the one llama.cpp assumes too.
-        tokenizer_config.pop("add_bos_token", None)
-        tokenizer_config.pop("add_eos_token", None)
-        if (clean_spaces := metadata.get("tokenizer.ggml.clean_spaces")) is not None:
-            tokenizer_config["clean_up_tokenization_spaces"] = clean_spaces
-        for name, key in _WORDPIECE_SPECIAL_TOKENS.items():
-            if (token_id := metadata.get(f"tokenizer.ggml.{key}")) is not None:
-                tokenizer_config[name] = tokenizer["tokens"][token_id]
-        return architecture, tokenizer, tokenizer_config
-
-    for name, key in _SPECIAL_TOKENS.items():
-        token_id = metadata.get(f"tokenizer.ggml.{key}")
-        tokenizer_config[name] = tokenizer["tokens"][token_id] if token_id is not None else None
+    elif tokenizer_type == "bert":
+        # WordPiece has no BOS / EOS: llama.cpp restates `[CLS]` / `[SEP]` as those (gguf-py's `SpecialVocab`).
+        tokenizer_config["bos_token"] = tokenizer_config["eos_token"] = None
     return architecture, tokenizer, tokenizer_config
 
 
@@ -203,24 +196,24 @@ def unigram_tokenizer(tokenizer_dict):
 
 
 def wordpiece_tokenizer(tokenizer_dict):
-    """WordPiece, as BERT has it.
+    """WordPiece, spelled back the way `BertTokenizer` reads it.
 
-    llama.cpp respells the vocabulary: a word-initial piece gains a leading `\u2581` and a continuation loses
-    its `##`, control tokens like `[CLS]` aside. We spell it back. Lowercasing is stated in recent files;
-    older ones say nothing, and llama.cpp lowercases those, as `BertTokenizer` does by default.
+    llama.cpp marks where a word starts instead of where it goes on: `\u2581play` `ing` for `play` `##ing`. Control
+    tokens like `[CLS]` keep their spelling. Lowercasing (and with it accent stripping) follows the file, and
+    defaults to on in both llama.cpp and `BertTokenizer` for older files that do not say.
     """
+    tokens = tokenizer_dict["tokens"]
     vocab = {}
-    for index, (token, token_type) in enumerate(zip(tokenizer_dict["tokens"], tokenizer_dict["token_type"])):
+    for index, (token, token_type) in enumerate(zip(tokens, tokenizer_dict["token_type"])):
         if token_type != 3:  # 3 is CONTROL
             token = token[1:] if token.startswith("\u2581") else f"##{token}"
         vocab[token] = index
-    lowercase = tokenizer_dict.get("do_lower_case", True)
     unk_id = tokenizer_dict.get("unk_token_id")
     return BertTokenizer(
         vocab=vocab,
-        do_lower_case=lowercase,
-        strip_accents=tokenizer_dict.get("strip_accents", lowercase),
-        unk_token=tokenizer_dict["tokens"][unk_id] if unk_id is not None else "[UNK]",
+        do_lower_case=tokenizer_dict.get("do_lower_case", True),
+        strip_accents=tokenizer_dict.get("strip_accents"),
+        unk_token=tokens[unk_id] if unk_id is not None else "[UNK]",
     )
 
 

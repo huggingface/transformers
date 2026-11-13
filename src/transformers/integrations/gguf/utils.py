@@ -21,7 +21,7 @@ from torch import nn
 from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform, rename_source_key
 from ...utils import logging
 from .dequant import GGML_BLOCK, row_bytes
-from .gguf_conversion_mapping import GGUF_ARCHS, Cast, Dequantize
+from .gguf_conversion_mapping import GGUF_ARCHS, GGUF_DROPPED_MODULES, Cast, Dequantize
 from .kernels import DEQUANT_CHUNK_ELEMS, MAX_GEMV_ROWS, dequantize_blocks, mul_mat_id, mul_mat_vec
 from .reader import GgufHeader
 
@@ -39,6 +39,13 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
     if gguf_arch not in GGUF_ARCHS:
         raise ValueError(f"GGUF architecture {gguf_arch!r} is not supported yet. Supported: {sorted(GGUF_ARCHS)}.")
     return GGUF_ARCHS[gguf_arch](config)
+
+
+def remove_dropped_modules(model: nn.Module, gguf_arch: str) -> None:
+    """Remove the modules a `gguf_arch` file never has, so they are not left randomly initialized."""
+    for name in GGUF_DROPPED_MODULES.get(gguf_arch, ()):
+        if getattr(model.base_model, name, None) is not None:
+            setattr(model.base_model, name, None)
 
 
 def get_gguf_plan(

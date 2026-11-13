@@ -516,12 +516,8 @@ class BertGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
     prompt = "The capital of France is Paris. The capital of Germany is Berlin."
 
-    @classmethod
-    def load_gguf_model(cls, gguf_file, dtype=None, **kwargs):
-        # llama.cpp keeps the encoder alone, so there is no pooler to load
-        return super().load_gguf_model(gguf_file, dtype=dtype, add_pooling_layer=False, **kwargs)
-
     def reference_model(self, dtype=torch.float32):
+        # the GGUF-loaded model has no pooler (llama.cpp drops it), so compare against the encoder alone
         return BertModel.from_pretrained(self.reference_repo, dtype=dtype, add_pooling_layer=False)
 
     def reference_state_dict(self):
