@@ -50,7 +50,7 @@ RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]'
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 

@@ -1266,13 +1266,14 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         dschf = HfDeepSpeedConfig(ds_config)
         self.assertTrue(dschf.is_zero3())
         self.assertTrue(is_deepspeed_zero3_enabled())
-        model, _ = self._load_with_logging(AutoModel, T5_TINY, expect_zero3=True)
+        # GPT-2 has no FP32-only layers, so every weight should use the configured dtype.
+        model, _ = self._load_with_logging(AutoModel, GPT2_TINY, expect_zero3=True)
 
         del ds_config["zero_optimization"]
         dschf = HfDeepSpeedConfig(ds_config)
         self.assertFalse(dschf.is_zero3())
         self.assertFalse(is_deepspeed_zero3_enabled())
-        self._load_with_logging(AutoModel, T5_TINY, expect_zero3=False)
+        self._load_with_logging(AutoModel, GPT2_TINY, expect_zero3=False)
 
         return model
 
@@ -1300,6 +1301,19 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
             self.assertEqual(
                 param.dtype, expected_dtype, f"Parameter {name} has dtype {param.dtype}, expected {expected_dtype}"
             )
+
+    def test_init_zero3_keeps_fp32_modules(self):
+        # DeepSpeed 0.20.0 started honoring _keep_in_fp32_modules for ZeRO-3 parameters.
+        ds_config = HfDeepSpeedConfig(self._get_zero3_ds_config(fp16={"enabled": True}))
+        self.assertTrue(ds_config.is_zero3())
+        model, _ = self._load_with_logging(AutoModel, T5_TINY)
+        self.assertTrue(model._keep_in_fp32_modules)
+
+        for name, param in model.named_parameters():
+            expected_dtype = torch.float16
+            if any(module in name.split(".") for module in model._keep_in_fp32_modules):
+                expected_dtype = torch.float32
+            self.assertEqual(param.dtype, expected_dtype, name)
 
     @require_torch_accelerator
     def test_from_config_zero3_weight_init(self):
