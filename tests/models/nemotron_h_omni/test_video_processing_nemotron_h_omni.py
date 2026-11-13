@@ -15,8 +15,11 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available() and is_torchvision_available():
     from transformers import NemotronH_Omni_Reasoning_V3VideoProcessor
@@ -69,9 +72,7 @@ class NemotronHOmniVideoProcessingTest(unittest.TestCase):
         wp, hp = processor._compute_target_patches(64, 256)
         self.assertEqual(wp, hp)
 
-    def test_call_returns_normalized_frames_and_token_counts(self):
-        import torch
-
+    def test_call_returns_normalized_tubelets(self):
         processor = self._processor()
         num_frames = 3
         video = torch.randint(0, 256, (num_frames, 3, 64, 64), dtype=torch.uint8)
@@ -80,20 +81,16 @@ class NemotronHOmniVideoProcessingTest(unittest.TestCase):
 
         wp, hp = processor._compute_target_patches(64, 64)
         expected_size = (hp * processor.patch_size, wp * processor.patch_size)
-        self.assertEqual(tuple(out["pixel_values_videos"].shape), (num_frames, 3, *expected_size))
-        # one tile per frame, and every frame of a clip shares its token count.
-        # `return_tensors="pt"` turns these into tensors, so compare element-wise.
-        self.assertEqual([int(n) for n in out["num_patches"]], [1] * num_frames)
-        expected_tokens = (wp * hp) // (processor._downsample_factor**2)
-        self.assertEqual([int(n) for n in out["num_tokens"]], [expected_tokens] * num_frames)
+        # 3 frames pack into 2 tubelets of `temporal_patch_size` frames stacked along the channel dim
+        self.assertEqual(tuple(out["pixel_values_videos"].shape), (1, 2, 2 * 3, *expected_size))
+        self.assertEqual([int(n) for n in out["num_frames"]], [num_frames])
+        torch.testing.assert_close(out["pixel_values_videos"][0, 1, 3:], out["pixel_values_videos"][0, 1, :3])
         # normalization actually ran, so values are no longer in [0, 255]
         self.assertLess(out["pixel_values_videos"].abs().max().item(), 10.0)
 
     def test_frames_are_resized_to_the_patch_grid(self):
-        import torch
-
         processor = self._processor()
-        num_frames = 3
+        num_frames = 4
         videos = [torch.randint(0, 256, (num_frames, 3, 72, 128), dtype=torch.uint8) for _ in range(2)]
 
         out = processor(videos=videos, return_tensors="pt")
@@ -101,4 +98,21 @@ class NemotronHOmniVideoProcessingTest(unittest.TestCase):
         wp, hp = processor._compute_target_patches(72, 128)
         expected_size = (hp * processor.patch_size, wp * processor.patch_size)
         self.assertNotEqual(expected_size, (72, 128))
-        self.assertEqual(tuple(out["pixel_values_videos"].shape), (2 * num_frames, 3, *expected_size))
+        self.assertEqual(tuple(out["pixel_values_videos"].shape), (2, num_frames // 2, 2 * 3, *expected_size))
+
+    def test_videos_that_cannot_be_stacked_are_rejected(self):
+        processor = self._processor()
+        for videos in (
+            # different frame sizes after resizing
+            [
+                torch.randint(0, 256, (2, 3, 64, 64), dtype=torch.uint8),
+                torch.randint(0, 256, (2, 3, 72, 128), dtype=torch.uint8),
+            ],
+            # different numbers of tubelets
+            [
+                torch.randint(0, 256, (2, 3, 64, 64), dtype=torch.uint8),
+                torch.randint(0, 256, (4, 3, 64, 64), dtype=torch.uint8),
+            ],
+        ):
+            with self.assertRaises(ValueError):
+                processor(videos=videos, return_tensors="pt")
