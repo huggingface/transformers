@@ -304,9 +304,10 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
 @require_torch
 class TrainerHyperParameterSearchSetupTest(unittest.TestCase):
     """
-        Calls `_hp_search_setup` directly with the RAY backend
-        (trial params as a plain dict), without running Ray.
+    Calls `_hp_search_setup` directly with the RAY backend
+    (trial params as a plain dict), without running Ray.
     """
+
     def get_trainer(self, output_dir, generation_config=None):
         args = Seq2SeqTrainingArguments(output_dir, generation_config=generation_config, report_to="none")
         trainer = Seq2SeqTrainer(model_init=get_tiny_seq2seq_model, args=args)

@@ -526,8 +526,8 @@ if is_torch_available():
 
     def get_tiny_seq2seq_model():
         """
-            Tiny (small values) randomly initialized seq2seq model, 
-            so `Seq2SeqTrainer` tests run fast on CPU without downloads.
+        Tiny (small values) randomly initialized seq2seq model,
+        so `Seq2SeqTrainer` tests run fast on CPU without downloads.
         """
         config = BartConfig(
             vocab_size=64,
@@ -544,8 +544,8 @@ if is_torch_available():
 
     def get_tiny_seq2seq_dataset(length=8, seq_len=8):
         """
-            Deterministic dataset of random `input_ids` and `labels`
-            for the tiny seq2seq model, no tokenizer needed.
+        Deterministic dataset of random `input_ids` and `labels`
+        for the tiny seq2seq model, no tokenizer needed.
         """
         generator = torch.Generator().manual_seed(0)
         return [
