@@ -49,15 +49,15 @@ class ClassifierFreeGuidanceBatchExpansionTest(unittest.TestCase):
     def check_expanded_generation(self, batch_size, num_return_sequences, use_cache, guidance_scale, negative):
         input_ids = torch.tensor([[1, 5, 6], [1, 7, 8]])[:batch_size]
         saved_negative = {key: value.clone() for key, value in negative.items()}
-        options = dict(
-            do_sample=True,
-            top_k=0,
-            max_new_tokens=4,
-            use_cache=use_cache,
-            guidance_scale=guidance_scale,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
+        options = {
+            "do_sample": True,
+            "top_k": 0,
+            "max_new_tokens": 4,
+            "use_cache": use_cache,
+            "guidance_scale": guidance_scale,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
         torch.manual_seed(91)
         actual = self.model.generate(
             input_ids,
