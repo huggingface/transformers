@@ -32,13 +32,20 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam). The 
 The encoder returns the mean of the latent posterior, or a sample of it with `sample=True`.
 
 ```python
-import torch
-from transformers import AutoModel
+import soundfile as sf
+from huggingface_hub import hf_hub_download
+from transformers import AutoFeatureExtractor, AutoModel
 
-model = AutoModel.from_pretrained("m-a-p/YuE2-Vae", revision="9a63959a7e34304bd31ef7bf9940ba03ee978c51", device_map="auto")
+model_id, revision = "m-a-p/YuE2-Vae", "9a63959a7e34304bd31ef7bf9940ba03ee978c51"
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
+sampling_rate = feature_extractor.sampling_rate  # 48 kHz
 
-# 2 seconds of 48 kHz stereo audio: (batch_size, audio_channels, num_samples)
-audio = 0.1 * torch.randn(1, 2, 2 * 48000, device=model.device)
+# 2 seconds of a stereo song, from 1 minute in
+path = hf_hub_download("m-a-p/YuE2-3B", "assets/audio/tonight-awake.mp3")
+audio, _ = sf.read(path, start=60 * sampling_rate, frames=2 * sampling_rate, dtype="float32")  # (num_samples, audio_channels)
+inputs = feature_extractor(audio.T, sampling_rate=sampling_rate, return_tensors="pt")
+audio = inputs["input_values"].to(model.device)  # (batch_size, audio_channels, num_samples)
 
 latents = model.encode(audio).latents  # (batch_size, num_frames, latent_dim): (1, 50, 64)
 audio_values = model.decode(latents).audio_values  # (batch_size, audio_channels, num_samples)
@@ -51,13 +58,23 @@ You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stabl
 On an A100, we observed a speed-up of ~2.1 for a batch size of 4 with 10 seconds of audio each (228 ms to 109 ms for encoding and decoding, [script](https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc#file-benchmark_torch_compile-py)).
 
 ```python
+import soundfile as sf
 import torch
-from transformers import AutoModel
+from huggingface_hub import hf_hub_download
+from transformers import AutoFeatureExtractor, AutoModel
 
-model = AutoModel.from_pretrained("m-a-p/YuE2-Vae", revision="9a63959a7e34304bd31ef7bf9940ba03ee978c51", device_map="auto")
+model_id, revision = "m-a-p/YuE2-Vae", "9a63959a7e34304bd31ef7bf9940ba03ee978c51"
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
+sampling_rate = feature_extractor.sampling_rate  # 48 kHz
 
-# 4 excerpts of 10 seconds of 48 kHz stereo audio
-audio = 0.1 * torch.randn(4, 2, 10 * 48000, device=model.device)
+# 4 consecutive excerpts of 10 seconds of a stereo song, from 1 minute in
+path = hf_hub_download("m-a-p/YuE2-3B", "assets/audio/tonight-awake.mp3")
+excerpt_length = 10 * sampling_rate
+audio, _ = sf.read(path, start=60 * sampling_rate, frames=4 * excerpt_length, dtype="float32")  # (num_samples, audio_channels)
+excerpts = [audio[i : i + excerpt_length].T for i in range(0, len(audio), excerpt_length)]
+inputs = feature_extractor(excerpts, sampling_rate=sampling_rate, return_tensors="pt")
+audio = inputs["input_values"].to(model.device)  # (batch_size, audio_channels, num_samples)
 
 compiled_model = torch.compile(model, fullgraph=True)
 
