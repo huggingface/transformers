@@ -3219,6 +3219,14 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
 
+    def test_error_flash_kernel_without_flash_support(self):
+        # A Flash Attention kernel from the Hub must not bypass the model's `_supports_flash_attn`
+        model = BaseModel(PreTrainedConfig())
+        with self.assertRaises(ValueError) as cm:
+            model._check_and_adjust_attn_implementation("kernels-community/flash-attn3")
+
+        self.assertIn("BaseModel does not support Flash Attention yet", str(cm.exception))
+
     def test_registered_experts_implementation_is_valid(self):
         from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS
 
