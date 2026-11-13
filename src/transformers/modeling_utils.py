@@ -188,8 +188,8 @@ class LoadStateDictConfig:
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
-    # Checkpoint keys another component reads on its own (e.g. experts streamed by `experts_offload`).
-    skip_keys: set = field(default_factory=set)
+    # Checkpoint keys loaded by another component.
+    skip_keys: set[str] = field(default_factory=set)
 
     @property
     def is_quantized(self) -> bool:
@@ -4102,6 +4102,9 @@ class PreTrainedModel(
                 This should only be used as an inference optimization, as it can slightly change outputs. If omitted,
                 `from_pretrained()` falls back to `config.fusion_config` when available. Refer to the fusion mapping
                 guide in `docs/source/en/fusion_mapping.md` for more details.
+            experts_offload (`dict`, *optional*):
+                Stream MoE experts through a single-device cache for inference. Requires `cache_bytes`;
+                see `transformers.integrations.experts_offload.prepare_experts_offload` for options.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -4682,10 +4685,6 @@ class PreTrainedModel(
 
 
         Args:
-            experts_offload (`dict`, *optional*):
-                Keep the experts of an MoE model on disk and stream them through a device cache of
-                `experts_offload["cache_bytes"]` bytes, for models whose experts do not fit in memory. Inference only, on a
-                single device. The options are documented in `transformers.integrations.experts_offload.prepare_experts_offload`.
             auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
                 The auto class to register this new model with.
         """

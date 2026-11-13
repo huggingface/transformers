@@ -27,7 +27,12 @@ if is_torch_available():
     from safetensors.torch import load_file, save_file
 
     from transformers import OlmoeConfig, OlmoeForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM
-    from transformers.integrations.experts_offload import ExpertStore, _split_expert, quantize_experts
+    from transformers.integrations.experts_offload import (
+        ExpertStore,
+        SafetensorsReader,
+        _split_expert,
+        quantize_experts,
+    )
     from transformers.integrations.metal_quantization import _affine_dequantize_tensor
 
 
@@ -59,6 +64,7 @@ def greedy(model, ids, tokens=6):
         return model.generate(torch.tensor(ids), max_new_tokens=tokens, do_sample=False, pad_token_id=0)
 
 
+# TODO(portability): run on Linux/macOS/Windows and parameterize available devices; current loads use CPU.
 @require_torch
 class ExpertsOffloadTest(unittest.TestCase):
     def load(self, path, **options):
@@ -89,7 +95,7 @@ class ExpertsOffloadTest(unittest.TestCase):
         expected = greedy(reference, IDS)
         with tempfile.TemporaryDirectory() as directory:
             reference.save_pretrained(directory)
-            # 0 slots: every expert runs uncached; 1: smaller than one call; 8: the whole model, no host sync.
+            # Cover uncached, partial-cache and fully resident execution.
             for slots in (0, 1, 3, 8):
                 for implementation in ("grouped_mm", "batched_mm"):
                     with self.subTest(slots=slots, implementation=implementation):
@@ -177,7 +183,7 @@ class ExpertsOffloadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             reference.save_pretrained(path)
-            # Rewrite the experts the way the Hub checkpoint stores them: one tensor per expert and projection.
+            # Match the Hub checkpoint: one tensor per expert and projection.
             tensors = load_file(path / "model.safetensors")
             for name in [name for name in tensors if name.endswith("experts.gate_up_proj")]:
                 prefix = name.removesuffix(".gate_up_proj")
@@ -267,13 +273,14 @@ class ExpertStorePolicyTest(unittest.TestCase):
             read_bytes=0,
             read_calls=0,
         )
+        reader.read_expert = lambda prefix, expert: SafetensorsReader.read_expert(reader, prefix, expert)
         expert_bytes = 3 * intermediate * hidden * 4
         store = ExpertStore(reader, cache_experts * expert_bytes, "cpu", torch.float32, policy=policy)
         store.register("layer", SimpleNamespace(num_experts=experts, intermediate_dim=intermediate, hidden_dim=hidden))
         return store, banks
 
     def test_lfu_keeps_a_hot_set_where_lru_thrashes(self):
-        # Decoding visits the same experts in the same order every token: a cycle longer than the cache.
+        # Repeat a decoding cycle longer than the cache.
         pattern = [0, 1, 2, 3, 4] * 20
         hits = {}
         for policy in ("lru", "lfu"):

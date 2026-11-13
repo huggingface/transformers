@@ -11,28 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Stream MoE experts from disk through a bounded device cache: ``from_pretrained(..., experts_offload={...})``.
-
-An MoE token only uses its top-k experts per layer, so a model whose experts do not fit in device memory can still
-run at a useful speed if the experts it needs are read from disk on demand and the frequently used ones stay cached.
-
-- Loading: the model is built on meta; every experts module decorated with ``@use_experts_implementation`` loses its
-  expert banks and dispatches to the ``experts_offload`` implementation. The loader skips the expert tensors
-  (``LoadStateDictConfig.skip_keys``); everything else loads as usual.
-- Cache: one preallocated device pool of expert slots shared by all layers (LRU or LFU), with a per-layer device table
-  expert -> slot. Resident experts run through the existing experts kernels (``grouped_mm`` / ``batched_mm``) on the
-  pool, with remapped indices. When every expert is resident, layers never synchronize with the host.
-- Reads: each layer copies its routing to the host once, to know which experts are missing. Misses are read on a few
-  I/O threads; the next layers' experts are guessed by running their routers on the current hidden states and read
-  in the background, then installed while the current layer computes. A miss is one contiguous read and one
-  non-blocking host-to-device copy.
-- Quantized experts (optional): :func:`quantize_experts` writes the experts once in MLX's affine format, one
-  contiguous row per expert. They stay quantized on disk and in the cache, and run through ``gather_qmm`` from
-  ``kernels-community/mlx-quantization-metal-kernels`` on MPS (a slow PyTorch reference elsewhere).
-
-Inference only, one device, gated and concatenated experts without bias. The model cannot be trained, moved, cast or
-saved; reload the checkpoint for that.
-"""
+"""Stream MoE experts from disk through a shared device cache. Inference only, on one device."""
 
 import heapq
 import json
@@ -59,17 +38,15 @@ except ImportError:  # Windows
 logger = logging.get_logger(__name__)
 
 _DTYPES = {"F32": torch.float32, "F16": torch.float16, "BF16": torch.bfloat16}
-# Quantized experts (see `quantize_experts`) are stored as rows of bytes.
 _PACKED_DTYPES = {**_DTYPES, "U32": torch.uint32, "U8": torch.uint8}
 _QUANTIZED_FORMAT = "mlx-affine-expert-blob"
 _MLX_QUANTIZATION_KERNEL = ("kernels-community/mlx-quantization-metal-kernels", 2)
-# Reads run on I/O threads (OS reads release the GIL); their byte counters are shared.
 _COUNTER_LOCK = threading.Lock()
 
 
 def _read_exact(path, offset, size, bypass_page_cache, what):
-    """Read ``size`` bytes at ``offset``. With ``bypass_page_cache``, the bytes do not stay in the OS page cache
-    (macOS: F_NOCACHE; elsewhere: drop the range after reading), so every miss is a real storage read."""
+    """Read a byte range, optionally bypassing or dropping the OS page cache."""
+    # TODO(portability): implement Windows cache bypass; report unsupported OS/filesystem combinations.
     data = bytearray(size)
     with path.open("rb", buffering=0) as handle:
         if bypass_page_cache and hasattr(fcntl, "F_NOCACHE"):
@@ -82,17 +59,14 @@ def _read_exact(path, offset, size, bypass_page_cache, what):
             if not count:
                 raise OSError(f"Short checkpoint read: {path}, {what}")
             done += count
+        # TODO(portability): distinguish best-effort cache eviction from uncached reads.
         if bypass_page_cache and hasattr(os, "posix_fadvise"):
             os.posix_fadvise(handle.fileno(), offset, size, os.POSIX_FADV_DONTNEED)
     return data
 
 
 class SafetensorsReader:
-    """Index validated safetensors headers, then read whole tensors or contiguous expert slices.
-
-    File handles are scoped to individual reads. No whole-file mapping survives indexing and no full
-    packed expert tensor is loaded. Both sharded and single-file local checkpoints are supported.
-    """
+    """Validate safetensors headers and read tensors or contiguous expert slices without persistent mmap."""
 
     def __init__(self, directory, bypass_page_cache=False, packed=False):
         directory = Path(directory)
@@ -112,7 +86,7 @@ class SafetensorsReader:
             path = (directory / filename).resolve()
             if not path.is_file():
                 raise FileNotFoundError(f"Missing checkpoint shard: {path}")
-            # Delegate safetensors format validation (offsets, sizes, overlaps) to safetensors.
+            # Validate offsets, sizes and overlaps before reading the header.
             with safe_open(path, framework="pt", device="cpu") as handle:
                 keys = set(handle.keys())
             with path.open("rb") as handle:
@@ -150,26 +124,17 @@ class SafetensorsReader:
             self.read_calls += 1
         return torch.frombuffer(data, dtype=dtype).reshape(shape)
 
+    def read_expert(self, prefix, expert):
+        if f"{prefix}.gate_up_proj" in self.tensors:
+            return self.read(f"{prefix}.gate_up_proj", expert), self.read(f"{prefix}.down_proj", expert)
+        gate_up = torch.cat([self.read(f"{prefix}.{expert}.{p}_proj.weight") for p in ("gate", "up")])
+        return gate_up, self.read(f"{prefix}.{expert}.down_proj.weight")
+
 
 class ExpertStore:
-    """One expert cache shared by all MoE layers, budgeted in bytes of device memory.
+    """Shared device pool with LRU or decaying LFU admission, for one inference request at a time.
 
-    The cache is a preallocated pool of ``cache_bytes // expert_bytes`` slots. Each layer keeps a device table
-    expert -> slot (``num_slots`` when not resident), so resident experts run through Transformers' experts kernels
-    (``grouped_mm`` / ``batched_mm``, or ``gather_qmm`` for quantized experts) with remapped indices.
-
-    Policies:
-    - ``"lru"``: evict the least recently used expert. Decoding visits every layer in order, so when the experts used by
-      one token do not all fit, LRU evicts exactly the expert the next token needs first and the hit rate drops to 0.
-    - ``"lfu"``: keep a usage count per expert, halved every ``decay_every`` lookups so the set can follow the text.
-      When the cache is full, the least used resident expert is the victim, and a missing expert is admitted only when
-      it has been used more than that victim; otherwise it runs once without being cached. The cache settles on the
-      most used experts instead of cycling through all of them.
-
-    A miss evicts before loading. One active expert plus conversion/staging memory may exceed the cache
-    budget. Eviction never overwrites a tensor used by queued work; PyTorch owns tensor lifetimes.
-    The store is synchronous and intended for one inference request at a time.
-    """
+    Staging and uncached experts can exceed the cache budget."""
 
     def __init__(
         self,
@@ -189,7 +154,7 @@ class ExpertStore:
         self.policy = policy
         self.decay_every = decay_every
         self.counts = {}
-        self.heap = []  # (count, sequence, key) for resident experts; stale entries are skipped lazily
+        self.heap = []  # (count, sequence, key); discard stale entries lazily
         self.sequence = 0
         self.lookups = 0
         self.not_admitted = 0
@@ -201,10 +166,8 @@ class ExpertStore:
         self.resident_bytes = 0
         self.peak_cache_bytes = 0
         self.hits = self.misses = self.evictions = 0
-        self.layouts = {}
         self.gate_up_pool = self.down_pool = None
         self.pools = None
-        # Quantized experts: (reader of the `quantize_experts` directory, bits, group_size), run by `gather_qmm`.
         self.quantized = None
         if quantized is not None:
             info = json.loads((Path(quantized) / "quantization.json").read_text(encoding="utf-8"))
@@ -221,15 +184,11 @@ class ExpertStore:
         self.slot_tables = {}
         self.total_experts = 0
         self.compute = "grouped_mm"
-        # Reads of experts that are not resident run on `io_threads` threads: a layer's misses in parallel, and the
-        # predicted experts of the next layer in the background. They land in host memory and only enter the cache
-        # when a forward call actually uses them, so a wrong prediction costs storage bandwidth, never a cached expert.
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload-io") if io_threads else None
         self.pending = {}
         self.window = 2 * io_threads
         self.prefetched = self.prefetch_used = self.installed_ahead = 0
-        # Host buffers of non-blocking host-to-device copies still queued on the device; the next host
-        # synchronization (each layer's routing copy) proves they are done, see `release_host_buffers`.
+        # Retain host buffers until the next routing copy synchronizes the device.
         self.inflight = []
 
     def register(self, prefix, module):
@@ -238,17 +197,14 @@ class ExpertStore:
             "down_proj": (module.num_experts, module.hidden_dim, module.intermediate_dim),
         }
         if self.quantized is not None and f"{prefix}.experts" in self.quantized[0].tensors:
-            # The quantized experts are what runs; a BF16 copy in the checkpoint (if any) is not read but consumed.
             candidates = [f"{prefix}.gate_up_proj", f"{prefix}.down_proj"] + [
                 f"{prefix}.{expert}.{projection}.weight"
                 for expert in range(module.num_experts)
                 for projection in ("gate_proj", "up_proj", "down_proj")
             ]
             names = {name: None for name in candidates if name in self.reader.tensors}
-            packed = True
         elif f"{prefix}.gate_up_proj" in self.reader.tensors:
             names = {f"{prefix}.{suffix}": shape for suffix, shape in shapes.items()}
-            packed = True
         else:
             names = {}
             for expert in range(module.num_experts):
@@ -257,16 +213,13 @@ class ExpertStore:
                     if projection == "down_proj":
                         shape = shape[::-1]
                     names[f"{prefix}.{expert}.{projection}.weight"] = shape
-            packed = False
         for name, shape in names.items():
             if shape is None:
                 continue
             if name not in self.reader.tensors or self.reader.shape(name) != shape:
                 raise ValueError(f"Missing or incompatible expert tensor {name}; expected {shape}")
-        self.layouts[prefix] = (packed, 3 * module.intermediate_dim * module.hidden_dim)
         if self.quantized is not None:
             self._check_quantized(prefix, module)
-            self.layouts[prefix] = ("quantized",)
         self._register_slots(prefix, module)
         return set(names)
 
@@ -309,8 +262,6 @@ class ExpertStore:
             self.slot_bytes = sum(math.prod(shape) * dtype.itemsize for shape, dtype in shapes)
             self.num_slots = self.cache_bytes // self.slot_bytes
             if self.quantized is not None:
-                # One byte buffer per slot holding the expert exactly as stored: a miss is one read and one copy.
-                # The kernel reads the six tensors through strided views of it.
                 self.slot_buffer = torch.empty(
                     (self.num_slots, self.slot_bytes), device=self.device, dtype=torch.uint8
                 )
@@ -328,7 +279,7 @@ class ExpertStore:
         self.total_experts += module.num_experts
 
     def all_resident(self):
-        """True when every expert of the model is cached: nothing can be evicted, no routing needs to reach the host."""
+        """Whether every expert is cached, allowing routing to stay on the device."""
         return len(self.cache) == self.total_experts
 
     def _count(self, key):
@@ -364,10 +315,7 @@ class ExpertStore:
         self.slot_tables[victim[0]][victim[1]] = self.num_slots
 
     def _make_room(self, key, size, pinned=()):
-        """Evict until ``size`` fits; returns False when the policy declines to cache ``key``.
-
-        ``pinned`` experts are used by the forward call in progress and are never evicted for it.
-        """
+        """Evict unpinned experts until size fits; return False if admission is declined."""
         if size > self.cache_bytes:
             return False
         if self.policy == "lfu":
@@ -387,29 +335,11 @@ class ExpertStore:
             self._evict(victim)
         return True
 
-    def _expert_bytes(self, prefix):
-        layout = self.layouts[prefix]
-        if layout[0] == "quantized":
-            return self.slot_bytes
-        return layout[1] * self.dtype.itemsize
-
     def _read_host(self, prefix, expert):
-        """Read one expert from storage into host memory: its quantized bytes, or gate_up and down in the execution dtype.
-
-        Runs on I/O threads: storage and host work only, no device calls.
-        """
-        layout = self.layouts[prefix]
-        if layout[0] == "quantized":
-            # One contiguous read per expert, kept as bytes until it reaches the device.
+        """Read expert bytes or floating weights on the host; safe to run on I/O threads."""
+        if self.quantized is not None:
             return (self.quantized[0].read(f"{prefix}.experts", expert),)
-        if layout[0]:
-            gate_up = self.reader.read(f"{prefix}.gate_up_proj", expert)
-        else:
-            gate_up = torch.cat([self.reader.read(f"{prefix}.{expert}.{p}_proj.weight") for p in ("gate", "up")])
-        down = self.reader.read(f"{prefix}.down_proj", expert) if layout[0] else None
-        if down is None:
-            down = self.reader.read(f"{prefix}.{expert}.down_proj.weight")
-        return gate_up.to(self.dtype), down.to(self.dtype)
+        return tuple(t.to(self.dtype) for t in self.reader.read_expert(prefix, expert))
 
     def prefetch(self, prefix, experts):
         """Start reading the experts of ``prefix`` that are neither resident nor already being read."""
@@ -434,35 +364,34 @@ class ExpertStore:
             return future.result()
         return self._read_host(prefix, expert)
 
+    # TODO(portability): share pinned host staging for asynchronous accelerator copies with _install.
     def _read(self, prefix, expert):
         """One expert on the device, for a single use."""
         tensors = self._take_host(prefix, expert)
         self.inflight.append(tensors)
-        if self.layouts[prefix][0] == "quantized":
+        if self.quantized is not None:
             return _split_expert(tensors[0].to(self.device, non_blocking=True), self._pool_shapes)
         return tuple(t.to(self.device, non_blocking=True) for t in tensors)
 
     def release_host_buffers(self):
         """Called right after a host synchronization: every queued copy has read its host buffer."""
+        # TODO(portability): validate copy completion and slot reuse on each backend before releasing buffers.
         self.inflight.clear()
 
     def install_ahead(self, prefix, experts):
-        """Make guessed experts resident before their layer runs: called once this layer's work is queued, so waiting
-        for their reads and queuing their copies overlaps device work instead of following the next routing copy.
-        Not counted as lookups; the layer's own `acquire` then counts a hit (and `installed_ahead` says how many)."""
+        """Install prefetched experts while queued device work runs, without counting lookups."""
         for expert in experts:
             key = (prefix, expert)
             if key in self.cache or key not in self.pending:
                 continue
-            if self._install(key, self._expert_bytes(prefix)) is not None:
+            if self._install(key, self.slot_bytes) is not None:
                 self.installed_ahead += 1
 
     def _install(self, key, size, pinned=()):
         if not self._make_room(key, size, pinned):
             return None
         slot = self.free_slots.pop()
-        # Non-blocking: a blocking copy waits for the whole device queue each time (1.6 ms vs 0.13 ms for a
-        # 3.5 MB expert on the M5). The host buffer stays referenced until the next host synchronization.
+        # Keep host buffers alive until the next host synchronization.
         tensors = self._take_host(*key)
         self.inflight.append(tensors)
         if self.quantized is not None:
@@ -487,7 +416,7 @@ class ExpertStore:
             self.cache.move_to_end(key)
             return self.cache[key][0]
         self.misses += 1
-        return self._install(key, self._expert_bytes(prefix), pinned)
+        return self._install(key, self.slot_bytes, pinned)
 
     def get(self, prefix, expert):
         """Return the device tensors of one expert (pool views when cached, else read for this use only)."""
@@ -510,6 +439,7 @@ class ExpertStore:
             self.prefetch(prefix, experts)
             for expert in experts:
                 self.acquire(prefix, expert)
+            # TODO(portability): synchronize other accelerator backends before releasing host buffers.
             if self.device.type == "mps":
                 torch.mps.synchronize()
             elif self.device.type == "cuda":
@@ -536,10 +466,7 @@ class ExpertStore:
 
 
 class _PoolExperts:
-    """The attributes Transformers' experts kernels read from an experts module, with the shared pool as its banks.
-
-    Slot ``num_slots`` marks an expert that is not resident; the kernels' expert-parallel sentinel handling drops it.
-    """
+    """Expose pool banks to MoE kernels; slot num_slots uses their expert-parallel sentinel handling."""
 
     def __init__(self, module, store):
         self.module = module
@@ -559,18 +486,19 @@ class _PoolExperts:
 
 
 def _run_expert(module, result, hidden_states, top_k_weights, token, slot, gate_up, down):
-    # Bound the temporary activations during prefill, even when one expert serves many tokens.
+    # Bound temporary activations during prefill.
     for start in range(0, token.numel(), module.offload_token_chunk_size):
         indices = token[start : start + module.offload_token_chunk_size]
         slots = slot[start : start + module.offload_token_chunk_size]
-        gate, up = torch.nn.functional.linear(hidden_states[indices], gate_up).chunk(2, dim=-1)
-        output = torch.nn.functional.linear(module.act_fn(gate) * up, down)
+        activated = module._apply_gate(torch.nn.functional.linear(hidden_states[indices], gate_up))
+        output = torch.nn.functional.linear(activated, down)
         output = output * top_k_weights[indices, slots, None]
         result.index_add_(0, indices, output.to(result.dtype))
 
 
 def _split_expert(blob, shapes):
     """Views of one expert's bytes as its quantized tensors: gate_up (weight, scales, biases), then down."""
+    # TODO(portability): validate uint32 views and strided packed banks on each accelerator backend.
     tensors, offset = [], 0
     for shape, dtype in shapes:
         size = math.prod(shape) * dtype.itemsize
@@ -590,6 +518,7 @@ def _load_gather_qmm(device):
             return get_kernel(_MLX_QUANTIZATION_KERNEL[0], version=_MLX_QUANTIZATION_KERNEL[1]).gather_qmm
         except Exception as error:  # the kernels package is optional
             logger.warning(f"Using the PyTorch reference for quantized experts; the Metal kernel failed: {error}")
+    # TODO(portability): add optimized non-Metal kernels; retain the reference as a correctness fallback.
     return _gather_qmm_reference
 
 
@@ -605,12 +534,8 @@ def _gather_qmm_reference(x, w, scales, biases, rhs_indices, group_size, bits, *
     return output
 
 
-def _quantized_mlp(module, store, x, banks, rhs):
-    """Gated expert MLP of rows ``x`` [S, hidden], row ``i`` through expert ``rhs[i]`` of ``banks``.
-
-    ``sorted_indices`` stays off: in mlx-quantization-metal-kernels v2 (torch 2.15, M5) the sorted path returns wrong
-    results once a call has 4 or more rows per expert of the bank (prefill), and it is no faster below that.
-    """
+def _quantized_mlp(module, store, x, banks, rhs, *, sorted_indices=False):
+    """Apply the quantized expert selected by rhs for each input row."""
     _, bits, group_size = store.quantized
 
     def matmul(inputs, weight, scales, biases):
@@ -623,25 +548,20 @@ def _quantized_mlp(module, store, x, banks, rhs):
             transpose=True,
             group_size=group_size,
             bits=bits,
+            sorted_indices=sorted_indices,
         ).squeeze(1)
 
     return matmul(module._apply_gate(matmul(x, *banks[:3])), *banks[3:])
 
 
 def _sorted_kernel_applies(rows, experts):
-    """Whether `gather_qmm(sorted_indices=True)` takes MLX's batched `gather_qmm_rhs` path: M == 1, at least 16 rows
-    and 4 rows per expert of the bank. That path is several times faster for prefill."""
+    """Whether MLX selects its batched sorted kernel (at least 16 rows and 4 per expert)."""
+    # TODO(portability): select this threshold and the float32 workaround by kernel/backend.
     return rows >= 16 and rows >= 4 * experts
 
 
 def _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_weights, experts, banks):
-    """Prefill: rows sorted by expert through the sorted `gather_qmm`, over ``banks`` holding only ``experts``.
-
-    Runs in float32: in mlx-quantization-metal-kernels v2 the sorted (NAX) kernel returns wrong results for bfloat16
-    and float16 inputs on the M5, but is correct, and still 4-6x faster than the unsorted path, in float32. Only this
-    call's scales and biases are converted.
-    """
-    _, bits, group_size = store.quantized
+    """Sort routes for prefill. Use float32 to avoid incorrect fp16/bf16 results in the v2 M5 kernel."""
     num_tokens, top_k = top_k_index.shape
     lookup = torch.zeros(module.num_experts, dtype=torch.long, device=hidden_states.device)
     lookup[torch.tensor(experts, device=hidden_states.device)] = torch.arange(
@@ -650,21 +570,8 @@ def _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_w
     rhs, order = torch.sort(lookup[top_k_index.reshape(-1)], stable=True)
     banks = [bank.float() if bank.is_floating_point() else bank for bank in banks]
 
-    def matmul(inputs, weight, scales, biases):
-        return store.gather_qmm(
-            inputs[:, None, :],
-            weight,
-            scales,
-            biases,
-            rhs_indices=rhs,
-            transpose=True,
-            group_size=group_size,
-            bits=bits,
-            sorted_indices=True,
-        ).squeeze(1)
-
     x = hidden_states.float()[order // top_k]
-    output = matmul(module._apply_gate(matmul(x, *banks[:3])), *banks[3:])
+    output = _quantized_mlp(module, store, x, banks, rhs, sorted_indices=True)
     output = output * top_k_weights.reshape(-1)[order, None].float()
     routed = torch.zeros_like(output).index_copy_(0, order, output)
     return routed.view(num_tokens, top_k, -1).sum(dim=1).to(hidden_states.dtype)
@@ -680,6 +587,14 @@ def _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights):
     return (output * weights.to(output.dtype)).view(num_tokens, top_k, -1).sum(dim=1).to(hidden_states.dtype)
 
 
+def _pool_forward(module, store, hidden_states, top_k_index, top_k_weights):
+    slots = store.slot_tables[module.offload_prefix][top_k_index]
+    if store.quantized is not None:
+        return _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights)
+    kernel = ExpertsInterface._global_mapping[store.compute]
+    return kernel(_PoolExperts(module, store), hidden_states, slots, top_k_weights)
+
+
 def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
     """The ``experts_offload`` experts implementation: resident experts from the cache, missing ones from disk."""
     if module.training or torch.is_grad_enabled():
@@ -691,21 +606,12 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
         )
     prefix = module.offload_prefix
     if store.all_resident():
-        # Nothing to load or evict: stay on the device, no host synchronization (counted as one hit per route).
         store.hits += top_k_index.numel()
-        slots = store.slot_tables[prefix][top_k_index]
-        if store.quantized is not None:
-            return _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights)
-        kernel = ExpertsInterface._global_mapping[store.compute]
-        return kernel(_PoolExperts(module, store), hidden_states, slots, top_k_weights)
-    # Routing IDs are small; copy them once per layer, rather than synchronizing for every expert. The next MoE layer's
-    # experts are guessed from this layer's hidden states with the next router (the residual stream changes little
-    # from one layer to the next), and the guess rides along in the same copy.
+        return _pool_forward(module, store, hidden_states, top_k_index, top_k_weights)
+    # Copy routing and next-layer predictions to the host together.
     next_layer = getattr(module, "offload_next", None)
     predict = next_layer is not None and store.executor is not None
     predict = predict and top_k_index.numel() <= module.offload_predict_max_routes
-    # With `offload_after_next` (prefetch depth 2), the layer after the next one is guessed the same way and its experts are
-    # only read into host memory, giving those reads two layers of compute to finish; installs stay one layer ahead.
     after_next = getattr(module, "offload_after_next", None) if predict else None
     if predict:
         next_prefix, router = next_layer
@@ -718,13 +624,11 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
         routing = routes[: top_k_index.numel()].view(top_k_index.shape)
     else:
         routing = top_k_index.cpu()
-    # That copy waited for all queued device work, including earlier host-to-device expert copies.
+    # The routing copy also waits for earlier host-to-device copies.
     store.release_host_buffers()
     experts = torch.unique(routing).tolist()
     if experts and not (experts[0] >= 0 and experts[-1] < module.num_experts):
         raise ValueError("Expert parallelism and sentinel expert IDs are unsupported")
-    # This layer's misses are read in parallel (a window ahead of use, bounding host memory); the guessed next-layer
-    # reads queue behind them.
     store.prefetch(prefix, experts[: store.window])
     width = top_k_index.shape[0] * (next_layer[1].top_k if predict else 0)
     guessed = torch.unique(routes[top_k_index.numel() : top_k_index.numel() + width]).tolist() if predict else []
@@ -737,7 +641,6 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
     finally:
         store.discard(prefix)
     if guessed:
-        # This layer's experts are queued on the device: install the next layer's guesses while it computes.
         store.install_ahead(next_prefix, guessed)
     return result
 
@@ -751,7 +654,6 @@ def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_
         else:
             pinned.add((prefix, expert))
     if store.quantized is not None and _sorted_kernel_applies(top_k_index.numel(), len(experts)):
-        # Prefill-sized call: one sorted gather_qmm over a compact bank of this call's experts, cached or not.
         per_expert = []
         for expert in experts:
             if (prefix, expert) in pinned:
@@ -761,16 +663,10 @@ def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_
                 per_expert.append(store._read(prefix, expert))
         banks = [torch.stack(parts) for parts in zip(*per_expert)]
         return _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_weights, experts, banks)
-    if pinned and store.quantized is not None:
-        slots = store.slot_tables[prefix][top_k_index]
-        result = _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights)
-    elif pinned:
-        kernel = ExpertsInterface._global_mapping[store.compute]
-        table = store.slot_tables[prefix]
-        result = kernel(_PoolExperts(module, store), hidden_states, table[top_k_index], top_k_weights)
+    if pinned:
+        result = _pool_forward(module, store, hidden_states, top_k_index, top_k_weights)
     else:
         result = torch.zeros_like(hidden_states)
-    # Experts the cache did not admit (budget smaller than one call's working set, or LFU declined) run once each.
     for position, expert in enumerate(uncached):
         store.prefetch(prefix, uncached[position + 1 : position + 1 + store.window])
         token, slot = (t.to(hidden_states.device) for t in torch.where(routing == expert))
@@ -786,9 +682,7 @@ def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_
 
 
 def _checkpoint_prefix(reader, name, quantized_reader=None):
-    """The checkpoint key prefix of the experts module ``name``: the same path, possibly under another root (e.g.
-    ``model.language_model.``), in the packed (``gate_up_proj``) or per-expert (``0.gate_proj.weight``) layout, or
-    in the quantized experts (``experts``) when the checkpoint has no BF16 experts."""
+    """Find a unique packed, per-expert, or quantized checkpoint prefix, allowing a different model root."""
     suffix = name.split(".", 1)[1] if name.startswith("model.") else name
     found = set()
     for key in reader.tensors:
@@ -818,12 +712,7 @@ _OPTIONS = {
 
 
 def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
-    """Called by ``from_pretrained(..., experts_offload=...)`` on the meta-initialized model, before any weight loads.
-
-    Every experts module built with ``@use_experts_implementation`` (gated, concatenated, untransposed, no bias) loses
-    its expert banks (so the loader never materializes them), dispatches to the ``experts_offload`` implementation and
-    reads its experts from the checkpoint through one shared :class:`ExpertStore`. Returns the checkpoint keys the
-    store reads on its own, for the loader to skip.
+    """Replace meta expert banks with a shared disk-backed cache and return checkpoint keys to skip.
 
     Options:
         cache_bytes (`int`, required): device memory for cached experts.
@@ -878,14 +767,13 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         consumed.update(store.register(prefix, module))
         module.register_parameter("gate_up_proj", None)
         module.register_parameter("down_proj", None)
-        module._is_hf_initialized = True  # nothing to initialize: the banks live in the checkpoint
+        module._is_hf_initialized = True  # Banks remain in the checkpoint.
         module.config._experts_implementation = "experts_offload"
         module.offload_store = store
         module.offload_prefix = prefix
         module.offload_token_chunk_size = options.get("token_chunk_size", 256)
         module.offload_predict_max_routes = options.get("predict_max_routes", 64)
         module.offload_next = module.offload_after_next = None
-    # Each layer can guess the next ones' experts with their routers (when they expose `weight` and `top_k`).
     depth = options.get("prefetch_depth", 2)
     routers = []
     for name, module in experts:
@@ -898,21 +786,15 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         if depth >= 2 and index + 2 < len(routers):
             module.offload_after_next = routers[index + 2]
     if options.get("preload", False):
-        # Experts come only from the expert files, so they can be read before the rest of the model loads.
         store.preload()
     model.experts_offload_store = store
     return consumed
 
 
 def quantize_experts(checkpoint, output, *, bits=4, group_size=64, device="cpu"):
-    """Write the experts of a safetensors MoE checkpoint, quantized for `ExpertStore(quantized=output)`.
+    """Write MLX affine experts as uint8 rows: gate_up then down, each with weights, scales and biases.
 
-    MLX's affine format, the one `gather_qmm` reads: per projection (``gate_up_proj``, then ``down_proj``), ``weight``
-    [out, in * bits / 32] uint32, ``scales`` and ``biases`` [out, in / group_size] in the checkpoint dtype. The six
-    tensors of one expert are stored back to back as one uint8 row of ``{prefix}.experts`` [experts, bytes], so a miss
-    is a single contiguous read. One file per experts module plus an index. Quantizes with the Metal kernel on MPS, else with the PyTorch reference (same layout).
-    Peak memory is one experts module.
-    """
+    Uses the Metal kernel on MPS, otherwise PyTorch. Peak memory is one experts module."""
     from safetensors.torch import save_file
 
     from .metal_quantization import _affine_quantize_tensor
@@ -937,26 +819,17 @@ def quantize_experts(checkpoint, output, *, bits=4, group_size=64, device="cpu")
     for index, prefix in enumerate(packed + per_expert):
         if prefix in packed:
             experts = reader.shape(f"{prefix}.gate_up_proj")[0]
-
-            def read(expert):
-                return reader.read(f"{prefix}.gate_up_proj", expert), reader.read(f"{prefix}.down_proj", expert)
-
         else:
             experts = sum(
                 1 for name in reader.tensors if re.fullmatch(rf"{re.escape(prefix)}\.\d+\.gate_proj\.weight", name)
             )
 
-            def read(expert):
-                gate_up = torch.cat([reader.read(f"{prefix}.{expert}.{p}_proj.weight") for p in ("gate", "up")])
-                return gate_up, reader.read(f"{prefix}.{expert}.down_proj.weight")
-
         blobs = []
         for expert in range(experts):
             parts = []
-            for weight in read(expert):
+            for weight in reader.read_expert(prefix, expert):
                 weight_q, scales, biases = quantize(weight.to(device))
                 parts += [weight_q, scales.to(weight.dtype), biases.to(weight.dtype)]
-            # Expert-major: one expert is one contiguous run of bytes, read in one call.
             blobs.append(torch.cat([part.cpu().contiguous().view(torch.uint8).reshape(-1) for part in parts]))
         filename = f"experts-{index:05d}.safetensors"
         save_file({f"{prefix}.experts": torch.stack(blobs)}, output / filename, {"format": "pt"})
