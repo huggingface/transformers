@@ -98,7 +98,7 @@ class Seq2SeqTrainer(Trainer):
         Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
         Args:
-            gen_config_arg (`str` or [`~generation.GenerationConfig]`):
+            gen_config_arg (`str`, `dict` or [`~generation.GenerationConfig]`):
                 `Seq2SeqTrainingArguments.generation_config` argument.
 
         Returns:
@@ -108,6 +108,9 @@ class Seq2SeqTrainer(Trainer):
         # GenerationConfig provided, nothing to do
         if isinstance(gen_config_arg, GenerationConfig):
             gen_config = deepcopy(gen_config_arg)
+        # dict of generation parameters, e.g. from a hyperparameter search space
+        elif isinstance(gen_config_arg, dict):
+            gen_config = GenerationConfig.from_dict(gen_config_arg)
         else:
             # str or Path
             pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
