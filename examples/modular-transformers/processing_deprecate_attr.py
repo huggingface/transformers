@@ -16,14 +16,8 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-class DeprecateAttrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class DeprecateAttrProcessor(ProcessorMixin):
-    valid_processor_kwargs = DeprecateAttrProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -46,7 +40,7 @@ class DeprecateAttrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[DeprecateAttrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):

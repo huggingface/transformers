@@ -35,6 +35,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
@@ -71,14 +72,14 @@ def _prepare_cross_attention_mask(
     return cross_attention_mask, full_text_row_masked_out_mask
 
 
-def _has_cached_cross_attention_states(past_key_values: Cache | None, layer_idx: int) -> bool:
+def _has_cached_cross_attention_states(cache: Cache | None, layer_idx: int) -> bool:
     """
     Whether the cross-attention layer `layer_idx` already holds the projected vision states. Not written as
     `get_seq_length(layer_idx) > 0`, which is a 0-dim tensor on compileable layers, i.e. a data-dependent branch.
     """
-    if past_key_values is None or layer_idx >= len(past_key_values.layers):
+    if cache is None or layer_idx >= len(cache.layers):
         return False
-    layer = past_key_values.layers[layer_idx]
+    layer = cache.layers[layer_idx]
     # `Cache.early_initialization` marks a layer as initialized while it is still empty, hence the second check.
     return layer.is_initialized and layer.keys.numel() > 0
 
@@ -417,11 +418,12 @@ class MllamaTextCrossAttention(nn.Module):
         self.q_norm = MllamaTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MllamaTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cross_attention_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
@@ -439,16 +441,16 @@ class MllamaTextCrossAttention(nn.Module):
             value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
             key_states = self.k_norm(key_states)
-            if past_key_values is not None:
+            if cache is not None:
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+                key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
         else:
             # `MllamaTextModel` skips this layer entirely when there is nothing cached, so assume the cache exists
             # and let it fail loudly otherwise.
             key_states, value_states = (
-                past_key_values.layers[self.layer_idx].keys,
-                past_key_values.layers[self.layer_idx].values,
+                cache.layers[self.layer_idx].keys,
+                cache.layers[self.layer_idx].values,
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -526,12 +528,13 @@ class MllamaTextSelfAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
-        past_key_values=None,
+        cache=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -547,8 +550,8 @@ class MllamaTextSelfAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -603,6 +606,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
 
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -611,7 +615,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -624,9 +628,9 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
                 query_sequence_length, key_sequence_length)` if default attention is used.
 
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            cache (`Cache`, *optional*): cached past key and value projection states
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -643,7 +647,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -674,6 +678,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(1))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -682,7 +687,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -694,7 +699,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=cross_attention_mask,
             cross_attention_states=cross_attention_states,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
@@ -1038,6 +1043,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1046,7 +1052,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         cross_attention_states: torch.Tensor | None = None,
         cross_attention_mask: torch.Tensor | None = None,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -1100,11 +1106,11 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1112,7 +1118,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -1123,7 +1129,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             # Let's check if the layer is cross attention layer and if we have cross attention states
             # or cached cross attention states.
             is_cross_attention_layer = idx in self.cross_attention_layers
-            is_cross_attention_cache_empty = not _has_cached_cross_attention_states(past_key_values, idx)
+            is_cross_attention_cache_empty = not _has_cached_cross_attention_states(cache, idx)
 
             if is_cross_attention_layer and cross_attention_states is None and is_cross_attention_cache_empty:
                 continue
@@ -1135,7 +1141,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
                 attention_mask=causal_mask,
                 full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -1145,7 +1151,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1170,6 +1176,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1178,7 +1185,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_states: torch.LongTensor | None = None,
         cross_attention_mask: torch.LongTensor | None = None,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1233,7 +1240,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             cross_attention_mask=cross_attention_mask,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1250,7 +1257,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1280,6 +1287,7 @@ class MllamaModel(MllamaPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1290,7 +1298,7 @@ class MllamaModel(MllamaPreTrainedModel):
         cross_attention_mask: torch.Tensor | None = None,
         cross_attention_states: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -1350,7 +1358,7 @@ class MllamaModel(MllamaPreTrainedModel):
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
             if cross_attention_mask.shape[1] != seq_len:
                 # `int(...)` as compileable layers return a 0-dim tensor. Never reached from `generate`, so not traced.
-                past_seen_tokens = int(past_key_values.get_seq_length()) if past_key_values is not None else 0
+                past_seen_tokens = int(cache.get_seq_length()) if cache is not None else 0
                 cross_attention_mask = cross_attention_mask[:, past_seen_tokens : past_seen_tokens + seq_len]
 
             cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
@@ -1368,7 +1376,7 @@ class MllamaModel(MllamaPreTrainedModel):
             cross_attention_states=cross_attention_states,
             cross_attention_mask=cross_attention_mask,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
@@ -1376,7 +1384,7 @@ class MllamaModel(MllamaPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1399,6 +1407,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1409,7 +1418,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_mask: torch.Tensor | None = None,
         cross_attention_states: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1483,7 +1492,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             cross_attention_states=cross_attention_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1500,7 +1509,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1521,6 +1530,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
                 cache.layers[layer_idx] = StaticLayer(max_cache_len=cross_attention_cache_len)
         return cache
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids=None,
@@ -1532,7 +1542,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         aspect_ratio_ids=None,
         aspect_ratio_mask=None,
         cross_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         use_cache=False,
         logits_to_keep=0,
         is_first_iteration=False,
@@ -1543,7 +1553,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             next_sequence_length=next_sequence_length,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,

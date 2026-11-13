@@ -143,8 +143,6 @@ class AnyToAnyPipeline(Pipeline):
         if "image" in self.model.input_modalities or "video" in self.model.input_modalities:
             requires_backends(self, "vision")
             requires_backends(self, "torchvision")
-        if "audio" in self.model.input_modalities:
-            requires_backends(self, "librosa")
         self.check_model_type(MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES)
 
     def _sanitize_parameters(

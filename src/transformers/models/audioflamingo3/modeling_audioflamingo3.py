@@ -36,6 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -114,11 +115,12 @@ class AudioFlamingo3Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
@@ -143,21 +145,21 @@ class AudioFlamingo3Attention(nn.Module):
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
-        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None and isinstance(cache, EncoderDecoderCache):
+            is_updated = cache.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_values.is_updated[self.layer_idx] = True
-                past_key_values = past_key_values.cross_attention_cache
+                cache.is_updated[self.layer_idx] = True
+                cache = cache.cross_attention_cache
             else:
-                past_key_values = past_key_values.self_attention_cache
+                cache = cache.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_values and is_updated:
+        if is_cross_attention and cache and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_values.layers[self.layer_idx].keys
-            value_states = past_key_values.layers[self.layer_idx].values
+            key_states = cache.layers[self.layer_idx].keys
+            value_states = cache.layers[self.layer_idx].values
         else:
             # Use the query's batch dimension for kv view so that a different-batch
             # encoder output (e.g. in tests) gets absorbed into the sequence axis,
@@ -165,8 +167,8 @@ class AudioFlamingo3Attention(nn.Module):
             kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
             key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
-            if past_key_values is not None:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -253,7 +255,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["AudioFlamingo3Attention"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -281,7 +283,7 @@ class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance.
     audio_hidden_states (`torch.Tensor`, *optional*):
         Hidden states of the audio encoder after projection.
@@ -289,7 +291,7 @@ class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     audio_hidden_states: torch.Tensor | None = None
@@ -513,6 +515,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -520,7 +523,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -548,14 +551,14 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
         return AudioFlamingo3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
@@ -581,6 +584,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -588,7 +592,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -616,7 +620,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             input_features_mask=input_features_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -635,7 +639,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         return AudioFlamingo3CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
