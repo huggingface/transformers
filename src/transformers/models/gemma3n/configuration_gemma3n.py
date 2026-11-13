@@ -24,7 +24,12 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_timm_available, is_torchvision_available, requires_backends
+from ...utils import (
+    auto_docstring,
+    is_timm_available,
+    is_torchvision_available,
+    requires_backends,
+)
 
 
 # timm requires torchvision under the hood, in CI we force remove torchvision for some tests
