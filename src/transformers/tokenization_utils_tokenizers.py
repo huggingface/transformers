@@ -448,6 +448,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs.setdefault("max_length", _padding["length"])
             kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
 
+        # The backend's own truncation and padding, which `save_pretrained` writes: a call sets its own instead
+        self._backend_settings = self._backend_truncation_and_padding()
+        self._call_settings = None
+
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
@@ -929,6 +933,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         _truncation = self._tokenizer.truncation
         _padding = self._tokenizer.padding
+        # Changed since the last call, e.g. by `backend_tokenizer.enable_truncation`: the backend's own from now on
+        if (_truncation, _padding) != self._call_settings:
+            self._backend_settings = (_truncation, _padding)
         # Set truncation and padding on the backend tokenizer
         if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
             if _truncation is not None:
@@ -968,6 +975,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             }
             if _padding != target:
                 self._tokenizer.enable_padding(**target)
+        self._call_settings = self._backend_truncation_and_padding()
 
     def _encode_plus(
         self,
@@ -1190,6 +1198,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         return text
 
+    def _backend_truncation_and_padding(self) -> tuple[dict | None, dict | None]:
+        return self._tokenizer.truncation, self._tokenizer.padding
+
+    def _set_backend_truncation_and_padding(self, truncation: dict | None, padding: dict | None):
+        if truncation is None:
+            self._tokenizer.no_truncation()
+        else:
+            self._tokenizer.enable_truncation(**truncation)
+        if padding is None:
+            self._tokenizer.no_padding()
+        else:
+            self._tokenizer.enable_padding(**padding)
+
     def _save_pretrained(
         self,
         save_directory: str | os.PathLike,
@@ -1202,7 +1223,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         tokenizer_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
         )
-        self.backend_tokenizer.save(tokenizer_file)
+        settings = self._backend_truncation_and_padding()
+        # Unless set after the last call, the call's truncation and padding aren't the tokenizer's own
+        if settings == self._call_settings:
+            self._set_backend_truncation_and_padding(*self._backend_settings)
+        try:
+            self.backend_tokenizer.save(tokenizer_file)
+        finally:
+            self._set_backend_truncation_and_padding(*settings)
         file_names = file_names + (tokenizer_file,)
 
         return file_names
