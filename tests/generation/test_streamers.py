@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import unittest
 from queue import Empty
 from threading import Event, Thread
@@ -125,6 +126,78 @@ class StreamerTester(unittest.TestCase):
         streamer_text = cs.out[:-1]  # Remove the final "\n"
         streamer_text_tokenized = tokenizer(streamer_text, return_tensors="pt")
         self.assertEqual(streamer_text_tokenized.input_ids.shape, (1, 1))
+
+    def test_text_streamer_long_line_decodes_bounded_window(self):
+        # Without newlines, the streamer only decodes the most recent tokens instead of the whole line
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        token_ids = tokenizer.encode("Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 100)
+
+        with CaptureStdout() as cs:
+            streamer = TextStreamer(tokenizer)
+            with patch.object(tokenizer, "decode", wraps=tokenizer.decode) as mock_decode:
+                for token_id in token_ids:
+                    streamer.put(torch.tensor([token_id]))
+                streamer.end()
+
+        self.assertEqual(cs.out[:-1], tokenizer.decode(token_ids))
+        longest_decode = max(len(call.args[0]) for call in mock_decode.call_args_list)
+        self.assertLessEqual(longest_decode, 2 * TextStreamer._decode_window_size + 1)
+
+    def test_text_streamer_invalid_byte_before_window(self):
+        # With byte fallback, an invalid byte turns the whole run of byte tokens into replacement characters, including
+        # the tokens that are already before the decode window
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        token_ids = tokenizer.encode("Look: " + "😀🎉🦄🧬" * 10, add_special_tokens=False)
+        token_ids += [tokenizer.convert_tokens_to_ids("<0xF0>")] + tokenizer.encode(" next", add_special_tokens=False)
+
+        with CaptureStdout() as cs:
+            streamer = TextStreamer(tokenizer)
+            for token_id in token_ids:
+                streamer.put(torch.tensor([token_id]))
+            streamer.end()
+
+        self.assertEqual(cs.out[:-1], tokenizer.decode(token_ids))
+
+    def test_text_streamer_matches_full_decode(self):
+        # Every printed chunk must be the same as when the whole cache is decoded at each step, which is what the
+        # streamer does when its decode window never moves
+        class RecordingStreamer(TextStreamer):
+            def on_finalized_text(self, text, stream_end=False):
+                self.chunks.append((text, stream_end))
+
+        class FullDecodeStreamer(RecordingStreamer):
+            _decode_window_size = 10**9
+
+        rng = random.Random(0)
+        emojis = "😀🎉🦄🧬𠀀 " * 30
+        text = "Streaming 😀 émojis, 我们今天 and long lines , isn't it ? It ' s fine !\n" * 8
+        for checkpoint in (
+            "openai-community/gpt2",
+            "hf-internal-testing/llama-tokenizer",
+            "google-bert/bert-base-uncased",
+        ):
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+            text_ids = [tokenizer.encode(t, add_special_tokens=False) for t in (text, text.replace("\n", " "), emojis)]
+            for _ in range(15):
+                token_ids = list(rng.choice(text_ids))
+                # Random tokens, including the byte tokens at the start of the vocabulary
+                for _ in range(10):
+                    token_id = rng.randrange(rng.choice([300, len(tokenizer)]))
+                    token_ids.insert(rng.randrange(len(token_ids)), token_id)
+                decode_kwargs = rng.choice([{}, {"skip_special_tokens": True}, {"clean_up_tokenization_spaces": True}])
+                streamers = [
+                    RecordingStreamer(tokenizer, **decode_kwargs),
+                    FullDecodeStreamer(tokenizer, **decode_kwargs),
+                ]
+                streamers[0]._decode_window_size = rng.choice([1, 4, 32])
+                for streamer in streamers:
+                    streamer.chunks = []
+                    # A streamer can be used for several generations
+                    for _ in range(2):
+                        for token_id in token_ids:
+                            streamer.put(torch.tensor([token_id]))
+                        streamer.end()
+                self.assertEqual(streamers[0].chunks, streamers[1].chunks)
 
     def test_iterator_streamer_timeout(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
