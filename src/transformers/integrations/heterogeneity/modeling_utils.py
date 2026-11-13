@@ -154,7 +154,11 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
         @wraps(orig_layer_init)
         def _patched_layer_init(self, *args, **kwargs):
-            bound_arguments = orig_layer_init_signature.bind(self, *args, **kwargs)
+            try:
+                bound_arguments = orig_layer_init_signature.bind(self, *args, **kwargs)
+            except TypeError:
+                # The arguments don't fit `__init__`, so the original `__init__` raises its own error
+                return orig_layer_init(self, *args, **kwargs)
             config = bound_arguments.arguments.get("config")
             context = next(
                 (
