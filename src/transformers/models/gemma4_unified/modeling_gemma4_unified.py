@@ -949,6 +949,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma4UnifiedConfig):
         super().__init__(config)
@@ -1353,6 +1354,8 @@ def create_masks_for_vision_model(
 class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     accepts_loss_kwargs = False
     base_model_prefix = "model"
 
