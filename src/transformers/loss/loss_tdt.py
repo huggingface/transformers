@@ -14,12 +14,14 @@
 
 import torch
 
+from ..integrations import use_kernel_forward_from_hub
 from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@use_kernel_forward_from_hub("tdt_loss")
 def tdt_loss(
     token_logits: torch.Tensor,
     duration_logits: torch.Tensor,
