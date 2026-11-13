@@ -133,11 +133,14 @@ class Lfm2VlModel(LlavaModel):
         image_offset = torch.arange(num_images, device=last_hidden_state.device)[:, None, None, None] * num_patches
         patch_index = image_offset + rows * widths[..., None, None] + columns
 
-        # The real tokens, all images' side by side in one patch grid, which the projector unshuffles as one image
-        patch_index = patch_index[token < num_tokens].permute(1, 0, 2).reshape(factor, -1)
+        # Every image's token slots side by side in one patch grid, which the projector unshuffles as one image. Padding
+        # slots read the first patch and are dropped after, so the projector's shape doesn't depend on the image sizes
+        is_token = token < num_tokens
+        patch_index = patch_index.masked_fill(~is_token[..., None, None], 0)
+        patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
-        image_features = image_features.reshape(-1, image_features.shape[-1])
+        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
         split_sizes = (spatial_shapes // factor).prod(-1).tolist()
         image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
         return image_outputs

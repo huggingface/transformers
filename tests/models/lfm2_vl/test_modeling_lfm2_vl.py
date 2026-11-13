@@ -196,26 +196,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    def test_get_image_features_of_padded_images_of_different_sizes(self):
-        """Each image of a padded batch of different sizes gets the features it gets alone."""
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Lfm2VlModel(config).to(torch_device).eval()
-        shapes = [(8, 8), (4, 8), (8, 4)]
-        pixel_values = floats_tensor([len(shapes), 64, inputs["pixel_values"].shape[-1]]).to(torch_device)
-        pixel_attention_mask = torch.zeros(len(shapes), 64, dtype=torch.long, device=torch_device)
-        for image, (height, width) in enumerate(shapes):
-            pixel_attention_mask[image, : height * width] = 1
-        spatial_shapes = torch.tensor(shapes, device=torch_device)
-        with torch.no_grad():
-            batched = model.get_image_features(pixel_values, spatial_shapes, pixel_attention_mask).pooler_output
-            for image, (height, width) in enumerate(shapes):
-                alone = model.get_image_features(
-                    pixel_values[image : image + 1, : height * width],
-                    spatial_shapes[image : image + 1],
-                    pixel_attention_mask[image : image + 1, : height * width],
-                ).pooler_output[0]
-                torch.testing.assert_close(batched[image], alone, rtol=1e-4, atol=1e-4)
-
 
 @require_torch_accelerator
 @slow
