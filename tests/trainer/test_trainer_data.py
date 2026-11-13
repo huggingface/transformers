@@ -19,7 +19,6 @@ batch size finder, pad/concatenate, collators, and eval loop container.
 
 import copy
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -42,6 +41,7 @@ from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
+    execute_subprocess_async,
     require_accelerate,
     require_torch,
     torch_device,
@@ -404,7 +404,7 @@ class TrainerSmallLengthGroupedSamplerTest(unittest.TestCase):
     def test_small_dataset_native_ddp_updates(self):
         script = Path(__file__).parent / "distributed" / "scripts" / "check_length_grouped_small_dataset.py"
         with tempfile.TemporaryDirectory() as output_dir:
-            result = subprocess.run(
+            result = execute_subprocess_async(
                 [
                     sys.executable,
                     "-m",
@@ -415,12 +415,9 @@ class TrainerSmallLengthGroupedSamplerTest(unittest.TestCase):
                     str(script),
                     output_dir,
                 ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
                 timeout=180,
             )
-            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertEqual(result.returncode, 0, "\n".join(result.stdout + result.stderr))
             for rank in range(3):
                 report = json.loads((Path(output_dir) / f"rank-{rank}.json").read_text())
                 self.assertEqual(report["steps"], 2)

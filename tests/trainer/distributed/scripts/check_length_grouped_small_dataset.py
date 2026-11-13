@@ -14,6 +14,7 @@
 """Exercise length-grouped padding through real CPU DDP optimizer steps."""
 
 import copy
+import faulthandler
 import json
 import sys
 from pathlib import Path
@@ -28,9 +29,11 @@ from transformers.trainer_pt_utils import DistributedLengthGroupedSampler
 
 
 def main():
-    torch.set_num_threads(1)
-    dist.init_process_group("gloo")
+    # Bound each worker through initialization, training, and process-group cleanup.
+    faulthandler.dump_traceback_later(180, exit=True)
     try:
+        torch.set_num_threads(1)
+        dist.init_process_group("gloo")
         torch.manual_seed(17)
         model = nn.Linear(4, 1)
         reference = copy.deepcopy(model)
@@ -65,8 +68,14 @@ def main():
             torch.testing.assert_close(values, other, rtol=0, atol=0)
         report = {"steps": steps, "indices": indices, "parameters": values.tolist()}
         (Path(sys.argv[1]) / f"rank-{dist.get_rank()}.json").write_text(json.dumps(report))
+        if dist.get_rank() == 0:
+            print("All ranks completed two DDP updates matching the single-process reference.", flush=True)
     finally:
-        dist.destroy_process_group()
+        try:
+            if dist.is_initialized():
+                dist.destroy_process_group()
+        finally:
+            faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":
