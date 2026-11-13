@@ -2923,12 +2923,18 @@ class GenerationMixin(ContinuousMixin):
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
         # Expand inputs depending on the generation mode
+        expand_size = max(generation_config.num_beams, generation_config.num_return_sequences)
         input_ids, model_kwargs = self._expand_inputs_for_generation(
             input_ids=input_ids,
-            expand_size=max(generation_config.num_beams, generation_config.num_return_sequences),
+            expand_size=expand_size,
             is_encoder_decoder=self.config.is_encoder_decoder,
             **model_kwargs,
         )
+        if expand_size > 1:
+            if negative_prompt_ids is not None:
+                negative_prompt_ids = negative_prompt_ids.repeat_interleave(expand_size, dim=0)
+            if negative_prompt_attention_mask is not None:
+                negative_prompt_attention_mask = negative_prompt_attention_mask.repeat_interleave(expand_size, dim=0)
 
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
