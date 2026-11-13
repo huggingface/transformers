@@ -170,9 +170,8 @@ for i, text in enumerate(processor.decode(generated_ids, skip_special_tokens=Tru
 
 ### Training
 
-The model can be trained with the loss it outputs. Put the target transcript in an assistant turn of the
-[chat template](#chat-template) and pass `processor_kwargs={"output_labels": True}`. Everything but the transcript and
-its EOS is masked automatically (namely the audio placeholders, the language prompt and the padding).
+OmniASR can be trained with the loss outputted by the model. Put the target transcript in the assistant turn of the
+[chat template](#chat-template) and pass `output_labels=True`. Audio and padding positions are masked automatically.
 
 Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech transcripts are lowercased below.
 
@@ -181,7 +180,7 @@ from datasets import Audio, load_dataset
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 model_id = "bezzam/omniasr-llm-300m-v2"
-NUM_SAMPLES = 5
+NUM_SAMPLES = 2
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
@@ -189,21 +188,31 @@ model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
-text_samples = [text.lower() for text in ds["text"][:NUM_SAMPLES]]
-
-# Any supported language code, or no `language` item to train the language-agnostic mode
-conversations = [
+conversation = [
     [
-        {"role": "user", "content": [{"type": "audio", "audio": audio}, {"type": "language", "language": "en"}]},
-        {"role": "assistant", "content": [{"type": "text", "text": text}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "audio", "audio": sample["audio"]["array"]},
+                # any supported language code, or no `language` item to train the language-agnostic mode
+                {"type": "language", "language": "en"},
+            ],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": sample["text"].lower()}]},
     ]
-    for audio, text in zip(speech_samples, text_samples)
+    for sample in ds.select(range(NUM_SAMPLES))
 ]
+
 inputs = processor.apply_chat_template(
-    conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
-)
-inputs.to(model.device, dtype=model.dtype)
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())
