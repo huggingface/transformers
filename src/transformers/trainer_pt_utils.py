@@ -476,7 +476,9 @@ class LabelSmoother:
             denominator = num_items_in_batch.to(nll_loss.device)
         else:
             denominator = num_items_in_batch
-        nll_loss = nll_loss.sum() / denominator
+        # Half-precision token sums can overflow even when their mean is finite.
+        loss_dtype = torch.float32 if nll_loss.dtype in (torch.float16, torch.bfloat16) else nll_loss.dtype
+        nll_loss = nll_loss.sum(dtype=loss_dtype) / denominator
         smoothed_loss = smoothed_loss.sum() / (denominator * log_probs.shape[-1])
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
