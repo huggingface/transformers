@@ -214,8 +214,9 @@ class LightGlueAttention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         current_attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
-        key_states = self.k_proj(current_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(hidden_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+        key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
         if position_embeddings is not None:
             cos, sin = position_embeddings
