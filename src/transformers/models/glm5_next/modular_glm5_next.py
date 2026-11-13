@@ -1438,11 +1438,11 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         # Same as in `Glm46V`
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
+        return_flat = kwargs.pop("return_flat", False)
         t = video_grid_thw[:, 0]
         hw = video_grid_thw[:, 1:]
         # repeat each (h,w) row `t` times

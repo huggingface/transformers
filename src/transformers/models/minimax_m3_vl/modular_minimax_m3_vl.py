@@ -970,12 +970,12 @@ class MiniMaxM3VLModel(LlavaModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
-        return_flat: bool = False,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         # Return the raw vision-tower output (so callers can inspect hidden states /
         # attentions) while stashing the projected + spatially-merged features —
         # ready to scatter into the text embeddings — in `pooler_output`.
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
         if return_flat:

@@ -1187,9 +1187,9 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
@@ -1214,9 +1214,9 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         if return_flat:

@@ -753,9 +753,9 @@ class Molmo2Model(Molmo2PreTrainedModel):
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
-        return_flat: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        return_flat = kwargs.pop("return_flat", False)
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]
