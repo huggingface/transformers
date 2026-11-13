@@ -892,6 +892,10 @@ class ModelTesterMixin(_UnittestCompatMixin, ExportTesterMixin):
                 attr = getattr(cls, attr_name)
                 if callable(attr):
                     setattr(cls, attr_name, hub_retry()(attr))
+        # pytest reads `__test__` with `getattr`, so a base class setting `__test__ = False` would also hide all its
+        # subclasses. Make the opt-out apply only to the class that declares it.
+        if "__test__" not in cls.__dict__:
+            cls.__test__ = True
 
     @property
     def all_generative_model_classes(self):
