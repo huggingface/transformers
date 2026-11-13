@@ -238,7 +238,7 @@ class OmniASRModel(VoxtralModel):
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: OmniASRConfig):
         super().__init__(config)
         self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
 

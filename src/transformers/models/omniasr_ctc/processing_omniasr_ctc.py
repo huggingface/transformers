@@ -19,13 +19,9 @@ from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 
 
-class OmniASRCTCProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @auto_docstring
 class OmniASRCTCProcessor(ProcessorMixin):
-    valid_processor_kwargs = OmniASRCTCProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -35,7 +31,7 @@ class OmniASRCTCProcessor(ProcessorMixin):
         self,
         audio: AudioInput,
         text: TextInput | list[TextInput] | None = None,
-        **kwargs: Unpack[OmniASRCTCProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         text (`str`, `list[str]`, *optional*):
@@ -45,7 +41,7 @@ class OmniASRCTCProcessor(ProcessorMixin):
             [`BatchFeature`]: `input_values` and its `padding_mask`, and `labels` whenever `text` is given.
         """
         output_kwargs = self._merge_kwargs(
-            OmniASRCTCProcessorKwargs,
+            ProcessingKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -60,13 +60,9 @@ ISO_639_1_TO_LANGUAGE = {
 # fmt: on
 
 
-class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @auto_docstring
 class OmniASRProcessor(ProcessorMixin):
-    valid_processor_kwargs = OmniASRProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,
@@ -101,7 +97,7 @@ class OmniASRProcessor(ProcessorMixin):
         audio: AudioInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[OmniASRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         text (`str`, `list[str]`, *optional*):
@@ -161,7 +157,7 @@ class OmniASRProcessor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         language: str | list[str] | None = None,
         tokenize: bool = True,
-        **kwargs: Unpack[OmniASRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature | list[str]:
         """
         Prepare inputs for speech recognition without manually writing the chat template.
