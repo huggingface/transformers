@@ -489,7 +489,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, GenerationMixin):
@@ -620,7 +620,7 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

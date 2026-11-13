@@ -584,7 +584,7 @@ class InternVLModel(LlavaModel):
             **kwargs,
         )
 
-        return InternVLModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return InternVLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):

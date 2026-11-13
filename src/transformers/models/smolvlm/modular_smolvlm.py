@@ -260,7 +260,7 @@ class SmolVLMModel(Idefics3Model):
             **kwargs,
         )
 
-        return SmolVLMBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return SmolVLMBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):

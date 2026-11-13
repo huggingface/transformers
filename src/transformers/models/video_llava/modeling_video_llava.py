@@ -48,15 +48,15 @@ class VideoLlavaModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def video_hidden_states(self):
         logger.warning_once(
             "`video_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `video_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
         return self.video_pooler_output
 
@@ -68,15 +68,15 @@ class VideoLlavaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def video_hidden_states(self):
         logger.warning_once(
             "`video_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `video_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
         return self.video_pooler_output
 
@@ -334,7 +334,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             **kwargs,
         )
 
-        return VideoLlavaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return VideoLlavaModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -504,7 +504,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

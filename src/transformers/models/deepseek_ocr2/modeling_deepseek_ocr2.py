@@ -85,9 +85,9 @@ class DeepseekOcr2ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring
@@ -97,9 +97,9 @@ class DeepseekOcr2CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring
@@ -1516,7 +1516,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
             **kwargs,
         )
 
-        return DeepseekOcr2ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return DeepseekOcr2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -1617,7 +1617,7 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

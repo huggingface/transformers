@@ -350,7 +350,7 @@ class Ovis2Model(LlavaModel):
             **kwargs,
         )
 
-        return Ovis2ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Ovis2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -433,7 +433,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

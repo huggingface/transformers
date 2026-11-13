@@ -774,7 +774,7 @@ class Qwen3VLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
@@ -873,7 +873,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

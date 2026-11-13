@@ -71,9 +71,9 @@ class Granite4VisionModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring
@@ -96,9 +96,9 @@ class Granite4VisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(

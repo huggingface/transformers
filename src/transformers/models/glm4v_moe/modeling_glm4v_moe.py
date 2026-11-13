@@ -1382,7 +1382,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             **kwargs,
         )
 
-        return MultimodalMoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 def load_balancing_loss_func(
@@ -1598,7 +1598,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

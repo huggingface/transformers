@@ -180,9 +180,9 @@ class Kosmos2ModelOutput(MultimodalBaseModelOutputWithPast):
     @property
     def image_embeds(self):
         logger.warning_once(
-            "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
+            "`image_embeds` is deprecated and will be removed in v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring
@@ -205,9 +205,9 @@ class Kosmos2ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithPas
     @property
     def image_embeds(self):
         logger.warning_once(
-            "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
+            "`image_embeds` is deprecated and will be removed in v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2

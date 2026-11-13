@@ -50,9 +50,9 @@ class Idefics3BaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring
@@ -62,9 +62,9 @@ class Idefics3CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionEmbeddings with Idefics2->Idefics3
@@ -674,7 +674,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             **kwargs,
         )
 
-        return Idefics3BaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Idefics3BaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -832,7 +832,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

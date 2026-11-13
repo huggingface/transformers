@@ -209,7 +209,7 @@ class Mistral3Model(LlavaModel):
             **kwargs,
         )
 
-        return Mistral3ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Mistral3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -301,7 +301,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

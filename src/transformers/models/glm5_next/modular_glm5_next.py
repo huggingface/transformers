@@ -1576,7 +1576,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         )
 
         # Only change is the output type to Moe
-        return MultimodalMoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -1694,7 +1694,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

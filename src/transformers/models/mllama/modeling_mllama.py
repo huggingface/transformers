@@ -1505,7 +1505,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def _prepare_static_cache(self, *args, model_kwargs, **kwargs) -> Cache:

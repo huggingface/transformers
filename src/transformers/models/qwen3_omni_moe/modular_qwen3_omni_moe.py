@@ -1357,7 +1357,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             **kwargs,
         )
 
-        return MultimodalMoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
@@ -1450,7 +1450,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

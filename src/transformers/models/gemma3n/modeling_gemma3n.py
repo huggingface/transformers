@@ -81,17 +81,17 @@ class Gemma3nModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def audio_hidden_states(self):
         logger.warning_once(
             "`audio_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
         )
-        return self.audio_pooler_output
+        return self.audio_outputs.pooler_output
 
 
 @auto_docstring
@@ -101,17 +101,17 @@ class Gemma3nCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def audio_hidden_states(self):
         logger.warning_once(
             "`audio_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
         )
-        return self.audio_pooler_output
+        return self.audio_outputs.pooler_output
 
 
 class Gemma3nRMSNorm(nn.Module):
@@ -2124,7 +2124,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             **kwargs,
         )
 
-        return Gemma3nModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Gemma3nModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer
@@ -2286,7 +2286,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def get_per_layer_input_embeddings(self):

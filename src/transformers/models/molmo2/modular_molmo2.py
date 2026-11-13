@@ -1637,7 +1637,7 @@ class Molmo2Model(LlavaModel):
             **kwargs,
         )
 
-        return Molmo2ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Molmo2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -1762,7 +1762,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def prepare_inputs_for_generation(

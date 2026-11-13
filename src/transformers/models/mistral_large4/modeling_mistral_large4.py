@@ -797,9 +797,9 @@ class MistralLarge4ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 class MistralLarge4PatchMerger(nn.Module):
@@ -994,7 +994,7 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
             **kwargs,
         )
 
-        return MistralLarge4ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MistralLarge4ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -1004,9 +1004,9 @@ class MistralLarge4CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -1122,7 +1122,7 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

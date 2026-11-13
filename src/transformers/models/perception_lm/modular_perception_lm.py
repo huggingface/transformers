@@ -263,7 +263,7 @@ class PerceptionLMModel(LlavaModel):
             return_dict=True,
             **kwargs,
         )
-        return PerceptionLMModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return PerceptionLMModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -360,7 +360,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def get_image_features(self, **kwargs):

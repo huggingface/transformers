@@ -522,9 +522,9 @@ class QianfanOCRModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -664,7 +664,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
             **kwargs,
         )
 
-        return QianfanOCRModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return QianfanOCRModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
@@ -709,9 +709,9 @@ class QianfanOCRCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -818,7 +818,7 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

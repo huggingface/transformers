@@ -427,5 +427,5 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=mm_encoder_outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
         )

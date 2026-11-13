@@ -939,7 +939,7 @@ class MuseSparkModel(MuseGlimmerModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MuseSparkModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MuseSparkModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
@@ -1057,7 +1057,7 @@ class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

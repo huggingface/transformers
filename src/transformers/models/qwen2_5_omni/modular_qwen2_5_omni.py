@@ -1888,7 +1888,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
@@ -2050,7 +2050,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

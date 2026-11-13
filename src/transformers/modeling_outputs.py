@@ -513,49 +513,30 @@ class Seq2SeqModelOutput(ModelOutput):
 class MultimodalModelOutput(ModelOutput):
     """
     Base class for multimodal model outputs. This dataclass has to be subclassed to add model output fields including
-    `modality_outputs` field! The `modality_outputs` cannot be added by default due to dataclass field ordering in subclasses.
+    `image/video/audio outputs` fields. The modality-related fields cannot be added by default due to dataclass field
+    ordering in subclasses.
 
-    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
-    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
-    that are absent.
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
     """
 
-    _ALLOWED_MODALITIES = ("image", "video", "audio")
-
-    def __getattr__(self, name: str):
-        # called when normal lookup fails to give easy access `out.image_hidden_states`
-        if not name.startswith("_") and name != "modality_outputs":
-            modality, _, field = name.partition("_")
-            if modality in self._ALLOWED_MODALITIES:
-                outputs = self.__dict__.get("modality_outputs") or {}
-                encoder_output = outputs.get(modality)
-                return getattr(encoder_output, field) if encoder_output is not None else None
-        raise AttributeError(f"{type(self).__name__} has no attribute '{name}'")
-
     def to_tuple(self) -> tuple:
-        items = []
-        for k in self.keys():
-            if k == "modality_outputs":
-                # flatten each modality: image -> image_last_hidden_state, image_hidden_states, ...
-                for modality, encoder_output in (self.modality_outputs or {}).items():
-                    if encoder_output is None:
-                        continue
-                    for field in encoder_output.keys():  # keys() skips None fields, like ModelOutput.to_tuple
-                        items.append((f"{modality}_{field}", encoder_output[field]))
-            else:
-                items.append((k, self[k]))
-        return tuple(v for _, v in items)
+        # `keys()` skips None fields, like `ModelOutput.to_tuple`
+        return tuple(
+            self[k] if k not in ("image_outputs", "video_outputs", "audio_outputs") else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 @dataclass
 class MultimodalBaseModelOutputWithPast(MultimodalModelOutput):
     """
-    Base class for multimodal model outputs. Contains the outputs of the language model backbone and, optionally, the
-    outputs of each modality encoder that was used.
+    Base class for multimodal model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
-    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
-    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
-    that are absent.
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -574,27 +555,35 @@ class MultimodalBaseModelOutputWithPast(MultimodalModelOutput):
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
-        modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-            Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-            encoder. Contains only the modalities that were processed.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
     """
 
     last_hidden_state: torch.FloatTensor | None = None
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
 
 
 @dataclass
 class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
     """
-    Base class for multimodal causal language model (or autoregressive) outputs.Contains the outputs of the
+    Base class for multimodal causal language model (or autoregressive) outputs. Contains the outputs of the
     language model backbone and, optionally, the outputs of each modality encoder that was used.
 
-    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
-    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
-    that are absent.
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -613,9 +602,15 @@ class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
-        modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-            Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-            encoder. Contains only the modalities that were processed.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
     """
 
     loss: torch.FloatTensor | None = None
@@ -623,18 +618,19 @@ class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
 
 
 @dataclass
 class MultimodalMoeBaseModelOutputWithPast(MultimodalModelOutput):
     """
-    Base class for multimodal model with mixture of experts outputs. Contains the outputs of the
-    language model backbone and, optionally, the outputs of each modality encoder that was used.
+    Base class for multimodal MoE model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
-    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
-    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
-    that are absent.
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -657,9 +653,15 @@ class MultimodalMoeBaseModelOutputWithPast(MultimodalModelOutput):
             Tuple of `torch.Tensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
             Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
             inspect how tokens are dispatched to experts.
-        modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-            Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-            encoder. Contains only the modalities that were processed.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
     """
 
     last_hidden_state: torch.FloatTensor | None = None
@@ -667,7 +669,9 @@ class MultimodalMoeBaseModelOutputWithPast(MultimodalModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     router_logits: tuple[torch.Tensor] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
 
 
 @dataclass
@@ -676,9 +680,9 @@ class MultimodalMoeCausalLMOutputWithPast(MultimodalModelOutput):
     Base class for multimodal causal language model (or autoregressive) with mixture of experts outputs.
     Contains the outputs of the language model backbone and, optionally, the outputs of each modality encoder that was used.
 
-    Only modalities that were actually processed appear in `modality_outputs`. For convenience, flat access such as
-    `output.image_hidden_states` or `output.audio_pooler_output` is supported and returns `None` for modalities
-    that are absent.
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -705,9 +709,15 @@ class MultimodalMoeCausalLMOutputWithPast(MultimodalModelOutput):
             Tuple of `torch.Tensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
             Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
             inspect how tokens are dispatched to experts.
-        modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-            Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-            encoder. Contains only the modalities that were processed.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
     """
 
     loss: torch.Tensor | None = None
@@ -717,7 +727,9 @@ class MultimodalMoeCausalLMOutputWithPast(MultimodalModelOutput):
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     router_logits: tuple[torch.Tensor] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
 
 
 @dataclass

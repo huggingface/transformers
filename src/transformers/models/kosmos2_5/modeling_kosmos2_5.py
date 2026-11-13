@@ -285,9 +285,9 @@ class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
     @property
     def image_embeds(self):
         logger.warning_once(
-            "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
+            "`image_embeds` is deprecated and will be removed in v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def projection_attentions(self):
@@ -320,9 +320,9 @@ class Kosmos2_5ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithP
     @property
     def image_embeds(self):
         logger.warning_once(
-            "`image_embeds` is deprecated and will be removed in v5.30; Use `image_pooler_output` to obtain pooled features."
+            "`image_embeds` is deprecated and will be removed in v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def projection_attentions(self):

@@ -222,7 +222,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -363,7 +363,7 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):

@@ -278,7 +278,7 @@ class LightOnOcrModel(Mistral3Model):
             **kwargs,
         )
 
-        return LightOnOcrModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return LightOnOcrModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):

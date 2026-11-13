@@ -73,9 +73,9 @@ class DeepseekVLHybridBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast)
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring
@@ -85,9 +85,9 @@ class DeepseekVLHybridCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
 
 class DeepseekVLHybridLayerNorm(nn.LayerNorm):
@@ -343,7 +343,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
             **kwargs,
         )
 
-        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
+        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
     def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
@@ -437,7 +437,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

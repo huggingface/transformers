@@ -305,7 +305,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     def compute_3d_position_ids(self, **kwargs):
         raise AttributeError("Exaone4.5 doesn't use 3D positions")
@@ -401,7 +401,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):

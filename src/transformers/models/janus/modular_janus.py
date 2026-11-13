@@ -808,7 +808,7 @@ class JanusModel(JanusPreTrainedModel):
             **kwargs,
         )
 
-        return JanusBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
+        return JanusBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
@@ -874,7 +874,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def decode_image_tokens(self, image_tokens: torch.Tensor):

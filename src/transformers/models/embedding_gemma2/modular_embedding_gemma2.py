@@ -546,17 +546,17 @@ class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def audio_hidden_states(self):
         logger.warning_once(
             "`audio_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
         )
-        return self.audio_pooler_output
+        return self.audio_outputs.pooler_output
 
 
 @auto_docstring(
@@ -750,7 +750,7 @@ class EmbeddingGemma2Model(Gemma4Model):
             **kwargs,
         )
 
-        return EmbeddingGemma2ModelOutput(**outputs, modality_outputs=mm_encoder_outputs)
+        return EmbeddingGemma2ModelOutput(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):

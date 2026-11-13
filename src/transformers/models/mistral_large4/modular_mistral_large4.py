@@ -755,7 +755,7 @@ class MistralLarge4Model(Mistral3Model):
             **kwargs,
         )
 
-        return MistralLarge4ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MistralLarge4ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class MistralLarge4CausalLMOutputWithPast(AriaCausalLMOutputWithPast):
@@ -844,7 +844,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

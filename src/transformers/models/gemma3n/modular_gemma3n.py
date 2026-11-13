@@ -461,9 +461,9 @@ class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
     def audio_hidden_states(self):
         logger.warning_once(
             "`audio_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
         )
-        return self.audio_pooler_output
+        return self.audio_outputs.pooler_output
 
 
 class Gemma3nCausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
@@ -471,9 +471,9 @@ class Gemma3nCausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     def audio_hidden_states(self):
         logger.warning_once(
             "`audio_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
         )
-        return self.audio_pooler_output
+        return self.audio_outputs.pooler_output
 
 
 class Gemma3nRMSNorm(nn.Module):
@@ -2261,7 +2261,7 @@ class Gemma3nModel(PaliGemmaModel):
             **kwargs,
         )
 
-        return Gemma3nModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Gemma3nModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
@@ -2411,7 +2411,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):

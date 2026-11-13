@@ -328,7 +328,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             **kwargs,
         )
 
-        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
+        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
@@ -377,7 +377,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

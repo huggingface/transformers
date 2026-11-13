@@ -169,7 +169,7 @@ class VipLlavaModel(LlavaModel):
             **kwargs,
         )
 
-        return VipLlavaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return VipLlavaModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
@@ -275,7 +275,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
 

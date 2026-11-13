@@ -1281,15 +1281,15 @@ class MiniMaxM3VLModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def video_hidden_states(self):
         logger.warning_once(
             "`video_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `video_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
         return self.video_pooler_output
 
@@ -1301,15 +1301,15 @@ class MiniMaxM3VLCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     def image_hidden_states(self):
         logger.warning_once(
             "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_pooler_output
+        return self.image_outputs.pooler_output
 
     @property
     def video_hidden_states(self):
         logger.warning_once(
             "`video_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `video_pooler_output` to obtain pooled features."
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
         return self.video_pooler_output
 
@@ -1450,7 +1450,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
             **kwargs,
         )
 
-        return MiniMaxM3VLModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return MiniMaxM3VLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -1577,7 +1577,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
         )
 
     @auto_docstring

@@ -610,7 +610,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Kimi_K25ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
+        return Kimi_K25ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -703,7 +703,7 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs=outputs.modality_outputs,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 
