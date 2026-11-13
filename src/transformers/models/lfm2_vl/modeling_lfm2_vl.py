@@ -191,7 +191,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
             The pixel attention mask of the input images.
         """
-        return_flat = kwargs.pop("return_flat", False)
         factor = self.config.downsample_factor
         unshuffle_index = get_vision_unshuffle_index(
             spatial_shapes, pixel_attention_mask.shape[-1], factor, kwargs=kwargs
@@ -207,10 +206,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[unshuffle_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
         image_features = image_features.reshape(-1, image_features.shape[-1])
-
-        if return_flat:
-            image_outputs.pooler_output = image_features
-            return image_outputs
         split_sizes = (spatial_shapes // factor).prod(-1).tolist()
         image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
         return image_outputs
