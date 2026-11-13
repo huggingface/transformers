@@ -438,6 +438,25 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.assertIsNotNone(transformer_decoder_mask_predictions.grad)
         self.assertIsNotNone(attentions.grad)
 
+    def test_init_weights_match_original(self):
+        # The original OneFormer keeps normal init (std 1) for the pixel decoder level embeddings,
+        # the default nn.Embedding init for the query and level embeddings, and the default
+        # nn.Linear init (non-zero bias) for the MLP heads.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        torch.manual_seed(0)
+        model = OneFormerForUniversalSegmentation(config)
+
+        level_embed = model.model.pixel_level_module.decoder.level_embed
+        self.assertGreater(level_embed.std().item(), 0.5)
+
+        transformer_module = model.model.transformer_module
+        self.assertGreater(transformer_module.queries_embedder.weight.std().item(), 0.5)
+        self.assertGreater(transformer_module.level_embed.weight.std().item(), 0.5)
+
+        for module in transformer_module.decoder.mask_embed.modules():
+            if isinstance(module, torch.nn.Linear):
+                self.assertFalse(torch.all(module.bias == 0))
+
     @require_timm
     def test_backbone_selection(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

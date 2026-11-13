@@ -2808,7 +2808,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, OneFormerPixelDecoder):
-            init.normal_(module.level_embed, std=0)
+            init.normal_(module.level_embed, std=1.0)
         elif isinstance(module, (OneFormerTransformerDecoderLayer, OneFormerTransformerDecoderQueryTransformer)):
             for p in module.parameters():
                 if p.dim() > 1:
@@ -2829,10 +2829,17 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
             init.constant_(module.reference_points.bias, 0.0)
         elif isinstance(module, OneFormerMLPPredictionHead):
+            # The MLP heads keep the default nn.Linear init in the original
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
-                    init.xavier_uniform_(submodule.weight, gain=xavier_std)
-                    init.constant_(submodule.bias, 0)
+                    init.kaiming_uniform_(submodule.weight, a=math.sqrt(5))
+                    if submodule.bias is not None:
+                        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(submodule.weight)
+                        bound = 1.0 / math.sqrt(fan_in) if fan_in > 0 else 0
+                        init.uniform_(submodule.bias, -bound, bound)
+        elif isinstance(module, nn.Embedding):
+            # The query, level and prompt embeddings keep the default nn.Embedding init in the original
+            init.normal_(module.weight, mean=0.0, std=1.0)
         elif isinstance(module, nn.MultiheadAttention):
             init.normal_(module.in_proj_weight, mean=0.0, std=std)
             init.zeros_(module.in_proj_bias)
