@@ -78,8 +78,17 @@ class _HeterogeneitySpec:
     generic_modeling_state: _GenericModelingState | None = None
 
 
-def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
-    normalized = copy.deepcopy(layer_overrides)
+def _normalize_layer_overrides(layer_overrides: dict[str, Any], attribute_map: dict[str, str]) -> dict[str, Any]:
+    normalized = {}
+    for key, value in copy.deepcopy(layer_overrides).items():
+        attribute = attribute_map.get(key, key)
+        if attribute in normalized:
+            names = [name for name in layer_overrides if attribute_map.get(name, name) == attribute]
+            raise ValueError(
+                f"`per_layer_config` sets {' and '.join(f'`{name}`' for name in names)} in the same layer, but these "
+                "are names of the same attribute. Set only one of them."
+            )
+        normalized[attribute] = value
 
     if "skip" in normalized:
         skip = normalized.pop("skip")
@@ -236,7 +245,7 @@ def _apply_heterogeneous_config(
     """
 
     normalized_per_layer_overrides = {
-        int(layer_idx): _normalize_layer_overrides(layer_overrides)
+        int(layer_idx): _normalize_layer_overrides(layer_overrides, config.attribute_map)
         for layer_idx, layer_overrides in per_layer_config.items()
     }
 

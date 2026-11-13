@@ -19,7 +19,7 @@ import unittest
 from parameterized import parameterized
 
 from tests.heterogeneity.testing_utils import tiny_llama_config
-from transformers import LlamaConfig
+from transformers import GPT2Config, LlamaConfig
 from transformers.integrations.heterogeneity import AmbiguousGlobalPerLayerAttributeError
 from transformers.utils import logging as transformers_logging
 
@@ -261,6 +261,18 @@ class TestHeterogeneousConfig(unittest.TestCase):
             getattr(config, "num_key_value_heads", "default")
         with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
             hasattr(config, "num_key_value_heads")
+
+    def test_override_under_another_name_of_the_attribute(self):
+        # `GPT2Config` stores `num_attention_heads` under the name `n_head`
+        config = GPT2Config(n_layer=2, n_head=4, per_layer_config={1: {"num_attention_heads": 2}})
+
+        self.assertEqual(config.per_layer_config[1].n_head, 2)
+        for name in ("n_head", "num_attention_heads"):
+            with self.assertRaises(AmbiguousGlobalPerLayerAttributeError):
+                getattr(config, name)
+
+        with self.assertRaisesRegex(ValueError, "sets `n_head` and `num_attention_heads` in the same layer"):
+            GPT2Config(n_layer=2, n_head=4, per_layer_config={1: {"n_head": 2, "num_attention_heads": 1}})
 
     def test_allow_global_per_layer_attribute_access(self):
         config = tiny_llama_config(
