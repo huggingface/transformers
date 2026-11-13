@@ -15,8 +15,6 @@
 import json
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -32,6 +30,7 @@ if is_vision_available():
 @require_vision
 class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2Processor
+    num_image_tokens_images_kwargs = {"crop_to_patches": True, "max_patches": 4}
     # Tiny processor created with make_tiny_processor.py from "thisisiron/Ovis2-1B-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-ovis2"
 
@@ -68,24 +67,3 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def test_get_num_multimodal_tokens_matches_processor_call(self):
-        # `<image>` isn't in the expanded text, so count the `<IMG_ATOM>` tokens in each replacement
-        processor = self.get_processor()
-        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
-        images = [np.random.randint(255, size=(h, w, 3), dtype=np.uint8) for h, w in image_sizes]
-        text = [f"This is an image {processor.image_token}"] * len(images)
-        tiling_kwargs = {"crop_to_patches": True, "max_patches": 4}
-        inputs = processor(
-            text=text,
-            images=images,
-            **tiling_kwargs,
-            padding=True,
-            return_tensors="pt",
-            return_text_replacement_offsets=True,
-        )
-
-        replacements = [r["replacement"] for offsets in inputs["text_replacement_offsets"] for r in offsets]
-        num_image_tokens_from_call = [r.count("<IMG_ATOM>") for r in replacements]
-        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes, **tiling_kwargs)
-        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
