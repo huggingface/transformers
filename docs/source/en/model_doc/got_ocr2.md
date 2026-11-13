@@ -158,10 +158,10 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
 model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map="auto")
-processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True, max_patches=3)
 
 image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
-inputs = processor(image, return_tensors="pt", format=True, crop_to_patches=True, max_patches=3, device=device).to(model.device)
+inputs = processor(image, return_tensors="pt", format=True, crop_to_patches=True, device=device).to(model.device)
 
 generate_ids = model.generate(
     **inputs,

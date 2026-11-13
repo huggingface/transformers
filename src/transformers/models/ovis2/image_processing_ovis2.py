@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for OVIS2."""
 
-from functools import lru_cache
-
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -33,26 +31,12 @@ from ...utils import TensorType, auto_docstring
 
 
 # Helper functions for patch/tile calculations
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
-    """Computes all allowed aspect ratios for a given minimum and maximum number of input tiles."""
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles and width * height >= min_image_tiles:
-                aspect_ratios.append((width, height))
-    return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-
-@lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],
     target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
 ) -> tuple[int, int]:
     """Find the canvas with the closest aspect ratio to the original image aspect ratio."""
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
     aspect_ratio = original_width / original_height
@@ -60,7 +44,7 @@ def get_optimal_tiled_canvas(
 
     best_ratio_diff = float("inf")
     best_grid = (1, 1)
-    for grid in possible_tile_arrangements:
+    for grid in supported_aspect_ratios:
         grid_aspect_ratio = grid[0] / grid[1]
         ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
         if ratio_diff < best_ratio_diff:
@@ -97,20 +81,18 @@ def split_image_into_grid(h: int, w: int, grid: tuple[int, int]) -> list[tuple[i
     ]
 
 
-@lru_cache(maxsize=100)
 def get_min_tile_covering_grid(
     image_size: tuple[int, int],
     target_patch_size: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
     covering_threshold: float = 0.9,
 ) -> tuple[int, int]:
     image_height, image_width = image_size
     image_area = image_width * image_height
-    candidate_tile_grids = get_all_supported_aspect_ratios(1, max_image_tiles)
     evaluated_grids = []
     sufficient_covering_grids = []
 
-    for tile_grid in candidate_tile_grids:
+    for tile_grid in supported_aspect_ratios:
         tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
         tile_covering_ratio = (
             sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
@@ -131,10 +113,10 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to 1):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     max_patches (`int`, *optional*, defaults to 12):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     use_covering_area_grid (`bool`, *optional*, defaults to `True`):
         Whether to use the covering area grid to determine the number of patches. Only has an effect if
         `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
@@ -144,6 +126,7 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
     crop_to_patches: bool
     min_patches: int
     max_patches: int
+    supported_aspect_ratios: list[list[int]]
     use_covering_area_grid: bool
 
 
@@ -161,11 +144,24 @@ class Ovis2ImageProcessor(TorchvisionBackend):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
+    init_only_kwargs = ("min_patches", "max_patches")
     use_covering_area_grid = True
     valid_kwargs = Ovis2ImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Ovis2ImageProcessorKwargs]):
         super().__init__(**kwargs)
+        # build the grids for configs saved without them, or when `min_patches`/`max_patches` were changed
+        tile_counts = [width * height for width, height in self.supported_aspect_ratios or [[0, 0]]]
+        if (min(tile_counts), max(tile_counts)) != (self.min_patches, self.max_patches):
+            self.supported_aspect_ratios = sorted(
+                (
+                    [width, height]
+                    for width in range(1, self.max_patches + 1)
+                    for height in range(1, self.max_patches + 1)
+                    if self.min_patches <= width * height <= self.max_patches
+                ),
+                key=lambda grid: grid[0] * grid[1],
+            )
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Ovis2ImageProcessorKwargs]) -> BatchFeature:
@@ -174,8 +170,7 @@ class Ovis2ImageProcessor(TorchvisionBackend):
     def crop_image_to_patches(
         self,
         images: "torch.Tensor",
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
         patch_size: SizeDict | None = None,
@@ -190,10 +185,8 @@ class Ovis2ImageProcessor(TorchvisionBackend):
         Args:
             images (`torch.Tensor`):
                 The images to be cropped.
-            min_patches (`int`):
-                The minimum number of patches to be extracted from the image.
-            max_patches (`int`):
-                The maximum number of patches to be extracted from the image.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (columns, rows) tile grids the image can be cropped to.
             use_covering_area_grid (`bool`, *optional*, defaults to `True`):
                 Whether to use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90%
                 of the image area. If `False`, the closest aspect ratio to the target is used.
@@ -216,13 +209,13 @@ class Ovis2ImageProcessor(TorchvisionBackend):
             num_columns, num_rows = get_min_tile_covering_grid(
                 (original_height, original_width),
                 target_patch_size=patch_size_height,  # square patch size
-                max_image_tiles=max_patches,
+                supported_aspect_ratios=supported_aspect_ratios,
                 covering_threshold=covering_threshold,
             )
         else:
             # find the closest aspect ratio to the target
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+                (original_height, original_width), (patch_size_height, patch_size_width), supported_aspect_ratios
             )
 
         # calculate the target width and height
@@ -272,20 +265,18 @@ class Ovis2ImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_to_patches: bool = False,
-        min_patches: int = 1,
-        max_patches: int = 12,
+        supported_aspect_ratios: list[list[int]] | None = None,
         use_covering_area_grid: bool = True,
         **kwargs,
     ) -> BatchFeature:
-        if crop_to_patches and max_patches > 1:
+        if crop_to_patches and self.max_patches > 1:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
             processed_images_grouped = {}
             grids = {}
             for shape, stacked_images in grouped_images.items():
                 stacked_images, grid = self.crop_image_to_patches(
                     stacked_images,
-                    min_patches,
-                    max_patches,
+                    supported_aspect_ratios,
                     patch_size=size,
                     use_covering_area_grid=use_covering_area_grid,
                     resample=resample,

@@ -31,7 +31,6 @@ from transformers import (
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
-from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
 
 
 # fmt: off
@@ -126,7 +125,7 @@ def pre_compute_positional_embedding(embedding):
     """
     max_num_tiles, *shapes = embedding.shape
     hidden_size = shapes[-1]
-    supported_aspect_ratios = get_all_supported_aspect_ratios(max_num_tiles)
+    supported_aspect_ratios = MllamaImageProcessor(max_image_tiles=max_num_tiles).supported_aspect_ratios
     max_aspect_ratio_id = len(supported_aspect_ratios)  # we keep 0 index for padding
     # tile embedding does not have patches
     num_patches = 1 if len(shapes) == 2 else shapes[1]
@@ -307,7 +306,7 @@ def write_model(
     vision_dim_per_head = vision_dim // vision_num_heads
     vision_num_heads_per_shard = vision_num_heads // num_shards
     vision_intermediate_size = vision_dim * 4
-    vision_supported_aspect_ratios = get_all_supported_aspect_ratios(vision_max_num_tiles)
+    vision_supported_aspect_ratios = MllamaImageProcessor(max_image_tiles=vision_max_num_tiles).supported_aspect_ratios
 
     vision_config = MllamaVisionConfig(
         hidden_size=vision_dim,

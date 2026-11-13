@@ -93,10 +93,10 @@ class UnlimitedOcrImageProcessorKwargs(DeepseekOcr2ImageProcessorKwargs):
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to `2`):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     max_patches (`int`, *optional*, defaults to `32`):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     tile_size (`int`, *optional*, defaults to `640`):
         The size of each local tile. Must match the model's query embedding size.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
@@ -123,8 +123,7 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
         images: list["torch.Tensor"],
         size: SizeDict,
         crop_to_patches: bool,
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         tile_size: int,
         maximum_pad_value: int,
         resample: "PILImageResampling | None",
@@ -148,12 +147,11 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
             num_images = stacked_images.shape[0]
             if crop_to_patches and max(height, width) > tile_size:
                 num_columns, num_rows = get_optimal_tiled_canvas(
-                    (height, width), (tile_size, tile_size), min_patches, max_patches
+                    (height, width), (tile_size, tile_size), supported_aspect_ratios
                 )
                 stacked_patches, num_patches = self.crop_image_to_patches(
                     stacked_images,
-                    min_patches=min_patches,
-                    max_patches=max_patches,
+                    supported_aspect_ratios=supported_aspect_ratios,
                     tile_size=tile_size,
                     resample=resample,
                 )

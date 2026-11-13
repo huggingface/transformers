@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for Got-OCR-2."""
 
-from functools import lru_cache
-
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -36,68 +34,30 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to `self.min_patches`):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     max_patches (`int`, *optional*, defaults to `self.max_patches`):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     """
 
     crop_to_patches: bool
     min_patches: int
     max_patches: int
+    supported_aspect_ratios: list[list[int]]
 
 
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the minimum and maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        min_image_tiles (`int`):
-            The minimum number of tiles allowed.
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(1, 4)
-        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
-
-    """
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles and width * height >= min_image_tiles:
-                aspect_ratios.append((width, height))
-
-    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-    return aspect_ratios
-
-
-@lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],
     target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
 ) -> tuple[int, int]:
     """
-    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
+    Given the supported tile grids, find the canvas with the closest aspect ratio to the
     original image aspect ratio.
     In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
     more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
     excessive tiling.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
-
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
     aspect_ratio = original_width / original_height
@@ -106,7 +66,7 @@ def get_optimal_tiled_canvas(
     # find the grid with the best aspect ratio
     best_ratio_diff = float("inf")
     best_grid = (1, 1)
-    for grid in possible_tile_arrangements:
+    for grid in supported_aspect_ratios:
         grid_aspect_ratio = grid[0] / grid[1]
         ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
         if ratio_diff < best_ratio_diff:
@@ -135,15 +95,27 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
+    init_only_kwargs = ("min_patches", "max_patches")
 
     def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
+        # build the grids for configs saved without them, or when `min_patches`/`max_patches` were changed
+        tile_counts = [width * height for width, height in self.supported_aspect_ratios or [[0, 0]]]
+        if (min(tile_counts), max(tile_counts)) != (self.min_patches, self.max_patches):
+            self.supported_aspect_ratios = sorted(
+                (
+                    [width, height]
+                    for width in range(1, self.max_patches + 1)
+                    for height in range(1, self.max_patches + 1)
+                    if self.min_patches <= width * height <= self.max_patches
+                ),
+                key=lambda grid: grid[0] * grid[1],
+            )
 
     def crop_image_to_patches(
         self,
         images: "torch.Tensor",
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         use_thumbnail: bool = True,
         patch_size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
@@ -157,10 +129,8 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
         Args:
             images (`torch.Tensor`):
                 The images to be cropped.
-            min_patches (`int`):
-                The minimum number of patches to be extracted from the image.
-            max_patches (`int`):
-                The maximum number of patches to be extracted from the image.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (columns, rows) tile grids the image can be cropped to.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
             patch_size (`SizeDict`, *optional*):
@@ -172,7 +142,7 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
         original_height, original_width = images.shape[-2:]
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+            (original_height, original_width), (patch_size_height, patch_size_width), supported_aspect_ratios
         )
 
         # calculate the target width and height
@@ -221,6 +191,7 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
+        supported_aspect_ratios: list[list[int]] | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:
@@ -230,8 +201,7 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
             for shape, stacked_images in grouped_images.items():
                 stacked_images = self.crop_image_to_patches(
                     stacked_images,
-                    min_patches,
-                    max_patches,
+                    supported_aspect_ratios,
                     patch_size=size,
                     resample=resample,
                 )
@@ -283,19 +253,18 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
             `int`: Number of patches per image.
         """
         images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        supported_aspect_ratios = images_kwargs.get("supported_aspect_ratios", self.supported_aspect_ratios)
         patch_size = images_kwargs.get("patch_size", self.size)
         crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
         num_patches = 1
-        if crop_to_patches and max_patches > 1:
+        if crop_to_patches and self.max_patches > 1:
             if isinstance(patch_size, dict):
                 patch_height, patch_width = patch_size["height"], patch_size["width"]
             else:
                 patch_height, patch_width = patch_size.height, patch_size.width
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (patch_height, patch_width), min_patches, max_patches
+                (height, width), (patch_height, patch_width), supported_aspect_ratios
             )
             if num_columns * num_rows > 1:
                 num_patches += num_columns * num_rows
