@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import re
 
 import numpy as np
@@ -26,14 +25,7 @@ import torch
 
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import (
-    MultiModalData,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-    prepare_keyword_inputs,
-    prepare_prompt_input,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
@@ -162,33 +154,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             for example in audio:
                 if example.ndim != 1:
                     raise ValueError(f"Audio should be mono, got shape: {example.shape}")
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            # Mirror the feature extractor, which splits each audio into Whisper windows padded to `n_samples`
-            window_size = self.feature_extractor.n_samples
-            num_frames, audio_chunk_mapping = [], []
-            for idx, length in enumerate(audio_lengths):
-                for start in range(0, max(length, 1), window_size):
-                    chunk_length = min(length - start, window_size)
-                    num_frames.append(math.ceil(chunk_length / self.feature_extractor.hop_length))
-                    audio_chunk_mapping.append(idx)
-            num_frames, audio_chunk_mapping = torch.tensor(num_frames), torch.tensor(audio_chunk_mapping)
-            data["num_audio_tokens"] = self._get_audio_token_length(num_frames, audio_chunk_mapping).tolist()
-        return MultiModalData(**data)
 
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
         audio_inputs = self.feature_extractor(audio, **kwargs)

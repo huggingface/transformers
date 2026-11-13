@@ -23,7 +23,7 @@ from ...audio_utils import (
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_attr
@@ -414,29 +414,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         token_lengths = (
             (per_chunk_tokens - 1) // 2 + 1 + (audio_lengths // chunk_len) * 13
         )  # after third conv + full chunks
-        return token_lengths
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            n_window = self._merge_kwargs(**kwargs)["audio_kwargs"]["n_window"]
-            min_length = self.feature_extractor.min_length
-            # The STFT drops the last frame, so an unpadded audio has `length // hop_length` frames
-            num_frames = [max(length, min_length) // self.feature_extractor.hop_length for length in audio_lengths]
-            data["num_audio_tokens"] = [self._get_audio_token_length(n, n_window) for n in num_frames]
-        return MultiModalData(**data)
+        return token_lengths.cpu().numpy()
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         n_window = kwargs.get("n_window", 50)
@@ -444,7 +422,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
         audio_lengths = self._get_audio_token_length(audio_inputs["input_features_mask"].sum(-1), n_window)
-        audio_inputs["num_audio_tokens"] = audio_lengths.cpu().numpy()
+        audio_inputs["num_audio_tokens"] = audio_lengths
 
         audio_replacements = [self.replace_audio_token(audio_inputs, idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements

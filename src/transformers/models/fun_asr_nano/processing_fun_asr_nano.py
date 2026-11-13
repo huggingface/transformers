@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 from ...audio_utils import (
     AudioInput,
     make_audio_chat_template_content,
@@ -27,14 +25,7 @@ from ...audio_utils import (
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import (
-    MultiModalData,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-    prepare_keyword_inputs,
-    prepare_prompt_input,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_attr
@@ -118,32 +109,6 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         if text is not None and audio is not None and len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
-
-    def _get_num_audio_tokens(self, audio_length: int, sampling_rate: int) -> int:
-        # Kaldi fbank frames (`snip_edges=True`) followed by LFR subsampling
-        frame_length = int(sampling_rate * self.feature_extractor.frame_length / 1000)
-        frame_shift = int(sampling_rate * self.feature_extractor.frame_shift / 1000)
-        num_frames = 1 + (audio_length - frame_length) // frame_shift if audio_length >= frame_length else 0
-        return math.ceil(num_frames / self.feature_extractor.stride_lfr)
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            sampling_rate = self._merge_kwargs(**kwargs)["audio_kwargs"]["sampling_rate"]
-            data["num_audio_tokens"] = [self._get_num_audio_tokens(length, sampling_rate) for length in audio_lengths]
-        return MultiModalData(**data)
 
     def _process_audio(self, audio, **kwargs):
         audio_inputs = self.feature_extractor(audio, **kwargs)

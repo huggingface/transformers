@@ -41,7 +41,6 @@ if is_tokenizers_available():
 class Nemotron3_5TranscribeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Nemotron3_5TranscribeProcessor
     model_id = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
-    supports_multiple_audios_per_text = False
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):

@@ -19,13 +19,11 @@
 # limitations under the License.
 
 
-import math
-
 import numpy as np
 
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.deprecation import deprecate_attr
@@ -132,31 +130,6 @@ class GlmAsrProcessor(ProcessorMixin):
 
         num_tokens = (audio_lengths - merge_factor) // merge_factor + 1
         return num_tokens
-
-    def _get_num_audio_tokens(self, audio_length: int, sampling_rate: int) -> int:
-        window_size = int(sampling_rate * self.feature_extractor.chunk_length)
-        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
-        num_frames = math.ceil(min(audio_length, max_windows * window_size) / self.feature_extractor.hop_length)
-        return int(self._get_audio_token_length(num_frames))
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            sampling_rate = self._merge_kwargs(**kwargs)["audio_kwargs"]["sampling_rate"]
-            data["num_audio_tokens"] = [self._get_num_audio_tokens(length, sampling_rate) for length in audio_lengths]
-        return MultiModalData(**data)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         # Determine number of chunks per sample, and flatten

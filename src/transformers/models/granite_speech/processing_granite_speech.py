@@ -15,7 +15,7 @@
 
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_attr
@@ -77,24 +77,6 @@ class GraniteSpeechProcessor(ProcessorMixin):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_audio_tokens = audio_inputs["audio_embed_sizes"][audio_idx]
         return self.audio_token * num_audio_tokens
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            data["num_audio_tokens"] = list(self.audio_processor._get_num_audio_features(audio_lengths))
-        return MultiModalData(**data)
 
     @property
     def unused_input_names(self) -> list[str]:

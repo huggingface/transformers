@@ -13,14 +13,13 @@
 # limitations under the License.
 
 import json
-import math
 import re
 
 import numpy as np
 
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
@@ -150,25 +149,6 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             for example in audio:
                 if example.ndim != 1:
                     raise ValueError(f"Audio should be mono, got shape: {example.shape}")
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            pad_to_multiple_of = self._merge_kwargs(**kwargs)["audio_kwargs"]["pad_to_multiple_of"]
-            data["num_audio_tokens"] = [math.ceil(length / pad_to_multiple_of) for length in audio_lengths]
-        return MultiModalData(**data)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         audio_inputs = self.feature_extractor(audio, **kwargs)

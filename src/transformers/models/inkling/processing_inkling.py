@@ -108,15 +108,13 @@ class InklingProcessor(ProcessorMixin):
             num_soft_tokens = int(audio_inputs["audio_input_ids"][audio_idx].shape[-2])
         return self.audio_token * num_soft_tokens
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -131,11 +129,6 @@ class InklingProcessor(ProcessorMixin):
                 for image_size in image_sizes
             ]
             vision_data.update({"num_image_tokens": num_image_patches, "num_image_patches": num_image_patches})
-
-        if audio_lengths is not None:
-            # One token per STFT frame, see `InklingFeatureExtractor`
-            hop_length = self.feature_extractor.hop_length
-            vision_data["num_audio_tokens"] = [-(-audio_length // hop_length) for audio_length in audio_lengths]
 
         return MultiModalData(**vision_data)
 

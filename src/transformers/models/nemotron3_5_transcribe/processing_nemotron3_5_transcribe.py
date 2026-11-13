@@ -21,7 +21,7 @@ import numpy as np
 
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
     auto_docstring,
@@ -305,26 +305,6 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
     def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         # one audio token per `subsampling_factor` spectrogram frames, the last group may be incomplete
         return (audio_lengths + self.subsampling_factor - 1) // self.subsampling_factor
-
-    def _get_num_multimodal_tokens(self, audio_lengths=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            audio_lengths (`list[int]`, *optional*):
-                The lengths of audio inputs in number of samples. Used to dynamically
-                compute per-audio token counts.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        data = {}
-        if audio_lengths is not None:
-            # A centered STFT has `length // hop_length` valid frames
-            num_frames = [length // self.feature_extractor.hop_length for length in audio_lengths]
-            data["num_audio_tokens"] = [self._get_audio_token_length(n) for n in num_frames]
-        return MultiModalData(**data)
 
     def _process_audio(self, audio, **kwargs):
         audio = self.feature_extractor.fetch_audio(audio)

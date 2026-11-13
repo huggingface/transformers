@@ -162,8 +162,6 @@ class ProcessorTesterMixin:
     audio_text_kwargs_max_length = 300
     audio_processor_tester_max_length = 117
     audio_unstructured_max_length = 76
-    # Set to False for processors that take exactly one audio per text
-    supports_multiple_audios_per_text = True
 
     # Max-length values used in video-text kwargs tests. Override in subclasses if needed.
     videos_text_kwargs_max_length = 167
@@ -1802,9 +1800,6 @@ class ProcessorTesterMixin:
         if not hasattr(processor, "_get_num_multimodal_tokens"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
 
-        if getattr(processor, "image_processor", None) is None:
-            self.skipTest("Processor has no image processor")
-
         if processor.tokenizer.pad_token_id is None:
             processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
@@ -1936,9 +1931,6 @@ class ProcessorTesterMixin:
 
         num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
         self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
-
-        if not self.supports_multiple_audios_per_text:
-            return
 
         # Test with two audios per single text
         text = [f"These are two audios {audio_token}{audio_token}"] * len(audio_inputs)

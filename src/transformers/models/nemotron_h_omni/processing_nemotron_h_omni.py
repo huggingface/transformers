@@ -250,15 +250,13 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             length = (length + add_pad) // stride + 1
         return length
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            audio_lengths (`list[int]`, *optional*):
-                The number of raw audio samples per each audio.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -276,10 +274,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             ]
             num_image_tokens = [num_patches // merge_size**2 for num_patches in num_image_patches]
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-
-        if audio_lengths is not None:
-            num_audio_tokens = [max(1, self._estimate_audio_num_embeddings(length)) for length in audio_lengths]
-            vision_data["num_audio_tokens"] = num_audio_tokens
 
         return MultiModalData(**vision_data)
 
