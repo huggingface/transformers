@@ -583,6 +583,43 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
 
 @require_torch
 class TestDataCollatorForMultipleChoice(DataCollatorTestMixin, unittest.TestCase):
+    def test_numpy_batches_match_torch(self):
+        for padding_side in ("left", "right"):
+            tokenizer = BertTokenizer(self.vocab_file, padding_side=padding_side)
+            for label_name in ("label", "labels"):
+                for padding_kwargs in ({}, {"padding": "max_length", "max_length": 6}, {"pad_to_multiple_of": 8}):
+                    with self.subTest(
+                        padding_side=padding_side,
+                        label_name=label_name,
+                        padding_kwargs=padding_kwargs,
+                    ):
+                        features = [
+                            {"input_ids": [[1, 2], [1, 4, 2]], label_name: 1},
+                            {"input_ids": [[1, 4, 4, 2], [1, 2]], label_name: 0},
+                        ]
+                        for feature in features:
+                            feature["attention_mask"] = [[1] * len(choice) for choice in feature["input_ids"]]
+                            feature["token_type_ids"] = [[0] * len(choice) for choice in feature["input_ids"]]
+                        original = copy.deepcopy(features)
+                        collator = DataCollatorForMultipleChoice(tokenizer, return_tensors="np", **padding_kwargs)
+                        expected = collator(features, return_tensors="pt")
+                        for _ in range(2):
+                            actual = collator(features)
+                            self.assertEqual(actual.keys(), expected.keys())
+                            for key in actual:
+                                self.assertIsInstance(actual[key], np.ndarray)
+                                np.testing.assert_array_equal(actual[key], expected[key].numpy())
+                            self.assertEqual(actual["labels"].dtype, np.int64)
+                        self.assertEqual(features, original)
+
+    def test_numpy_batch_without_padding(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForMultipleChoice(tokenizer, padding=False)
+        features = [{"input_ids": [[1, 2], [1, 4]], "labels": 1}]
+        batch = collator(features, return_tensors="np")
+        np.testing.assert_array_equal(batch["input_ids"], [[[1, 2], [1, 4]]])
+        np.testing.assert_array_equal(batch["labels"], [1])
+
     def test_reusing_examples_preserves_labels(self):
         collator = DataCollatorForMultipleChoice(BertTokenizer(self.vocab_file))
         for label_name in ("label", "labels"):

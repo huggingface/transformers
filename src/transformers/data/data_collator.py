@@ -457,6 +457,16 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
     def torch_call(self, examples: list[dict[str, Any]]):  # Refactored implementation from the docs.
         import torch
 
+        batch, labels = self._collate(examples, "pt")
+        batch["labels"] = torch.tensor(labels, dtype=torch.int64)
+        return batch
+
+    def numpy_call(self, examples: list[dict[str, Any]]):
+        batch, labels = self._collate(examples, "np")
+        batch["labels"] = np.asarray(labels, dtype=np.int64)
+        return batch
+
+    def _collate(self, examples: list[dict[str, Any]], return_tensors: str):
         # Take labels out of the examples beforehand, because they aren't nested.
         label_name = "label" if "label" in examples[0] else "labels"
         labels = [example[label_name] for example in examples]
@@ -478,13 +488,12 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            return_tensors=return_tensors,
         )
 
         # Reshape from B*C x L into B x C x L, and add the labels back in.
-        batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
-        batch["labels"] = torch.tensor(labels, dtype=torch.int64)
-        return batch
+        batch = {k: v.reshape(batch_size, num_choices, -1) for k, v in batch.items()}
+        return batch, labels
 
 
 @dataclass
