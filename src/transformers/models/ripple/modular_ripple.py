@@ -214,8 +214,7 @@ class RippleAttention(LlamaAttention):
 
 
 class RippleDecoderLayer(Gemma3DecoderLayer):
-    """Gemma3DecoderLayer with `value_residual` as a positional input (gradient checkpointing with `use_reentrant=True`
-    only detaches positional inputs; the scaled embeddings carry a graph and reach every layer)."""
+    """Gemma3DecoderLayer with `value_residual` added as a positional input."""
 
     def __init__(self, config: RippleConfig, layer_idx: int):
         super().__init__(config, layer_idx)
