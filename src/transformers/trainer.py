@@ -4617,8 +4617,14 @@ class Trainer:
                 )
                 continue
             old_attr = getattr(self.args, key, None)
-            # Casting value to the proper type
-            if old_attr is not None:
+
+            # Casting value to the proper type.
+            # Values that already have it (e.g. a `GenerationConfig`) and dicts
+            # are kept as they are, since their constructor may not accept them.
+
+            # TODO: other values are still cast blindly, e.g. a `GenerationConfig`
+            # set on a field that currently holds a model id becomes its `str().
+            if old_attr is not None and not isinstance(value, (type(old_attr), dict)):
                 value = type(old_attr)(value)
 
             setattr(self.args, key, value)
