@@ -447,6 +447,7 @@ if TYPE_CHECKING:
     from .rembert import *
     from .resnet import *
     from .rf_detr import *
+    from .ripple import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *
