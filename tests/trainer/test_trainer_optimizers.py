@@ -625,6 +625,92 @@ class TrainerOptimizerTest(TestCasePlus):
 
 
 @require_torch
+class TrainerOptimizerGroupLookupTest(TestCasePlus):
+    @parameterized.expand(
+        [(kind, name) for kind in ("parameter", "name") for name in ("0.weight", "0.bias", "1.weight", "1.bias")]
+    )
+    def test_lookup_each_parameter(self, kind, name):
+        model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 4))
+        trainer = Trainer(
+            model=model,
+            args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[], weight_decay=0.1),
+        )
+        trainer.create_optimizer()
+        parameter = model.get_parameter(name)
+        expected = next(
+            group
+            for group in trainer.optimizer.param_groups
+            if any(candidate is parameter for candidate in group["params"])
+        )
+        self.assertIs(trainer.get_optimizer_group(name if kind == "name" else parameter), expected)
+
+    @parameterized.expand(
+        [(kind, dtype) for kind in ("parameter", "name") for dtype in (torch.float32, torch.float64)]
+    )
+    def test_lookup_controls_actual_parameter_updates(self, kind, dtype):
+        torch.manual_seed(42)
+        model = nn.Sequential(nn.Linear(4, 4, bias=False), nn.Linear(4, 4, bias=False)).to(dtype=dtype)
+        optimizer = torch.optim.SGD([{"params": [model[0].weight]}, {"params": [model[1].weight]}], lr=0.1)
+        trainer = Trainer(
+            model=model,
+            args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
+            optimizers=(optimizer, None),
+        )
+        target = "1.weight" if kind == "name" else model[1].weight
+        trainer.get_optimizer_group(target)["lr"] = 0.0
+        first_before = model[0].weight.detach().clone()
+        second_before = model[1].weight.detach().clone()
+        for _ in range(2):
+            optimizer.zero_grad()
+            model(torch.randn(3, 4, dtype=dtype)).square().mean().backward()
+            optimizer.step()
+        self.assertFalse(torch.equal(model[0].weight, first_before))
+        torch.testing.assert_close(model[1].weight, second_before, rtol=0, atol=0)
+
+    def test_equal_scalar_parameters_use_identity(self):
+        model = nn.ParameterList([nn.Parameter(torch.tensor(2.0)), nn.Parameter(torch.tensor(2.0))])
+        optimizer = torch.optim.SGD([{"params": [model[0]]}, {"params": [model[1]]}], lr=0.1)
+        trainer = Trainer(
+            model=model,
+            args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
+            optimizers=(optimizer, None),
+        )
+        self.assertIs(trainer.get_optimizer_group(model[1]), optimizer.param_groups[1])
+
+    def test_tied_parameter_name(self):
+        model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 4))
+        model[1].weight = model[0].weight
+        trainer = Trainer(
+            model=model,
+            args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
+        )
+        trainer.create_optimizer()
+        self.assertIs(trainer.get_optimizer_group("1.weight"), trainer.get_optimizer_group(model[0].weight))
+
+    def test_foreign_equal_parameter_keeps_all_groups_fallback(self):
+        model = nn.ParameterList([nn.Parameter(torch.tensor(2.0))])
+        trainer = Trainer(
+            model=model,
+            args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
+        )
+        trainer.create_optimizer()
+        groups = trainer.get_optimizer_group(nn.Parameter(torch.tensor(2.0)))
+        self.assertIsInstance(groups, list)
+        self.assertEqual(len(groups), len(trainer.optimizer.param_groups))
+        for actual, expected in zip(groups, trainer.optimizer.param_groups):
+            self.assertIs(actual, expected["params"])
+
+    def test_unknown_name_uses_model_parameter_error(self):
+        trainer = Trainer(
+            model=nn.Linear(4, 4),
+            args=TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True, report_to=[]),
+        )
+        trainer.create_optimizer()
+        with self.assertRaises(AttributeError):
+            trainer.get_optimizer_group("missing.weight")
+
+
+@require_torch
 class TrainerLRTest(TestCasePlus):
     def test_get_learning_rates(self):
         model = nn.Sequential(nn.Linear(128, 64))

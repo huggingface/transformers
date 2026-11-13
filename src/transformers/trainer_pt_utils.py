@@ -1321,9 +1321,11 @@ def get_optimizer_group(self, param: str | torch.nn.parameter.Parameter | None =
     """
     if self.optimizer is None:
         raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    if isinstance(param, str):
+        param = self.model.get_parameter(param)
     if param is not None:
         for group in self.optimizer.param_groups:
-            if param in group["params"]:
+            if any(candidate is param for candidate in group["params"]):
                 return group
     return [group["params"] for group in self.optimizer.param_groups]
 
