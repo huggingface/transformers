@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_flex_attention,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -5809,6 +5810,27 @@ class GenerationIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = 'Write a poem about the market crashing in summer wed digassethrte forec heav dent Var américaine dealing substr energcalc Christmas spé mak夢project askspush speech VBA sufficientjoint február retr Ostilingoser mehrere Mathemat jaarєдна Culturalomas prayerRAY gather ули Senate turn Publicterm cruel),( hardly virt Atlasisie mehrere Mathemat jaar'  # fmt: skip
         output = tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output, EXPECTED_TEXT)
+
+    @require_flex_attention
+    @require_torch_accelerator
+    def test_flex_attention_with_static_cache(self):
+        """With a compileable cache, `prepare_inputs_for_generation` builds the attention mask itself. For flex attention
+        that mask is a `BlockMask`, which has no `.contiguous()`: generation must pass it through, and match sdpa."""
+        # flex attention kernels need a head dim of at least 16
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        config.hidden_size, config.num_attention_heads, config.num_key_value_heads = 64, 4, 4
+        config.head_dim = 16
+        set_seed(0)
+        model = AutoModelForCausalLM.from_config(config, attn_implementation="sdpa").to(torch_device).eval()
+        input_ids = torch.randint(3, config.vocab_size, (1, 8), device=torch_device)
+
+        outputs = {}
+        for attn_implementation in ("sdpa", "flex_attention"):
+            model.set_attn_implementation(attn_implementation)
+            outputs[attn_implementation] = model.generate(
+                input_ids, max_new_tokens=5, do_sample=False, cache_implementation="static"
+            )
+        self.assertEqual(outputs["flex_attention"].tolist(), outputs["sdpa"].tolist())
 
     def test_encoder_outputs_without_input_ids_with_encoder_penalties(self):
         """
