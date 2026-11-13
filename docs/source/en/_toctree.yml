@@ -925,6 +925,8 @@
         title: Reformer
       - local: model_doc/rembert
         title: RemBERT
+      - local: model_doc/ripple
+        title: Ripple
       - local: model_doc/roberta
         title: RoBERTa
       - local: model_doc/roberta-prelayernorm
