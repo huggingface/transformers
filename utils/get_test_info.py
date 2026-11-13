@@ -86,21 +86,39 @@ def get_test_classes(test_file):
     """
     test_classes = []
     test_module = get_test_module(test_file)
+
+    # Migration: grab ModelTesterMixin from the loaded module to also detect migrated classes
+    # (no longer subclassing unittest.TestCase). TODO: heuristic — assumes every test_modeling_*
+    # file imports ModelTesterMixin by that exact name; needs verification before treating as
+    # 100% correct. Revisit once migration is complete.
+    ModelTesterMixin = getattr(test_module, "ModelTesterMixin", None)
+
     for attr in dir(test_module):
         attr_value = getattr(test_module, attr)
 
-        # Look for the test classes (subclass of `unittest.TestCase`) with `all_model_classes` attribute.
-        # This also excludes `ModelTesterMixin` and `CausalLMModelTest`.
-        if isinstance(attr_value, type) and issubclass(attr_value, unittest.TestCase):
-            model_classes = getattr(attr_value, "all_model_classes", [])
-            # `CausalLMModelTest` (subclass of `ModelTesterMixin`) has `all_model_classes` as a class attribute with
-            # the value being `None`. For a real test class of `CausalLMModelTest`, the value is only set during `setUp`.
-            if model_classes is None:
-                test_instance = attr_value()
-                test_instance.setUp()
-                model_classes = getattr(test_instance, "all_model_classes", [])
-            if len(model_classes) > 0:
-                test_classes.append(attr_value)
+        # Look for test classes that are either:
+        # - (old style) subclasses of unittest.TestCase, or
+        # - (migrated) subclasses of ModelTesterMixin without unittest.TestCase
+        # In both cases we require a non-empty `all_model_classes` (checked below).
+        is_unittest_class = isinstance(attr_value, type) and issubclass(attr_value, unittest.TestCase)
+        is_migrated_class = (
+            ModelTesterMixin is not None
+            and isinstance(attr_value, type)
+            and not issubclass(attr_value, unittest.TestCase)
+            and issubclass(attr_value, ModelTesterMixin)
+        )
+        if not (is_unittest_class or is_migrated_class):
+            continue
+
+        model_classes = getattr(attr_value, "all_model_classes", [])
+        # `CausalLMModelTest` (subclass of `ModelTesterMixin`) has `all_model_classes` as a class attribute with
+        # the value being `None`. For a real test class of `CausalLMModelTest`, the value is only set during `setUp`.
+        if model_classes is None:
+            test_instance = attr_value()
+            test_instance.setUp()
+            model_classes = getattr(test_instance, "all_model_classes", [])
+        if len(model_classes) > 0:
+            test_classes.append(attr_value)
 
     # sort with class names
     return sorted(test_classes, key=lambda x: x.__name__)
@@ -125,8 +143,13 @@ def get_model_classes(test_file):
 def get_model_tester_from_test_class(test_class):
     """Get the model tester class of a model test class."""
     test = test_class()
+    # During migration, unmigrated classes use setUp; migrated classes use setup_method.
+    # TODO: same heuristic caveat as in get_test_classes — correct for all current model
+    # test files but not formally verified to be universally correct.
     if hasattr(test, "setUp"):
         test.setUp()
+    elif hasattr(test, "setup_method"):
+        test.setup_method()
 
     model_tester = None
     if hasattr(test, "model_tester"):

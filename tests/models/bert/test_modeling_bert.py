@@ -427,7 +427,7 @@ class BertModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     all_model_classes = (
         (
             BertModel,
@@ -477,7 +477,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config.is_decoder = True
         return config, inputs
 
-    def setUp(self):
+    def setup_method(self):
         self.model_tester = BertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=32)
 
