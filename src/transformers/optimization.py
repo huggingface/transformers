@@ -270,19 +270,25 @@ def get_polynomial_decay_schedule_with_warmup(
 
     """
 
-    lr_init = optimizer.defaults["lr"]
-    if not (lr_init > lr_end):
-        raise ValueError(f"lr_end ({lr_end}) must be smaller than initial lr ({lr_init})")
-
-    lr_lambda = partial(
-        _get_polynomial_decay_schedule_with_warmup_lr_lambda,
-        num_warmup_steps=num_warmup_steps,
-        num_training_steps=num_training_steps,
-        lr_end=lr_end,
-        power=power,
-        lr_init=lr_init,
-    )
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
+    lr_lambdas = []
+    for group in optimizer.param_groups:
+        lr_init = group.get("initial_lr", group["lr"])
+        if lr_init == 0:
+            lr_lambdas.append(_get_constant_lambda)
+            continue
+        if not (lr_init > lr_end):
+            raise ValueError(f"lr_end ({lr_end}) must be smaller than initial lr ({lr_init})")
+        lr_lambdas.append(
+            partial(
+                _get_polynomial_decay_schedule_with_warmup_lr_lambda,
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+                lr_end=lr_end,
+                power=power,
+                lr_init=lr_init,
+            )
+        )
+    return LambdaLR(optimizer, lr_lambdas, last_epoch)
 
 
 def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps: int, timescale: int | None = None):
@@ -371,19 +377,23 @@ def get_cosine_with_min_lr_schedule_with_warmup(
 
     if min_lr is not None and min_lr_rate is not None:
         raise ValueError("Only one of min_lr or min_lr_rate should be set")
-    elif min_lr is not None:
-        min_lr_rate = min_lr / optimizer.defaults["lr"]
-    elif min_lr_rate is None:
+    elif min_lr is None and min_lr_rate is None:
         raise ValueError("One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`")
 
-    lr_lambda = partial(
-        _get_cosine_schedule_with_warmup_lr_lambda,
-        num_warmup_steps=num_warmup_steps,
-        num_training_steps=num_training_steps,
-        num_cycles=num_cycles,
-        min_lr_rate=min_lr_rate,
-    )
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
+    lr_lambdas = []
+    for group in optimizer.param_groups:
+        lr_init = group.get("initial_lr", group["lr"])
+        group_min_lr_rate = min_lr_rate if min_lr is None else (min_lr / lr_init if lr_init else 0.0)
+        lr_lambdas.append(
+            partial(
+                _get_cosine_schedule_with_warmup_lr_lambda,
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+                num_cycles=num_cycles,
+                min_lr_rate=group_min_lr_rate,
+            )
+        )
+    return LambdaLR(optimizer, lr_lambdas, last_epoch)
 
 
 def _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda(
@@ -451,20 +461,24 @@ def get_cosine_with_min_lr_schedule_with_warmup_lr_rate(
 
     if min_lr is not None and min_lr_rate is not None:
         raise ValueError("Only one of min_lr or min_lr_rate should be set")
-    elif min_lr is not None:
-        min_lr_rate = min_lr / optimizer.defaults["lr"]
-    elif min_lr_rate is None:
+    elif min_lr is None and min_lr_rate is None:
         raise ValueError("One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`")
 
-    lr_lambda = partial(
-        _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda,
-        num_warmup_steps=num_warmup_steps,
-        num_training_steps=num_training_steps,
-        num_cycles=num_cycles,
-        min_lr_rate=min_lr_rate,
-        warmup_lr_rate=warmup_lr_rate,
-    )
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
+    lr_lambdas = []
+    for group in optimizer.param_groups:
+        lr_init = group.get("initial_lr", group["lr"])
+        group_min_lr_rate = min_lr_rate if min_lr is None else (min_lr / lr_init if lr_init else 0.0)
+        lr_lambdas.append(
+            partial(
+                _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda,
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+                num_cycles=num_cycles,
+                min_lr_rate=group_min_lr_rate,
+                warmup_lr_rate=warmup_lr_rate,
+            )
+        )
+    return LambdaLR(optimizer, lr_lambdas, last_epoch)
 
 
 def _get_wsd_scheduler_lambda(

@@ -626,6 +626,39 @@ class TrainerOptimizerTest(TestCasePlus):
 
 @require_torch
 class TrainerLRTest(TestCasePlus):
+    @parameterized.expand(["polynomial", "cosine_with_min_lr", "cosine_warmup_with_min_lr"])
+    def test_absolute_minimum_with_custom_parameter_groups(self, scheduler_name):
+        model = RegressionModel()
+        optimizer = torch.optim.SGD([{"params": [model.a], "lr": 3e-5}, {"params": [model.b], "lr": 5e-5}], lr=1e-3)
+        used_learning_rates = []
+        optimizer.register_step_pre_hook(
+            lambda opt, args, kwargs: used_learning_rates.append([group["lr"] for group in opt.param_groups])
+        )
+        scheduler_kwargs = {"lr_end" if scheduler_name == "polynomial" else "min_lr": 1e-6}
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            max_steps=10,
+            warmup_steps=2,
+            lr_scheduler_type=scheduler_name,
+            lr_scheduler_kwargs=scheduler_kwargs,
+            use_cpu=True,
+            report_to=[],
+            save_strategy="no",
+            logging_strategy="no",
+            disable_tqdm=True,
+        )
+        trainer = Trainer(model, args, train_dataset=RegressionDataset(), optimizers=(optimizer, None))
+        trainer.train()
+        self.assertEqual(len(used_learning_rates), 10)
+        minimum_rates = (
+            used_learning_rates[-1]
+            if scheduler_name == "cosine_warmup_with_min_lr"
+            else trainer.lr_scheduler.get_last_lr()
+        )
+        torch.testing.assert_close(minimum_rates, [1e-6, 1e-6], rtol=1e-12, atol=1e-15)
+        self.assertGreater(model.a.item(), 0)
+        self.assertGreater(model.b.item(), 0)
+
     def test_get_learning_rates(self):
         model = nn.Sequential(nn.Linear(128, 64))
         with tempfile.TemporaryDirectory() as tmp_dir:
