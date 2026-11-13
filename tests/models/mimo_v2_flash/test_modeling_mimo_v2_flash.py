@@ -33,6 +33,7 @@ if is_torch_available():
     import torch
 
     from transformers import MiMoV2FlashForCausalLM, MiMoV2FlashModel
+    from transformers.models.mimo_v2_flash.modeling_mimo_v2_flash import MiMoV2FlashTopkRouter
 
 
 class MiMoV2FlashModelTester(CausalLMModelTester):
@@ -102,6 +103,17 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             if name.endswith("e_score_correction_bias"):
                 self.assertEqual(bias.dtype, torch.float32, name)
         # the dense MLP's gate_proj is not matched and follows the requested dtype
+        self.assertEqual(model.model.layers[0].mlp.gate_proj.weight.dtype, torch.bfloat16)
+
+    def test_router_built_in_float32(self):
+        # Without a checkpoint too: the router declares its weight and correction bias in float32
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiMoV2FlashForCausalLM._from_config(config, dtype=torch.bfloat16)
+        routers = [m for m in model.modules() if isinstance(m, MiMoV2FlashTopkRouter)]
+        self.assertTrue(routers)
+        for router in routers:
+            self.assertEqual(router.weight.dtype, torch.float32)
+            self.assertEqual(router.e_score_correction_bias.dtype, torch.float32)
         self.assertEqual(model.model.layers[0].mlp.gate_proj.weight.dtype, torch.bfloat16)
 
     # Tests from Gemma3 adapted to MiMo
