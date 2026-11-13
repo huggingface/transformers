@@ -36,6 +36,7 @@ if is_datasets_available():
     import datasets
 
 if TYPE_CHECKING:
+    import optuna
     from torch.utils.data import IterableDataset
 
     from .data.data_collator import DataCollator
@@ -86,11 +87,20 @@ class Seq2SeqTrainer(Trainer):
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
-        # Override self.model.generation_config if a GenerationConfig is specified in args.
+        self._apply_generation_config()
+
+    def _apply_generation_config(self) -> None:
+        """Override `self.model.generation_config` if a `generation_config` is specified in args."""
         # Priority: args.generation_config > model.generation_config > default GenerationConfig.
         if self.args.generation_config is not None:
-            gen_config = self.load_generation_config(self.args.generation_config)
-            self.model.generation_config = gen_config
+            self.model.generation_config = self.load_generation_config(self.args.generation_config)
+
+    def _hp_search_setup(self, trial: "optuna.Trial | dict[str, Any] | None") -> None:
+        super()._hp_search_setup(trial)
+        # With `model_init`, `train()` creates a new model, so the generation config applied in `__init__` is lost.
+        # Apply it again here, once the trial params (which may include `generation_config`) are set.
+        if self.model_init is not None:
+            self._apply_generation_config()
 
     @staticmethod
     def load_generation_config(gen_config_arg: str | GenerationConfig) -> GenerationConfig:
