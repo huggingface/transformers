@@ -21,6 +21,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
@@ -101,12 +102,13 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         self.model = Qwen3MoeModel(config)
         self.num_experts = config.num_experts
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -141,7 +143,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
@@ -171,7 +173,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

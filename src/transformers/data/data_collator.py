@@ -459,16 +459,18 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
 
         # Take labels out of the examples beforehand, because they aren't nested.
         label_name = "label" if "label" in examples[0] else "labels"
-        labels = [example.pop(label_name) for example in examples]
+        labels = [example[label_name] for example in examples]
 
         batch_size = len(examples)
         num_choices = len(examples[0]["input_ids"])
 
         # Go from e.g. 2 examples of 2 choices [{input_ids: [[1], [2]]}, {input_ids: [[3], [4]]}]
         # to 4 examples [{input_ids: [1]}, {input_ids: [2]}] + [{input_ids: [3]}, {input_ids: [4]}]
-        flat_examples = sum(
-            ([{k: v[i] for k, v in example.items()} for i in range(num_choices)] for example in examples), start=[]
-        )
+        flat_examples = [
+            {k: v[i] for k, v in example.items() if k != label_name}
+            for example in examples
+            for i in range(num_choices)
+        ]
 
         # Pad all choices of all examples as if you're padding any other batch of examples.
         batch = self.tokenizer.pad(
