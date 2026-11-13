@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch DiffusionGemma model."""
 
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -24,6 +25,7 @@ from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_torch,
+    require_torch_accelerator,
     slow,
     tooslow,
     torch_device,
@@ -220,35 +222,47 @@ class DiffusionGemmaVisionText2TextModelTest(
         result = model(inputs_dict["input_ids"])
         self.assertEqual(result.last_hidden_state.shape, expected_shape)
 
-    def test_encoder_prefill_multimodal_mask_assigned(self):
-        """Tests that DiffusionGemmaEncoderModel assigns create_masks_for_generate return value to causal_mask_mapping."""
+    def test_bidirectional_image_attention(self):
+        """
+        Tests that each image block in `DiffusionGemmaEncoderModel` attends to itself bidirectionally via
+        `mm_token_type_ids`, while text tokens remain causal and earlier images cannot attend to future images.
+        """
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
         model = DiffusionGemmaModel(config=config).to(torch_device).eval()
 
-        batch_size = self.model_tester.batch_size
-        seq_length = inputs_dict["input_ids"].shape[1]
-        attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=torch_device)
-        mm_token_type_ids = torch.zeros((batch_size, seq_length), dtype=torch.long, device=torch_device)
-        mm_token_type_ids[:, seq_length // 2 :] = 1
+        encoder_inputs = {k: v for k, v in inputs_dict.items() if k != "decoder_input_ids"}
 
-        passed_mask = {}
-        orig_forward = model.encoder.language_model.forward
+        # 1. Single image spanning the first 4 tokens: bidirectional within `:4`, causal after
+        encoder_inputs["mm_token_type_ids"] = torch.zeros_like(encoder_inputs["mm_token_type_ids"])
+        encoder_inputs["mm_token_type_ids"][:, :4] = 1
+        with torch.no_grad():
+            out = model.encoder(**encoder_inputs, output_attentions=True)
+            self.assertEqual(len(out.attentions), self.model_tester.num_hidden_layers)
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+                self.assertTrue((attention[..., 4:8, 4:8].triu(diagonal=1) == 0).all().item())
 
-        def spy_forward(*args, **kwargs):
-            passed_mask["attention_mask"] = kwargs.get("attention_mask")
-            return orig_forward(*args, **kwargs)
+        # 2. All-zero `mm_token_type_ids` (or `mm_token_type_ids=None`): strictly causal mask on `:4`
+        encoder_inputs["mm_token_type_ids"][:, :4] = 0
+        for mm_ids in (encoder_inputs["mm_token_type_ids"], None):
+            call_inputs = {**encoder_inputs, "mm_token_type_ids": mm_ids}
+            with torch.no_grad():
+                out = model.encoder(**call_inputs, output_attentions=True)
+                for attention in out.attentions:
+                    self.assertFalse((attention[..., :4, :4] != 0).all().item())
+                    self.assertTrue((attention[..., :4, :4].triu(diagonal=1) == 0).all().item())
 
-        model.encoder.language_model.forward = spy_forward
-        try:
-            model.encoder(
-                input_ids=inputs_dict["input_ids"],
-                attention_mask=attention_mask,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-            self.assertIsInstance(passed_mask["attention_mask"], dict)
-            self.assertIn("full_attention", passed_mask["attention_mask"])
-        finally:
-            model.encoder.language_model.forward = orig_forward
+        # 3. Two separate images (`:4` and `7:10`): bidirectional within each image, no looking ahead to future image
+        encoder_inputs["mm_token_type_ids"][:, :4] = 1
+        encoder_inputs["mm_token_type_ids"][:, 7:10] = 1
+        with torch.no_grad():
+            out = model.encoder(**encoder_inputs, output_attentions=True)
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+                self.assertTrue((attention[..., 7:10, 7:10] != 0).all().item())
+                self.assertTrue((attention[..., :4, 7:10] == 0).all().item())
 
     def test_vision_axial_rope(self):
         # override -> uses gemma4Vision backbone which also overrides this test
@@ -305,6 +319,24 @@ class DiffusionGemmaVisionText2TextModelTest(
         self.assertEqual(cos.shape[0], 3)  # angles presserve batch
 
     # Tests overwritten from `ModelTesterMixin`.
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        # Vision `mm_token_type_ids` activates `block_sequence_ids` in `create_masks_for_generate`, forcing 4D mask
+        # materialization that the Flash-only SDPA kernel rejects (same as `gemma3`/`gemma4`). Omit `mm_token_type_ids`
+        # here so Flash SDPA dispatch is still verified across the vision tower, encoder, and decoder.
+        orig_prepare = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_without_mm_token_type_ids():
+            config, inputs_dict = orig_prepare()
+            inputs_dict.pop("mm_token_type_ids", None)
+            return config, inputs_dict
+
+        with patch.object(
+            self.model_tester, "prepare_config_and_inputs_for_common", side_effect=prepare_without_mm_token_type_ids
+        ):
+            super().test_sdpa_can_dispatch_on_flash()
+
     @unittest.skip(reason="TODO")
     def test_attention_outputs(self):
         # TODO(joaogante): Write a custom test for this model. The base test can't be used because

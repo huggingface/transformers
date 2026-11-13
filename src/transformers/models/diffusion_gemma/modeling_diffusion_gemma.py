@@ -1170,12 +1170,13 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
         # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
         # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
-
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if (
+            getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision"
+            and mm_token_type_ids is not None
+        ):
+            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                mm_token_type_ids, device=inputs_embeds.device
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 
