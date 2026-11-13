@@ -27,9 +27,10 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -53,7 +54,6 @@ from ..glm4v.modeling_glm4v import (
 from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, Glm4vMoeTextRotaryEmbedding, eager_attention_forward
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
 
@@ -170,7 +170,7 @@ class GlmImageConfig(PreTrainedConfig):
         "vision_config": GlmImageVisionConfig,
         "vq_config": GlmImageVQVAEConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -747,6 +747,7 @@ class GlmImageModel(Glm4vModel):
 
         return special_image_mask
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -754,12 +755,12 @@ class GlmImageModel(Glm4vModel):
         images_per_sample: torch.Tensor | None,
         inputs_embeds: torch.Tensor | None,
         attention_mask: torch.Tensor | None,
-        past_key_values: torch.Tensor | None,
+        cache: torch.Tensor | None,
     ) -> torch.Tensor | None:
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        cache_length = 0 if cache is None else cache.get_seq_length()
         can_compute_mrope = input_ids is not None and image_grid_thw is not None
 
-        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+        if can_compute_mrope and (self.rope_deltas is None or cache_length == 0):
             position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 image_grid_thw=image_grid_thw,
@@ -768,30 +769,29 @@ class GlmImageModel(Glm4vModel):
             )
             self.rope_deltas = rope_deltas
         # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
-        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
-        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # generation (cache_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without cache to avoid shape
         # mismatches from stale rope_deltas (e.g., training forward pass after generation).
-        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+        elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
-                step = past_key_values_length - self._prefill_len
+                step = cache_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = (
-                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
-                )
+                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + cache_length
                 position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
             # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -832,14 +832,14 @@ class GlmImageModel(Glm4vModel):
                 images_per_sample=images_per_sample,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
 
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
@@ -880,12 +880,13 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     def get_image_tokens(self, hidden_states: torch.Tensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -938,7 +939,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             images_per_sample=images_per_sample,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
@@ -958,7 +959,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1033,11 +1034,13 @@ class GlmImageImageProcessorPil(Qwen2VLImageProcessorPil):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
-class GlmImageImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedGlmImageImagesKwargs(ImagesKwargs, total=False):
     """
     target_h (`int`):
+        Deprecated, use [`GlmImageProcessorKwargs.target_h`] instead.
         Height of the target image to be generated.
     target_w (`int`):
+        Deprecated, use [`GlmImageProcessorKwargs.target_w`] instead.
         Width of the target image to be generated.
     """
 
@@ -1045,19 +1048,18 @@ class GlmImageImagesKwargs(ImagesKwargs, total=False):
     target_w: int
 
 
-class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
-    images_kwargs: GlmImageImagesKwargs
+class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    target_h (`int`, *optional*, defaults to `1152`):
+        Height of the target image to be generated.
+    target_w (`int`, *optional*, defaults to `768`):
+        Width of the target image to be generated.
+    """
 
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "target_h": 1152,
-            "target_w": 768,
-        },
-    }
+    images_kwargs: DeprecatedGlmImageImagesKwargs
+
+    target_h: int
+    target_w: int
 
 
 @requires(backends=("torch",))
@@ -1075,7 +1077,10 @@ class GlmImageProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = GlmImageProcessorKwargs
+
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
+    target_h = 1152
+    target_w = 768
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -1120,17 +1125,26 @@ class GlmImageProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            GlmImageProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        for key in ("target_h", "target_w"):
+            if key in output_kwargs["images_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `images_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+                # "images_kwargs" has priority for backwards compatibility
+                output_kwargs[key] = output_kwargs["images_kwargs"].pop(key)
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         if text is None:  # early exit if cond only on image
             return model_inputs
 
-        target_h = output_kwargs["images_kwargs"].get("target_h")
-        target_w = output_kwargs["images_kwargs"].get("target_w")
+        target_h = output_kwargs["target_h"]
+        target_w = output_kwargs["target_w"]
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
         is_text_to_image = images is None
 
@@ -1177,15 +1191,15 @@ class GlmImageProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[GlmImageImagesKwargs],
+        **kwargs: Unpack[GlmImageProcessorKwargs],
     ):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
         processed_text = text
         if text is not None:
             processed_text = []
-            target_h = kwargs["images_kwargs"].get("target_h", None)
-            target_w = kwargs["images_kwargs"].get("target_w", None)
+            target_h = kwargs["target_h"]
+            target_w = kwargs["target_w"]
 
             for sample in text:
                 token_h, token_w, prev_token_h, prev_token_w = self._get_target_shape(height=target_h, width=target_w)
@@ -1201,7 +1215,7 @@ class GlmImageProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[GlmImageImagesKwargs],
+        **kwargs: Unpack[GlmImageProcessorKwargs],
     ):
         super().validate_inputs(images=images, text=text)
         if text is None and images is None:
@@ -1217,12 +1231,6 @@ class GlmImageProcessor(ProcessorMixin):
                 f"In image-to-image mode, all samples must have the same number of source images. "
                 f"Got different counts: {images_per_sample}"
             )
-
-    def _process_images(self, images: ImageInput, **kwargs):
-        # Kwargs used only in processor, if we pass them down to image processor it raises an error
-        kwargs.pop("target_h", None)
-        kwargs.pop("target_w", None)
-        return super()._process_images(images, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
@@ -1268,6 +1276,8 @@ class GlmImageProcessor(ProcessorMixin):
                 ],
             )
 
+
+__getattr__ = deprecate_attr(__name__, remove={"GlmImageImagesKwargs": (DeprecatedGlmImageImagesKwargs, "5.29.0")})
 
 __all__ = [
     "GlmImageVQVAEConfig",

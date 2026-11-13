@@ -30,6 +30,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
@@ -74,11 +75,12 @@ class CohereAsrSelfAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ):
         input_shape = hidden_states.shape[:-1]
@@ -92,9 +94,9 @@ class CohereAsrSelfAttention(nn.Module):
         key_states = key_states.view(hidden_shape).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
-        if past_key_values is not None:
-            past_key_values = past_key_values.self_attention_cache
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            cache = cache.self_attention_cache
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -141,12 +143,13 @@ class CohereAsrCrossAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         # determine input shapes
@@ -159,22 +162,20 @@ class CohereAsrCrossAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
-        if past_key_values is not None and is_updated:
+        is_updated = cache.is_updated.get(self.layer_idx) if cache is not None else False
+        if cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
-            value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+            key_states = cache.cross_attention_cache.layers[self.layer_idx].keys
+            value_states = cache.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
             value_states = self.v_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all states to the cache
-                key_states, value_states = past_key_values.cross_attention_cache.update(
-                    key_states, value_states, self.layer_idx
-                )
+                key_states, value_states = cache.cross_attention_cache.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -206,6 +207,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -214,7 +216,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         encoder_position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
@@ -224,7 +226,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -236,7 +238,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
             hidden_states = residual + hidden_states
 
@@ -249,6 +251,8 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
 
 class CohereAsrPreTrainedModel(MoonshinePreTrainedModel):
     main_input_name = "input_features"
+    # The encoder is built with `AutoModel.from_config` and registers its own layers in `post_init`
+    _no_split_modules = ["CohereAsrDecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
 
 
@@ -268,12 +272,13 @@ class CohereAsrDecoder(MoonshineDecoder):
         self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
@@ -297,11 +302,11 @@ class CohereAsrDecoder(MoonshineDecoder):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -314,7 +319,7 @@ class CohereAsrDecoder(MoonshineDecoder):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -332,7 +337,7 @@ class CohereAsrDecoder(MoonshineDecoder):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -340,7 +345,7 @@ class CohereAsrDecoder(MoonshineDecoder):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
@@ -351,6 +356,7 @@ class CohereAsrModel(MoonshineModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_features: torch.Tensor | None = None,
@@ -358,7 +364,7 @@ class CohereAsrModel(MoonshineModel):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
@@ -403,7 +409,7 @@ class CohereAsrModel(MoonshineModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs.last_hidden_state,
             encoder_attention_mask=encoder_outputs.attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
@@ -412,7 +418,7 @@ class CohereAsrModel(MoonshineModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -430,6 +436,7 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_features: torch.Tensor | None = None,
@@ -437,7 +444,7 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
@@ -490,7 +497,7 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_inputs_embeds=decoder_inputs_embeds,
             decoder_position_ids=decoder_position_ids,
             use_cache=use_cache,
@@ -512,7 +519,7 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
         return Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

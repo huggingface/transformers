@@ -28,7 +28,6 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
-from transformers.exporters.quantizers.utils import openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -37,6 +36,7 @@ from transformers.exporters.utils import (
     is_multimodal,
     module_device,
     module_dtype,
+    openvino_feed,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -74,6 +74,10 @@ from transformers.utils import is_executorch_available
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
+        "HunYuanVLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HunYuanVLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -136,7 +140,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "cross-attention mask doesn't flow through the generate decomposition correctly."
         ),
         "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "Exported prefill drops `cache.*.{keys,values,_sliding_window_tensor}` "
             "tensors that eager returns. Plain forward exports work. "
             "TODO: align generate-decomposition path with the realtime KV-cache shape."
         ),
@@ -230,11 +234,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "onnx.exactness": {
         "Wav2Vec2ForPreTraining": (
-            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
-            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
-            "with itself either."
+            "The quantizer picks codes with `argmax`; on near-tied logits ORT's rounding can pick another "
+            "code, and `codevector_perplexity` jumps far over the tolerance. See PR #50575."
         ),
-        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "UniSpeechSatForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
+        "Wav2Vec2ConformerForPreTraining": "Same `argmax` near-tie as `Wav2Vec2ForPreTraining`.",
         "PatchTSTForPretraining": (
             "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
             "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
@@ -687,19 +692,6 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
-
-    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
-    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
-    """
-    set_seed(1234)
-    onnx_inputs = get_leaf_tensors(inputs)
-    onnx_outputs = onnx_program(**onnx_inputs)
-    onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
-    return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
-
-
 def _run_openvino_model(ov_model, inputs) -> dict:
     """Compile an OpenVINO model and run it, returning outputs as a `{name: torch.Tensor}` dict.
 
@@ -745,77 +737,17 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     return outputs
 
 
-def _run_executorch_program(program_manager, inputs):
-    """Load and run an ExecuTorch program, returning its outputs — or ``None`` to skip this component.
-
-    ``None`` means "move on to the next component" and is returned when either:
-    - the export is valid but ExecuTorch's own runtime can't service it — a missing portable kernel
-      (``0x14``), an oversized arena (``0x21`` / ``bad_alloc``), or a portable-kernel / XNNPACK-delegate
-      failure at execute (``0x12`` / ``0x1``): a runtime limitation, not a transformers export defect; or
-    - the inputs couldn't be reconstructed for this program (a derived symint slot with no eager leaf).
-
-    Otherwise the model's declared outputs are returned for the caller to check against eager.
-    ``torch.export`` also appends mutated inputs (in-place-modified ``pixel_values``, recurrent state,
-    …) to the program outputs; those are dropped here — keeping only ``USER_OUTPUT`` slots — so the
-    result matches eager's returned leaves.
-
-    Inputs are bound *positionally* against the program's declared slots (``num_inputs`` /
-    ``input_tensor_meta``), filled in order from the eager pytree leaves — tensor leaves for tensor
-    slots, scalars for the rest.
-    """
-    from executorch.runtime import Runtime, Verification
-
+def _run_executorch_program(exported, inputs):
+    """Run an ExecuTorch export through its runner, returning its outputs, or `None` to skip this component when
+    ExecuTorch's own runtime can't service it (a missing portable kernel, an oversized arena, a portable-kernel or
+    XNNPACK-delegate failure): a runtime limitation, not a transformers export defect."""
     set_seed(1234)
-    leaves = torch.utils._pytree.tree_leaves(inputs)
-    # The runtime rejects non-contiguous inputs, so materialise tensor leaves. `int` covers `bool`.
-    tensors = [t.contiguous() for t in leaves if isinstance(t, torch.Tensor)]
-    scalars = (t for t in leaves if isinstance(t, (int, float)))
-
-    # Load — surfaces ExecuTorch resource limits (missing portable kernel / oversized arena).
     try:
-        program = Runtime.get().load_program(program_manager.buffer, verification=Verification.Minimal)
-        method = program.load_method("forward")
+        return list(get_leaf_tensors(exported(**inputs)).values())
     except (RuntimeError, MemoryError) as e:
         if _is_executorch_runtime_limit(e):
             return None
         raise
-
-    # Each slot declares its shape; match it to an eager tensor leaf of that shape so the right tensor
-    # lands in the right slot (count alone isn't enough — a wrong-shape tensor crashes conv/copy
-    # kernels at execute). Under dynamic shapes the declared shape is an upper bound and won't match a
-    # leaf, so fall back to the next unused leaf (leaf order tracks the program's input order). If a
-    # slot can't be filled — a derived symint, or no leaf of the right shape — reconstruction isn't
-    # possible; return None and rely on the load check rather than run with bogus inputs.
-    args = []
-    for i in range(method.metadata.num_inputs()):
-        try:
-            shape = tuple(method.metadata.input_tensor_meta(i).sizes())
-        except Exception:  # non-tensor slot
-            args.append(next(scalars, None))
-        else:
-            match = next((t for t in tensors if tuple(t.shape) == shape), tensors[0] if tensors else None)
-            if match is not None:
-                tensors.remove(match)
-            args.append(match)
-        if args[-1] is None:
-            return None
-
-    try:
-        outputs = method.execute(args)
-    except (RuntimeError, MemoryError) as e:
-        if _is_executorch_runtime_limit(e):
-            return None
-        raise
-
-    # Drop `torch.export`'s appended mutated-input outputs, keeping only the model's `USER_OUTPUT`s
-    # (in program-output order). Then keep tensors only, mirroring eager's `get_leaf_tensors`, so the
-    # returned outputs line up with eager's returned leaves for the caller's count check.
-    exported_program = program_manager.exported_program
-    exported_program = exported_program() if callable(exported_program) else exported_program
-    output_kinds = [spec.kind.name for spec in exported_program.graph_signature.output_specs]
-    if len(output_kinds) == len(outputs):
-        outputs = [out for out, kind in zip(outputs, output_kinds) if kind == "USER_OUTPUT"]
-    return [out for out in outputs if isinstance(out, torch.Tensor)]
 
 
 # ExecuTorch runtime error codes that mean "the export is valid (it produced a loadable program) but
@@ -978,14 +910,17 @@ class ExportTesterMixin:
         return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
-        """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
-        eager_outputs = {}
+        """Run eager forward for each component and return its leaf tensors and output class, as
+        ``({name: leaf_tensors}, {name: output_class})``."""
+        eager_outputs, eager_types = {}, {}
         for name, (model, inputs) in components.items():
             with torch.no_grad():
                 set_seed(1234)
-                eager_outputs[name] = get_leaf_tensors(model(**copy.deepcopy(inputs)))
-                assert eager_outputs[name], f"Eager outputs are empty for {name}."
-        return eager_outputs
+                outputs = model(**copy.deepcopy(inputs))
+            eager_outputs[name] = get_leaf_tensors(outputs)
+            eager_types[name] = type(outputs)
+            assert eager_outputs[name], f"Eager outputs are empty for {name}."
+        return eager_outputs, eager_types
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None):
         """Assert outputs are close, allowing up to 5% element-level mismatch.
@@ -1041,16 +976,17 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    runtime = exporter.export(model, inputs, config=config)
 
-                    with torch.no_grad():
-                        set_seed(1234)
-                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
-                        self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
+                    set_seed(1234)
+                    outputs = runtime(**copy.deepcopy(inputs))
+                    self.assertIs(type(outputs), eager_types[name])
+                    exported_outputs = get_leaf_tensors(outputs)
+                    self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
                     if not self._should_skip_exactness(model_class, dynamic=dynamic):
                         self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
@@ -1075,15 +1011,20 @@ class ExportTesterMixin:
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
+            ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
-                    onnx_outputs = _run_onnx_program(onnx_program, inputs)
+                    runtime = exporter.export(model, inputs, config=config)
+                    set_seed(1234)
+                    outputs = runtime(**inputs)
+                    self.assertIs(type(outputs), eager_types[name])
+                    onnx_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
                     if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx"):
@@ -1110,12 +1051,15 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(ov_model, inputs)
+                    runtime = exporter.export(model, inputs, config=config)
+                    set_seed(1234)
+                    outputs = runtime(**inputs)
+                    self.assertIs(type(outputs), eager_types[name])
+                    ov_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
                     if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino"):
@@ -1150,13 +1094,13 @@ class ExportTesterMixin:
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
             components = self._prepare_export_model_and_inputs(model_class, device="cpu")
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
-                    executorch_outputs = _run_executorch_program(program, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                    exported = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(exported, inputs)
+                    if executorch_outputs is None:  # ExecuTorch runtime limit
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
 
@@ -1236,11 +1180,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 check_device = True
-                cache = inputs.get("past_key_values")
+                cache = inputs.get("cache")
                 # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
                 # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
                 if (
@@ -1255,12 +1199,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
-
-                    with torch.no_grad():
-                        set_seed(1234)
-                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
-                        self.assertTrue(exported_outputs, "Exported outputs are empty.")
+                    exported = exporter.export(model, inputs, config=config)
+                    set_seed(1234)
+                    exported_outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
+                    self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
                     if not self._should_skip_exactness(
                         model_class,
@@ -1295,18 +1237,20 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
+            ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    exported = exporter.export(model, inputs, config=config)
                     set_seed(1234)
-                    onnx_outputs = _run_onnx_program(onnx_program, inputs)
+                    onnx_outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -1333,11 +1277,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1372,12 +1316,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
-                    executorch_outputs = _run_executorch_program(program, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
+                    exported = exporter.export(model, inputs, config=config)
+                    executorch_outputs = _run_executorch_program(exported, inputs)
+                    if executorch_outputs is None:  # ExecuTorch runtime limit
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))

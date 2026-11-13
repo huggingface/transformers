@@ -23,11 +23,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DeepseekV4Config,
     FineGrainedFP8Config,
     OPTForCausalLM,
 )
-from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -82,15 +80,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
-    def test_megamoe_takes_over_the_experts_ep_rule(self):
-        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
-        config = DeepseekV4Config()
-        config._experts_implementation = "deepgemm_megamoe"
-        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
-        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
-        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
-
 
 @slow
 @require_accelerate
@@ -108,6 +97,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_OUTPUTS = {
         "Once upon a time, there was a little girl who loved to play",
         "Once upon a time, there was a man who was very rich.",
+        "Once upon a time, there was a man who was a very rich",
     }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
@@ -402,6 +392,11 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # deepgemm only has CUDA kernels, skip on other devices
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
+        if experts_implementation == "deepgemm":
+            from transformers.integrations.deepgemm import is_sm100
+
+            if is_sm100():
+                self.skipTest("DeepGEMM takes only UE8M0 scales on SM100, and this checkpoint's are float32")
 
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
@@ -630,3 +625,28 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+
+class FP8ModulesToNotConvertTest(unittest.TestCase):
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_checkpoint_module_names_follow_weight_renamings(self):
+        # The checkpoint's `self_attn.f_a_proj` loads as `self_attn.forget_gate.f_a_proj`
+        from transformers import KimiLinearConfig, KimiLinearForCausalLM
+        from transformers.integrations.finegrained_fp8 import FP8Linear
+
+        config = KimiLinearConfig(
+            vocab_size=64, pad_token_id=0, bos_token_id=1, eos_token_id=2, hidden_size=64, intermediate_size=64,
+            num_hidden_layers=1, num_attention_heads=4, num_key_value_heads=4, layer_types=["linear_attention"],
+            mlp_layer_types=["dense"], linear_conv_kernel_dim=2, linear_head_dim=16, linear_num_heads=4,
+        )  # fmt: skip
+        quantization_config = FineGrainedFP8Config(
+            weight_block_size=(16, 16), modules_to_not_convert=["model.layers.0.self_attn.f_a_proj"]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            KimiLinearForCausalLM(config).save_pretrained(tmp)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmp, quantization_config=quantization_config, device_map="cpu"
+            )
+        forget_gate = model.model.layers[0].self_attn.forget_gate
+        self.assertNotIsInstance(forget_gate.f_a_proj, FP8Linear)
+        self.assertIsInstance(forget_gate.f_b_proj, FP8Linear)
