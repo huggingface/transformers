@@ -17,6 +17,7 @@ Generic utilities
 
 from __future__ import annotations
 
+import functools
 import importlib
 import inspect
 import json
@@ -416,7 +417,56 @@ def safe_load_json_file(json_file: str):
     return config_dict
 
 
-class ModelOutput(OrderedDict):
+def _rename_kwargs_for_bc(kwargs: dict) -> dict:
+    """Rename `past_key_values`/`cache_params` to `cache` in-place inside `kwargs`, and raise appropriate errors/warnings."""
+    log_warning = False
+    if "past_key_values" in kwargs:
+        if "cache" not in kwargs:
+            kwargs["cache"] = kwargs.pop("past_key_values")
+            log_warning = True
+        else:
+            raise ValueError("You cannot specify both `cache` and `past_key_values`. use `cache` only.")
+    elif "cache_params" in kwargs:
+        if "cache" not in kwargs:
+            kwargs["cache"] = kwargs.pop("cache_params")
+            log_warning = True
+        else:
+            raise ValueError("You cannot specify both `cache` and `cache_params`. use `cache` only.")
+
+    if log_warning and not is_tracing():
+        logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+
+
+class _BCCacheNameMeta(type):
+    """
+    This meta class is only here to allow BC on all __init__ of ModelOutput subclasses. Indeed, since the subclasses
+    are all @dataclasses, we need this to avoid a TypeError if trying to __init__ with the old names, i.e. `past_key_values`
+    and `cache_params`. This is a bit convoluted due to how dataclasses work and add the __init__ methods, but it's the
+    only way to allow BC while keeping compile compatibility as well.
+    """
+
+    def __setattr__(cls, name, value):
+        """
+        The @dataclass calls setattr on the class where it's used to add an __init__ method with all the fields (and only
+        the declared fields). Se we override setattr to also allow the fields `past_key_values`/`cache_params` and rename
+        them to `cache`, for BC on all the remote code most notably. Indeed, every remote code model usually does
+        `return OutputClass(past_key_values=past_key_values,...)` which would crash without this.
+        """
+        if name == "__init__":
+            init = value
+
+            # Wrap with the kwarg name change
+            @functools.wraps(init)
+            def __init__(self, *args, **kwargs):
+                _rename_kwargs_for_bc(kwargs)
+                init(self, *args, **kwargs)
+
+            # Replace the value with the wrapped function
+            value = __init__
+        super().__setattr__(name, value)
+
+
+class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
     """
     Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
     tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular

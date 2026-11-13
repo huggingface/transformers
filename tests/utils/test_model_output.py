@@ -227,6 +227,15 @@ class ModelOutputTester(unittest.TestCase):
             output["cache_params"] = 4
             self.assertEqual(output.cache, 4)
 
+        # Test that we can still call __init__ with the old names (very important for remote code mdoels, as usually we have
+        # `return ModelOutput(past_key_values=past_key_values, ...)`)
+        with ensure_deprecation_warning():
+            foo = BaseModelOutputWithPast(past_key_values=0)
+        self.assertEqual(foo.cache, 0)
+        with ensure_deprecation_warning():
+            foo = BaseModelOutputWithPast(cache_params=0)
+        self.assertEqual(foo.cache, 0)
+
 
 @contextmanager
 def ensure_deprecation_warning():
