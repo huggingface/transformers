@@ -24,6 +24,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     T5Tokenizer,
 )
+from transformers.hyperparameter_search import HPSearchBackend
 from transformers.testing_utils import (
     TestCasePlus,
     require_sentencepiece,
@@ -32,6 +33,8 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_datasets_available, is_torch_available
+
+from .trainer_test_utils import get_tiny_seq2seq_dataset, get_tiny_seq2seq_model
 
 
 if is_datasets_available():
@@ -240,3 +243,35 @@ class Seq2seqTrainerTester(TestCasePlus):
         with self.assertRaises(ValueError) as exc:
             Seq2SeqTrainer.load_generation_config({"do_sample": False, "top_p": 0.9})
         self.assertIn("Fix these issues to train your model", str(exc.exception))
+
+    @require_torch
+    def test_generation_config_applied_with_model_init(self):
+        # `train()` re-creates the model with `model_init`, the generation config from args must survive it
+        default_generation_config = get_tiny_seq2seq_model().generation_config
+        self.assertNotEqual(default_generation_config.num_beams, 3)
+        self.assertNotEqual(default_generation_config.max_length, 7)
+
+        args = Seq2SeqTrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            generation_config=GenerationConfig(num_beams=3, max_length=7),
+            max_steps=1,
+            save_strategy="no",
+            report_to="none",
+        )
+        trainer = Seq2SeqTrainer(
+            model_init=get_tiny_seq2seq_model, args=args, train_dataset=get_tiny_seq2seq_dataset()
+        )
+        trainer.train()
+        self.assertEqual(trainer.model.generation_config.num_beams, 3)
+        self.assertEqual(trainer.model.generation_config.max_length, 7)
+
+    @require_torch
+    def test_generation_config_from_trial_applied_to_model(self):
+        args = Seq2SeqTrainingArguments(self.get_auto_remove_tmp_dir(), report_to="none")
+        trainer = Seq2SeqTrainer(model_init=get_tiny_seq2seq_model, args=args)
+        # Calling `_hp_search_setup` directly: `train(trial=...)` with Ray outside of Ray Tune would call `ray.tune`
+        trainer.hp_search_backend = HPSearchBackend.RAY
+        trainer._hp_search_setup({"generation_config": {"num_beams": 3, "max_length": 7}})
+        self.assertIsInstance(trainer.model.generation_config, GenerationConfig)
+        self.assertEqual(trainer.model.generation_config.num_beams, 3)
+        self.assertEqual(trainer.model.generation_config.max_length, 7)
