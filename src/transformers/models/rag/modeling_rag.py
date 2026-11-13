@@ -26,6 +26,7 @@ from ...generation.utils import GENERATION_MODES_MAPPING
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 
@@ -49,11 +50,11 @@ class RetrievAugLMMarginOutput(ModelOutput):
     doc_scores (`torch.Tensor` of shape `(batch_size, config.n_docs)`):
         Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
         `question_encoder_last_hidden_state`.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
-        (see `past_key_values` input) to speed up sequential decoding.
+        (see `cache` input) to speed up sequential decoding.
     retrieved_doc_embeds (`torch.Tensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
         Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
         the `doc_scores`.
@@ -113,7 +114,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
     doc_scores: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     retrieved_doc_embeds: torch.Tensor | None = None
     retrieved_doc_ids: torch.LongTensor | None = None
     context_input_ids: torch.LongTensor | None = None
@@ -139,11 +140,11 @@ class RetrievAugLMOutput(ModelOutput):
     doc_scores (`torch.Tensor` of shape `(batch_size, config.n_docs)`):
         Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
         `question_encoder_last_hidden_state`.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
-        (see `past_key_values` input) to speed up sequential decoding.
+        (see `cache` input) to speed up sequential decoding.
     retrieved_doc_embeds (`torch.Tensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
         Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
         the `doc_scores`.
@@ -202,7 +203,7 @@ class RetrievAugLMOutput(ModelOutput):
 
     logits: torch.Tensor | None = None
     doc_scores: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     retrieved_doc_embeds: torch.Tensor | None = None
     retrieved_doc_ids: torch.LongTensor | None = None
     context_input_ids: torch.LongTensor | None = None
@@ -423,6 +424,7 @@ class RagModel(RagPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -430,7 +432,7 @@ class RagModel(RagPreTrainedModel):
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         doc_scores: torch.Tensor | None = None,
         context_input_ids: torch.LongTensor | None = None,
         context_attention_mask: torch.LongTensor | None = None,
@@ -612,7 +614,7 @@ class RagModel(RagPreTrainedModel):
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             return_dict=True,
@@ -638,7 +640,7 @@ class RagModel(RagPreTrainedModel):
         return RetrievAugLMOutput(
             logits=gen_outputs.logits,
             doc_scores=doc_scores,
-            past_key_values=gen_outputs.past_key_values,
+            cache=gen_outputs.cache,
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
             retrieved_doc_embeds=retrieved_doc_embeds,
@@ -700,6 +702,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self.rag.ctx_encoder = ctx_encoder
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -707,7 +710,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         context_input_ids: torch.LongTensor | None = None,
         context_attention_mask: torch.LongTensor | None = None,
         doc_scores: torch.Tensor | None = None,
@@ -820,7 +823,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
             doc_scores=doc_scores,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -844,7 +847,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             loss=loss,
             logits=outputs.logits,
             doc_scores=outputs.doc_scores,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             context_input_ids=outputs.context_input_ids,
             context_attention_mask=outputs.context_attention_mask,
             retrieved_doc_embeds=outputs.retrieved_doc_embeds,
@@ -1139,10 +1142,11 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         self.rag.context_encoder_training = True
         self.rag.ctx_encoder = ctx_encoder
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         use_cache=None,
         encoder_outputs=None,
@@ -1152,7 +1156,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- `do_marginalize` is explicitly set in the output
 
-        if past_key_values is not None:
+        if cache is not None:
             # if past is defined use only last decoder_input_ids
             decoder_input_ids = decoder_input_ids[:, -1:]
 
@@ -1162,7 +1166,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             "doc_scores": doc_scores,
             "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "use_cache": use_cache,
             "do_marginalize": True,
             "n_docs": n_docs,
@@ -1181,7 +1185,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         return self.rag.question_encoder
 
     @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
+    def _reorder_cache(cache, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
 
         def _reorder_stacked(hidden_states, new_order):
@@ -1192,26 +1196,26 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             return result
 
         reordered_past = ()
-        for idx in range(len(past_key_values)):
-            if isinstance(past_key_values, EncoderDecoderCache):
+        for idx in range(len(cache)):
+            if isinstance(cache, EncoderDecoderCache):
                 self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
                     _reorder_stacked(x, beam_idx.to(x.device))
                     for x in (
-                        past_key_values.self_attention_cache.layers[idx].keys,
-                        past_key_values.self_attention_cache.layers[idx].values,
-                        past_key_values.cross_attention_cache.layers[idx].keys,
-                        past_key_values.cross_attention_cache.layers[idx].values,
+                        cache.self_attention_cache.layers[idx].keys,
+                        cache.self_attention_cache.layers[idx].values,
+                        cache.cross_attention_cache.layers[idx].keys,
+                        cache.cross_attention_cache.layers[idx].values,
                     )
                 )
                 new_tuple = (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
             else:
                 self_attention_k, self_attention_v = (
                     _reorder_stacked(x, beam_idx.to(x.device))
-                    for x in (past_key_values.layers[idx].keys, past_key_values.layers[idx].values)
+                    for x in (cache.layers[idx].keys, cache.layers[idx].values)
                 )
                 new_tuple = (self_attention_k, self_attention_v)
             reordered_past += (new_tuple,)
-        return type(past_key_values)(reordered_past)
+        return type(cache)(reordered_past)
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -1225,6 +1229,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         return torch.logsumexp(log_prob_sum, dim=1)
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1232,7 +1237,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         context_input_ids: torch.LongTensor | None = None,
         context_attention_mask: torch.LongTensor | None = None,
         doc_scores: torch.Tensor | None = None,
@@ -1353,7 +1358,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
             doc_scores=doc_scores,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1381,7 +1386,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             loss=loss,
             logits=logits,
             doc_scores=outputs.doc_scores,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             context_input_ids=outputs.context_input_ids,
             context_attention_mask=outputs.context_attention_mask,
             retrieved_doc_embeds=outputs.retrieved_doc_embeds,
@@ -1602,12 +1607,12 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         )
 
     # Auxiliary functions for beam search
-    def _temporary_reorder_cache(self, past_key_values, beam_idx):
+    def _temporary_reorder_cache(self, cache, beam_idx):
         # RAG should always use the legacy path even though the LM backbone (T5) uses new cache format
         # because RAG expands input for doc-size internally. TODO: raushan, remove me when all models support
         # new cache format
-        past_key_values = self._reorder_cache(past_key_values, beam_idx)
-        return past_key_values
+        cache = self._reorder_cache(cache, beam_idx)
+        return cache
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()

@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
@@ -252,6 +252,7 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(self, **super_kwargs) -> tuple | QianfanOCRCausalLMOutputWithPast:
         r"""
         Example:

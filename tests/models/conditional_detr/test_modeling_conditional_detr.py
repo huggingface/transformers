@@ -310,8 +310,8 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
                 if model_class.__name__ == "ConditionalDetrForSegmentation":
                     correct_outlen += 2
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 

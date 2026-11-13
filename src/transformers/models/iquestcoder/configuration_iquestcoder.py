@@ -43,7 +43,7 @@ class IQuestCoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "iquestcoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `IQuestCoderModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
