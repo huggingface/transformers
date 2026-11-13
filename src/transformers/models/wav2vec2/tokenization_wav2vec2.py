@@ -179,7 +179,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # characters are not split at tokenization
         for token in self.encoder:
             if len(token) > 1:
-                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
+                strip = token not in self.all_special_tokens
+                self.add_tokens(AddedToken(token, rstrip=strip, lstrip=strip, normalized=False))
 
     def set_target_lang(self, target_lang: str):
         """
@@ -207,7 +208,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # characters are not split at tokenization
         for token in self.encoder:
             if len(token) > 1:
-                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
+                strip = token not in self.all_special_tokens
+                self.add_tokens(AddedToken(token, rstrip=strip, lstrip=strip, normalized=False))
 
     @property
     def word_delimiter_token(self) -> str:
