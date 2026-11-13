@@ -236,6 +236,11 @@ def convert_encoder_config(nemo_config):
     """Convert NeMo encoder config to HF encoder config."""
     encoder_keys_to_ignore = [
         "att_context_size",
+        # Streaming-only knobs of the unified (offline + streaming) FastConformer checkpoints. They select the
+        # chunked attention masks and dynamic chunk convolution used in streaming mode; the offline path this
+        # conversion targets runs with full context, where they have no effect on the forward pass.
+        "att_chunk_context_size",
+        "conv_context_style",
         "causal_downsampling",
         "stochastic_depth_start_layer",
         "feat_out",
