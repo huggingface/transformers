@@ -1911,6 +1911,12 @@ class ProcessorMixin(PushToHubMixin):
         auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
         is_primary = sub_processor_type == "tokenizer"
 
+        from .models.auto.tokenization_auto import TOKENIZER_BACKEND_CLASSES
+
+        # `backend` may be meant for the image processor (ex. `backend="pil"`), only pass tokenizer backends
+        if kwargs.get("backend") not in TOKENIZER_BACKEND_CLASSES:
+            kwargs.pop("backend", None)
+
         if is_primary:
             # Primary tokenizer: load from root
             tokenizer = auto_processor_class.from_pretrained(
