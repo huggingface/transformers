@@ -213,9 +213,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         pixel_values_videos (`torch.Tensor` of shape `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`):
             Videos packed by the video processor into tubelets of `video_temporal_patch_size` consecutive frames
             stacked along the channel dimension. The `(num_frames, num_channels, height, width)` frames of a single
-            video are also accepted and packed here.
+            video are also accepted and packed here, but this is deprecated.
         """
         if pixel_values_videos.dim() == 4:
+            logger.warning_once(
+                "Passing `pixel_values_videos` as the `(num_frames, num_channels, height, width)` frames of a single "
+                "video is deprecated and will be removed in v5.28. The video processor now packs the frames into "
+                "tubelets, `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`."
+            )
             num_frames, num_channels, height, width = pixel_values_videos.shape
             temporal_patch_size = self.config.video_temporal_patch_size
             if num_frames % temporal_patch_size:
