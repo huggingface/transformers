@@ -93,7 +93,7 @@ class YuE2AcousticTokenizerEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="m-a-p/YuE2-Vae")
 @strict
-class YuE2AcousticTokenizerDecoderConfig(YuE2AcousticTokenizerEncoderConfig):
+class YuE2AcousticTokenizerDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 2):
         Number of channels of the output audio; the released checkpoint is stereo.
@@ -125,6 +125,11 @@ class YuE2AcousticTokenizerDecoderConfig(YuE2AcousticTokenizerEncoderConfig):
     model_type = "yue2_acoustic_tokenizer_decoder"
     base_config_key = "decoder_config"
 
+    audio_channels: int = positive_int_field(default=2)
+    hidden_sizes: list[int] | tuple[int, ...] = (64, 64, 128, 256, 512, 1024, 2048)
+    downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5, 6)
+    latent_dim: int = positive_int_field(default=64)
+
     def __post_init__(self, **kwargs):
         # handling of the original checkpoint (m-a-p/YuE2-Vae)
         if "out_channels" in kwargs:
@@ -132,7 +137,26 @@ class YuE2AcousticTokenizerDecoderConfig(YuE2AcousticTokenizerEncoderConfig):
             if kwargs.pop("final_tanh", False) or kwargs.pop("use_filter", False):
                 raise ValueError("Only the released variant, without final `tanh` nor filter, is supported.")
             kwargs.pop("snake_type", None)
+        if "c_mults" in kwargs:
+            channels = kwargs.pop("channels")
+            self.hidden_sizes = [channels * multiplier for multiplier in [1, *kwargs.pop("c_mults")]]
+            self.downsampling_ratios = kwargs.pop("strides")
+            if not kwargs.pop("use_snake", True):
+                raise ValueError("Only the released variant, with SnakeBeta activations, is supported.")
+        self.hidden_sizes = list(self.hidden_sizes)
+        self.downsampling_ratios = list(self.downsampling_ratios)
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        if len(self.hidden_sizes) != len(self.downsampling_ratios) + 1:
+            raise ValueError(
+                f"`hidden_sizes` ({self.hidden_sizes}) must have one more entry than `downsampling_ratios` "
+                f"({self.downsampling_ratios}): the input convolution's width, then each block's."
+            )
+
+    @property
+    def hop_length(self) -> int:
+        return math.prod(self.downsampling_ratios)
 
 
 @auto_docstring(checkpoint="m-a-p/YuE2-Vae")

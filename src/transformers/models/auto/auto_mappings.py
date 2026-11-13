@@ -791,6 +791,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
         ("youtu", "YoutuConfig"),
+        ("yue2_acoustic_tokenizer_decoder", "YuE2AcousticTokenizerDecoderConfig"),
+        ("yue2_acoustic_tokenizer_encoder", "YuE2AcousticTokenizerEncoderConfig"),
         ("yue2_vae", "YuE2AcousticTokenizerConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
@@ -1090,6 +1092,9 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip_vision_model", "x_clip"),
         ("xlm-roberta", "xlm_roberta"),
         ("xlm-roberta-xl", "xlm_roberta_xl"),
+        ("yue2_acoustic_tokenizer_decoder", "yue2_acoustic_tokenizer"),
+        ("yue2_acoustic_tokenizer_encoder", "yue2_acoustic_tokenizer"),
+        ("yue2_vae", "yue2_acoustic_tokenizer"),
     ]
 )
 

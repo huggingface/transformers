@@ -44,8 +44,6 @@ CONFIG_MAPPING_NAMES.update(
         "pocket_tts_audio_tokenizer_encoder": "PocketTTSAudioTokenizerEncoderConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
-        "yue2_acoustic_tokenizer_decoder": "YuE2AcousticTokenizerDecoderConfig",
-        "yue2_acoustic_tokenizer_encoder": "YuE2AcousticTokenizerEncoderConfig",
     }
 )
 
@@ -63,9 +61,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
         "pocket_tts_audio_tokenizer_decoder": "pocket_tts_audio_tokenizer",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
-        "yue2_acoustic_tokenizer_encoder": "yue2_acoustic_tokenizer",
-        "yue2_acoustic_tokenizer_decoder": "yue2_acoustic_tokenizer",
-        "yue2_vae": "yue2_acoustic_tokenizer",
     }
 )
 
