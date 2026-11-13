@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import os
 import tempfile
 import unittest
@@ -22,7 +23,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_torch_greater_or_equal
-from transformers.utils import is_torch_available, is_torch_distributed_available
+from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
@@ -30,7 +31,7 @@ if is_torch_available():
     import torch.distributed as dist
     import torch.multiprocessing as mp
 
-    from transformers import LlamaConfig, LlamaForCausalLM
+    from transformers import LlamaConfig, LlamaForCausalLM, MixtralConfig, MixtralForCausalLM
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import (
         _load_model_checkpoint_distributed,
@@ -92,6 +93,14 @@ def _test_save_and_from_pretrained(rank, directory, source_config, destination_c
         )
         full_state_dict = get_model_state_dict(restored, options=StateDictOptions(full_state_dict=True))
         torch.testing.assert_close(full_state_dict, reference.state_dict())
+
+
+def _test_save_sharded_model_files(rank, directory, source_config):
+    with _distributed_context(rank, directory):
+        model = MixtralForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(**source_config)
+        )
+        model.save_pretrained(f"{directory}/saved", max_shard_size="10KB")
 
 
 def _test_save_for_consolidation(rank, directory):
@@ -230,6 +239,37 @@ class DistributedUtilsTest(unittest.TestCase):
             # Reload without a process group or distributed configuration.
             torch.testing.assert_close(
                 LlamaForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
+            )
+
+    @parameterized.expand(PARALLEL_CONFIGS.items())
+    def test_save_sharded_model_files(self, _, source_config):
+        # The fused experts are reverted to one tensor per expert on save, the tied `lm_head` is dropped, and the
+        # files outnumber the ranks, so every rank writes files over several rounds.
+        config = MixtralConfig(
+            vocab_size=16,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_local_experts=4,
+            tie_word_embeddings=True,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            reference = MixtralForCausalLM(config)
+            reference.save_pretrained(f"{directory}/seed", max_shard_size="10KB")
+            mp.spawn(_test_save_sharded_model_files, args=(directory, source_config), nprocs=4, join=True)
+
+            # Same weight names and files as a non-distributed save.
+            seed_index = json.loads(Path(f"{directory}/seed/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
+            saved_index = json.loads(Path(f"{directory}/saved/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
+            self.assertEqual(set(saved_index["weight_map"]), set(seed_index["weight_map"]))
+            saved_files = set(saved_index["weight_map"].values())
+            self.assertGreater(len(saved_files), 4)
+            self.assertEqual(saved_files, {path.name for path in Path(f"{directory}/saved").glob("*.safetensors")})
+
+            torch.testing.assert_close(
+                MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
 
     def test_consolidate_distributed_checkpoint_round_trip(self):
