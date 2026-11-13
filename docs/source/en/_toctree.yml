@@ -231,6 +231,8 @@
       title: DDP
     - local: fsdp
       title: FSDP2
+    - local: context_parallelism
+      title: Context parallelism
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
