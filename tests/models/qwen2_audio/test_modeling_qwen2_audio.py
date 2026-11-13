@@ -76,6 +76,43 @@ class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     model_tester_class = Qwen2AudioModelTester
     pipeline_model_mapping = {"any-to-any": Qwen2AudioForConditionalGeneration} if is_torch_available() else {}
 
+    def test_legacy_audio_merge_matches_input_embedding_dtype(self):
+        config = Qwen2AudioConfig(
+            audio_config=Qwen2AudioEncoderConfig(
+                num_mel_bins=4,
+                encoder_layers=1,
+                encoder_attention_heads=2,
+                encoder_ffn_dim=32,
+                d_model=16,
+                max_source_positions=16,
+            ),
+            text_config=Qwen2Config(
+                vocab_size=32,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                max_position_embeddings=16,
+                pad_token_id=0,
+                bos_token_id=1,
+                eos_token_id=2,
+            ),
+            audio_token_index=5,
+        )
+        model = Qwen2AudioModel(config)
+        inputs_embeds = torch.zeros((1, 3, 16), dtype=torch.bfloat16)
+        audio_features = torch.arange(48, dtype=torch.float32).reshape(1, 3, 16)
+        input_ids = torch.tensor([[1, config.audio_token_id, 2]])
+        attention_mask = torch.ones_like(input_ids)
+
+        merged_embeddings, *_ = model._merge_input_ids_with_audio_features(
+            audio_features, torch.tensor([3]), inputs_embeds, input_ids, attention_mask, labels=None
+        )
+
+        self.assertEqual(merged_embeddings.dtype, inputs_embeds.dtype)
+        torch.testing.assert_close(merged_embeddings[0, 1:4], audio_features[0].to(inputs_embeds.dtype))
+
     @unittest.skip(reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings.")
     def test_inputs_embeds_matches_input_ids(self):
         pass
