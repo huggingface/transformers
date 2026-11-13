@@ -255,7 +255,7 @@ def _test_context_parallel_loss(rank, cp_size):
 
 def _install_default_plan(model, cp_mesh):
     """`apply_context_parallelism` with the plan a `base_model_cp_plan` of a decoder-only model would resolve to."""
-    plan = {}
+    plan = dict(model.cp_plan)
     for layer in range(model.config.num_hidden_layers):
         plan[f"model.layers.{layer}"] = "cp_split_sequence"
         plan[f"model.layers.{layer}.self_attn"] = "cp_ulysses"
@@ -560,7 +560,8 @@ class TestContextParallelChecks(unittest.TestCase):
         config.layer_types = ["full_attention", "sliding_attention"]
         _install_default_plan(LlamaForCausalLM(config), _MeshStub(2))
         # a base model computes no loss of its own, so the caller's loss is theirs to shard
-        model, plan = LlamaModel(_tiny_config()), {}
+        model = LlamaModel(_tiny_config())
+        plan = dict(model.cp_plan)
         for layer in range(model.config.num_hidden_layers):
             plan[f"layers.{layer}"], plan[f"layers.{layer}.self_attn"] = "cp_split_sequence", "cp_ulysses"
         apply_context_parallelism(model, _MeshStub(2), plan)
@@ -579,6 +580,21 @@ class TestContextParallelChecks(unittest.TestCase):
             # refused before anything is installed: the plan is not even read
             with self.subTest(type(model).__name__), self.assertRaisesRegex(ValueError, message):
                 apply_context_parallelism(model, _MeshStub(2), {})
+
+
+class TestContextParallelPlan(unittest.TestCase):
+    def test_every_model_is_the_root_of_its_plan(self):
+        config = _tiny_config()
+        config.base_model_cp_plan = {"layers.*": "cp_split_sequence", "layers.*.self_attn": "cp_ulysses"}
+        model = LlamaForCausalLM(config)
+
+        self.assertEqual(model.model.cp_plan, {"": "cp_model", **config.base_model_cp_plan})
+        # the head, not its base model, is the `""` of the head's plan
+        self.assertEqual(
+            model.cp_plan,
+            {"": "cp_model", "model.layers.*": "cp_split_sequence", "model.layers.*.self_attn": "cp_ulysses"},
+        )
+        self.assertNotIn("base_model_cp_plan", config.to_dict())
 
 
 class TestContextParallelStyles(unittest.TestCase):
