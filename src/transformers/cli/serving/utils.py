@@ -19,6 +19,7 @@ import asyncio
 import copy
 import enum
 import json
+import os
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -64,10 +65,12 @@ def split_model_id(model_id: str) -> tuple[str, str | None]:
     model, the file which weights, and both are answered for rather than one of them dropped. A colon
     that is not a `.gguf` file is left alone -- it is part of the id.
     """
-    head, _, named = model_id.partition(":")
-    if named and not named.endswith(".gguf"):
+    if ":" not in model_id or os.path.exists(model_id):
         return model_id, None
-    return head, named or None
+    head, _, named = model_id.rpartition(":")
+    if not head or not named.endswith(".gguf"):
+        return model_id, None
+    return head, named
 
 
 class Modality(enum.Enum):

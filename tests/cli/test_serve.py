@@ -46,6 +46,7 @@ from transformers.cli.serving.utils import (
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
+    split_model_id,
 )
 from transformers.testing_utils import (
     require_audio,
@@ -528,6 +529,34 @@ class TestResolveModel(unittest.TestCase):
         self.assertIn("org/pinned", ctx.exception.detail)
         self.assertIn("other/model", ctx.exception.detail)
 
+    def test_resolve_local_paths_with_and_without_at_symbol(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for subdir in ("saved_model", "ckpt@1000"):
+                ckpt_dir = Path(tmpdir) / subdir
+                ckpt_dir.mkdir()
+                handler = self._make_handler()
+                body = {"model": str(ckpt_dir)}
+                model_id, _, _ = handler._resolve_model(body)
+                self.assertEqual(model_id, str(ckpt_dir))
+                self.assertEqual(body["model"], str(ckpt_dir))
+                handler.model_manager.load_model_and_processor.assert_called_once_with(str(ckpt_dir), gguf_file=None)
+
+    def test_force_model_with_local_path_containing_at_symbol(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt_dir = Path(tmpdir) / "ckpt@1000"
+            ckpt_dir.mkdir()
+            handler = self._make_handler(force_model=str(ckpt_dir))
+            body = {}
+            model_id, _, _ = handler._resolve_model(body)
+            self.assertEqual(model_id, str(ckpt_dir))
+            self.assertEqual(body["model"], str(ckpt_dir))
+
 
 class TestModelManager(unittest.TestCase):
     def test_process_model_name_adds_main(self):
@@ -535,6 +564,145 @@ class TestModelManager(unittest.TestCase):
 
     def test_process_model_name_preserves_revision(self):
         self.assertEqual(ModelManager.process_model_name("org/model@dev"), "org/model@dev")
+
+    def test_process_model_name_preserves_local_paths(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for rel_path in ("plain_model", "ckpt@1000", "user@corp/ckpt@1000"):
+                local_dir = Path(tmpdir) / rel_path
+                local_dir.mkdir(parents=True)
+                self.assertEqual(ModelManager.process_model_name(str(local_dir)), str(local_dir))
+
+    def test_split_model_id(self):
+        import tempfile
+        from pathlib import Path
+
+        self.assertEqual(split_model_id("org/model"), ("org/model", None))
+        self.assertEqual(split_model_id("org/model@dev"), ("org/model@dev", None))
+        self.assertEqual(split_model_id("org/model:weights.gguf"), ("org/model", "weights.gguf"))
+        self.assertEqual(split_model_id("org/model@dev:weights.gguf"), ("org/model@dev", "weights.gguf"))
+        self.assertEqual(split_model_id("org/model:not_gguf"), ("org/model:not_gguf", None))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt_dir = Path(tmpdir) / "run:1" / "ckpt@1000"
+            ckpt_dir.mkdir(parents=True)
+            self.assertEqual(split_model_id(str(ckpt_dir)), (str(ckpt_dir), None))
+            self.assertEqual(split_model_id(f"{ckpt_dir}:weights.gguf"), (str(ckpt_dir), "weights.gguf"))
+
+            local_gguf = ckpt_dir / "weights.gguf"
+            local_gguf.write_bytes(b"")
+            self.assertEqual(split_model_id(str(local_gguf)), (str(local_gguf), None))
+
+    def test_load_hub_model_passes_revision(self):
+        mock_config = MagicMock(model_type="qwen2", architectures=["Qwen2ForCausalLM"])
+
+        for raw_id, expected_revision in (("org/model", "main"), ("org/model@v2", "v2")):
+            mm = ModelManager()
+            try:
+                with (
+                    patch("transformers.AutoProcessor.from_pretrained", return_value=MagicMock()) as proc_mock,
+                    patch("transformers.AutoConfig.from_pretrained", return_value=mock_config) as cfg_mock,
+                    patch("transformers.Qwen2ForCausalLM.from_pretrained", return_value=MagicMock()) as model_mock,
+                ):
+                    canonical = mm.process_model_name(raw_id)
+                    mm.load_model_and_processor(canonical)
+
+                    proc_mock.assert_called_once_with("org/model", trust_remote_code=False, revision=expected_revision)
+                    self.assertEqual(cfg_mock.call_args.args, ("org/model",))
+                    self.assertEqual(cfg_mock.call_args.kwargs["revision"], expected_revision)
+                    self.assertEqual(model_mock.call_args.args, ("org/model",))
+                    self.assertEqual(model_mock.call_args.kwargs["revision"], expected_revision)
+            finally:
+                mm.shutdown()
+
+    def test_load_local_path_with_at_symbol_skips_revision_split(self):
+        import tempfile
+        from pathlib import Path
+
+        mock_config = MagicMock(model_type="qwen2", architectures=["Qwen2ForCausalLM"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt_dir = Path(tmpdir) / "user@corp" / "ckpt@1000"
+            ckpt_dir.mkdir(parents=True)
+
+            with (
+                patch("transformers.AutoProcessor.from_pretrained", return_value=MagicMock()) as proc_mock,
+                patch("transformers.AutoConfig.from_pretrained", return_value=mock_config) as cfg_mock,
+                patch("transformers.Qwen2ForCausalLM.from_pretrained", return_value=MagicMock()) as model_mock,
+            ):
+                mm = ModelManager(force_model=str(ckpt_dir))
+                try:
+                    self.assertIn(str(ckpt_dir), mm.loaded_models)
+                    proc_mock.assert_called_once_with(str(ckpt_dir), trust_remote_code=False)
+                    self.assertEqual(cfg_mock.call_args.args, (str(ckpt_dir),))
+                    self.assertNotIn("revision", cfg_mock.call_args.kwargs)
+                    self.assertEqual(model_mock.call_args.args, (str(ckpt_dir),))
+                    self.assertNotIn("revision", model_mock.call_args.kwargs)
+                finally:
+                    mm.shutdown()
+
+    def test_load_local_path_gguf_with_at_symbol(self):
+        import tempfile
+        from pathlib import Path
+
+        mock_config = MagicMock(model_type="qwen2", architectures=["Qwen2ForCausalLM"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt_dir = Path(tmpdir) / "ckpt@1000"
+            ckpt_dir.mkdir()
+
+            with (
+                patch("transformers.AutoTokenizer.from_pretrained", return_value=MagicMock()) as tok_mock,
+                patch("transformers.AutoConfig.from_pretrained", return_value=mock_config) as cfg_mock,
+                patch("transformers.Qwen2ForCausalLM.from_pretrained", return_value=MagicMock()) as model_mock,
+            ):
+                mm = ModelManager(force_model=f"{ckpt_dir}:weights.gguf")
+                try:
+                    self.assertIn(f"{ckpt_dir}:weights.gguf", mm.loaded_models)
+                    tok_mock.assert_called_once_with(str(ckpt_dir), gguf_file="weights.gguf", trust_remote_code=False)
+                    self.assertEqual(cfg_mock.call_args.args, (str(ckpt_dir),))
+                    self.assertEqual(cfg_mock.call_args.kwargs["gguf_file"], "weights.gguf")
+                    self.assertNotIn("revision", cfg_mock.call_args.kwargs)
+                    self.assertEqual(model_mock.call_args.args, (str(ckpt_dir),))
+                    self.assertEqual(model_mock.call_args.kwargs["gguf_file"], "weights.gguf")
+                    self.assertNotIn("revision", model_mock.call_args.kwargs)
+                finally:
+                    mm.shutdown()
+
+    def test_load_real_checkpoint_from_local_path_with_at_symbol(self):
+        import tempfile
+        from pathlib import Path
+
+        from tokenizers import Tokenizer
+        from tokenizers.models import WordLevel
+
+        from transformers import PreTrainedTokenizerFast, Qwen2Config, Qwen2ForCausalLM
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt_dir = Path(tmpdir) / "ckpt@1000"
+            config = Qwen2Config(
+                vocab_size=32,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+            )
+            Qwen2ForCausalLM(config).save_pretrained(ckpt_dir)
+            tok_backend = Tokenizer(WordLevel({"<unk>": 0, "hi": 1}, unk_token="<unk>"))
+            PreTrainedTokenizerFast(tokenizer_object=tok_backend, unk_token="<unk>").save_pretrained(ckpt_dir)
+
+            mm = ModelManager(device="cpu", dtype="float32")
+            try:
+                canonical = mm.process_model_name(str(ckpt_dir))
+                self.assertEqual(canonical, str(ckpt_dir))
+                model, processor = mm.load_model_and_processor(canonical)
+                self.assertIsInstance(model, Qwen2ForCausalLM)
+                self.assertIsInstance(processor, PreTrainedTokenizerFast)
+            finally:
+                mm.shutdown()
 
     def test_quantization_config_4bit(self):
         mm = ModelManager(quantization="bnb-4bit")
