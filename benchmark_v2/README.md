@@ -69,6 +69,27 @@ python run_benchmarks.py --include llama
 
 # Exclude specific benchmarks
 python run_benchmarks.py --exclude old_benchmark
+```
+
+### Comparing Against a Baseline
+
+`compare_results.py` compares a candidate run to a baseline, scenario by scenario, on end-to-end latency, time to first
+token, inter-token latency and throughput. A metric that is worse by more than `--threshold` percent is a regression,
+and the script then exits with status 1, so it can gate CI.
+
+```bash
+# Baseline on main, candidate on a branch, same hardware and arguments
+python run_benchmarks.py --model-id meta-llama/Llama-2-7b-hf -b 1 -s 128 -n 128 -w 5 -i 30 --output-dir results_main
+python run_benchmarks.py --model-id meta-llama/Llama-2-7b-hf -b 1 -s 128 -n 128 -w 5 -i 30 --output-dir results_pr
+
+python compare_results.py --baseline results_main --candidate results_pr --threshold 1.0
+```
+
+Each side is a results file or a directory of them: with several repeated runs, each metric is the median of the
+per-run medians. The report also shows the noise for each metric (the largest within-run or between-run coefficient of
+variation) and flags it when it is above the threshold: the comparison cannot resolve a change that small. Pick a
+threshold above the noise of your setup, and run the baseline and the candidate on the same machine, GPU and arguments.
+Scenarios that failed or only exist on one side are listed separately.
 
 ## Output Format
 
