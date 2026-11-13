@@ -22,7 +22,6 @@ from datasets import load_dataset
 from transformers import BeitConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -282,11 +281,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @require_torch_multi_gpu
-    @unittest.skip(reason="BEiT has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
@@ -370,7 +364,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 continue
 
             model = model_class(config)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)

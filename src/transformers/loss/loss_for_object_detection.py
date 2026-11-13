@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from ..utils import is_accelerate_available, is_scipy_available, is_vision_available, requires_backends
+from ..utils import is_accelerate_available, is_scipy_available, is_vision_available, logging, requires_backends
 
 
 if is_accelerate_available():
@@ -29,6 +29,9 @@ if is_scipy_available():
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+
+logger = logging.get_logger(__name__)
 
 
 def dice_loss(inputs, targets, num_boxes):
@@ -55,9 +58,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     Loss used in RetinaNet for dense detection: https://huggingface.co/papers/1708.02002.
 
     Args:
-        inputs (`torch.FloatTensor` of arbitrary shape):
+        inputs (`torch.Tensor` of arbitrary shape):
             The predictions for each example.
-        targets (`torch.FloatTensor` with the same shape as `inputs`)
+        targets (`torch.Tensor` with the same shape as `inputs`)
             A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
             and 1 for the positive class).
         alpha (`float`, *optional*, defaults to `0.25`):
@@ -115,7 +118,7 @@ class ImageLoss(nn.Module):
         self.losses = losses
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
     # removed logging parameter, which was part of the original implementation
     def loss_labels(self, outputs, targets, indices, num_boxes):
@@ -311,7 +314,13 @@ class HungarianMatcher(nn.Module):
 
     @torch.no_grad()
     def forward(self, outputs, targets):
-        """
+        """Performs the matching
+
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Args:
             outputs (`dict`):
                 A dictionary that contains at least these entries:
@@ -353,6 +362,10 @@ class HungarianMatcher(nn.Module):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
@@ -376,12 +389,12 @@ def box_area(boxes: Tensor) -> Tensor:
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
     Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+        boxes (`torch.Tensor` of shape `(number_of_boxes, 4)`):
             Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
             < x2` and `0 <= y1 < y2`.
 
     Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
+        `torch.Tensor`: a tensor containing the area for each box.
     """
     boxes = _upcast(boxes)
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -409,7 +422,7 @@ def generalized_box_iou(boxes1, boxes2):
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
     Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+        `torch.Tensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
     # degenerate boxes gives inf / nan results
     # so do an early check

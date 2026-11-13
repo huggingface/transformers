@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import auto_docstring, logging
 from .configuration_cpmant import CpmAntConfig
 
@@ -680,21 +680,25 @@ class CpmAntModel(CpmAntPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    The CPMAnt Model with a language modeling head on top (linear layer whose weights are a
+    vocabulary-sized slice of the input embeddings).
     """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "cpmant.input_embedding.weight"}
+    # The head is a vocab-sized slice of `input_embedding.weight`, so a whole-tensor tie
+    # would be shape-mismatched; the checkpoint ships `lm_head.weight` explicitly.
+    _tied_weights_keys = {}
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
         self.cpmant = CpmAntModel(config)
 
-        # lm_head.weight is tied to cpmant.input_embedding.weight
-        self.lm_head = nn.Linear(
-            config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
-        )
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    def prepare_inputs_for_generation(self, input_ids, next_sequence_length=None, **kwargs):
+        # `forward` slices off the cached prefix itself, so it needs the full `input_ids`.
+        return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
 
     @auto_docstring
     def forward(
@@ -748,9 +752,8 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             return_dict,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

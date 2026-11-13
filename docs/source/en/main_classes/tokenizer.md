@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 A tokenizer is in charge of preparing the inputs for a model. The library contains tokenizers for all the models. Most
 of the tokenizers are available in two flavors: a full python implementation and a "Fast" implementation based on the
-Rust library [🤗 Tokenizers](https://github.com/huggingface/tokenizers). The "Fast" implementations allows:
+Rust library [🤗 Tokenizers](https://github.com/huggingface/tokenizers). The "Fast" implementations allow:
 
 1. a significant speed-up in particular when doing batched tokenization and
 2. additional methods to map between the original string (character and words) and the token space (e.g. getting the
@@ -83,7 +83,7 @@ print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
 
 ## PreTrainedTokenizerFast
 
-The [`PreTrainedTokenizerFast`] depend on the [tokenizers](https://huggingface.co/docs/tokenizers) library. The tokenizers obtained from the 🤗 tokenizers library can be
+The [`PreTrainedTokenizerFast`] depends on the [tokenizers](https://huggingface.co/docs/tokenizers) library. The tokenizers obtained from the 🤗 tokenizers library can be
 loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) page to understand how this is done.
 
 [[autodoc]] PreTrainedTokenizerFast

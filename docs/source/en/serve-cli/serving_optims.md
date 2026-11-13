@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -25,16 +25,8 @@ Add `--continuous-batching` to enable it.
 
 ```sh
 transformers serve \
-  --continuous-batching
-  --attn_implementation "sdpa"
-```
-
-Monitor continuous batching performance with [OpenTelemetry](https://opentelemetry.io). It collects traces and metrics, but you'll need a backend to visualize them.
-
-Install the OpenTelemetry dependency.
-
-```py
-pip install transformers[open-telemetry]
+  --continuous-batching \
+  --attn-implementation "sdpa"
 ```
 
 ## Quantization
@@ -66,9 +58,20 @@ An optimized [attention backend](../attention_interface) improves memory efficie
 
 ```sh
 transformers serve \
-  --continuous_batching \
-  --attn_implementation "flash_attention_2"
+  --continuous-batching \
+  --attn-implementation "flash_attention_2"
 ```
+
+### Apple Silicon (Metal flash attention)
+
+With `--continuous-batching` on MPS, install [kernels](https://github.com/huggingface/kernels) to switch to [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa). It runs 1.66x faster than SDPA with `generate_batch` (gsm8k, Qwen2.5-0.5B-Instruct, fp16) and matches it token-for-token under greedy decoding.
+
+```sh
+pip install kernels
+transformers serve --continuous-batching
+```
+
+Without continuous batching, models keep their default attention (SDPA). Pass `--attn-implementation` to try another one, such as `kernels-community/metal-flash-sdpa`.
 
 ## Compile
 
@@ -88,6 +91,6 @@ The `"bfloat16"` or `"float16"` [data types](../models#model-data-type) save mem
 
 ```sh
 transformers serve \
-  --continuous_batching \
+  --continuous-batching \
   --dtype "bfloat16"
 ```

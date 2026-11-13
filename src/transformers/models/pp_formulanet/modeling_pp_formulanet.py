@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -51,7 +51,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_pp_formulanet import PPFormulaNetConfig, PPFormulaNetVisionConfig
+from .configuration_pp_formulanet import PPFormulaNetConfig, PPFormulaNetTextConfig, PPFormulaNetVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -137,7 +137,7 @@ class PPFormulaNetVisionAttention(nn.Module):
         max_rel_dist = int(2 * max(q_size, k_size) - 1)
         # Interpolate rel pos.
         rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            rel_pos.reshape(1, rel_pos.shape[0], -1).transpose(1, 2),
             size=max_rel_dist,
             mode="linear",
         )
@@ -326,7 +326,7 @@ class PPFormulaNetVisionLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states[:, :height, :width, :].contiguous()
         return hidden_states
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
         # Window partition
@@ -429,6 +429,7 @@ class PPFormulaNetVisionNeck(nn.Module):
 
 
 class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
+    config: PPFormulaNetVisionConfig
     _can_record_outputs = {"hidden_states": PPFormulaNetVisionLayer, "attentions": PPFormulaNetVisionAttention}
     input_modalities = ("image",)
 
@@ -470,7 +471,7 @@ class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -718,12 +719,12 @@ class PPFormulaNetDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
         """
@@ -782,8 +783,9 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
         "attentions": OutputRecorder(PPFormulaNetAttention, index=1, layer_name="self_attn"),
         "cross_attentions": OutputRecorder(PPFormulaNetAttention, index=1, layer_name="encoder_attn"),
     }
+    config: PPFormulaNetTextConfig
 
-    def __init__(self, config: PPFormulaNetConfig):
+    def __init__(self, config: PPFormulaNetTextConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -817,10 +819,10 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
@@ -841,7 +843,7 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -861,7 +863,7 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
@@ -909,7 +911,7 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
         )
 
         # embed positions
-        position_ids = self.embed_positions(input, past_key_values_length, position_ids=position_ids)
+        position_ids = self.embed_positions(input_ids, past_key_values_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + position_ids.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -918,7 +920,7 @@ class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
@@ -962,7 +964,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
 
 
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
         self.decoder = PPFormulaNetTextModel(config.text_config)
@@ -974,16 +976,16 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor
+        inputs_embeds: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
@@ -1032,6 +1034,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
@@ -1046,15 +1049,15 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1066,7 +1069,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
@@ -1074,7 +1077,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
@@ -1082,6 +1085,10 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         >>> print(result)
         ['\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,']
         ```"""
+        # `shift_labels` is consumed by the loss below (the decoder inputs are already right-shifted), so pop it
+        # before the inner model call rather than letting it flow down through `**kwargs`.
+        shift_labels = kwargs.pop("shift_labels", None)
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1097,14 +1104,19 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
+            # Encoder-decoder logits are position-aligned with the targets, so pass them as `shift_labels`
+            # (with `labels=None`) to stop `ForCausalLMLoss` shifting them a second time.
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=None,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=shift_labels if shift_labels is not None else labels,
+                **kwargs,
             )
 
         return Seq2SeqLMOutput(
@@ -1119,41 +1131,9 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
-
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
-    def get_encoder(self):
-        return self.model.get_encoder()
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
 
 __all__ = [

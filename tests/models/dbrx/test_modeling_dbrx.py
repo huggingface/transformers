@@ -60,10 +60,11 @@ class DbrxModelTester(CausalLMModelTester):
         # Set DBRX's unusual params
         self.clip_qkv = clip_qkv
 
-        # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
+        # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here.
+        # `ffn_config.hidden_size` is not set here on purpose: it always mirrors the model's `hidden_size` and
+        # is propagated by `DbrxConfig`.
         self.ffn_config = {
-            "ffn_hidden_size": self.hidden_size,
-            "hidden_size": 2 * self.hidden_size,
+            "ffn_hidden_size": 2 * self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
             "moe_loss_weight": moe_loss_weight,
             "moe_num_experts": moe_num_experts,
@@ -111,7 +112,7 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 class DbrxModelIntegrationTest(unittest.TestCase):
     @slow
     def test_tiny_model_logits(self):
-        model = DbrxForCausalLM.from_pretrained("Rocketknight1/dbrx-tiny-random")
+        model = DbrxForCausalLM.from_pretrained("Rocketknight1/dbrx-tiny-random", dtype=torch.float32)
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
         vocab_size = model.vocab_size

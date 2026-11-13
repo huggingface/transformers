@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-21 and added to Hugging Face Transformers on 2021-10-13.*
+*This model was published in HF papers on 2021-09-21 and contributed to Hugging Face Transformers on 2021-10-13.*
 
 # Vision Encoder Decoder Models
 
@@ -74,7 +74,7 @@ model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
 
 To load fine-tuned checkpoints of the `VisionEncoderDecoderModel` class, [`VisionEncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
 
-To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
+To perform inference, one uses the [`generate`] method, which allows autoregressively generating text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 
 ```python
 import requests

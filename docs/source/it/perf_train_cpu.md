@@ -42,28 +42,6 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 
 Vedi altri approcci per [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html).
 
-### Utilizzo nel Trainer
-
-Per abilitare la auto mixed precision con IPEX in Trainer, l'utende dovrebbe aggiungere `use_ipex`, `bf16` e `no_cuda` negli argomenti del comando di addestramento.
-
-Vedi un sempio di un caso d'uso [Transformers question-answering](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
-
-- Training with IPEX using BF16 auto mixed precision on CPU:
-
-<pre> python run_qa.py \
---model_name_or_path google-bert/bert-base-uncased \
---dataset_name squad \
---do_train \
---do_eval \
---per_device_train_batch_size 12 \
---learning_rate 3e-5 \
---num_train_epochs 2 \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/debug_squad/ \
-<b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
-
 ### Esempi pratici
 
 Blog: [Accelerating PyTorch Transformers with Intel Sapphire Rapids](https://huggingface.co/blog/intel-sapphire-rapids)

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-10-19 and added to Hugging Face Transformers on 2022-12-05.*
+*This model was published in HF papers on 2022-10-19 and contributed to Hugging Face Transformers on 2022-12-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -113,7 +113,7 @@ print(output)
 ## Notes
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
-- BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers/main/en/model_doc/biogpt#transformers.BioGptModel.forward.past_key_values) parameter in [`BioGPTModel.forward`].
+- BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [`~BioGptModel.forward#past_key_values`] parameter in [`BioGPTModel.forward`].
 
 ## BioGptConfig
 

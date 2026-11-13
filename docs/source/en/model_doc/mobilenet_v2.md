@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-01-13 and added to Hugging Face Transformers on 2022-11-14.*
+*This model was published in HF papers on 2018-01-13 and contributed to Hugging Face Transformers on 2022-11-14.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [MobileNet V2](https://huggingface.co/papers/1801.04381) improves performance on mobile devices with a more efficient architecture. It uses inverted residual blocks and linear bottlenecks to start with a smaller representation of the data, expands it for processing, and shrinks it again to reduce the number of computations. The model also removes non-linearities to maintain accuracy despite its simplified design. Like [MobileNet V1](./mobilenet_v1), it uses depthwise separable convolutions for efficiency.
 
-You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
+You can find all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
 
 > [!TIP]
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.

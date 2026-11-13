@@ -27,7 +27,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from tests.trainer.trainer_test_utils import TrainerIntegrationCommon, get_regression_trainer  # noqa
-from transformers import PreTrainedConfig, is_torch_available
+from transformers import HfArgumentParser, PreTrainedConfig, TrainingArguments, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -40,7 +40,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import FSDPOption, set_seed
+from transformers.trainer_utils import set_seed
 from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
@@ -120,8 +120,8 @@ if is_torch_available():
 
 @require_torch
 class InitializeMissingKeysTest(unittest.TestCase):
-    """Tests for FSDP non-rank-0 weight initialization: params should be moved from meta to CPU
-    and marked as initialized without being re-initialized."""
+    """Tests for FSDP non-rank-0 weight initialization: params stay on meta (rank 0 broadcasts them)
+    and are marked as initialized without being re-initialized."""
 
     def _clear_init_flags(self, model):
         for module in model.modules():
@@ -134,10 +134,13 @@ class InitializeMissingKeysTest(unittest.TestCase):
             if hasattr(buffer, "_is_hf_initialized"):
                 delattr(buffer, "_is_hf_initialized")
 
-    def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
-        """FSDP non-rank-0 path should move all params from meta to CPU."""
+    def test_move_missing_keys_fsdp_non_rank0_only_moves_non_persistent_buffers(self):
+        """FSDP non-rank-0 path should leave params and persistent buffers on meta, since rank 0 broadcasts them,
+        and only move non-persistent buffers to CPU."""
         with torch.device("meta"):
             model = _BaseModel(PreTrainedConfig())
+            model.linear.register_buffer("persistent_buffer", torch.ones(5))
+            model.linear.register_buffer("non_persistent_buffer", torch.ones(5), persistent=False)
 
         for param in model.parameters():
             self.assertEqual(param.device, torch.device("meta"))
@@ -151,7 +154,9 @@ class InitializeMissingKeysTest(unittest.TestCase):
             )
 
         for name, param in model.named_parameters():
-            self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
+            self.assertEqual(param.device, torch.device("meta"), f"param {name} should stay on meta")
+        self.assertEqual(model.linear.persistent_buffer.device, torch.device("meta"))
+        self.assertEqual(model.linear.non_persistent_buffer.device, torch.device("cpu"))
 
     def test_fsdp_non_rank0_end_to_end_no_reinit(self):
         """End-to-end: move from meta + _initialize_missing_keys should mark all params initialized
@@ -276,6 +281,9 @@ class TestFSDPConfig(TestCasePlus):
     @parameterized.expand(config_params, name_func=_parameterized_custom_name_func)
     def test_accelerate_fsdp_config(self, sharding_strategy, dtype):
         output_dir = self.get_auto_remove_tmp_dir()
+        # Snapshot before trainer construction — `_process_fsdp_args` strips the
+        # `fsdp_` prefix in place.
+        expected = dict(self.accelerate_fsdp_config)
         kwargs = {
             "output_dir": output_dir,
             "train_len": 128,
@@ -287,12 +295,14 @@ class TestFSDPConfig(TestCasePlus):
         kwargs[dtype] = True
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            for k, v in trainer.args.fsdp_config.items():
-                self.assertTrue(k in self.accelerate_fsdp_config)
-                self.assertEqual(v, self.accelerate_fsdp_config[k])
+            self.assertIs(trainer.args.fsdp, True)
+            self.assertTrue(trainer.args.fsdp_config.get("cpu_offload"))
+            for k, v in expected.items():
+                assert k.startswith("fsdp_")
+                # `transformer_layer_cls_to_wrap` is normalized from str → list during parsing.
+                if k == "fsdp_transformer_layer_cls_to_wrap" and isinstance(v, str):
+                    v = [v]
+                self.assertEqual(trainer.args.fsdp_config[k[5:]], v)
 
     def test_torchrun_fsdp_config(self):
         """Verify that --fsdp + --fsdp_config (torchrun-style) are parsed correctly."""
@@ -309,10 +319,29 @@ class TestFSDPConfig(TestCasePlus):
         }
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], "full_shard")
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.AUTO_WRAP)
+            self.assertIs(trainer.args.fsdp, True)
             # fsdp_ prefix is stripped and value is normalized to a list during parsing
             self.assertIn("Qwen2DecoderLayer", trainer.args.fsdp_config["transformer_layer_cls_to_wrap"])
+
+    def test_fsdp_cli_parsing(self):
+        """`--fsdp` (bare) → True; legacy `--fsdp full_shard` still parses; absent → None."""
+        parser = HfArgumentParser(TrainingArguments)
+        base = ["--output_dir", "/tmp/x"]
+
+        args, _ = parser.parse_known_args([*base, "--fsdp"])
+        self.assertIs(args.fsdp, True)
+
+        args, _ = parser.parse_known_args([*base, "--fsdp", "full_shard"])
+        self.assertEqual(args.fsdp, "full_shard")
+
+        args, _ = parser.parse_known_args(base)
+        self.assertIsNone(args.fsdp)
+
+        # Bare `--fsdp` should resolve to a fully enabled FSDP setup through `_process_fsdp_args`.
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer_args = TrainingArguments(output_dir="/tmp/x", fsdp=True)
+            self.assertIs(trainer_args.fsdp, True)
+            self.assertIsNotNone(trainer_args.fsdp_plugin_args)
 
     @parameterized.expand(config_params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
@@ -328,11 +357,10 @@ class TestFSDPConfig(TestCasePlus):
         kwargs[dtype] = True
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            for k, v in trainer.args.fsdp_config.items():
-                self.assertEqual(v, self.fsdp_config[k])
+            self.assertIs(trainer.args.fsdp, True)
+            self.assertTrue(trainer.args.fsdp_config.get("cpu_offload"))
+            for k, v in self.fsdp_config.items():
+                self.assertEqual(trainer.args.fsdp_config[k], v)
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +377,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []
         for rank in range(num_processes):
-            with open(os.path.join(output_dir, f"env_rank{rank}.json")) as f:
+            with open(os.path.join(output_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:
                 results.append(json.load(f))
         return results
 
@@ -439,7 +467,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
                 self.assertEqual(info["args_n_gpu"], 1)
                 self.assertEqual(info["accelerator_is_main_process"], rank == 0)
                 self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
-                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+                self.assertIn(f"{torch_device}:{rank}", info["accelerator_device"])
 
                 # Both should have FSDP enabled with the correct version
                 self.assertEqual(info["accelerator_distributed_type"], "DistributedType.FSDP")
@@ -502,6 +530,7 @@ class TestTrainerDistributedFSDPCommon(
 
     @parameterized.expand(resume_params, name_func=_parameterized_custom_name_func)
     def test_training_and_can_resume_normally(self, state_dict_type, fsdp_version):
+        """Resume without repeating completed steps, preserving the learning-rate history."""
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_default_script_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2)
 
@@ -513,9 +542,7 @@ class TestTrainerDistributedFSDPCommon(
             output_dir,
         )
 
-        # resume from ckpt
         checkpoint = os.path.join(output_dir, "checkpoint-2")
-        resume_args = args + ["--resume_from_checkpoint", checkpoint]
 
         is_fsdp_ckpt = os.path.isdir(checkpoint) and (
             # this checks the FSDP state dict when `SHARDED_STATE_DICT` is used
@@ -529,11 +556,17 @@ class TestTrainerDistributedFSDPCommon(
         )
         self.assertTrue(is_fsdp_ckpt)
 
+        resume_output_dir = self.get_auto_remove_tmp_dir()
+        resume_args = args + ["--resume_from_checkpoint", checkpoint, "--output_dir", resume_output_dir]
         logs_resume = self._train_and_get_log_history(
             self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=resume_args, **cmd_kwargs),
-            output_dir,
+            resume_output_dir,
         )
 
+        # Restarting from scratch would save checkpoint-2 again instead of continuing after it.
+        self.assertFalse(os.path.exists(os.path.join(resume_output_dir, "checkpoint-2")))
+
+        self.assertEqual(len(logs), len(logs_resume))
         for log, log1 in zip(logs, logs_resume):
             if "learning_rate" in log:
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
@@ -599,9 +632,9 @@ class TestTrainerDistributedFSDPCommon(
         execute_subprocess_async(cmd, env=self.get_env())
 
         # Compare losses
-        with open(cp_yes_losses_path) as f:
+        with open(cp_yes_losses_path, encoding="utf-8") as f:
             cp_yes_losses = json.load(f)
-        with open(cp_no_losses_path) as f:
+        with open(cp_no_losses_path, encoding="utf-8") as f:
             cp_no_losses = json.load(f)
 
         assert len(cp_yes_losses) == len(cp_no_losses), (

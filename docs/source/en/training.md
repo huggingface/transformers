@@ -20,6 +20,14 @@ Fine-tuning continues training a large pretrained model on a smaller dataset spe
 
 The tutorial below walks through fine-tuning a large language model with [`Trainer`].
 
+> [!AgentPrompt]
+> Help the user plan a fine-tuning run for their task. Before proposing a configuration, identify the task, pretrained model and revision, dataset fields, evaluation data, Transformers version, hardware, and available memory. Use this tutorial to check the data preparation, model loading, and `Trainer` setup that apply to their case. Do not assume the example dataset or model fits a different task.
+>
+> 1. Ask for missing details that could change the model, preprocessing, or training setup. State any assumptions.
+> 2. Keep evaluation examples separate from training data. Select a model and tokenizer for the task, prepare the model's expected inputs and labels, and choose a data collator that matches those inputs.
+> 3. Set `TrainingArguments` to fit the user's hardware and goals. Configure evaluation and checkpoint saving when the user needs them. Run a small test before a full training job, and check that the model receives the expected inputs, the loss is finite, and evaluation completes.
+> 4. Do not start a full training run or upload artifacts unless the user asks. Report the proposed configuration, evidence from any test, expected resource tradeoffs, and anything you could not verify.
+
 Log in to your Hugging Face account with your user token to push your fine-tuned model to the Hub.
 
 ```py
@@ -68,7 +76,7 @@ A data collator assembles dataset samples into batches for the model to process.
 - Set `mlm=False` to avoid randomly masking tokens.
 
 ```py
-data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
+data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 ```
 
 ## Loading a model
@@ -98,7 +106,9 @@ model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 
 - Set `bf16=True` for fast mixed precision training if your hardware supports it (Ampere+ GPUs). Otherwise, fall back to `fp16=True` on older hardware.
 - `gradient_accumulation_steps` simulates a larger effective batch size by accumulating gradients over multiple forward passes before updating weights.
-- `gradient_checkpointing` trades compute for memory by recomputing intermediate activations during the backward pass instead of storing them.
+- `gradient_checkpointing` trades compute for memory by recomputing intermediate activations during the backward pass instead of storing them. For a compromise between memory and speed, see [partial checkpointing](./grad_checkpointing#partial-checkpointing).
+- When `gradient_checkpointing=True`, set `gradient_checkpointing_kwargs={"offload": True}` to keep saved activations in pinned host memory and reduce GPU memory usage for long sequences. See [offloading the saved activations](./grad_checkpointing#offloading-the-saved-activations) for the trade-off.
+- Set `train_sampling_strategy="group_by_length"` to batch examples with similar lengths and reduce padding. See [group samples by length](./trainer_recipes#group-samples-by-length) for processor-based multimodal datasets and precomputed lengths.
 
 </hfoption>
 <hfoption id="evaluation and checkpointing">
@@ -121,6 +131,7 @@ training_args = TrainingArguments(
     per_device_train_batch_size=2,
     gradient_accumulation_steps=8,
     gradient_checkpointing=True,
+    gradient_checkpointing_kwargs={"every_n_layers": 4},
     bf16=True,
     learning_rate=2e-5,
     logging_steps=10,
@@ -156,4 +167,5 @@ trainer.push_to_hub()
 - Read the [Subclassing Trainer methods](./trainer_customize) guide to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
 - Read the [Callbacks](./trainer_callbacks) guide to learn how to hook into training events for logging, early stopping, and other custom behavior.
 - Read the [Data collators](./data_collators) guide to learn how to customize how samples are assembled into batches.
-- Browse [transformers/examples/pytorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [notebooks](./notebooks), or the **Resources > Task Recipes** section for additional training examples on different text, audio, vision, and multimodal tasks.
+- Run a training script on a rented GPU with [Hugging Face Jobs](https://huggingface.co/docs/hub/jobs-training).
+- Browse [notebooks](./notebooks) or the **Resources > Task Recipes** section for additional training examples on different text, audio, vision, and multimodal tasks.

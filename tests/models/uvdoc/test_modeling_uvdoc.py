@@ -307,7 +307,9 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = AutoModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor()
-        img_url = url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg"
+        )
         self.image = load_image(img_url)
 
     def test_inference_document_rectification(self):
@@ -323,11 +325,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((bs, 2, 45, 31))
         expected_logits = torch.tensor(
-            [
-                [-0.7635, -0.7251, -0.6819],
-                [-0.7643, -0.7250, -0.6814],
-                [-0.7647, -0.7252, -0.6816],
-            ],
+            [[-0.8466, -0.7975, -0.7427], [-0.8476, -0.798, -0.7427], [-0.8476, -0.7981, -0.743]],
             device=torch_device,
         )
 
@@ -335,11 +333,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
         expected_images = torch.tensor(
-            [
-                [131, 130, 128],
-                [131, 129, 127],
-                [130, 129, 127],
-            ],
+            [[248, 204, 184], [248, 205, 184], [248, 206, 184]],
             device=torch_device,
             dtype=torch.uint8,
         )

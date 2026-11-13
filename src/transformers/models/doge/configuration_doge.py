@@ -61,8 +61,8 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.router_gate": "colwise_gather_output",
-        "layers.*.mlp.down_embed": "rowwise_split_input",
-        "layers.*.mlp.up_embed": "rowwise_split_input",
+        "layers.*.mlp.down_embed": "embedding_rowwise",
+        "layers.*.mlp.up_embed": "embedding_rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_maskformer.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2022 Meta Platforms, Inc.s and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -68,16 +68,12 @@ if is_scipy_available():
 @dataclass
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.
     """
 
-    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -93,24 +89,24 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 @dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
     r"""
-    encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
+    encoder_last_hidden_state (`torch.Tensor` of shape`(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the encoder.
-    decoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
+    decoder_last_hidden_state (`torch.Tensor` of shape`(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the decoder.
-    encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
         the output of each stage.
-    decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
         the output of each stage.
     """
 
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    decoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
+    decoder_last_hidden_state: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -122,13 +118,13 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
 @dataclass
 class MaskFormerPixelDecoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the model.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -139,37 +135,37 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
 @dataclass
 class MaskFormerModelOutput(ModelOutput):
     r"""
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    encoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the encoder model (backbone).
-    pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    pixel_decoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the pixel decoder model (FPN).
-    transformer_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    transformer_decoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Last hidden states (final feature map) of the last stage of the transformer decoder model.
-    encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
         model at the output of each stage.
-    pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    pixel_decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
         decoder model at the output of each stage.
-    transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    transformer_decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
         transformer decoder at the output of each stage.
-    hidden_states `tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` containing `encoder_hidden_states`, `pixel_decoder_hidden_states` and
+    hidden_states `tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` containing `encoder_hidden_states`, `pixel_decoder_hidden_states` and
         `decoder_hidden_states`
     """
 
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    pixel_decoder_last_hidden_state: torch.FloatTensor | None = None
-    transformer_decoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    pixel_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    transformer_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
+    pixel_decoder_last_hidden_state: torch.Tensor | None = None
+    transformer_decoder_last_hidden_state: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    pixel_decoder_hidden_states: tuple[torch.Tensor] | None = None
+    transformer_decoder_hidden_states: tuple[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -187,71 +183,49 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
         The computed loss, returned when labels are present.
-    class_queries_logits (`torch.FloatTensor`):
+    class_queries_logits (`torch.Tensor`):
         A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
         query. Note the `+ 1` is needed because we incorporate the null class.
-    masks_queries_logits (`torch.FloatTensor`):
+    masks_queries_logits (`torch.Tensor`):
         A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
         query.
-    auxiliary_logits (`Dict[str, torch.FloatTensor]`, *optional*, returned when `output_auxiliary_logits=True`):
+    auxiliary_logits (`Dict[str, torch.Tensor]`, *optional*, returned when `output_auxiliary_logits=True`):
         Dictionary containing auxiliary predictions for each decoder layer when auxiliary losses are enabled.
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    encoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the encoder model (backbone).
-    pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    pixel_decoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the pixel decoder model (FPN).
-    transformer_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    transformer_decoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Last hidden states (final feature map) of the last stage of the transformer decoder model.
-    encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
         model at the output of each stage.
-    pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    pixel_decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
         decoder model at the output of each stage.
-    transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    transformer_decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the transformer decoder at the output
         of each stage.
-    hidden_states `tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` containing `encoder_hidden_states`, `pixel_decoder_hidden_states` and
+    hidden_states `tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` containing `encoder_hidden_states`, `pixel_decoder_hidden_states` and
         `decoder_hidden_states`.
     """
 
-    loss: torch.FloatTensor | None = None
-    class_queries_logits: torch.FloatTensor | None = None
-    masks_queries_logits: torch.FloatTensor | None = None
-    auxiliary_logits: torch.FloatTensor | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    pixel_decoder_last_hidden_state: torch.FloatTensor | None = None
-    transformer_decoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    pixel_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    transformer_decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
-    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
-    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
-    """
-)
-@dataclass
-class MaskFormerDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
-    r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
-        Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
-        layernorm.
-    """
-
-    intermediate_hidden_states: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    class_queries_logits: torch.Tensor | None = None
+    masks_queries_logits: torch.Tensor | None = None
+    auxiliary_logits: torch.Tensor | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
+    pixel_decoder_last_hidden_state: torch.Tensor | None = None
+    transformer_decoder_last_hidden_state: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    pixel_decoder_hidden_states: tuple[torch.Tensor] | None = None
+    transformer_decoder_hidden_states: tuple[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class MaskFormerDetrLearnedPositionEmbedding(nn.Module):
@@ -281,10 +255,219 @@ class MaskFormerDetrLearnedPositionEmbedding(nn.Module):
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(shape[0], 1, 1, 1)
-        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
-        # expected by the encoder
-        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
+
+
+class MaskFormerDetrConvBlock(nn.Module):
+    """Basic conv block: Conv3x3 -> GroupNorm -> Activation."""
+
+    def __init__(self, in_channels: int, out_channels: int, activation: str = "relu"):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.norm = nn.GroupNorm(min(8, out_channels), out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.conv(x)))
+
+
+class MaskFormerDetrFPNFusionStage(nn.Module):
+    """Single FPN fusion stage combining low-resolution features with high-resolution FPN features."""
+
+    def __init__(self, fpn_channels: int, current_channels: int, output_channels: int, activation: str = "relu"):
+        super().__init__()
+        self.fpn_adapter = nn.Conv2d(fpn_channels, current_channels, kernel_size=1)
+        self.refine = MaskFormerDetrConvBlock(current_channels, output_channels, activation)
+
+    def forward(self, features: torch.Tensor, fpn_features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Current features to upsample, shape (B*Q, current_channels, H_in, W_in)
+            fpn_features: FPN features at target resolution, shape (B*Q, fpn_channels, H_out, W_out)
+
+        Returns:
+            Fused and refined features, shape (B*Q, output_channels, H_out, W_out)
+        """
+        fpn_features = self.fpn_adapter(fpn_features)
+        features = nn.functional.interpolate(features, size=fpn_features.shape[-2:], mode="nearest")
+        return self.refine(fpn_features + features)
+
+
+class MaskFormerDetrMaskHeadSmallConv(nn.Module):
+    """
+    Segmentation mask head that generates per-query masks using FPN-based progressive upsampling.
+
+    Combines attention maps (spatial localization) with encoder features (semantics) and progressively
+    upsamples through multiple scales, fusing with FPN features for high-resolution detail.
+    """
+
+    def __init__(
+        self,
+        input_channels: int,
+        fpn_channels: list[int],
+        hidden_size: int,
+        activation_function: str = "relu",
+    ):
+        super().__init__()
+        if input_channels % 8 != 0:
+            raise ValueError(f"input_channels must be divisible by 8, got {input_channels}")
+
+        self.conv1 = MaskFormerDetrConvBlock(input_channels, input_channels, activation_function)
+        self.conv2 = MaskFormerDetrConvBlock(input_channels, hidden_size // 2, activation_function)
+
+        # Progressive channel reduction: /2 -> /4 -> /8 -> /16
+        self.fpn_stages = nn.ModuleList(
+            [
+                MaskFormerDetrFPNFusionStage(fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function),
+                MaskFormerDetrFPNFusionStage(fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function),
+                MaskFormerDetrFPNFusionStage(
+                    fpn_channels[2], hidden_size // 8, hidden_size // 16, activation_function
+                ),
+            ]
+        )
+
+        self.output_conv = nn.Conv2d(hidden_size // 16, 1, kernel_size=3, padding=1)
+
+    def forward(
+        self,
+        features: torch.Tensor,
+        attention_masks: torch.Tensor,
+        fpn_features: list[torch.Tensor],
+    ) -> torch.Tensor:
+        """
+        Args:
+            features: Encoder output features, shape (batch_size, hidden_size, H, W)
+            attention_masks: Cross-attention maps from decoder, shape (batch_size, num_queries, num_heads, H, W)
+            fpn_features: List of 3 FPN features from low to high resolution, each (batch_size, C, H, W)
+
+        Returns:
+            Predicted masks, shape (batch_size * num_queries, 1, output_H, output_W)
+        """
+        num_queries = attention_masks.shape[1]
+
+        # Expand to (batch_size * num_queries) dimension
+        features = features.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1)
+        attention_masks = attention_masks.flatten(0, 1)
+        fpn_features = [
+            fpn_feat.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1) for fpn_feat in fpn_features
+        ]
+
+        hidden_states = torch.cat([features, attention_masks], dim=1)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+
+        for fpn_stage, fpn_feat in zip(self.fpn_stages, fpn_features):
+            hidden_states = fpn_stage(hidden_states, fpn_feat)
+
+        return self.output_conv(hidden_states)
+
+
+class MaskFormerDetrMHAttentionMap(nn.Module):
+    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
+
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.head_dim = hidden_size // num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+
+    def forward(
+        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ):
+        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
+        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
+
+        query_states = self.q_proj(query_states).view(query_hidden_shape)
+        key_states = nn.functional.conv2d(
+            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
+        ).view(key_hidden_shape)
+
+        batch_size, num_queries, num_heads, head_dim = query_states.shape
+        _, _, _, height, width = key_states.shape
+        query_shape = (batch_size * num_heads, num_queries, head_dim)
+        key_shape = (batch_size * num_heads, height * width, head_dim)
+        attn_weights_shape = (batch_size, num_heads, num_queries, height, width)
+
+        query = query_states.transpose(1, 2).contiguous().view(query_shape)
+        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(key_shape)
+
+        attn_weights = (
+            (torch.matmul(query * self.scaling, key.transpose(1, 2))).view(attn_weights_shape).transpose(1, 2)
+        )
+
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
+
+        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+
+        return attn_weights
+
+
+@auto_docstring
+class MaskFormerDetrPreTrainedModel(PreTrainedModel):
+    config: MaskFormerDetrConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    # Only the decoder is used: the encoder classes listed by DETR do not exist here
+    _no_split_modules = [r"MaskFormerDetrDecoderLayer"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+    _supports_flex_attn = True  # Uses create_bidirectional_masks for attention masking
+    _keys_to_ignore_on_load_unexpected = [
+        r"mask_former_detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
+    ]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        xavier_std = self.config.init_xavier_std
+
+        if isinstance(module, MaskFormerDetrMaskHeadSmallConv):
+            # MaskFormerDetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers
+            for m in module.modules():
+                if isinstance(m, nn.Conv2d):
+                    init.kaiming_uniform_(m.weight, a=1)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0)
+        elif isinstance(module, MaskFormerDetrMHAttentionMap):
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.q_proj.bias)
+            init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
+            init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
+        elif isinstance(module, MaskFormerDetrLearnedPositionEmbedding):
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the MASK_FORMER_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
+    """
+)
+@dataclass
+class MaskFormerDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
+    r"""
+    intermediate_hidden_states (`torch.Tensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
+        Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+        layernorm.
+    """
+
+    intermediate_hidden_states: torch.Tensor | None = None
 
 
 def eager_attention_forward(
@@ -514,19 +697,19 @@ class MaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            spatial_position_embeddings (`torch.FloatTensor`, *optional*):
+            spatial_position_embeddings (`torch.Tensor`, *optional*):
                 Spatial position embeddings (2D positional encodings from encoder) that are added to the keys only
                 in the cross-attention layer (not to values).
-            object_queries_position_embeddings (`torch.FloatTensor`, *optional*):
+            object_queries_position_embeddings (`torch.Tensor`, *optional*):
                 Position embeddings for the object query slots. In self-attention, these are added to both queries
                 and keys (not values). In cross-attention, these are added to queries only (not to keys or values).
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, hidden_size)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
         """
@@ -570,211 +753,6 @@ class MaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class MaskFormerDetrConvBlock(nn.Module):
-    """Basic conv block: Conv3x3 -> GroupNorm -> Activation."""
-
-    def __init__(self, in_channels: int, out_channels: int, activation: str = "relu"):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.norm = nn.GroupNorm(min(8, out_channels), out_channels)
-        self.activation = ACT2FN[activation]
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.conv(x)))
-
-
-class MaskFormerDetrFPNFusionStage(nn.Module):
-    """Single FPN fusion stage combining low-resolution features with high-resolution FPN features."""
-
-    def __init__(self, fpn_channels: int, current_channels: int, output_channels: int, activation: str = "relu"):
-        super().__init__()
-        self.fpn_adapter = nn.Conv2d(fpn_channels, current_channels, kernel_size=1)
-        self.refine = MaskFormerDetrConvBlock(current_channels, output_channels, activation)
-
-    def forward(self, features: torch.Tensor, fpn_features: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            features: Current features to upsample, shape (B*Q, current_channels, H_in, W_in)
-            fpn_features: FPN features at target resolution, shape (B*Q, fpn_channels, H_out, W_out)
-
-        Returns:
-            Fused and refined features, shape (B*Q, output_channels, H_out, W_out)
-        """
-        fpn_features = self.fpn_adapter(fpn_features)
-        features = nn.functional.interpolate(features, size=fpn_features.shape[-2:], mode="nearest")
-        return self.refine(fpn_features + features)
-
-
-class MaskFormerDetrMaskHeadSmallConv(nn.Module):
-    """
-    Segmentation mask head that generates per-query masks using FPN-based progressive upsampling.
-
-    Combines attention maps (spatial localization) with encoder features (semantics) and progressively
-    upsamples through multiple scales, fusing with FPN features for high-resolution detail.
-    """
-
-    def __init__(
-        self,
-        input_channels: int,
-        fpn_channels: list[int],
-        hidden_size: int,
-        activation_function: str = "relu",
-    ):
-        super().__init__()
-        if input_channels % 8 != 0:
-            raise ValueError(f"input_channels must be divisible by 8, got {input_channels}")
-
-        self.conv1 = MaskFormerDetrConvBlock(input_channels, input_channels, activation_function)
-        self.conv2 = MaskFormerDetrConvBlock(input_channels, hidden_size // 2, activation_function)
-
-        # Progressive channel reduction: /2 -> /4 -> /8 -> /16
-        self.fpn_stages = nn.ModuleList(
-            [
-                MaskFormerDetrFPNFusionStage(fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function),
-                MaskFormerDetrFPNFusionStage(fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function),
-                MaskFormerDetrFPNFusionStage(
-                    fpn_channels[2], hidden_size // 8, hidden_size // 16, activation_function
-                ),
-            ]
-        )
-
-        self.output_conv = nn.Conv2d(hidden_size // 16, 1, kernel_size=3, padding=1)
-
-    def forward(
-        self,
-        features: torch.Tensor,
-        attention_masks: torch.Tensor,
-        fpn_features: list[torch.Tensor],
-    ) -> torch.Tensor:
-        """
-        Args:
-            features: Encoder output features, shape (batch_size, hidden_size, H, W)
-            attention_masks: Cross-attention maps from decoder, shape (batch_size, num_queries, num_heads, H, W)
-            fpn_features: List of 3 FPN features from low to high resolution, each (batch_size, C, H, W)
-
-        Returns:
-            Predicted masks, shape (batch_size * num_queries, 1, output_H, output_W)
-        """
-        num_queries = attention_masks.shape[1]
-
-        # Expand to (batch_size * num_queries) dimension
-        features = features.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1)
-        attention_masks = attention_masks.flatten(0, 1)
-        fpn_features = [
-            fpn_feat.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1) for fpn_feat in fpn_features
-        ]
-
-        hidden_states = torch.cat([features, attention_masks], dim=1)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-
-        for fpn_stage, fpn_feat in zip(self.fpn_stages, fpn_features):
-            hidden_states = fpn_stage(hidden_states, fpn_feat)
-
-        return self.output_conv(hidden_states)
-
-
-class MaskFormerDetrMHAttentionMap(nn.Module):
-    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.head_dim = hidden_size // num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = dropout
-
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-
-    def forward(
-        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
-    ):
-        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
-        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
-
-        query_states = self.q_proj(query_states).view(query_hidden_shape)
-        key_states = nn.functional.conv2d(
-            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
-        ).view(key_hidden_shape)
-
-        batch_size, num_queries, num_heads, head_dim = query_states.shape
-        _, _, _, height, width = key_states.shape
-        query_shape = (batch_size * num_heads, num_queries, head_dim)
-        key_shape = (batch_size * num_heads, height * width, head_dim)
-        attn_weights_shape = (batch_size, num_heads, num_queries, height, width)
-
-        query = query_states.transpose(1, 2).contiguous().view(query_shape)
-        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(key_shape)
-
-        attn_weights = (
-            (torch.matmul(query * self.scaling, key.transpose(1, 2))).view(attn_weights_shape).transpose(1, 2)
-        )
-
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-
-        return attn_weights
-
-
-@auto_docstring
-class MaskFormerDetrPreTrainedModel(PreTrainedModel):
-    config: MaskFormerDetrConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = [r"MaskFormerDetrConvEncoder", r"MaskFormerDetrEncoderLayer", r"MaskFormerDetrDecoderLayer"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_attention_backend = True
-    _supports_flex_attn = True  # Uses create_bidirectional_masks for attention masking
-    _keys_to_ignore_on_load_unexpected = [
-        r"mask_former_detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
-    ]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.init_std
-        xavier_std = self.config.init_xavier_std
-
-        if isinstance(module, MaskFormerDetrMaskHeadSmallConv):
-            # MaskFormerDetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers
-            for m in module.modules():
-                if isinstance(m, nn.Conv2d):
-                    init.kaiming_uniform_(m.weight, a=1)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
-        elif isinstance(module, MaskFormerDetrMHAttentionMap):
-            init.zeros_(module.k_proj.bias)
-            init.zeros_(module.q_proj.bias)
-            init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
-            init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
-        elif isinstance(module, MaskFormerDetrLearnedPositionEmbedding):
-            init.uniform_(module.row_embeddings.weight)
-            init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
-
 class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
     """
     Transformer decoder that refines a set of object queries. It is composed of a stack of [`MaskFormerDetrDecoderLayer`] modules,
@@ -815,7 +793,7 @@ class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
     ) -> MaskFormerDetrDecoderOutput:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 The query embeddings that are passed into the decoder.
 
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -825,7 +803,7 @@ class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
                 - 0 for queries that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -835,9 +813,9 @@ class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            spatial_position_embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Spatial position embeddings (2D positional encodings from encoder) that are added to the keys in each cross-attention layer.
-            object_queries_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            object_queries_position_embeddings (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
                 Position embeddings for the object query slots that are added to the queries and keys in each self-attention layer.
         """
 
@@ -984,6 +962,11 @@ class MaskFormerHungarianMatcher(nn.Module):
     def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor` of dim `batch_size, num_queries, num_labels` with the
@@ -1029,6 +1012,10 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+            # these predictions only if there are no other valid predictions.
+            max_value = torch.finfo(cost_matrix.dtype).max
+            cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
             # do the assignment using the hungarian algorithm in scipy
             assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
@@ -1159,7 +1146,7 @@ class MaskFormerLoss(nn.Module):
         self.eos_coef = eos_coef
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
     def _max_by_axis(self, the_list: list[list[int]]) -> list[int]:
         maxes = the_list[0]
@@ -1471,7 +1458,6 @@ class MaskFormerPixelDecoder(nn.Module):
         )
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class MaskFormerSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -1479,36 +1465,56 @@ class MaskFormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -1516,6 +1522,17 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class PredictionBlock(nn.Module):
@@ -1632,7 +1649,9 @@ class MaskFormerTransformerModule(nn.Module):
         super().__init__()
         hidden_size = config.decoder_config.hidden_size
         should_project = in_features != hidden_size
-        self.position_embedder = MaskFormerSinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
+        self.position_embedder = MaskFormerSinePositionEmbedding(
+            num_position_features=hidden_size // 2, normalize=True
+        )
         self.queries_embedder = nn.Embedding(config.decoder_config.num_queries, hidden_size)
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
         self.decoder = MaskFormerDetrDecoder(config=config.decoder_config)
@@ -1646,7 +1665,6 @@ class MaskFormerTransformerModule(nn.Module):
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
@@ -1658,8 +1676,12 @@ class MaskFormerTransformerModule(nn.Module):
 
         batch_size, num_channels, height, width = image_features.shape
         # rearrange both image_features and object_queries "b c h w -> b (h w) c"
-        image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        object_queries = object_queries.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        object_queries = (
+            self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
+            .view(batch_size, num_channels, height * width)
+            .transpose(1, 2)
+        )
+        image_features = image_features.view(batch_size, num_channels, height * width).transpose(1, 2)
 
         decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,
@@ -1684,8 +1706,8 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
-        std = self.config.init_std
         if isinstance(module, MaskFormerTransformerModule):
             if module.input_projection is not None:
                 init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
@@ -1707,23 +1729,16 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 if isinstance(submodule, nn.Linear):
                     init.xavier_uniform_(submodule.weight, gain=xavier_std)
                     init.constant_(submodule.bias, 0)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        # copied from DETR
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+        # The base class treats BatchNorm as a norm (weight=ones_); MaskFormer instead applies a
+        # normal_ init to the weight and resets the running stats, so this branch must be kept.
+        elif isinstance(module, nn.BatchNorm2d):
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 init.zeros_(module.bias)
             if getattr(module, "running_mean", None) is not None:
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, MaskFormerLoss):
             empty_weight = torch.ones(module.num_labels + 1)
             empty_weight[-1] = module.eos_coef
@@ -1757,7 +1772,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
@@ -1941,7 +1956,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
@@ -1976,7 +1991,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation

@@ -24,13 +24,11 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_timm_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, requires_backends
 
 
 if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
@@ -167,6 +165,15 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"heads ({self.num_attention_heads})."
             )
 
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
@@ -195,6 +202,34 @@ class Gemma3nTextConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         return kwargs
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
+        # After this index, all layers are consumers
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
+
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer][::-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
@@ -432,7 +467,7 @@ class Gemma3nConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma3n"
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": Gemma3nTextConfig,
         "vision_config": Gemma3nVisionConfig,
         "audio_config": Gemma3nAudioConfig,
@@ -451,27 +486,7 @@ class Gemma3nConfig(PreTrainedConfig):
     audio_token_id: int | None = 262_273
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3nTextConfig()
-            logger.info("text_config is None, using default Gemma3nTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3nTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma3nVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Gemma3nVisionConfig()
-            logger.info("vision_config is None, using default Gemma3nVisionConfig vision config.")
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma3nAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Gemma3nAudioConfig()
-            logger.info("audio_config is None. Using default Gemma3nAudioConfig.")
-
-        super().__post_init__(**kwargs)
+    use_cache: bool = True
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

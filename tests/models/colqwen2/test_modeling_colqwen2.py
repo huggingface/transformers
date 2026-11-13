@@ -150,7 +150,7 @@ class ColQwen2ForRetrievalModelTester:
         )
 
         # Hardcoded image grid size: do not change unless you modified image size or patch size!
-        image_grid_thw = torch.tensor([1, 4, 4]).repeat(self.batch_size, 1)
+        image_grid_thw = torch.tensor([1, 4, 4], device=torch_device).repeat(self.batch_size, 1)
 
         # NOTE: The following adjustment ensures correct behavior with DDP on multiple GPUs.
         # Line is copied from `src/transformers/models/colqwen2/processing_colqwen2.py`
@@ -201,54 +201,11 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
-    test_torch_exportable = False
     test_missing_keys = False
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColQwen2Config, has_text_modality=False)
-
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @slow
     @require_vision
@@ -266,6 +223,12 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**inputs, return_dict=True)
 
             self.assertIsInstance(outputs, ColQwen2ForRetrievalOutput)
+
+    @unittest.skip(
+        reason="Conversions applied to underlying VLM saved in legacy format. Colqwen2 doesn't match any of those regexes!"
+    )
+    def test_reverse_loading_mapping(self, **kwargs):
+        pass
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of Qwen2-VL. Skip for now.")
     def test_model_parallelism(self):

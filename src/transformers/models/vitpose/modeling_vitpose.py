@@ -41,20 +41,20 @@ logger = logging.get_logger(__name__)
 @dataclass
 class VitPoseEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Loss is not supported at this moment. See https://github.com/ViTAE-Transformer/ViTPose/tree/main/mmpose/models/losses for further detail.
-    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
+    heatmaps (`torch.Tensor` of shape `(batch_size, num_keypoints, height, width)`):
         Heatmaps as predicted by the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: torch.FloatTensor | None = None
-    heatmaps: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    heatmaps: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -68,13 +68,11 @@ class VitPosePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
@@ -99,18 +97,20 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
 
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
+
     batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
     if target_type == "combined-target":
         channels = 3
+        output_flipped = output_flipped.clone()  # clone to avoid mutation of output_flipped argument
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
     output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
     output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
-    for left, right in flip_pairs.tolist():
-        output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
-        output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
+    left_indices, right_indices = flip_pairs.unbind(-1)
+    output_flipped_back[:, left_indices, ...] = output_flipped[:, right_indices, ...]
+    output_flipped_back[:, right_indices, ...] = output_flipped[:, left_indices, ...]
     output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
@@ -230,7 +230,7 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> from transformers import AutoImageProcessor, VitPoseForPoseEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> processor = AutoImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")

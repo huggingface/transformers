@@ -39,9 +39,9 @@ logger = logging.get_logger(__name__)
 )
 @dataclass
 class Swin2SREncoderOutput(ModelOutput):
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -87,7 +87,7 @@ class Swin2SREmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.window_size = config.window_size
 
-    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor]:
+    def forward(self, pixel_values: torch.Tensor | None) -> tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
 
         if self.position_embeddings is not None:
@@ -113,7 +113,7 @@ class Swin2SRPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
         self.layernorm = nn.LayerNorm(config.embed_dim) if normalize_patches else None
 
-    def forward(self, embeddings: torch.FloatTensor | None) -> tuple[torch.Tensor, tuple[int]]:
+    def forward(self, embeddings: torch.Tensor | None) -> tuple[torch.Tensor, tuple[int]]:
         embeddings = self.projection(embeddings)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
@@ -217,8 +217,8 @@ class Swin2SRSelfAttention(nn.Module):
         )
 
         relative_coords_table, relative_position_index = self.create_coords_table_and_index()
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_coords_table = nn.Buffer(relative_coords_table, persistent=False)
+        self.relative_position_index = nn.Buffer(relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
@@ -228,7 +228,7 @@ class Swin2SRSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -363,7 +363,7 @@ class Swin2SRAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)
@@ -458,32 +458,29 @@ class Swin2SRLayer(nn.Module):
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
-    def get_attn_mask(self, height, width, dtype):
-        if self.shift_size > 0:
-            # calculate attention mask for shifted window multihead self attention
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
-            height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
-                    count += 1
+    def get_attn_mask(self, height, width, dtype, device=None):
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
-            mask_windows = window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
-        else:
-            attn_mask = None
+        Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
+        as ``h_region * 3 + w_region``. Regions per axis:
+        - 0: indices ``[0, axis - window_size)``
+        - 1: indices ``[axis - window_size, axis - shift_size)``
+        - 2: indices ``[axis - shift_size, axis)``
+        Implementation note: a single arithmetic pass on `torch.arange` (two comparisons +
+        broadcast add) replaces the original 9-iteration nested-Python-loop slice-assignment —
+        fully vectorised, no per-cell host-side scatter, no GPU↔host sync.
+        """
+        if self.shift_size <= 0:
+            return None
+        h_idx = torch.arange(height, device=device)
+        w_idx = torch.arange(width, device=device)
+        h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
+        w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
@@ -516,9 +513,9 @@ class Swin2SRLayer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
@@ -691,13 +688,11 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, Swin2SRSelfAttention):
             init.constant_(module.logit_scale, math.log(10))
             relative_coords_table, relative_position_index = module.create_coords_table_and_index()
@@ -713,7 +708,7 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Swin2SRModel(Swin2SRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swin2SRConfig):
         super().__init__(config)
         self.config = config
 
@@ -721,7 +716,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
             mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
         else:
             mean = torch.zeros(1, 1, 1, 1)
-        self.register_buffer("mean", mean, persistent=False)
+        self.mean = nn.Buffer(mean, persistent=False)
 
         self.img_range = config.img_range
 
@@ -749,7 +744,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
 
         # 2. normalize
-        mean = self.mean.type_as(pixel_values)
+        mean = self.mean.to(device=pixel_values.device, dtype=pixel_values.dtype)
         pixel_values = (pixel_values - mean) * self.img_range
 
         return pixel_values
@@ -757,7 +752,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -946,7 +941,7 @@ class PixelShuffleAuxUpsampler(nn.Module):
     """
 )
 class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swin2SRConfig):
         super().__init__(config)
 
         self.swin2sr = Swin2SRModel(config)
@@ -975,7 +970,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -988,7 +983,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> import torch
          >>> import numpy as np
          >>> from PIL import Image
-         >>> import httpx
+         >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
          >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution

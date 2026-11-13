@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -26,7 +25,6 @@ from transformers import (
     T5Gemma2EncoderConfig,
     T5Gemma2TextConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from transformers.testing_utils import (
@@ -40,6 +38,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -54,12 +53,10 @@ if is_torch_available():
         T5Gemma2Model,
     )
 
-if is_vision_available():
-    from PIL import Image
-
 
 class T5Gemma2ModelTester:
     config_class = T5Gemma2Config
+
     text_config_class = T5Gemma2TextConfig
     encoder_config_class = T5Gemma2EncoderConfig
     decoder_config_class = T5Gemma2DecoderConfig
@@ -1087,6 +1084,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): ' a bumble bee in a flower bed.',
+                ("xpu", None): ' a bumble bee in a flower bed.',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -1095,8 +1093,8 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
+        image = load_test_image(url)
 
         prompt = "<start_of_image> in this image, there is"
         model_inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
@@ -1107,7 +1105,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
     def test_model_generation_batch_270m(self):
         expected_texts = Expectations(
             {
-                ("cuda", None): [' a bumble bee in a flower bed.', ', a bumblebee is seen in the garden of a house in the UK.'],
+                ("cuda", (8, 6)): [" a bumble bee in a flower bed.", " you can see a bumble bee in the garden.\n\nThe bumble bee is a very common species in the UK. It is a very common species in"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -1116,8 +1114,8 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
+        image = load_test_image(url)
 
         prompt = ["<start_of_image> in this image, there is", "<start_of_image> in this image"]
         model_inputs = processor(text=prompt, images=[[image], [image]], padding=True, return_tensors="pt").to(

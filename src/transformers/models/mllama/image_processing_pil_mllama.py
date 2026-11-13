@@ -17,7 +17,6 @@ import math
 from functools import lru_cache
 
 import numpy as np
-from PIL import Image
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -33,7 +32,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils import TensorType, auto_docstring
 
 
 def split_to_tiles_np(image: np.ndarray, num_tiles_height: int, num_tiles_width: int) -> np.ndarray:
@@ -192,25 +191,6 @@ def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_til
     _validate_size(size)
 
 
-# Adapted from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    """
-    if not is_vision_available() or not isinstance(image, Image.Image):
-        return image
-
-    if image.mode == "RGB":
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
-
-
 # Adapted from transformers.models.mllama.image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
@@ -359,11 +339,11 @@ class MllamaImageProcessorPil(PilBackend):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
-    do_resize = True
+    do_resize = True  # trf-ignore: TRF016 (enforced by validator)
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    do_pad = True
+    do_pad = True  # trf-ignore: TRF016 (enforced by validator)
     max_image_tiles = 4
     valid_kwargs = MllamaImageProcessorKwargs
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
@@ -384,10 +364,6 @@ class MllamaImageProcessorPil(PilBackend):
         """Prepare a nested images structure for processing."""
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """Converts an image to RGB format."""
-        return convert_to_rgb(image)
 
     def pad(
         self,

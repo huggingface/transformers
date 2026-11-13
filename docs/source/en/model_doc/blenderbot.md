@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-28 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2020-04-28 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # Blenderbot
 
@@ -84,10 +84,6 @@ print(tokenizer.batch_decode(reply_ids))
 ## BlenderbotTokenizer
 
 [[autodoc]] BlenderbotTokenizer
-
-## BlenderbotTokenizerFast
-
-[[autodoc]] BlenderbotTokenizerFast
 
 ## BlenderbotModel
 

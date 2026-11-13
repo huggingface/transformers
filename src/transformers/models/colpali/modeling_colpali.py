@@ -20,7 +20,7 @@ from torch import nn
 
 from transformers import AutoModel
 
-from ... import initialization as init
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -40,21 +40,7 @@ class ColPaliPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.vlm_config.text_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+        super()._init_weights(module)
 
 
 @auto_docstring(
@@ -65,26 +51,26 @@ class ColPaliPreTrainedModel(PreTrainedModel):
 @dataclass
 class ColPaliForRetrievalOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -106,42 +92,35 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
-        self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
-
         self.vlm = AutoModel.from_config(config.vlm_config)
-
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
-
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ColPaliForRetrievalOutput:
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
-        output_hidden_states = kwargs.pop("output_hidden_states", None)
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
 
         vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
-            output_hidden_states=True,
             **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_hidden_states = vlm_output.hidden_states
         vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)

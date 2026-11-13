@@ -53,7 +53,7 @@ from .configuration_beit import BeitConfig
 @dataclass
 class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
@@ -189,8 +189,9 @@ class BeitRelativePositionBias(nn.Module):
         )  # 2*Wh-1 * 2*Ww-1, nH
         # cls to token & token 2 cls & cls to cls
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=10)
-    def generate_relative_position_index(self, window_size: tuple[int, int]) -> torch.Tensor:
+    def generate_relative_position_index(window_size: tuple[int, int]) -> torch.Tensor:
         """
         This method creates the relative position index, modified to support arbitrary window sizes,
         as introduced in [MiDaS v3.1](https://huggingface.co/papers/2307.14460).
@@ -693,12 +694,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.beit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1013,10 +1008,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
@@ -1037,7 +1028,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-        kwargs["output_hidden_states"] = True
         outputs = self.beit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1086,7 +1076,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     """
 )
 class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BeitConfig):
         super().__init__(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -1131,7 +1121,6 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
         patch_width = width // self.config.patch_size
-        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         outputs = self.beit(pixel_values, **kwargs)
 
         hidden_states = outputs.hidden_states

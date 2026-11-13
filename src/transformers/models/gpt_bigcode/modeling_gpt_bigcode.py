@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 # Use separate functions for each case because conditionals prevent kernel fusion.
 # TODO: Could have better fused kernels depending on scaling and dropout.
 #  Is it doable without writing 32 functions?
-@torch.jit.script
 def upcast_masked_softmax(
     x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
 ):
@@ -62,7 +61,6 @@ def upcast_masked_softmax(
     return x
 
 
-@torch.jit.script
 def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
     input_dtype = x.dtype
     x = x.to(softmax_dtype) * scale
@@ -70,7 +68,6 @@ def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
     return x
 
 
-@torch.jit.script
 def masked_softmax(x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor):
     x = torch.where(mask, x, mask_value)
     x = torch.nn.functional.softmax(x, dim=-1)
@@ -251,7 +248,7 @@ class GPTBigCodeMLP(nn.Module):
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -291,7 +288,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
         **kwargs,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_output, _ = self.attn(
@@ -337,9 +334,11 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTBigCodeBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": GPTBigCodeBlock,
         "attentions": OutputRecorder(GPTBigCodeAttention, index=1, layer_name="attn"),
@@ -367,7 +366,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
@@ -380,8 +379,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
+        self.bias = nn.Buffer(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
         )
 
         self.gradient_checkpointing = False
@@ -509,7 +508,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.transformer = GPTBigCodeModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -566,9 +565,8 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -599,7 +597,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     """
 )
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTBigCodeModel(config)
@@ -635,10 +633,6 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        labels (`torch.Tensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
@@ -712,7 +706,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
 
 @auto_docstring
 class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

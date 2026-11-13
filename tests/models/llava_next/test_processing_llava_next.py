@@ -32,17 +32,13 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b")
+        tokenizer = tokenizer_class.from_pretrained("hf-internal-testing/tiny-processor-llava")
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         if not tokenizer.pad_token:
             tokenizer.pad_token = "[PAD]"
             if tokenizer.pad_token_id is None:
                 tokenizer.pad_token_id = 0
         return tokenizer
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
 
     @staticmethod
     def prepare_processor_dict():

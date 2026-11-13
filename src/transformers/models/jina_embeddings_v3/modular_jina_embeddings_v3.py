@@ -107,7 +107,7 @@ class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         embeddings = inputs_embeds
         if inputs_embeds is None:
@@ -117,13 +117,7 @@ class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
         device = embeddings.device
 
         if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
-                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
-                buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
-                token_type_ids = buffered_token_type_ids.expand(*input_shape)
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -212,7 +206,7 @@ class JinaEmbeddingsV3Layer(GPTNeoXLayer):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
         attention_output, _ = self.self_attn(
             hidden_states,
@@ -318,7 +312,7 @@ class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):
 
 
 class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         JinaEmbeddingsV3PreTrainedModel.__init__(self, config=config)
 
         self.lm_head = JinaEmbeddingsV3LMHead(config)
@@ -332,10 +326,10 @@ class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
@@ -349,10 +343,6 @@ class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
             >= 2. All the value in this tensor should be always < type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         outputs = self.roberta(
             input_ids=input_ids,

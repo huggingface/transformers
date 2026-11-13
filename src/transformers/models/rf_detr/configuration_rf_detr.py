@@ -20,12 +20,12 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
@@ -98,7 +98,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@auto_docstring(checkpoint="Roboflow/rf-detr-base")
 @strict
 class RfDetrConfig(PreTrainedConfig):
     r"""
@@ -154,10 +154,10 @@ class RfDetrConfig(PreTrainedConfig):
     ```python
     >>> from transformers import RfDetrConfig, RfDetrModel
 
-    >>> # Initializing a LW-DETR stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a RF-DETR roboflow/rf-detr-base style configuration
     >>> configuration = RfDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the stevenbucaille/RfDetr_small_60e_coco style configuration
+    >>> # Initializing a model (with random weights) from the Roboflow/rf-detr-base style configuration
     >>> model = RfDetrModel(configuration)
 
     >>> # Accessing the model configuration
@@ -165,7 +165,19 @@ class RfDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "rf_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="rf_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     hidden_expansion: float = 0.5

@@ -28,9 +28,10 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 class PPOCRV5ServerRecImageProcessorKwargs(ImagesKwargs, total=False):
@@ -85,27 +86,27 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
 
         # [Key Change] Use get_target_size to calculate target_size for resizing.
-        shape_list = list(grouped_images.keys())
+        shape_list = [image.shape[-2:] for image in images]
         target_size = self.get_target_size(shape_list)
 
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images.float(), size=target_size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad and target_size.width < pad_size.width:
@@ -140,6 +141,7 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
 
         return SizeDict(height=target_height, width=target_width)
 
+    @requires(backends=("torch",))
     def post_process_text_recognition(
         self,
         predictions,
@@ -156,7 +158,6 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
                 - "text" (str): The decoded text string.
                 - "score" (float): The average confidence score of the characters in the decoded text.
         """
-        requires_backends(self, ["torch"])
 
         logits = predictions.last_hidden_state
         batch_size = logits.shape[0]

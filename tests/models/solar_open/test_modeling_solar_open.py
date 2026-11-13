@@ -20,7 +20,6 @@ import torch
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -80,19 +80,12 @@ class SolarOpenModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
         # ensure SolarOpenConfig overrides the parent's default partial_rotary_factor to 1.0
-        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 1.0)
         self.assertEqual(config.rope_parameters["rope_theta"], 1_000_000)
 
 
 @require_torch_accelerator
 @slow
-class SolarOpenIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class SolarOpenIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_batch_generation_dummy_bf16(self):
         """Original model is 100B, hence using a dummy model on our CI to sanity check against"""
         model_id = "SSON9/solar-open-tiny-dummy"

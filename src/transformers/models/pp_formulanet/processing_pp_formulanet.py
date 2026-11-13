@@ -24,6 +24,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -35,6 +36,10 @@ class PPFormulaNetProcessor(ProcessorMixin):
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
+
+    images_kwargs = {
+        "data_format": "channels_first",
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -70,7 +75,6 @@ class PPFormulaNetProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -151,5 +155,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
         generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
         return [self.post_process_generation(text) for text in generated_texts]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PPFormulaNetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["PPFormulaNetProcessor"]

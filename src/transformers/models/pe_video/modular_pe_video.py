@@ -35,13 +35,32 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 
 
 # TODO: not sure about the typing for text_model_output
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`PeVideoModel`].
+    """
+)
 @dataclass
-# @auto_docstring
 class PeVideoOutput(ModelOutput):
-    loss: torch.FloatTensor | None = None
-    logits_video_text: torch.FloatTensor | None = None
-    text_video_embeds: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
+    r"""
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
+        Contrastive loss computed between video and text representations.
+    logits_video_text (`torch.Tensor` of shape `(batch_size, batch_size)`, *optional*):
+        Similarity logits between video and text embeddings.
+    text_video_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
+        Text embeddings projected to the video-text space.
+    video_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
+        Video embeddings projected to the video-text space.
+    text_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the text encoder, including last hidden state and pooled output.
+    video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the video encoder, including last hidden state and pooled output.
+    """
+
+    loss: torch.Tensor | None = None
+    logits_video_text: torch.Tensor | None = None
+    text_video_embeds: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     video_outputs: BaseModelOutputWithPooling = None
 
@@ -102,15 +121,22 @@ class PeVideoEncoder(PeAudioVideoEncoder):
         super().__init__(config)
         self.embedder = PeVideoEncoderEmbedder(config)
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        """
         inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
@@ -193,6 +219,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             return video_outputs
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -202,10 +229,19 @@ class PeVideoModel(PeVideoPreTrainedModel):
         return_loss: bool | None = None,
         **kwargs,
     ) -> PeVideoOutput:
+        r"""
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the loss.
+        """
         video_outputs: BaseModelOutputWithPooling = self.video_encoder(
             pixel_values_videos=pixel_values_videos, padding_mask_videos=padding_mask_videos, **kwargs
         )
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         video_embeds = video_outputs.pooler_output

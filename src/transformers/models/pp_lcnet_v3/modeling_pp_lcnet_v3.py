@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
@@ -314,8 +315,8 @@ class PPLCNetV3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, (PPLCNetV3LearnableAffineBlock)):
-            nn.init.ones_(module.scale)
-            nn.init.zeros_(module.bias)
+            init.ones_(module.scale)
+            init.zeros_(module.bias)
 
 
 @auto_docstring(
@@ -362,7 +363,6 @@ class PPLCNetV3Backbone(BackboneMixin, PPLCNetV3PreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()

@@ -137,11 +137,11 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
     def forward(
         self,
-        hidden_states: tuple[torch.FloatTensor] | None,
+        hidden_states: tuple[torch.Tensor] | None,
         past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor | tuple[torch.Tensor], ...]:
@@ -230,7 +230,7 @@ class DecisionTransformerGPT2MLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -260,11 +260,11 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: tuple[torch.FloatTensor] | None,
+        hidden_states: tuple[torch.Tensor] | None,
         past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = False,
         **kwargs,
     ) -> torch.Tensor:
@@ -313,6 +313,8 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     config: DecisionTransformerConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "hidden_states": DecisionTransformerGPT2Block,
@@ -342,7 +344,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -373,12 +375,12 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
@@ -413,7 +415,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             position_ids=position_ids,
         )
 
-        encoder_attention_mask = None
         if encoder_hidden_states is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
@@ -466,20 +467,20 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 @dataclass
 class DecisionTransformerOutput(ModelOutput):
     r"""
-    state_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, state_dim)`):
+    state_preds (`torch.Tensor` of shape `(batch_size, sequence_length, state_dim)`):
         Environment state predictions
-    action_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, action_dim)`):
+    action_preds (`torch.Tensor` of shape `(batch_size, sequence_length, action_dim)`):
         Model action predictions
-    return_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
+    return_preds (`torch.Tensor` of shape `(batch_size, sequence_length, 1)`):
         Predicted returns for each state
     """
 
-    state_preds: torch.FloatTensor | None = None
-    action_preds: torch.FloatTensor | None = None
-    return_preds: torch.FloatTensor | None = None
-    hidden_states: torch.FloatTensor | None = None
-    attentions: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
+    state_preds: torch.Tensor | None = None
+    action_preds: torch.Tensor | None = None
+    return_preds: torch.Tensor | None = None
+    hidden_states: torch.Tensor | None = None
+    attentions: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
 
 
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
@@ -492,6 +493,8 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 @auto_docstring(
@@ -507,7 +510,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
         self.config = config
         self.hidden_size = config.hidden_size
@@ -535,26 +538,26 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        states: torch.FloatTensor | None = None,
-        actions: torch.FloatTensor | None = None,
-        rewards: torch.FloatTensor | None = None,
-        returns_to_go: torch.FloatTensor | None = None,
+        states: torch.Tensor | None = None,
+        actions: torch.Tensor | None = None,
+        rewards: torch.Tensor | None = None,
+        returns_to_go: torch.Tensor | None = None,
         timesteps: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | DecisionTransformerOutput:
+    ) -> tuple[torch.Tensor] | DecisionTransformerOutput:
         r"""
-        states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
+        states (`torch.Tensor` of shape `(batch_size, episode_length, state_dim)`):
             The states for each step in the trajectory
-        actions (`torch.FloatTensor` of shape `(batch_size, episode_length, act_dim)`):
+        actions (`torch.Tensor` of shape `(batch_size, episode_length, act_dim)`):
             The actions taken by the "expert" policy for the current state, these are masked for auto regressive
             prediction
-        rewards (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
+        rewards (`torch.Tensor` of shape `(batch_size, episode_length, 1)`):
             The rewards for each state, action
-        returns_to_go (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
+        returns_to_go (`torch.Tensor` of shape `(batch_size, episode_length, 1)`):
             The returns for each state in the trajectory
         timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
             The timestep for each step in the trajectory

@@ -29,7 +29,7 @@ AVERAGE_TESTS_PER_NODES = 5
 def count_lines(filepath):
     """Count the number of lines in a file."""
     try:
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             return len(f.read().split("\n"))
     except FileNotFoundError:
         return 0
@@ -45,7 +45,7 @@ def compute_parallel_nodes(line_count, max_tests_per_node=10):
 
 def process_artifacts(input_file, output_file):
     # Read the JSON data from the input file
-    with open(input_file, "r") as f:
+    with open(input_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     # Process items and build the new JSON structure
@@ -64,7 +64,7 @@ def process_artifacts(input_file, output_file):
         del transformed_data["generated_config"]
 
     # Write the transformed data to the output file
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(transformed_data, f, indent=2)
 
 

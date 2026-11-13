@@ -120,9 +120,19 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         self.keep_accents = keep_accents
 
         # Used for whitespace normalization in input texts
-        # fmt : off
-        self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
-        # fmt : on
+        self.whitespaces = {
+            "\u0020",  # space
+            "\u2002",  # en space
+            "\u2003",  # em space
+            "\u2005",  # four-per-em space
+            "\u2008",  # punctuation space
+            "\u2009",  # thin space
+            "\u200a",  # hair space
+            "\u202f",  # narrow no-break space
+            "\u3000",  # ideographic space
+            "\ufffc",  # object replacement character
+            "\u0084",  # control character, also removed by non_printing_characters_re
+        }
 
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
@@ -168,12 +178,13 @@ class GPTSw3Tokenizer(SentencePieceBackend):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 # TODO: Check if this is needed, as it ensures that decode(encode(doc)) != doc by adding extra whitespace in the decoded document
                 if not prev_is_special:
                     out_string += " "

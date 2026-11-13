@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2023-12-13.*
+*This model was published in HF papers on 2023-12-01 and contributed to Hugging Face Transformers on 2023-12-13.*
 
 # VipLlava
 
@@ -38,7 +38,7 @@ This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada)
 
 ## Usage tips
 
-- The architecture is similar than llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
+- The architecture is similar to llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
 
 - We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
 

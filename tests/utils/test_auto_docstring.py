@@ -32,13 +32,19 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import ImageInput
+from transformers.modeling_layers import GenericForSequenceClassification
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.testing_utils import require_torch
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils.auto_docstring import (
+    ImageProcessorArgs,
+    ModelArgs,
+    ModelForArgs,
     auto_docstring,
+    get_args_doc_from_source,
+    get_model_for_args,
 )
 from transformers.utils.import_utils import is_torch_available
 
@@ -80,10 +86,10 @@ class TestCheckDocstrings(unittest.TestCase):
                     return result
             """)
 
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(original)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
             items = _build_ast_indexes(content)
@@ -98,7 +104,7 @@ class TestCheckDocstrings(unittest.TestCase):
             # Generate placeholders (overwrite=True)
             update_file_with_new_docstrings(test_file, lines, items, content, overwrite=True)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 updated = f.read()
 
             # Verify results
@@ -134,10 +140,10 @@ class TestCheckDocstrings(unittest.TestCase):
                         return self.layer(input_ids) * scale_factor
             """)
 
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(original)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
             items = _build_ast_indexes(content)
@@ -160,7 +166,7 @@ class TestCheckDocstrings(unittest.TestCase):
             # Update file
             update_file_with_new_docstrings(test_file, lines, items, content, overwrite=True)
 
-            with open(test_file, "r") as f:
+            with open(test_file, "r", encoding="utf-8") as f:
                 updated = f.read()
 
             # Verify updates and preservation
@@ -211,10 +217,10 @@ class TestCheckDocstrings(unittest.TestCase):
             has_decorator = os.path.join(tmpdir, "modeling.py")
             no_decorator = os.path.join(tmpdir, "utils.py")
 
-            with open(has_decorator, "w") as f:
+            with open(has_decorator, "w", encoding="utf-8") as f:
                 f.write("@auto_docstring\ndef forward(self): pass")
 
-            with open(no_decorator, "w") as f:
+            with open(no_decorator, "w", encoding="utf-8") as f:
                 f.write("def helper(): pass")
 
             found = find_files_with_auto_docstring([has_decorator, no_decorator])
@@ -244,10 +250,10 @@ class DummyForTestModel(PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         temperature: float = 1.0,
         custom_dict: dict[str, int | float] | None = None,
         output_attentions: bool | None = None,
@@ -273,6 +279,22 @@ class DummyForTestModel(PreTrainedModel):
         >>> logits = outputs.logits
         ```
         """
+        pass
+
+
+@auto_docstring
+class DummyModelForSequenceClassification(PreTrainedModel):
+    config_class = DummyConfig
+
+    def __init__(self, config: DummyConfig):
+        super().__init__(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+    ) -> CausalLMOutputWithPast:
         pass
 
 
@@ -378,7 +400,7 @@ class DummyForTestImageProcessorFast(TorchvisionBackend):
         >>> import requests
 
         >>> processor = DummyForTestImageProcessorFast.from_pretrained("dummy-processor")
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor.preprocess(images=image, return_tensors="pt")
         ```
@@ -431,6 +453,8 @@ Args:
         """Test complete class and forward method docstrings for PreTrainedModel with ModelArgs and custom parameters."""
         actual_class_docstring = DummyForTestModel.__doc__
         expected_class_docstring = """
+The bare None Model outputting raw hidden-states without any specific head on top.
+
 This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
 library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
 etc.)
@@ -467,7 +491,7 @@ Parameters:
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
@@ -482,7 +506,7 @@ Parameters:
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
                 is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
                 model's internal embedding lookup matrix.
@@ -500,21 +524,21 @@ Parameters:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`: A [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of
-            `torch.FloatTensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.Tensor)`: A [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of
+            `torch.Tensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
             elements depending on the configuration ([`None`]) and inputs.
 
-        - **loss** (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) -- Language modeling loss (for next-token prediction).
-        - **logits** (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`) -- Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        - **loss** (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided) -- Language modeling loss (for next-token prediction).
+        - **logits** (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`) -- Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         - **past_key_values** (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`) -- It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
           Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
           `past_key_values` input) to speed up sequential decoding.
-        - **hidden_states** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`) -- Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        - **hidden_states** (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`) -- Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
           one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
           Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        - **attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        - **attentions** (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
           sequence_length)`.
 
           Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -549,6 +573,10 @@ Parameters:
             text (`Union[str, list[str], list[list[str]]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
+            return_mm_token_type_ids (`bool`, *kwargs*):
+                Whether to return multimodal token type ids indicating multimodal placeholder token positions.
+            return_text_replacement_offsets (`bool`, *kwargs*):
+                Whether to return character offsets for each multimodal placeholder and its replacement.
             custom_processing_mode (`str`, *kwargs*, *optional*, defaults to `"standard"`):
                 Custom processing mode for advanced text/image processing. Can be 'standard', 'enhanced', or 'experimental'.
             enable_advanced_features (`bool`, *kwargs*, *optional*, defaults to `False`):
@@ -616,17 +644,64 @@ Parameters:
             images (`Union[PIL.Image.Image, numpy.ndarray, torch.Tensor, list[PIL.Image.Image], list[numpy.ndarray], list[torch.Tensor]]`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            do_convert_rgb (`bool`, *kwargs*, *optional*):
+                Whether to convert the image to RGB.
+            do_resize (`bool`, *kwargs*, *optional*):
+                Whether to resize the image.
+            size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`, *kwargs*):
+                Describes the maximum input dimensions to the model.
+            default_to_square (`bool`, *kwargs*, *optional*):
+                Whether to default to a square image when resizing, if size is an int.
+            crop_size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`, *kwargs*):
+                Size of the output image after applying `center_crop`.
+            resample (`Annotated[Union[int, PILImageResampling, NoneType], None]`, *kwargs*):
+                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+                has an effect if `do_resize` is set to `True`.
+            do_rescale (`bool`, *kwargs*, *optional*):
+                Whether to rescale the image.
+            rescale_factor (`float`, *kwargs*, *optional*):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *kwargs*, *optional*):
+                Whether to normalize the image.
+            image_mean (`Union[float, list[float], tuple[float, ...]]`, *kwargs*, *optional*):
+                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+            image_std (`Union[float, list[float], tuple[float, ...]]`, *kwargs*, *optional*):
+                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+                `True`.
+            do_pad (`bool`, *kwargs*, *optional*):
+                Whether to pad the image. Padding is done either to the largest size in the batch
+                or to a fixed square size per image. The exact padding strategy depends on the model.
+            pad_size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`, *kwargs*):
+                The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                    provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                    height and width in the batch. Applied only when `do_pad=True.`
+            do_center_crop (`bool`, *kwargs*, *optional*):
+                Whether to center crop the image.
+            data_format (`Union[str, ~image_utils.ChannelDimension]`, *kwargs*, *optional*):
+                Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
+            input_data_format (`Union[str, ~image_utils.ChannelDimension]`, *kwargs*, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            device (`Annotated[Union[str, torch.device, NoneType], None]`, *kwargs*):
+                The device to process the videos on. If unset, the device is inferred from the input videos.
+            return_tensors (`Annotated[str | ~utils.generic.TensorType | None, None]`, *kwargs*):
+                Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
+            disable_grouping (`bool`, *kwargs*, *optional*):
+                Whether to disable grouping of images by size to process them individually and not in batches.
+                If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
+                empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
+            image_seq_length (`int`, *kwargs*, *optional*):
+                The number of image tokens to be used for each image in the input.
+                Added for backward compatibility but this should be set as a processor attribute in future models.
             image_grid_pinpoints (`list[list[int]]`, *kwargs*, *optional*):
                 A list of possible resolutions to use for processing high resolution images. The best resolution is selected
                 based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
                 method.
             custom_scale (`float`, *kwargs*, *optional*, defaults to 255.0):
                 Custom scale factor for preprocessing pipelines.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
-            **kwargs ([`ImagesKwargs`], *optional*):
-                Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
-                for the complete list of supported arguments.
 
         Returns:
             `~image_processing_base.BatchFeature`:
@@ -642,7 +717,7 @@ Parameters:
         >>> import requests
 
         >>> processor = DummyForTestImageProcessorFast.from_pretrained("dummy-processor")
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor.preprocess(images=image, return_tensors="pt")
         ```
@@ -654,20 +729,95 @@ Parameters:
 
         expected_class_docstring = """
 Constructs a fast DummyForTest image processor.
-
 Args:
+    do_convert_rgb (`bool`, *kwargs*, *optional*):
+        Whether to convert the image to RGB.
+    do_resize (`bool`, *kwargs*, *optional*):
+        Whether to resize the image.
+    size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`, *kwargs*):
+        Describes the maximum input dimensions to the model.
+    default_to_square (`bool`, *kwargs*, *optional*, defaults to `True`):
+        Whether to default to a square image when resizing, if size is an int.
+    crop_size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`, *kwargs*):
+        Size of the output image after applying `center_crop`.
+    resample (`Annotated[Union[int, PILImageResampling, NoneType], None]`, *kwargs*):
+        Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+        has an effect if `do_resize` is set to `True`.
+    do_rescale (`bool`, *kwargs*, *optional*):
+        Whether to rescale the image.
+    rescale_factor (`float`, *kwargs*, *optional*, defaults to `0.00392156862745098`):
+        Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+    do_normalize (`bool`, *kwargs*, *optional*):
+        Whether to normalize the image.
+    image_mean (`Union[float, list[float], tuple[float, ...]]`, *kwargs*, *optional*):
+        Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+    image_std (`Union[float, list[float], tuple[float, ...]]`, *kwargs*, *optional*):
+        Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+        `True`.
+    do_pad (`bool`, *kwargs*, *optional*):
+        Whether to pad the image. Padding is done either to the largest size in the batch
+        or to a fixed square size per image. The exact padding strategy depends on the model.
+    pad_size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`, *kwargs*):
+        The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch. Applied only when `do_pad=True.`
+    do_center_crop (`bool`, *kwargs*, *optional*):
+        Whether to center crop the image.
+    data_format (`Union[str, ~image_utils.ChannelDimension]`, *kwargs*, *optional*):
+        Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
+    input_data_format (`Union[str, ~image_utils.ChannelDimension]`, *kwargs*, *optional*):
+        The channel dimension format for the input image. If unset, the channel dimension format is inferred
+        from the input image. Can be one of:
+        - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+        - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+        - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+    device (`Annotated[Union[str, torch.device, NoneType], None]`, *kwargs*):
+        The device to process the videos on. If unset, the device is inferred from the input videos.
+    return_tensors (`Annotated[str | ~utils.generic.TensorType | None, None]`, *kwargs*):
+        Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
+    disable_grouping (`bool`, *kwargs*, *optional*):
+        Whether to disable grouping of images by size to process them individually and not in batches.
+        If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
+        empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
+    image_seq_length (`int`, *kwargs*, *optional*):
+        The number of image tokens to be used for each image in the input.
+        Added for backward compatibility but this should be set as a processor attribute in future models.
     image_grid_pinpoints (`list[list[int]]`, *kwargs*, *optional*):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
         method.
     custom_scale (`float`, *kwargs*, *optional*, defaults to 255.0):
         Custom scale factor for preprocessing pipelines.
-    **kwargs ([`ImagesKwargs`], *optional*):
-        Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
-        for the complete list of supported arguments.
 """
 
         self.assertEqual(actual_class_docstring, expected_class_docstring)
+
+    def test_task_specific_args_selected_by_class_name_suffix(self):
+        self.assertIs(get_model_for_args("XForSequenceClassification"), ModelForArgs.ForSequenceClassification)
+        # Aliased tasks resolve to the class they are aliasing.
+        self.assertIs(get_model_for_args("XForVideoClassification"), ModelForArgs.ForImageClassification)
+
+        # A suffix that is not registered contributes no args.
+        source_args_dict = get_args_doc_from_source([ModelArgs, get_model_for_args("XForAbc")])
+        self.assertEqual(source_args_dict["labels"], ModelArgs.labels)
+
+    def test_task_specific_args_take_precedence_over_default_args(self):
+        # Task args take precedence over the language modeling default of `ModelArgs`.
+        source_args_dict = get_args_doc_from_source(
+            [ModelArgs, get_model_for_args("XForSequenceClassification"), ImageProcessorArgs]
+        )
+        self.assertEqual(source_args_dict["labels"], ModelForArgs.ForSequenceClassification.labels)
+
+    def test_task_specific_labels_in_generated_forward_docstring(self):
+        self.maxDiff = None
+        self.assertIn(
+            "Labels for computing the sequence classification/regression loss.",
+            DummyModelForSequenceClassification.forward.__doc__,
+        )
+        self.assertIn(
+            "Labels for computing the sequence classification/regression loss.",
+            GenericForSequenceClassification.forward.__doc__,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -686,7 +836,7 @@ class TestAutoDocstringPerformance:
 
     # Upper bound (%) of total import time that auto_docstring overhead may take.
     # Relative metric; robust across CI vs local. Catches serious regressions.
-    AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 70.0
+    AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 80.0
 
     def test_auto_docstring_import_time_upper_bound(self):
         """

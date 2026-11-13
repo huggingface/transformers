@@ -22,7 +22,6 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -49,7 +48,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
+from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config, PPDocLayoutV2ReadingOrderConfig
 
 
 class PPDocLayoutV2GlobalPointer(nn.Module):
@@ -75,7 +74,7 @@ class PPDocLayoutV2GlobalPointer(nn.Module):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    def __init__(self, config, device=None):
+    def __init__(self, config: PPDocLayoutV2Config):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -83,24 +82,16 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: PPDocLayoutV2Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: PPDocLayoutV2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -110,11 +101,8 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         half_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / half_dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
         return inv_freq, attention_factor
 
     def box_relative_encoding(
@@ -461,9 +449,7 @@ class PPDocLayoutV2TextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -732,7 +718,7 @@ class PPDocLayoutV2MultiscaleDeformableAttention(nn.Module):
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV2Config
-    base_model_prefix = "pp_doclayout_v2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV2HybridEncoder", r"PPDocLayoutV2DecoderLayer"]
@@ -744,6 +730,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, PPDocLayoutV2ForObjectDetection):
             if module.model.decoder.class_embed is not None:
                 for layer in module.model.decoder.class_embed:
@@ -786,7 +773,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -795,23 +782,15 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
 
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             init.xavier_uniform_(module.denoising_class_embed.weight)
         if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        if isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
-            module.register_buffer("inv_freq", inv_freq, persistent=False)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring(
@@ -822,13 +801,15 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     """
 )
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
+    config: PPDocLayoutV2ReadingOrderConfig
+
     # Attention is based on LayoutLMv3 (no interface)
     _supports_sdpa = False
     _supports_flash_attn = False
     _supports_attention_backend = False
     _supports_flex_attn = False
 
-    def __init__(self, config):
+    def __init__(self, config: PPDocLayoutV2ReadingOrderConfig):
         super().__init__(config)
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
         self.label_embeddings = nn.Embedding(config.num_classes, config.hidden_size)
@@ -906,63 +887,63 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
 @dataclass
 class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
-    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+    order_logits (`tuple` of `torch.Tensor` of shape `(batch_size, num_queries, num_queries)`):
         Order logits for all queries. The first dimension of each tensor is the batch size. The second dimension is the number of queries.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
+    intermediate_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
         Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_predicted_corners (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    initial_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked initial reference points (initial reference points of each layer of the decoder).
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_topk_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the encoder.
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_topk_bboxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the encoder.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values
     """
 
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
-    order_logits: tuple[torch.FloatTensor] | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_logits: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    intermediate_predicted_corners: torch.FloatTensor | None = None
-    initial_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    init_reference_points: tuple[torch.FloatTensor] | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    pred_boxes: torch.Tensor | None = None
+    order_logits: tuple[torch.Tensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_logits: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    intermediate_predicted_corners: torch.Tensor | None = None
+    initial_reference_points: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[torch.Tensor] | None = None
+    cross_attentions: tuple[torch.Tensor] | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[torch.Tensor] | None = None
+    init_reference_points: tuple[torch.Tensor] | None = None
+    enc_topk_logits: torch.Tensor | None = None
+    enc_topk_bboxes: torch.Tensor | None = None
+    enc_outputs_class: torch.Tensor | None = None
+    enc_outputs_coord_logits: torch.Tensor | None = None
     denoising_meta_values: dict | None = None
 
 
@@ -974,53 +955,53 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
 @dataclass
 class PPDocLayoutV2ModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+    intermediate_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
         Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_predicted_corners (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    initial_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points used for the first decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    enc_topk_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+    enc_topk_bboxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`):
         Logits of predicted bounding boxes coordinates in the encoder stage.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_logits: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    intermediate_predicted_corners: torch.FloatTensor | None = None
-    initial_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_logits: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    intermediate_predicted_corners: torch.Tensor | None = None
+    initial_reference_points: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[torch.Tensor] | None = None
+    cross_attentions: tuple[torch.Tensor] | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[torch.Tensor] | None = None
+    init_reference_points: torch.Tensor | None = None
+    enc_topk_logits: torch.Tensor | None = None
+    enc_topk_bboxes: torch.Tensor | None = None
+    enc_outputs_class: torch.Tensor | None = None
+    enc_outputs_coord_logits: torch.Tensor | None = None
     denoising_meta_values: dict | None = None
 
 
@@ -1054,31 +1035,31 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
 @dataclass
 class PPDocLayoutV2DecoderOutput(ModelOutput):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+    intermediate_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
         Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_predicted_corners (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    initial_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked initial reference points (initial reference points of each layer of the decoder).
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
         used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_logits: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    intermediate_predicted_corners: torch.FloatTensor | None = None
-    initial_reference_points: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_logits: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    intermediate_predicted_corners: torch.Tensor | None = None
+    initial_reference_points: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    cross_attentions: tuple[torch.Tensor] | None = None
 
 
 class PPDocLayoutV2MLP(nn.Module):
@@ -1104,16 +1085,16 @@ class PPDocLayoutV2FrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
     def __init__(self, n):
         super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -1339,11 +1320,11 @@ class PPDocLayoutV2EncoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            spatial_position_embeddings (`torch.FloatTensor`, *optional*):
+            spatial_position_embeddings (`torch.Tensor`, *optional*):
                 Spatial position embeddings (2D positional encodings of image locations), to be added to both
                 the queries and keys in self-attention (but not to values).
         """
@@ -1471,20 +1452,20 @@ class PPDocLayoutV2DecoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input to the layer of shape `(batch, seq_len, hidden_size)`.
-            object_queries_position_embeddings (`torch.FloatTensor`, *optional*):
+            object_queries_position_embeddings (`torch.Tensor`, *optional*):
                 Position embeddings for the object query slots. These are added to both queries and keys
                 in the self-attention layer (not values).
-            reference_points (`torch.FloatTensor`, *optional*):
+            reference_points (`torch.Tensor`, *optional*):
                 Reference points.
             spatial_shapes (`torch.LongTensor`, *optional*):
                 Spatial shapes.
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, hidden_size)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
         """
@@ -1560,11 +1541,13 @@ def build_2d_sinusoidal_position_embedding(
         raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
 
     pos_dim = embed_dim // 4
-    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    # mps doesn't support float64
+    compute_dtype = torch.float64 if device is None or device.type != "mps" else torch.float32
+    omega = torch.arange(pos_dim, dtype=compute_dtype, device=device) / pos_dim
     omega = 1.0 / temperature**omega  # (D/4,)
 
-    grid_h = torch.arange(height, dtype=torch.float64, device=device)
-    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h = torch.arange(height, dtype=compute_dtype, device=device)
+    grid_w = torch.arange(width, dtype=compute_dtype, device=device)
     grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
 
     emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
@@ -1573,7 +1556,7 @@ def build_2d_sinusoidal_position_embedding(
     pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
 
     if cls_token:
-        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=compute_dtype, device=device), pos_embed], dim=0)
 
     return pos_embed.to(dtype)
 
@@ -1588,7 +1571,11 @@ class PPDocLayoutV2SinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -1602,7 +1589,7 @@ class PPDocLayoutV2SinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        return build_2d_sinusoidal_position_embedding(
+        return self._cached_build_2d_sinusoidal_position_embedding(
             height=torch_int(height),
             width=torch_int(width),
             embed_dim=self.embed_dim,
@@ -1636,13 +1623,13 @@ class PPDocLayoutV2AIFILayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
                 Feature map to process.
         """
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -1663,7 +1650,7 @@ class PPDocLayoutV2AIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -1744,7 +1731,7 @@ class PPDocLayoutV2HybridEncoder(PPDocLayoutV2PreTrainedModel):
     ) -> BaseModelOutput:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
         """
         feature_maps = inputs_embeds
@@ -1826,9 +1813,9 @@ class PPDocLayoutV2Decoder(PPDocLayoutV2PreTrainedModel):
     ):
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
                 The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1836,9 +1823,9 @@ class PPDocLayoutV2Decoder(PPDocLayoutV2PreTrainedModel):
                 in `[0, 1]`:
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            spatial_shapes (`torch.Tensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
@@ -1928,11 +1915,11 @@ def get_contrastive_denoising_training_group(
             Scale of noise applied to bounding boxes.
     Returns:
         `tuple` comprising various elements:
-        - **input_query_class** (`torch.FloatTensor`) --
+        - **input_query_class** (`torch.Tensor`) --
           Class queries with applied label noise.
-        - **input_query_bbox** (`torch.FloatTensor`) --
+        - **input_query_bbox** (`torch.Tensor`) --
           Bounding box queries with applied box noise.
-        - **attn_mask** (`torch.FloatTensor`) --
+        - **attn_mask** (`torch.Tensor`) --
            Attention mask for separating denoising and reconstruction queries.
         - **denoising_meta_values** (`dict`) --
           Metadata including denoising positive indices, number of groups, and split sizes.
@@ -2110,13 +2097,14 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -2135,37 +2123,45 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+        anchors = torch.where(valid_mask, anchors, torch.full((), torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV2ModelOutput:
+    ) -> tuple[torch.Tensor] | PPDocLayoutV2ModelOutput:
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
             can choose to directly pass a flattened representation of an image.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+            in the image,)` and the boxes a `torch.Tensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2220,7 +2216,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
@@ -2375,37 +2371,32 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV2ForObjectDetectionOutput:
+    ) -> tuple[torch.Tensor] | PPDocLayoutV2ForObjectDetectionOutput:
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
             can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        decoder_inputs_embeds (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
@@ -2469,7 +2460,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         thresholds = class_thresholds[class_ids]
         mask = max_probs >= thresholds
 
-        indices = torch.argsort(mask.to(torch.int8), dim=1, descending=True)
+        indices = torch.argsort(mask.int(), dim=1, descending=True)
 
         sorted_class_ids = torch.take_along_dim(class_ids, indices, dim=1)
         sorted_boxes = torch.take_along_dim(bboxes, indices[..., None].expand(-1, -1, 4), dim=1)

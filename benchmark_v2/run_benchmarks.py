@@ -51,7 +51,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--config-file", type=str, help="Path to a config file stored as a json or jsonl format")
     parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
-    parser.add_argument("--enable-tp", action="store_true", help="Enable tensor parallelism with tp_plan=auto")
+    parser.add_argument(
+        "--enable-tp",
+        action="store_true",
+        help="Enable tensor parallelism over WORLD_SIZE devices (requires launching with torchrun)",
+    )
 
     parser.add_argument("--branch-name", type=str, help="Git branch name")
     parser.add_argument("--commit-id", type=str, help="Git commit ID (if not provided, will auto-detect from git)")
@@ -96,10 +100,10 @@ if __name__ == "__main__":
     # If a config file is provided, read it and use the configs therein. They will still be adapted to the given arguments.
     if args.config_file is not None:
         if args.config_file.endswith(".json"):
-            with open(args.config_file, "r") as f:
+            with open(args.config_file, "r", encoding="utf-8") as f:
                 config_as_dicts = [json.load(f)]
         elif args.config_file.endswith(".jsonl"):
-            with open(args.config_file, "r") as f:
+            with open(args.config_file, "r", encoding="utf-8") as f:
                 config_as_dicts = [json.loads(line) for line in f if line.startswith("{")]
         else:
             raise ValueError(f"Unsupported config file format: {args.config_file}")

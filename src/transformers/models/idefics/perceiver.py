@@ -178,7 +178,7 @@ class IdeficsMLP(nn.Module):
         self.act = nn.ReLU()
         self.c_proj = nn.Linear(intermediate_size, self.embed_dim, bias=False)
 
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.ln(hidden_states)
         hidden_states = self.fc(hidden_states)
         hidden_states = self.act(hidden_states)

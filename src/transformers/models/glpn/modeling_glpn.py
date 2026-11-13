@@ -376,7 +376,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class GLPNModel(GLPNPreTrainedModel):
     # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
-    def __init__(self, config):
+    def __init__(self, config: GLPNConfig):
         super().__init__(config)
         self.config = config
 
@@ -390,7 +390,7 @@ class GLPNModel(GLPNPreTrainedModel):
     # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -563,7 +563,7 @@ class GLPNDepthEstimationHead(nn.Module):
     """
 )
 class GLPNForDepthEstimation(GLPNPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GLPNConfig):
         super().__init__(config)
 
         self.glpn = GLPNModel(config)
@@ -576,15 +576,15 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        labels: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
 
         Examples:
@@ -594,7 +594,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

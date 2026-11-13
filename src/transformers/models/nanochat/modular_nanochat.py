@@ -149,7 +149,7 @@ class NanoChatModel(LlamaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -199,6 +199,8 @@ class NanoChatModel(LlamaModel):
 @auto_docstring
 class NanoChatForCausalLM(Gemma2ForCausalLM):
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def forward(self, **super_kwargs) -> CausalLMOutputWithPast:
         r"""

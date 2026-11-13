@@ -70,6 +70,12 @@ class Dots1Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -83,6 +89,7 @@ class Dots1Config(PreTrainedConfig):
     num_key_value_heads: int | None = 32
     n_shared_experts: int | None = None
     n_routed_experts: int | None = None
+    output_router_logits: bool = False
     n_group: int | None = 1
     topk_group: int | None = 1
     num_experts_per_tok: int | None = None

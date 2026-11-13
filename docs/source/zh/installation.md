@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 为你正在使用的深度学习框架安装 🤗 Transformers、设置缓存，并选择性配置 🤗 Transformers 以离线运行。
 
-🤗 Transformers 已在 Python 3.10+ 以及 PyTorch 2.4+ 上进行测试。针对你使用的深度学习框架，请参照以下安装说明进行安装：
+🤗 Transformers 已在 Python 3.11+ 以及 PyTorch 2.4+ 上进行测试。针对你使用的深度学习框架，请参照以下安装说明进行安装：
 
 * [PyTorch](https://pytorch.org/get-started/locally/) 安装说明。
 
@@ -102,7 +102,7 @@ cd transformers
 pip install -e .
 ```
 
-这些命令将会链接你克隆的仓库以及你的 Python 库路径。现在，Python 不仅会在正常的库路径中搜索库，也会在你克隆到的文件夹中进行查找。例如，如果你的 Python 包通常本应安装在 `~/anaconda3/envs/main/lib/python3.10/site-packages/` 目录中，在这种情况下 Python 也会搜索你克隆到的文件夹：`~/transformers/`。
+这些命令将会链接你克隆的仓库以及你的 Python 库路径。现在，Python 不仅会在正常的库路径中搜索库，也会在你克隆到的文件夹中进行查找。例如，如果你的 Python 包通常本应安装在 `~/anaconda3/envs/main/lib/python3.11/site-packages/` 目录中，在这种情况下 Python 也会搜索你克隆到的文件夹：`~/transformers/`。
 
 <Tip warning={true}>
 
@@ -144,21 +144,6 @@ conda install conda-forge::transformers
 通过设置环境变量 `HF_DATASETS_OFFLINE=1` 将 [🤗 Datasets](https://huggingface.co/docs/datasets/) 添加至你的离线训练工作流程中。
 
 </Tip>
-
-例如，你通常会使用以下命令对外部实例进行防火墙保护的的普通网络上运行程序：
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-在离线环境中运行相同的程序：
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-现在脚本可以应该正常运行，而无需挂起或等待超时，因为它知道只应查找本地文件。
 
 ### 获取离线时使用的模型和分词器
 

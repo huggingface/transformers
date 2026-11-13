@@ -123,7 +123,7 @@ def load_original_checkpoint(checkpoint_path: str | Path) -> dict[str, Any]:
         )
 
     logger.info(f"Loading sharded checkpoint from {checkpoint_path}")
-    with open(index_path, "r") as f:
+    with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
     state_dict = {}
@@ -146,7 +146,7 @@ def create_config_from_checkpoint(checkpoint_path: str | Path) -> VibeVoiceAsrCo
     )
 
     if config_path.exists():
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             original_config = json.load(f)
 
         config_keys_to_remove = [
@@ -287,16 +287,17 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
         dtype = torch.bfloat16
     else:
         dtype = torch.float32
-    logger.info(f"Creating model with dtype {dtype}")
-    model = VibeVoiceAsrForConditionalGeneration(config).to(dtype)
+    logger.info(f"Loading the checkpoint in a VibeVoiceAsr model with dtype {dtype}")
+    model, loading_info = VibeVoiceAsrForConditionalGeneration.from_pretrained(
+        None, config=config, state_dict=converted_state_dict, dtype=dtype, output_loading_info=True
+    )
     logger.info("Number of parameters in model state dict: " + str(len(model.state_dict())))
-
-    logger.info("Loading weights into model")
-    load_result = model.load_state_dict(converted_state_dict, strict=False)
-    if load_result.missing_keys:
-        raise ValueError(f"{len(load_result.missing_keys)} missing keys: {load_result.missing_keys}")
-    if load_result.unexpected_keys:
-        raise ValueError(f"{len(load_result.unexpected_keys)} unexpected keys: {load_result.unexpected_keys}")
+    if loading_info["missing_keys"]:
+        raise ValueError(f"{len(loading_info['missing_keys'])} missing keys: {sorted(loading_info['missing_keys'])}")
+    if loading_info["unexpected_keys"]:
+        raise ValueError(
+            f"{len(loading_info['unexpected_keys'])} unexpected keys: {sorted(loading_info['unexpected_keys'])}"
+        )
 
     model.generation_config.pad_token_id = processor.tokenizer.convert_tokens_to_ids("<|image_pad|>")
     model.generation_config.eos_token_id = processor.tokenizer.eos_token_id
@@ -328,7 +329,7 @@ Usage:
 
 1) Download the original VibeVoice ASR model checkpoint:
 ```bash
-huggingface-cli download microsoft/VibeVoice-ASR --local-dir /path/to/vibevoice-asr
+hf download microsoft/VibeVoice-ASR --local-dir /path/to/vibevoice-asr
 ```
 
 2) Run conversion script (with optional `push_to_hub` argument):

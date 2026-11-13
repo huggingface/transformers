@@ -80,26 +80,18 @@ class EdgeTamLayerNorm(nn.LayerNorm):
 @dataclass
 class EdgeTamVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_hidden_states (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_position_encoding (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
-    fpn_hidden_states: torch.FloatTensor | None = None
-    fpn_position_encoding: torch.FloatTensor | None = None
+    fpn_hidden_states: torch.Tensor | None = None
+    fpn_position_encoding: torch.Tensor | None = None
 
 
 def eager_attention_forward(
@@ -205,7 +197,7 @@ class EdgeTamTwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`EdgeTamMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -304,7 +296,7 @@ class EdgeTamFeedForward(nn.Module):
 
 @auto_docstring
 class EdgeTamPreTrainedModel(PreTrainedModel):
-    config_class = EdgeTamConfig
+    config: EdgeTamConfig
     base_model_prefix = "edgetam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -323,7 +315,6 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
             init.normal_(module.positional_embedding, std=module.scale)
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class EdgeTamSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -331,36 +322,56 @@ class EdgeTamSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -369,6 +380,17 @@ class EdgeTamSinePositionEmbedding(nn.Module):
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
 
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
+
 
 class EdgeTamVisionNeck(nn.Module):
     def __init__(self, config: EdgeTamVisionConfig):
@@ -376,7 +398,7 @@ class EdgeTamVisionNeck(nn.Module):
         self.config = config
 
         self.position_encoding = EdgeTamSinePositionEmbedding(
-            num_pos_feats=config.fpn_hidden_size // 2, normalize=True
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
         )
         self.convs = nn.ModuleList()
         for in_channels in config.backbone_channel_list:
@@ -428,7 +450,7 @@ class EdgeTamVisionNeck(nn.Module):
     """
 )
 class EdgeTamVisionModel(EdgeTamPreTrainedModel):
-    config_class = EdgeTamVisionConfig
+    config: EdgeTamVisionConfig
     main_input_name = "pixel_values"
     # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
     # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
@@ -449,7 +471,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
     @capture_outputs
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
@@ -477,34 +499,34 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
 @dataclass
 class EdgeTamImageSegmentationOutput(ModelOutput):
     r"""
-    iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
+    iou_scores (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks)`):
         The Intersection over Union (IoU) scores of the predicted masks.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
+    object_score_logits (`torch.Tensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
-    image_embeddings (`tuple(torch.FloatTensor)`):
-        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.FloatTensor` where each
+    image_embeddings (`tuple(torch.Tensor)`):
+        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.Tensor` where each
         tensor has shape `(batch_size, channels, height, width)`.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
+    vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
         Hidden-states of the vision model at the output of each stage.
-    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    vision_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the vision model.
-    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    mask_decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor | None = None
-    pred_masks: torch.FloatTensor | None = None
-    object_score_logits: torch.FloatTensor | None = None
-    image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
-    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
+    iou_scores: torch.Tensor | None = None
+    pred_masks: torch.Tensor | None = None
+    object_score_logits: torch.Tensor | None = None
+    image_embeddings: tuple[torch.Tensor, ...] = None
+    vision_hidden_states: tuple[torch.Tensor, ...] | None = None
+    vision_attentions: tuple[torch.Tensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class EdgeTamPositionalEmbedding(nn.Module):
@@ -512,7 +534,7 @@ class EdgeTamPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.scale
         positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
+        self.positional_embedding = nn.Buffer(positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -680,8 +702,8 @@ class EdgeTamTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -968,14 +990,14 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
     @torch.no_grad()
     def get_image_embeddings(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
@@ -996,23 +1018,23 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: torch.FloatTensor | None = None,
+        input_points: torch.Tensor | None = None,
         input_labels: torch.LongTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_masks: torch.LongTensor | None = None,
     ):
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
         Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
+            input_points (`torch.Tensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
                 Optional input points for the prompt encoder. The padding of the point is automatically done by the
                 processor. `point_batch_size` refers to the number of masks that we want the model to predict per
                 point. The model will output `point_batch_size` times 3 masks in total.
             input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
                 Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
                 processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
+            input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes_per_image, 4)`):
                 Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
                 processor. users can also pass manually the input boxes.
             input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
@@ -1031,19 +1053,19 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
-        input_points: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        input_points: torch.Tensor | None = None,
         input_labels: torch.LongTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_masks: torch.LongTensor | None = None,
-        image_embeddings: torch.FloatTensor | None = None,
+        image_embeddings: torch.Tensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: torch.FloatTensor | None = None,
-        target_embedding: torch.FloatTensor | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EdgeTamImageSegmentationOutput:
         r"""
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+        input_points (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
             better results. The points can be obtained by passing a list of list of list to the processor that will
             create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
@@ -1066,7 +1088,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
 
             The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
@@ -1077,11 +1099,11 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             - `y1`: the y coordinate of the top left point of the input box
             - `x2`: the x coordinate of the bottom right point of the input box
             - `y2`: the y coordinate of the bottom right point of the input box
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+        input_masks (`torch.Tensor` of shape `(batch_size, image_size, image_size)`):
             SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
             generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
             manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+        image_embeddings (`torch.Tensor` of shape `(batch_size, output_channels, window_size, window_size)`):
             Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
@@ -1089,10 +1111,10 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
-        attention_similarity (`torch.FloatTensor`, *optional*):
+        attention_similarity (`torch.Tensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
+        target_embedding (`torch.Tensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
 
@@ -1100,7 +1122,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
@@ -1208,13 +1230,16 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVisionEncoderOutput:
         r"""
-        pixel_values (`torch.FloatTensor`):
+        pixel_values (`torch.Tensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
+        # original_sizes is returned by the processor for post-processing only and must not
+        # reach the timm backbone (FeatureListNet) which does not accept it.
+        kwargs.pop("original_sizes", None)
         vision_outputs: EdgeTamVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
@@ -1229,8 +1254,8 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

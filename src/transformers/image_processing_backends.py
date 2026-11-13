@@ -23,8 +23,8 @@ from .image_processing_utils import BaseImageProcessor
 from .image_transforms import (
     center_crop as np_center_crop,
 )
+from .image_transforms import convert_to_rgb as convert_to_rgb_pil
 from .image_transforms import (
-    convert_to_rgb,
     divide_to_patches,  # noqa: F401 - re-exported for backward compat with image_processing_utils_fast
     get_resize_output_image_size,
     get_size_with_aspect_ratio,
@@ -61,7 +61,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, is_torchvision_greater_or_equal, requires
 
 
 if is_vision_available():
@@ -89,19 +89,6 @@ class TorchvisionBackend(BaseImageProcessor):
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
-
-    @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
-        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
-        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
-        """
-        logger.warning_once(
-            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
-            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
-        )
-        return True
 
     @property
     def backend(self) -> str:
@@ -139,31 +126,60 @@ class TorchvisionBackend(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            image = self.convert_to_rgb(image)
-
         if image_type == ImageType.PIL:
-            image = tvF.pil_to_tensor(image)
+            # when input is PIL apply PIL's conversion to not lose mode
+            image = convert_to_rgb_pil(image, return_numpy=True) if do_convert_rgb else np.array(image)
+            image = torch.from_numpy(image)
+            input_data_format = ChannelDimension.LAST
         elif image_type == ImageType.NUMPY:
-            image = torch.from_numpy(image).contiguous()
+            image = torch.from_numpy(image)
 
+        # Normalize to channel-first
         if image.ndim == 2:
             image = image.unsqueeze(0)
+            input_data_format = ChannelDimension.FIRST
 
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
         if input_data_format == ChannelDimension.LAST:
-            image = image.permute(2, 0, 1).contiguous()
+            image = image.permute(2, 0, 1)
 
+        # Arrays/tensors: PIL mode is gone, so 1ch -> expand, 4ch -> RGBA
+        if do_convert_rgb and image_type != ImageType.PIL:
+            image = self.convert_to_rgb(image, input_data_format=ChannelDimension.FIRST)
+
+        image = image.contiguous()
         if device is not None:
             image = image.to(device)
-
         return image
 
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+    def convert_to_rgb(
+        self, image: "torch.Tensor", input_data_format: str | ChannelDimension | None = None
+    ) -> "torch.Tensor":
         """Convert an image to RGB format."""
-        return convert_to_rgb(image)
+        # no-op for 3/4-channel inputs and converts only if grayscale
+        # NOTEL tvF cannot handle images with no channel dim so fix it before
+        if image.ndim == 2:
+            image = image[None]
+        image = tvF.grayscale_to_rgb(image)
+
+        if image.shape[0] == 4:
+            if image.is_floating_point() and (image.min() < 0.0 or image.max() > 1.0):
+                raise ValueError(
+                    f"The image to be converted to RGB contains values outside the range [0, 1], got [{image.min().item()}, {image.max().item()}]."
+                )
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(image, num_channels=(4,))
+
+            channel_axis = -1 if input_data_format == ChannelDimension.LAST else -3
+            image = image.movedim(channel_axis, -1)
+            orig_dtype = image.dtype
+            image = tvF.to_dtype(image, torch.float32, scale=True)
+            image = image[..., :3] * image[..., 3:] + (1 - image[..., 3:])
+            image = tvF.to_dtype(image, orig_dtype, scale=True)
+            image = image.movedim(-1, channel_axis)
+
+        return image
 
     def pad(
         self,
@@ -232,11 +248,13 @@ class TorchvisionBackend(BaseImageProcessor):
                 interpolation = resample
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
+        if interpolation == tvF.InterpolationMode.LANCZOS and (
+            not is_torchvision_greater_or_equal("0.27") or image.device.type != "cpu"
+        ):
             logger.warning_once(
-                "You have used a torchvision backend image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to a pil backend image processor if you "
-                "want full consistency with the original model."
+                "LANCZOS resample requires torchvision >= 0.27 and processing on CPU; it is not supported on CUDA or for "
+                "torchvision < 0.27. Falling back to BICUBIC which approximates LANCZOS. To match the original model exactly"
+                ", upgrade torchvision and move the tensors to CPU before resizing, or use a PIL backend image processor instead."
             )
             interpolation = tvF.InterpolationMode.BICUBIC
 
@@ -301,10 +319,11 @@ class TorchvisionBackend(BaseImageProcessor):
         image: "torch.Tensor",
         mean: float | Iterable[float],
         std: float | Iterable[float],
+        inplace: bool = False,
         **kwargs,
     ) -> "torch.Tensor":
         """Normalize an image using Torchvision."""
-        return tvF.normalize(image, mean, std)
+        return tvF.normalize(image, mean, std, inplace=inplace)
 
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
@@ -342,7 +361,8 @@ class TorchvisionBackend(BaseImageProcessor):
             device=images.device,
         )
         if do_normalize:
-            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+            inplace = images.dtype != torch.float32  # Convert copied tensors inplace for speed
+            images = self.normalize(images.to(torch.float32), image_mean, image_std, inplace=inplace)
         elif do_rescale:
             images = self.rescale(images, rescale_factor)
 
@@ -433,19 +453,6 @@ class PilBackend(BaseImageProcessor):
         self._set_attributes(**kwargs)
 
     @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
-        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
-        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
-        """
-        logger.warning_once(
-            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
-            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
-        )
-        return False
-
-    @property
     def backend(self) -> str:
         """
         `str`: The backend used by this image processor.
@@ -464,33 +471,38 @@ class PilBackend(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            image = self.convert_to_rgb(image)
-
-        if image_type == ImageType.PIL:
-            image = np.array(image)
-            # Set LAST only for multi-channel PIL images (H, W, C); for grayscale (H, W), leave as is to avoid shape errors after expand_dims.
-            if image.ndim >= 3:
-                input_data_format = ChannelDimension.LAST if input_data_format is None else input_data_format
-        elif image_type == ImageType.TORCH:
+        if image_type == ImageType.TORCH:
             image = image.numpy()
 
-        if image.ndim == 2:
-            image = np.expand_dims(image, axis=0)
+        # Apply conversion first to not lose PIL mode for PIL.Image.Image
+        if do_convert_rgb:
+            image = self.convert_to_rgb(image, input_data_format=input_data_format)
+        elif image_type == ImageType.PIL:
+            image = np.array(image)
 
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
+        # Work out the channel-layout and normalize to channel-first
+        if image.ndim == 2:
+            image = image[None]
+            input_data_format = ChannelDimension.FIRST
+        elif image_type == ImageType.PIL:
+            # we called `np.array(PIL)` which is always `(H, W, C)`
+            image = np.moveaxis(image, -1, 0)
+            input_data_format = ChannelDimension.FIRST
+        elif input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
 
         if input_data_format == ChannelDimension.LAST:
-            # Convert from channels-last to channels-first
-            if isinstance(image, np.ndarray):
-                image = np.transpose(image, (2, 0, 1))
+            image = np.moveaxis(image, -1, 0)
 
         return image
 
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+    def convert_to_rgb(
+        self,
+        image: np.ndarray,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> np.ndarray:
         """Convert an image to RGB format."""
-        return convert_to_rgb(image)
+        return convert_to_rgb_pil(image, input_data_format=input_data_format, return_numpy=True)
 
     def pad(
         self,

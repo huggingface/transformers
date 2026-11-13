@@ -24,9 +24,9 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import httpx
 import torch
 import torchvision.transforms as T
+from huggingface_hub.utils import httpx
 from PIL import Image
 from torch import Tensor, nn
 

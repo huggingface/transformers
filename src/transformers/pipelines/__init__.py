@@ -13,13 +13,13 @@
 # limitations under the License.
 from __future__ import annotations
 
+import importlib
 import json
 import os
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import is_offline_mode, model_info
+from huggingface_hub import is_offline_mode
 
 from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -28,25 +28,26 @@ from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.modeling_auto import (
+    MODEL_FOR_DECISION_MAPPING,
+    AutoModelForDepthEstimation,
+    AutoModelForImageToImage,
+)
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
+from ..models.auto.video_processing_auto import AutoVideoProcessor
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
-    cached_file,
-    extract_commit_hash,
     find_adapter_config_file,
-    is_kenlm_available,
+    hf_api,
     is_peft_available,
-    is_pyctcdecode_available,
     is_torch_available,
     logging,
+    resolve_revision,
 )
-from .any_to_any import AnyToAnyPipeline
-from .audio_classification import AudioClassificationPipeline
-from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
+from ..video_processing_utils import BaseVideoProcessor
 from .base import (
     ArgumentHandler,
     CsvPipelineDataFormat,
@@ -59,32 +60,51 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
-from .depth_estimation import DepthEstimationPipeline
-from .document_question_answering import DocumentQuestionAnsweringPipeline
-from .feature_extraction import FeatureExtractionPipeline
-from .fill_mask import FillMaskPipeline
-from .image_classification import ImageClassificationPipeline
-from .image_feature_extraction import ImageFeatureExtractionPipeline
-from .image_segmentation import ImageSegmentationPipeline
-from .image_text_to_text import ImageTextToTextPipeline
-from .keypoint_matching import KeypointMatchingPipeline
-from .mask_generation import MaskGenerationPipeline
-from .object_detection import ObjectDetectionPipeline
-from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
-from .text_classification import TextClassificationPipeline
-from .text_generation import TextGenerationPipeline
-from .text_to_audio import TextToAudioPipeline
-from .token_classification import (
-    AggregationStrategy,
-    NerPipeline,
-    TokenClassificationArgumentHandler,
-    TokenClassificationPipeline,
-)
-from .video_classification import VideoClassificationPipeline
-from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
-from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
-from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
-from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
+
+
+# Map each public pipeline class name to its submodule, used by __getattr__ and _resolve_impl.
+# This replaces 27 eager submodule imports so that only the submodule(s) actually needed at
+# runtime are loaded (e.g. only TextClassificationPipeline when running text-classification).
+_PIPELINE_CLASS_TO_MODULE = {
+    "AggregationStrategy": "transformers.pipelines.token_classification",
+    "AnyToAnyPipeline": "transformers.pipelines.any_to_any",
+    "AudioClassificationPipeline": "transformers.pipelines.audio_classification",
+    "AutomaticSpeechRecognitionPipeline": "transformers.pipelines.automatic_speech_recognition",
+    "DecisionPipeline": "transformers.pipelines.decision",
+    "DepthEstimationPipeline": "transformers.pipelines.depth_estimation",
+    "DocumentQuestionAnsweringPipeline": "transformers.pipelines.document_question_answering",
+    "FeatureExtractionPipeline": "transformers.pipelines.feature_extraction",
+    "FillMaskPipeline": "transformers.pipelines.fill_mask",
+    "ImageClassificationPipeline": "transformers.pipelines.image_classification",
+    "ImageFeatureExtractionPipeline": "transformers.pipelines.image_feature_extraction",
+    "ImageSegmentationPipeline": "transformers.pipelines.image_segmentation",
+    "ImageTextToTextPipeline": "transformers.pipelines.image_text_to_text",
+    "KeypointMatchingPipeline": "transformers.pipelines.keypoint_matching",
+    "MaskGenerationPipeline": "transformers.pipelines.mask_generation",
+    "NerPipeline": "transformers.pipelines.token_classification",
+    "ObjectDetectionPipeline": "transformers.pipelines.object_detection",
+    "TableQuestionAnsweringArgumentHandler": "transformers.pipelines.table_question_answering",
+    "TableQuestionAnsweringPipeline": "transformers.pipelines.table_question_answering",
+    "TextClassificationPipeline": "transformers.pipelines.text_classification",
+    "TextGenerationPipeline": "transformers.pipelines.text_generation",
+    "TextToAudioPipeline": "transformers.pipelines.text_to_audio",
+    "TokenClassificationArgumentHandler": "transformers.pipelines.token_classification",
+    "TokenClassificationPipeline": "transformers.pipelines.token_classification",
+    "VideoClassificationPipeline": "transformers.pipelines.video_classification",
+    "ZeroShotAudioClassificationPipeline": "transformers.pipelines.zero_shot_audio_classification",
+    "ZeroShotClassificationArgumentHandler": "transformers.pipelines.zero_shot_classification",
+    "ZeroShotClassificationPipeline": "transformers.pipelines.zero_shot_classification",
+    "ZeroShotImageClassificationPipeline": "transformers.pipelines.zero_shot_image_classification",
+    "ZeroShotObjectDetectionPipeline": "transformers.pipelines.zero_shot_object_detection",
+}
+
+
+def _resolve_impl(impl):
+    """Resolve a pipeline impl: dotted-path string -> class, or pass through a class unchanged."""
+    if isinstance(impl, str):
+        module_path, cls_name = impl.rsplit(".", 1)
+        return getattr(importlib.import_module(module_path), cls_name)
+    return impl
 
 
 if is_torch_available():
@@ -95,6 +115,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDecision,
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
@@ -110,6 +131,7 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
+        AutoModelForTDT,
         AutoModelForTextToSpectrogram,
         AutoModelForTextToWaveform,
         AutoModelForTokenClassification,
@@ -123,6 +145,31 @@ if is_torch_available():
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_tokenizers import PreTrainedTokenizerFast
+    from .any_to_any import AnyToAnyPipeline
+    from .audio_classification import AudioClassificationPipeline
+    from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
+    from .decision import DecisionPipeline
+    from .depth_estimation import DepthEstimationPipeline
+    from .document_question_answering import DocumentQuestionAnsweringPipeline
+    from .feature_extraction import FeatureExtractionPipeline
+    from .fill_mask import FillMaskPipeline
+    from .image_classification import ImageClassificationPipeline
+    from .image_feature_extraction import ImageFeatureExtractionPipeline
+    from .image_segmentation import ImageSegmentationPipeline
+    from .image_text_to_text import ImageTextToTextPipeline
+    from .keypoint_matching import KeypointMatchingPipeline
+    from .mask_generation import MaskGenerationPipeline
+    from .object_detection import ObjectDetectionPipeline
+    from .table_question_answering import TableQuestionAnsweringPipeline
+    from .text_classification import TextClassificationPipeline
+    from .text_generation import TextGenerationPipeline
+    from .text_to_audio import TextToAudioPipeline
+    from .token_classification import TokenClassificationPipeline
+    from .video_classification import VideoClassificationPipeline
+    from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
+    from .zero_shot_classification import ZeroShotClassificationPipeline
+    from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+    from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -134,69 +181,71 @@ TASK_ALIASES = {
     "ner": "token-classification",
     "text-to-speech": "text-to-audio",
 }
+# Note: `["impl"]` values are dotted-path strings (e.g. "transformers.pipelines.text_classification.TextClassificationPipeline"),
+# not class objects — resolved lazily at call time via `_resolve_impl()` to avoid eagerly importing all pipeline submodules.
 SUPPORTED_TASKS = {
     "audio-classification": {
-        "impl": AudioClassificationPipeline,
+        "impl": "transformers.pipelines.audio_classification.AudioClassificationPipeline",
         "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
         "default": {"model": ("superb/wav2vec2-base-superb-ks", "372e048")},
         "type": "audio",
     },
     "automatic-speech-recognition": {
-        "impl": AutomaticSpeechRecognitionPipeline,
-        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
+        "impl": "transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline",
+        "pt": (AutoModelForCTC, AutoModelForTDT, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": ("facebook/wav2vec2-base-960h", "22aad52")},
         "type": "multimodal",
     },
     "text-to-audio": {
-        "impl": TextToAudioPipeline,
+        "impl": "transformers.pipelines.text_to_audio.TextToAudioPipeline",
         "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else (),
         "default": {"model": ("suno/bark-small", "1dbd7a1")},
         "type": "text",
     },
     "feature-extraction": {
-        "impl": FeatureExtractionPipeline,
+        "impl": "transformers.pipelines.feature_extraction.FeatureExtractionPipeline",
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilbert-base-cased", "6ea8117")},
         "type": "text",
     },
     "text-classification": {
-        "impl": TextClassificationPipeline,
+        "impl": "transformers.pipelines.text_classification.TextClassificationPipeline",
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "714eb0f")},
         "type": "text",
     },
     "token-classification": {
-        "impl": TokenClassificationPipeline,
+        "impl": "transformers.pipelines.token_classification.TokenClassificationPipeline",
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {"model": ("dbmdz/bert-large-cased-finetuned-conll03-english", "4c53496")},
         "type": "text",
     },
     "table-question-answering": {
-        "impl": TableQuestionAnsweringPipeline,
+        "impl": "transformers.pipelines.table_question_answering.TableQuestionAnsweringPipeline",
         "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
         "default": {"model": ("google/tapas-base-finetuned-wtq", "e3dde19")},
         "type": "text",
     },
     "document-question-answering": {
-        "impl": DocumentQuestionAnsweringPipeline,
+        "impl": "transformers.pipelines.document_question_answering.DocumentQuestionAnsweringPipeline",
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "default": {"model": ("impira/layoutlm-document-qa", "beed3c4")},
         "type": "multimodal",
     },
     "fill-mask": {
-        "impl": FillMaskPipeline,
+        "impl": "transformers.pipelines.fill_mask.FillMaskPipeline",
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {"model": ("distilbert/distilroberta-base", "fb53ab8")},
         "type": "text",
     },
     "text-generation": {
-        "impl": TextGenerationPipeline,
+        "impl": "transformers.pipelines.text_generation.TextGenerationPipeline",
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
         "default": {"model": ("HuggingFaceTB/SmolLM3-3B", "a07cc9a")},
         "type": "text",
     },
     "zero-shot-classification": {
-        "impl": ZeroShotClassificationPipeline,
+        "impl": "transformers.pipelines.zero_shot_classification.ZeroShotClassificationPipeline",
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": ("facebook/bart-large-mnli", "d7645e1"),
@@ -205,79 +254,87 @@ SUPPORTED_TASKS = {
         "type": "text",
     },
     "zero-shot-image-classification": {
-        "impl": ZeroShotImageClassificationPipeline,
+        "impl": "transformers.pipelines.zero_shot_image_classification.ZeroShotImageClassificationPipeline",
         "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {"model": ("openai/clip-vit-base-patch32", "3d74acf")},
         "type": "multimodal",
     },
     "zero-shot-audio-classification": {
-        "impl": ZeroShotAudioClassificationPipeline,
+        "impl": "transformers.pipelines.zero_shot_audio_classification.ZeroShotAudioClassificationPipeline",
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("laion/clap-htsat-fused", "cca9e28")},
         "type": "multimodal",
     },
     "image-classification": {
-        "impl": ImageClassificationPipeline,
+        "impl": "transformers.pipelines.image_classification.ImageClassificationPipeline",
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": ("google/vit-base-patch16-224", "3f49326")},
         "type": "image",
     },
     "image-feature-extraction": {
-        "impl": ImageFeatureExtractionPipeline,
+        "impl": "transformers.pipelines.image_feature_extraction.ImageFeatureExtractionPipeline",
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": ("google/vit-base-patch16-224", "3f49326")},
         "type": "image",
     },
     "image-segmentation": {
-        "impl": ImageSegmentationPipeline,
+        "impl": "transformers.pipelines.image_segmentation.ImageSegmentationPipeline",
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": ("facebook/detr-resnet-50-panoptic", "d53b52a")},
         "type": "multimodal",
     },
     "image-text-to-text": {
-        "impl": ImageTextToTextPipeline,
+        "impl": "transformers.pipelines.image_text_to_text.ImageTextToTextPipeline",
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
         "default": {"model": ("Qwen/Qwen3-VL-2B-Instruct", "8964489")},
         "type": "multimodal",
     },
     "object-detection": {
-        "impl": ObjectDetectionPipeline,
+        "impl": "transformers.pipelines.object_detection.ObjectDetectionPipeline",
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": ("facebook/detr-resnet-50", "1d5f47b")},
         "type": "multimodal",
     },
     "zero-shot-object-detection": {
-        "impl": ZeroShotObjectDetectionPipeline,
+        "impl": "transformers.pipelines.zero_shot_object_detection.ZeroShotObjectDetectionPipeline",
         "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
         "default": {"model": ("google/owlvit-base-patch32", "cbc355f")},
         "type": "multimodal",
     },
+    "decision": {
+        "impl": "transformers.pipelines.decision.DecisionPipeline",
+        "pt": (AutoModelForDecision, AutoModelForImageTextToText, AutoModelForCausalLM)
+        if is_torch_available()
+        else (),
+        "default": {"model": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae5576")},
+        "type": "multimodal",
+    },
     "depth-estimation": {
-        "impl": DepthEstimationPipeline,
+        "impl": "transformers.pipelines.depth_estimation.DepthEstimationPipeline",
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
         "default": {"model": ("Intel/dpt-large", "bc15f29")},
         "type": "image",
     },
     "video-classification": {
-        "impl": VideoClassificationPipeline,
+        "impl": "transformers.pipelines.video_classification.VideoClassificationPipeline",
         "pt": (AutoModelForVideoClassification,) if is_torch_available() else (),
         "default": {"model": ("MCG-NJU/videomae-base-finetuned-kinetics", "488eb9a")},
         "type": "video",
     },
     "mask-generation": {
-        "impl": MaskGenerationPipeline,
+        "impl": "transformers.pipelines.mask_generation.MaskGenerationPipeline",
         "pt": (AutoModelForMaskGeneration,) if is_torch_available() else (),
         "default": {"model": ("facebook/sam-vit-huge", "87aecf0")},
         "type": "multimodal",
     },
     "keypoint-matching": {
-        "impl": KeypointMatchingPipeline,
+        "impl": "transformers.pipelines.keypoint_matching.KeypointMatchingPipeline",
         "pt": (AutoModelForKeypointMatching,) if is_torch_available() else (),
         "default": {"model": ("magic-leap-community/superglue_outdoor", "f4041f8")},
         "type": "image",
     },
     "any-to-any": {
-        "impl": AnyToAnyPipeline,
+        "impl": "transformers.pipelines.any_to_any.AnyToAnyPipeline",
         "tf": (),
         "pt": (AutoModelForMultimodalLM,) if is_torch_available() else (),
         "default": {
@@ -291,6 +348,40 @@ SUPPORTED_TASKS = {
 
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
+REMOVED_TASKS = {
+    "text2text-generation": "Use the `text-generation` pipeline with a chat model instead.",
+    "summarization": "Use the `text-generation` pipeline with a chat model instead.",
+    "translation": "Use the `text-generation` pipeline with a chat model instead.",
+    "question-answering": "Use the `text-generation` pipeline with a chat model instead.",
+    "visual-question-answering": "Use the `image-text-to-text` pipeline with a vision-language chat model instead.",
+    "vqa": "Use the `image-text-to-text` pipeline with a vision-language chat model instead.",
+    "image-to-image": "For image generation tasks, please use 🤗 Diffusers instead.",
+}
+
+
+def _resolve_deprecated_task(task: str) -> str:
+    """
+    Redirects tasks listed in `DEPRECATED_TASKS` to their replacement and raises an explicit error for tasks listed
+    in `REMOVED_TASKS`.
+    """
+    if task == "image-to-text":
+        logger.warning_once(
+            f"The task `{task}` has been removed and has been replaced by `image-text-to-text`. The pipeline"
+            f" will be instantiated with the new task name.",
+            UserWarning,
+        )
+        return "image-text-to-text"
+
+    # Parametrized translation tasks such as "translation_en_to_fr" were removed along with "translation"
+    removed_task = "translation" if task.startswith("translation_") else task
+    if removed_task in REMOVED_TASKS:
+        raise KeyError(
+            f"The task {task} has been removed from transformers. {REMOVED_TASKS[removed_task]} See the migration"
+            f" guide for more details: https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md#pipelines"
+        )
+
+    return task
+
 
 def get_supported_tasks() -> list[str]:
     """
@@ -303,7 +394,7 @@ def get_task(model: str, token: str | None = None, **deprecated_kwargs) -> str:
     if is_offline_mode():
         raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
-        info = model_info(model, token=token)
+        info = hf_api().model_info(model, token=token)
     except Exception as e:
         raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
     if not info.pipeline_tag:
@@ -312,8 +403,7 @@ def get_task(model: str, token: str | None = None, **deprecated_kwargs) -> str:
         )
     if getattr(info, "library_name", "transformers") not in {"transformers", "timm"}:
         raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
-    task = info.pipeline_tag
-    return task
+    return _resolve_deprecated_task(info.pipeline_tag)
 
 
 def check_task(task: str) -> tuple[str, dict, Any]:
@@ -327,6 +417,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
             - `"audio-classification"`
             - `"automatic-speech-recognition"`
             - `"conversational"`
+            - `"decision"`
             - `"depth-estimation"`
             - `"document-question-answering"`
             - `"feature-extraction"`
@@ -352,7 +443,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
 
 
     """
-    return PIPELINE_REGISTRY.check_task(task)
+    return PIPELINE_REGISTRY.check_task(_resolve_deprecated_task(task))
 
 
 def clean_custom_task(task_info):
@@ -380,55 +471,57 @@ from typing import Literal, overload
 
 
 @overload
-def pipeline(task: Literal[None], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> Pipeline: ...
+def pipeline(task: Literal[None], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> Pipeline: ...
 @overload
-def pipeline(task: Literal["any-to-any"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AnyToAnyPipeline: ...
+def pipeline(task: Literal["any-to-any"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AnyToAnyPipeline: ...
 @overload
-def pipeline(task: Literal["audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AudioClassificationPipeline: ...
+def pipeline(task: Literal["audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AudioClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["automatic-speech-recognition"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AutomaticSpeechRecognitionPipeline: ...
+def pipeline(task: Literal["automatic-speech-recognition"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AutomaticSpeechRecognitionPipeline: ...
 @overload
-def pipeline(task: Literal["depth-estimation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DepthEstimationPipeline: ...
+def pipeline(task: Literal["decision"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DecisionPipeline: ...
 @overload
-def pipeline(task: Literal["document-question-answering"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DocumentQuestionAnsweringPipeline: ...
+def pipeline(task: Literal["depth-estimation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DepthEstimationPipeline: ...
 @overload
-def pipeline(task: Literal["feature-extraction"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> FeatureExtractionPipeline: ...
+def pipeline(task: Literal["document-question-answering"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DocumentQuestionAnsweringPipeline: ...
 @overload
-def pipeline(task: Literal["fill-mask"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> FillMaskPipeline: ...
+def pipeline(task: Literal["feature-extraction"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> FeatureExtractionPipeline: ...
 @overload
-def pipeline(task: Literal["image-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageClassificationPipeline: ...
+def pipeline(task: Literal["fill-mask"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> FillMaskPipeline: ...
 @overload
-def pipeline(task: Literal["image-feature-extraction"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageFeatureExtractionPipeline: ...
+def pipeline(task: Literal["image-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["image-segmentation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageSegmentationPipeline: ...
+def pipeline(task: Literal["image-feature-extraction"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageFeatureExtractionPipeline: ...
 @overload
-def pipeline(task: Literal["image-text-to-text"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageTextToTextPipeline: ...
+def pipeline(task: Literal["image-segmentation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageSegmentationPipeline: ...
 @overload
-def pipeline(task: Literal["keypoint-matching"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> KeypointMatchingPipeline: ...
+def pipeline(task: Literal["image-text-to-text"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ImageTextToTextPipeline: ...
 @overload
-def pipeline(task: Literal["mask-generation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> MaskGenerationPipeline: ...
+def pipeline(task: Literal["keypoint-matching"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> KeypointMatchingPipeline: ...
 @overload
-def pipeline(task: Literal["object-detection"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ObjectDetectionPipeline: ...
+def pipeline(task: Literal["mask-generation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> MaskGenerationPipeline: ...
 @overload
-def pipeline(task: Literal["table-question-answering"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TableQuestionAnsweringPipeline: ...
+def pipeline(task: Literal["object-detection"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ObjectDetectionPipeline: ...
 @overload
-def pipeline(task: Literal["text-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextClassificationPipeline: ...
+def pipeline(task: Literal["table-question-answering"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TableQuestionAnsweringPipeline: ...
 @overload
-def pipeline(task: Literal["text-generation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextGenerationPipeline: ...
+def pipeline(task: Literal["text-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["text-to-audio"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextToAudioPipeline: ...
+def pipeline(task: Literal["text-generation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextGenerationPipeline: ...
 @overload
-def pipeline(task: Literal["token-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TokenClassificationPipeline: ...
+def pipeline(task: Literal["text-to-audio"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TextToAudioPipeline: ...
 @overload
-def pipeline(task: Literal["video-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> VideoClassificationPipeline: ...
+def pipeline(task: Literal["token-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> TokenClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["zero-shot-audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotAudioClassificationPipeline: ...
+def pipeline(task: Literal["video-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> VideoClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["zero-shot-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotClassificationPipeline: ...
+def pipeline(task: Literal["zero-shot-audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotAudioClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["zero-shot-image-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotImageClassificationPipeline: ...
+def pipeline(task: Literal["zero-shot-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotClassificationPipeline: ...
 @overload
-def pipeline(task: Literal["zero-shot-object-detection"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotObjectDetectionPipeline: ...
+def pipeline(task: Literal["zero-shot-image-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotImageClassificationPipeline: ...
+@overload
+def pipeline(task: Literal["zero-shot-object-detection"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> ZeroShotObjectDetectionPipeline: ...
 
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 #                       The part of the file above was automatically generated from the code.
@@ -544,6 +637,32 @@ def _resolve_image_processor(
     return _load_pipeline_component(load_image_processor, image_processor, load)
 
 
+def _resolve_video_processor(
+    video_processor,
+    load_video_processor,
+    model_name,
+    config,
+    task,
+    hub_kwargs,
+    model_kwargs,
+):
+    def load(video_processor):
+        video_processor = _infer_pipeline_component(
+            video_processor,
+            model_name,
+            config,
+            "Impossible to guess which video processor to use. "
+            "Please provide a BaseVideoProcessor class or a path/identifier to a pretrained video processor.",
+        )
+
+        if not isinstance(video_processor, str):
+            return video_processor
+
+        return AutoVideoProcessor.from_pretrained(video_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+
+    return _load_pipeline_component(load_video_processor, video_processor, load)
+
+
 def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_name_or_path):
     """Attach a pyctcdecode decoder when the loaded feature extractor declares an LM-backed processor."""
     config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
@@ -556,7 +675,7 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
         return
 
     try:
-        import kenlm  # to trigger `ImportError` if not installed
+        import kenlm  # noqa: F401  # to trigger `ImportError` if not installed
         from pyctcdecode import BeamSearchDecoderCTC
 
         if os.path.isdir(model_name) or os.path.isfile(model_name):
@@ -569,12 +688,11 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
 
         kwargs["decoder"] = decoder
     except ImportError as error:
-        logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {error}")
-        if not is_kenlm_available():
-            logger.warning("Try to install `kenlm`: `pip install kenlm")
-
-        if not is_pyctcdecode_available():
-            logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+        logger.warning_once(
+            f"`{model_name}` ships an n-gram language model, but decoding falls back to greedy CTC ({error}), so "
+            "transcriptions can differ from previous versions. See: "
+            "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+        )
 
 
 def _resolve_feature_extractor(
@@ -645,6 +763,7 @@ def pipeline(
     tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None,
     feature_extractor: str | FeatureExtractionMixin | None = None,
     image_processor: str | BaseImageProcessor | None = None,
+    video_processor: str | BaseVideoProcessor | None = None,
     processor: str | ProcessorMixin | None = None,
     revision: str | None = None,
     use_fast: bool = True,
@@ -680,6 +799,7 @@ def pipeline(
 
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
+            - `"decision"`: will return a [`DecisionPipeline`].
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
@@ -762,9 +882,11 @@ def pipeline(
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `hf auth login`.
-        device (`int` or `str` or `torch.device`):
+        device (`int` or `str` or `torch.device`, *optional*):
             Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
-            pipeline will be allocated.
+            pipeline will be allocated. When left unset, the pipeline is automatically placed on the first available
+            accelerator (CUDA, MPS, XPU, ...) and only falls back to CPU when none is available; the model is moved
+            there for you. Pass `device="cpu"` (or `-1`) to force CPU. Cannot be used together with `device_map`.
         device_map (`str` or `dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically (see
@@ -777,9 +899,10 @@ def pipeline(
 
             </Tip>
 
-        dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
+        dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
+            Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
+            model in the dtype it was saved in. Pass an explicit `torch.float16`, `torch.bfloat16`, `torch.float32`,
+            ... to override it.
         trust_remote_code (`bool`, *optional*, defaults to `False`):
             Whether or not to allow for custom code defined on the Hub in their own modeling, configuration,
             tokenization or even pipeline files. This option should only be set to `True` for repositories you trust
@@ -811,17 +934,24 @@ def pipeline(
         model_kwargs = {}
 
     code_revision = kwargs.pop("code_revision", None)
-    commit_hash = kwargs.pop("_commit_hash", None)
+    if "code_revision" in model_kwargs:
+        if code_revision is not None:
+            raise ValueError(
+                'You cannot use both `pipeline(... code_revision=..., model_kwargs={"code_revision":...})` as those'
+                " arguments might conflict, use only one."
+            )
+        code_revision = model_kwargs.pop("code_revision")
+    kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
     local_files_only = kwargs.get("local_files_only", False)
 
+    requested_revision = revision
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
-        "_commit_hash": commit_hash,
         "local_files_only": local_files_only,
+        "code_revision": code_revision,
     }
-
     if task is None and model is None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline without either a task or a model "
@@ -845,35 +975,27 @@ def pipeline(
         model = str(model)
 
     pretrained_model_name_or_path = None
-    if commit_hash is None:
-        if isinstance(config, str):
-            pretrained_model_name_or_path = config
-        elif config is None and isinstance(model, str):
-            pretrained_model_name_or_path = model
+    if isinstance(config, str):
+        pretrained_model_name_or_path = config
+    elif config is None and isinstance(model, str):
+        pretrained_model_name_or_path = model
 
-        if not isinstance(config, PreTrainedConfig) and pretrained_model_name_or_path is not None:
-            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-            resolved_config_file = cached_file(
-                pretrained_model_name_or_path,
-                CONFIG_NAME,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-                cache_dir=model_kwargs.get("cache_dir"),
-                **hub_kwargs,
-            )
-            hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
-        else:
-            hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
+    if pretrained_model_name_or_path is not None:
+        # Resolve the revision of the model repository once. Everything loaded from that repository below (config,
+        # remote code, weights, and the components that default to it) then uses this immutable commit.
+        hub_kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=model_kwargs.get("cache_dir"),
+        )
 
     # Config is the primordial information item.
     # Instantiate config if needed
     adapter_path = None
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(
-            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
-        hub_kwargs["_commit_hash"] = config._commit_hash
+        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
@@ -883,7 +1005,6 @@ def pipeline(
                 model,
                 token=hub_kwargs["token"],
                 revision=hub_kwargs["revision"],
-                _commit_hash=hub_kwargs["_commit_hash"],
             )
 
             if maybe_adapter_path is not None:
@@ -896,11 +1017,16 @@ def pipeline(
                     # model named in the adapter's config from the hub.
                     if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
                         model = adapter_config["base_model_name_or_path"]
+                        # The revision resolved above belongs to the adapter repository, resolve the base model's.
+                        hub_kwargs["revision"] = resolve_revision(
+                            model,
+                            requested_revision,
+                            token=token,
+                            local_files_only=local_files_only,
+                            cache_dir=model_kwargs.get("cache_dir"),
+                        )
 
-        config = AutoConfig.from_pretrained(
-            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
-        hub_kwargs["_commit_hash"] = config._commit_hash
+        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -932,17 +1058,20 @@ def pipeline(
                     " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
                     " set the option `trust_remote_code=True` to remove this error."
                 )
+            # Custom pipeline impls are "module.Class" strings inside the Hub repo, which only
+            # get_class_from_dynamic_module can resolve, so we pass them through unchanged
             class_ref = targeted_task["impl"]
             pipeline_class = get_class_from_dynamic_module(
                 class_ref,
                 model,
-                code_revision=code_revision,
                 **hub_kwargs,
             )
     else:
+        # Resolve removed tasks here so that the pipeline and its components are built with the replacement task name
+        task = _resolve_deprecated_task(task)
         normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
-            pipeline_class = targeted_task["impl"]
+            pipeline_class = _resolve_impl(targeted_task["impl"])
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
@@ -952,10 +1081,11 @@ def pipeline(
             f"No model was supplied, defaulted to {model} and revision {revision}.\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
-        hub_kwargs["revision"] = revision
+        hub_kwargs["revision"] = resolve_revision(
+            model, revision, token=token, local_files_only=local_files_only, cache_dir=model_kwargs.get("cache_dir")
+        )
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-            hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
         if "device_map" in model_kwargs:
@@ -999,6 +1129,10 @@ def pipeline(
     # Load the correct model if possible
     if isinstance(model, str):
         model_classes = targeted_task["pt"]
+        # A decision model reading the checkpoint, which builds its config from the files of the checkpoint itself
+        if task == "decision" and type(config) in MODEL_FOR_DECISION_MAPPING:
+            model_classes = (MODEL_FOR_DECISION_MAPPING[type(config)],)
+            hub_kwargs.pop("code_revision", None)  # for remote code, which only the auto classes read
         model = load_model(
             adapter_path if adapter_path is not None else model,
             model_classes=model_classes,
@@ -1008,13 +1142,12 @@ def pipeline(
             **model_kwargs,
         )
 
-    hub_kwargs["_commit_hash"] = model.config._commit_hash
-
     if pipeline_class is None:
         raise RuntimeError("Failed to resolve a pipeline class.")
 
     load_tokenizer = getattr(pipeline_class, "_load_tokenizer")
     load_image_processor = getattr(pipeline_class, "_load_image_processor")
+    load_video_processor = getattr(pipeline_class, "_load_video_processor")
     load_feature_extractor = getattr(pipeline_class, "_load_feature_extractor")
     load_processor = getattr(pipeline_class, "_load_processor")
 
@@ -1058,6 +1191,15 @@ def pipeline(
         hub_kwargs=hub_kwargs,
         model_kwargs=model_kwargs,
     )
+    video_processor = _resolve_video_processor(
+        video_processor=video_processor,
+        load_video_processor=load_video_processor,
+        model_name=model_name,
+        config=config,
+        task=task,
+        hub_kwargs=hub_kwargs,
+        model_kwargs=model_kwargs,
+    )
 
     if tokenizer is not None:
         kwargs["tokenizer"] = tokenizer
@@ -1071,6 +1213,9 @@ def pipeline(
     if image_processor is not None:
         kwargs["image_processor"] = image_processor
 
+    if video_processor is not None:
+        kwargs["video_processor"] = video_processor
+
     if device is not None:
         kwargs["device"] = device
 
@@ -1078,3 +1223,12 @@ def pipeline(
         kwargs["processor"] = processor
 
     return pipeline_class(model=model, task=task, **kwargs)
+
+
+def __getattr__(name):
+    if name in _PIPELINE_CLASS_TO_MODULE:
+        module = importlib.import_module(_PIPELINE_CLASS_TO_MODULE[name])
+        value = getattr(module, name)
+        globals()[name] = value  # cache so subsequent accesses skip __getattr__
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -22,6 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput, QuestionAnsweringModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -49,16 +50,14 @@ class SplinterEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -135,7 +134,7 @@ class SplinterSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -189,7 +188,7 @@ class SplinterAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -246,7 +245,7 @@ class SplinterLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -278,7 +277,7 @@ class SplinterEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         for layer_module in self.layer:
@@ -317,7 +316,7 @@ class SplinterModel(SplinterPreTrainedModel):
     Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__(config)
         self.config = config
 
@@ -378,19 +377,22 @@ class SplinterModel(SplinterPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]
@@ -458,7 +460,7 @@ class QuestionAwareSpanSelectionHead(nn.Module):
 
 @auto_docstring
 class SplinterForQuestionAnswering(SplinterPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__(config)
 
         self.splinter = SplinterModel(config)
@@ -568,19 +570,19 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 @dataclass
 class SplinterForPreTrainingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when start and end positions are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when start and end positions are provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    start_logits (`torch.FloatTensor` of shape `(batch_size, num_questions, sequence_length)`):
+    start_logits (`torch.Tensor` of shape `(batch_size, num_questions, sequence_length)`):
         Span-start scores (before SoftMax).
-    end_logits (`torch.FloatTensor` of shape `(batch_size, num_questions, sequence_length)`):
+    end_logits (`torch.Tensor` of shape `(batch_size, num_questions, sequence_length)`):
         Span-end scores (before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    start_logits: torch.FloatTensor | None = None
-    end_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    start_logits: torch.Tensor | None = None
+    end_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -591,7 +593,7 @@ class SplinterForPreTrainingOutput(ModelOutput):
     """
 )
 class SplinterForPreTraining(SplinterPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__(config)
 
         self.splinter = SplinterModel(config)
@@ -636,7 +638,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_questions, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_questions, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -718,17 +720,19 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
     def _prepare_question_positions(self, input_ids: torch.Tensor) -> torch.Tensor:
         rows, flat_positions = torch.where(input_ids == self.config.question_token_id)
         num_questions = torch.bincount(rows)
+        torch_compilable_check(
+            num_questions.size(0) == input_ids.size(0),
+            "All samples in the batch must have at least one question token.",
+        )
+        # rows is sorted: col[i] = i - first_occurrence(rows[i])
+        first_idx = torch.searchsorted(rows, rows, side="left")
+        cols = torch.arange(rows.size(0), device=rows.device) - first_idx
         positions = torch.full(
             (input_ids.size(0), num_questions.max()),
             self.config.pad_token_id,
             dtype=torch.long,
             device=input_ids.device,
         )
-        torch_compilable_check(
-            num_questions.size(0) == input_ids.size(0),
-            "All samples in the batch must have at least one question token.",
-        )
-        cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions
         return positions
 

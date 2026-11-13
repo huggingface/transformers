@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-05-22 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2020-05-22 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # RAG
 
@@ -32,7 +32,7 @@ You can find all the original RAG checkpoints under the [AI at Meta](https://hug
 >
 > Click on the RAG models in the right sidebar for more examples of how to apply RAG to different language tasks.
 
-The examples below demonstrates how to generate text with [`AutoModel`].
+The examples below demonstrate how to generate text with [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -43,16 +43,17 @@ from transformers import RagRetriever, RagSequenceForGeneration, RagTokenizer
 
 tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 retriever = RagRetriever.from_pretrained(
-    "facebook/dpr-ctx_encoder-single-nq-base", dataset="wiki_dpr", index_name="compressed"
+    "facebook/rag-sequence-nq", dataset="wiki_dpr", index_name="compressed"
 )
 
 model = RagSequenceForGeneration.from_pretrained(
-    "facebook/rag-token-nq",
+    "facebook/rag-sequence-nq",
     retriever=retriever,
     attn_implementation="flash_attention_2",
- device_map="auto")
-input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt").to(model.device)
-generated = model.generate(input_ids=input_dict["input_ids"])
+    device_map="auto",
+)
+inputs = tokenizer("How many people live in Paris?", return_tensors="pt").to(model.device)
+generated = model.generate(input_ids=inputs["input_ids"])
 print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 ```
 
@@ -72,17 +73,17 @@ bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat1
 
 tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 retriever = RagRetriever.from_pretrained(
-    "facebook/dpr-ctx_encoder-single-nq-base", dataset="wiki_dpr", index_name="compressed"
+    "facebook/rag-sequence-nq", dataset="wiki_dpr", index_name="compressed"
 )
 
 model = RagSequenceForGeneration.from_pretrained(
-    "facebook/rag-token-nq",
+    "facebook/rag-sequence-nq",
     retriever=retriever,
-    quantization_config=bnb,   # quantizes generator weights
+    quantization_config=bnb,
     device_map="auto",
 )
-input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt").to(model.device)
-generated = model.generate(input_ids=input_dict["input_ids"])
+inputs = tokenizer("How many people live in Paris?", return_tensors="pt").to(model.device)
+generated = model.generate(input_ids=inputs["input_ids"])
 print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 ```
 

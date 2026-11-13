@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Whisper model."""
 
+import copy
 import math
 from collections.abc import Callable
 
@@ -301,7 +302,7 @@ class WhisperAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. whisper is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
@@ -309,6 +310,7 @@ class WhisperAttention(nn.Module):
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
@@ -384,8 +386,8 @@ class WhisperEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
@@ -457,12 +459,12 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
         """
@@ -551,6 +553,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         "attentions": WhisperAttention,
     }
     input_modalities = ("audio",)
+    _input_embed_layer = "conv1"
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -581,17 +584,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
-        input_features,
+        input_features: torch.Tensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -603,7 +600,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+                and conversion into a tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
                 Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
                 but it is not used. By default the silence in the input log mel spectrogram are ignored.
@@ -627,7 +624,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -715,16 +712,16 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.Tensor))`, *optional*):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of
+            inputs_embeds (`torch.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
@@ -737,10 +734,40 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
+            # Build a config that DynamicCache can use to pre-allocate the right number of layers.
+            # DynamicCache(config=...) reads config.num_hidden_layers via get_text_config(decoder=True),
+            # but WhisperConfig maps num_hidden_layers → encoder_layers (e.g. 32 for distil-whisper-large-v2
+            # even though the decoder only has 2 layers). Pre-allocating 32 cache slots for a 2-layer
+            # decoder wastes memory and, with crop(-n), causes crop() to iterate uninitialized layers
+            # and crash. We deepcopy the config and override num_hidden_layers with decoder_layers so
+            # DynamicCache allocates exactly the right number of slots.
+            decoder_cache_config = copy.deepcopy(self.config)
+            decoder_cache_config.num_hidden_layers = self.config.decoder_layers
             past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                EncoderDecoderCache(
+                    DynamicCache(config=decoder_cache_config), DynamicCache(config=decoder_cache_config)
+                )
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
-                else DynamicCache(config=self.config)
+                else DynamicCache(config=decoder_cache_config)
+            )
+        elif (
+            use_cache
+            and encoder_hidden_states is not None
+            and isinstance(past_key_values, DynamicCache)
+            and not isinstance(past_key_values, EncoderDecoderCache)
+            and past_key_values.get_seq_length() == 0
+        ):
+            # generate() (since PR #43679) pre-initializes the cache with DynamicCache based on
+            # config.is_encoder_decoder. WhisperForCausalLM sets is_encoder_decoder=False, so
+            # generate() creates a plain DynamicCache. But when encoder_hidden_states are present,
+            # both self-attention and cross-attention write to the same layer_idx in DynamicCache,
+            # overwriting each other. Convert the empty DynamicCache to EncoderDecoderCache here.
+            # Use the same decoder_cache_config approach: override num_hidden_layers with decoder_layers
+            # so only the actual decoder layers are pre-allocated.
+            decoder_cache_config = copy.deepcopy(self.config)
+            decoder_cache_config.num_hidden_layers = self.config.decoder_layers
+            past_key_values = EncoderDecoderCache(
+                DynamicCache(config=decoder_cache_config), DynamicCache(config=decoder_cache_config)
             )
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -772,7 +799,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
@@ -820,7 +847,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
     def _mask_input_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -865,13 +892,13 @@ class WhisperModel(WhisperPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
         **kwargs,
@@ -982,6 +1009,21 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
+        # During Whisper longform generation with condition_on_prev_tokens=True, shorter sequences
+        # in a batch are left-padded. Compute decoder_position_ids from decoder_attention_mask so
+        # each item gets correct positions regardless of padding, before the base class processes it.
+        if (
+            "decoder_position_ids" not in kwargs
+            and (decoder_attention_mask := kwargs.get("decoder_attention_mask")) is not None
+        ):
+            position_ids = decoder_attention_mask.long().cumsum(-1) - 1
+            position_ids = position_ids.masked_fill(decoder_attention_mask == 0, 0)
+            kwargs["decoder_position_ids"] = position_ids[..., -input_ids.shape[1] :]
+        return super().prepare_inputs_for_generation(
+            input_ids, past_key_values=past_key_values, attention_mask=attention_mask, **kwargs
+        )
+
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
@@ -993,13 +1035,13 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1105,7 +1147,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.decoder = WhisperDecoder(config)
@@ -1130,7 +1172,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
     main_input_name = "input_ids"
 
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.model = WhisperDecoderWrapper(config)
@@ -1158,21 +1200,26 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        encoder_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            Labels for computing the language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            The labels are **not shifted** inside the model. `labels[..., i]` is the target for `logits[..., i, :]`,
+            so for next-token prediction the labels must already be shifted one position to the left relative to
+            `input_ids`.
+
+        encoder_outputs (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            if the model is configured as a decoder.
 
         Example:
 
@@ -1239,7 +1286,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     """
 )
 class WhisperForAudioClassification(WhisperPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
 
         self.encoder = WhisperEncoder(config)
@@ -1270,7 +1317,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
     def forward(
         self,
         input_features: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:

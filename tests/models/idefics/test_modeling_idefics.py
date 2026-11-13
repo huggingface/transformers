@@ -349,6 +349,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     ):
         pass
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
     def test_model_outputs_equivalence(self):
         try:
             orig = self.all_model_classes
@@ -465,7 +470,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss

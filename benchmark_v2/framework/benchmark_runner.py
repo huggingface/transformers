@@ -212,7 +212,9 @@ class BenchmarkRunner:
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
         use_kernels = config.kernelize and kernelize is not None and Mode is not None
-        device_map = config.device if config.tp_plan is None else None
+        # `distributed_config` and `device_map` are mutually exclusive — TP does its own placement.
+        distributed_config = config.distributed_config
+        device_map = config.device if distributed_config is None else None
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=dtype,
@@ -220,7 +222,7 @@ class BenchmarkRunner:
             generation_config=generation_config,
             use_kernels=use_kernels,
             device_map=device_map,
-            tp_plan=config.tp_plan,
+            distributed_config=distributed_config,
         )
         self.model = self.model.eval()
         self.inputs = self.inputs.to(self.model.device)
@@ -434,7 +436,7 @@ class BenchmarkRunner:
             }
 
         # Save to JSON file
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(compact_json_numeric_arrays(converted_results))
 
         self.logger.info(f"Results saved to {filepath}")
@@ -464,7 +466,7 @@ class BenchmarkRunner:
             with tempfile.TemporaryDirectory() as tmp:
                 file_name = "summarized_results" if summarized else "full_results"
                 jsonl_path = os.path.join(tmp, f"{file_name}.jsonl")
-                with open(jsonl_path, "w") as f:
+                with open(jsonl_path, "w", encoding="utf-8") as f:
                     json_lines = []
                     for ex in ds:
                         json_lines.append(json.dumps(ex, ensure_ascii=False))

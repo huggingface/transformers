@@ -21,6 +21,7 @@ from ...modeling_outputs import ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from ..auto import AutoModelForImageTextToText
@@ -32,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWithNoAttention):
-    """ShieldGemma2 classifies imags as violative or not relative to a specific policy
+    """ShieldGemma2 classifies images as violative or not relative to a specific policy
     Args:
     """
 
@@ -44,6 +45,10 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
     base_model_prefix = "model"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
@@ -65,22 +70,23 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.model.get_decoder().set_output_embeddings(new_embeddings)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs,
+        **kwargs,
     ) -> ShieldGemma2ImageClassifierOutputWithNoAttention:
         r"""
         Returns:
@@ -116,7 +122,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
         logits = outputs.logits
         selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]

@@ -35,23 +35,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Рortuguês</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
 		<b>العربية</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -241,13 +244,12 @@ limitations under the License.
 
 - ليست هذه المكتبة عبارة عن مجموعة أدوات من الصناديق المكونة للشبكات العصبية. لم يتم إعادة صياغة التعليمات البرمجية في ملفات النموذج باستخدام تجريدات إضافية عن قصد، بحيث يمكن للباحثين إجراء حلقات تكرار سريعة على كل من النماذج دون الغوص في تجريدات/ملفات إضافية.
 - لا يُقصد بواجهة برمجة التطبيقات (API) للتدريب العمل على أي نموذج ولكنه مُستَهدف للعمل مع النماذج التي توفرها المكتبة. للحلقات العامة للتعلم الآلي، يجب استخدام مكتبة أخرى (ربما، [تسريع](https://huggingface.co/docs/accelerate)).
-- في حين أننا نسعى جاهدين لتقديم أكبر عدد ممكن من حالات الاستخدام، فإن البرامج النصية الموجودة في مجلد [الأمثلة](https://github.com/huggingface/transformers/tree/main/examples) الخاص بنا هي مجرد أمثلة. من المتوقع ألا تعمل هذه البرامج النصية خارج الصندوق على مشكلتك المحددة وأنه سيُطلب منك تغيير بضع أسطر من التعليمات البرمجية لتكييفها مع احتياجاتك.
 
 ## التثبيت
 
 ### باستخدام pip
 
-تم اختبار هذا المستودع على Python 3.10+ و PyTorch 2.4+.
+تم اختبار هذا المستودع على Python 3.10+ و PyTorch 2.5+.
 
 يجب تثبيت 🤗 Transformers في [بيئة افتراضية](https://docs.python.org/3/library/venv.html). إذا كنت غير معتاد على البيئات الافتراضية Python، فراجع [دليل المستخدم](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
@@ -288,7 +290,7 @@ conda install conda-forge::transformers
 
 للتحقق مما إذا كان لكل نموذج تنفيذ في Flax أو PyTorch أو TensorFlow، أو كان لديه مُعلم مرفق مدعوم من مكتبة 🤗 Tokenizers، يرجى الرجوع إلى [هذا الجدول](https://huggingface.co/docs/transformers/index#supported-frameworks).
 
-تم اختبار هذه التطبيقات على العديد من مجموعات البيانات (راجع البرامج النصية المثالية) ويجب أن تتطابق مع أداء التنفيذ الأصلي. يمكنك العثور على مزيد من التفاصيل حول الأداء في قسم الأمثلة من [الوثائق](https://github.com/huggingface/transformers/tree/main/examples).
+تم اختبار هذه التطبيقات على العديد من مجموعات البيانات ويجب أن تتطابق مع أداء التنفيذ الأصلي.
 
 
 ## تعلم المزيد
@@ -299,12 +301,11 @@ conda install conda-forge::transformers
 | [ملخص المهام](https://huggingface.co/docs/transformers/task_summary) | المهام التي يدعمها 🤗 Transformers |
 | [برنامج تعليمي لمعالجة مسبقة](https://huggingface.co/docs/transformers/preprocessing) | استخدام فئة `Tokenizer` لإعداد البيانات للنماذج |
 | [التدريب والضبط الدقيق](https://huggingface.co/docs/transformers/training) | استخدام النماذج التي يوفرها 🤗 Transformers في حلقة تدريب PyTorch/TensorFlow وواجهة برمجة تطبيقات `Trainer` |
-| [جولة سريعة: البرامج النصية للضبط الدقيق/الاستخدام](https://github.com/huggingface/transformers/tree/main/examples) | البرامج النصية المثالية للضبط الدقيق للنماذج على مجموعة واسعة من المهام |
 | [مشاركة النماذج وتحميلها](https://huggingface.co/docs/transformers/model_sharing) | تحميل ومشاركة نماذجك المضبوطة بدقة مع المجتمع |
 
 ## الاستشهاد
 
-لدينا الآن [ورقة](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
+لدينا الآن [ورقة](https://aclanthology.org/2020.emnlp-demos.6/) يمكنك الاستشهاد بها لمكتبة 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers،
     title = "Transformers: State-of-the-Art Natural Language Processing"،
@@ -314,7 +315,7 @@ conda install conda-forge::transformers
     year = "2020"،
     address = "Online"،
     publisher = "Association for Computational Linguistics"،
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6"،
+    url = "https://aclanthology.org/2020.emnlp-demos.6/"،
     pages = "38--45"
 }
 ```

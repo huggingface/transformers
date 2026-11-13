@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2021-08-04.*
+*This model was published in HF papers on 2021-06-15 and contributed to Hugging Face Transformers on 2021-08-04.*
 
 # BEiT
 
@@ -120,7 +120,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`BeitForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+- [`BeitForImageClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 - See also: [Image classification task guide](../tasks/image_classification)
 
 **Semantic segmentation**

@@ -28,10 +28,6 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChameleonProcessor
 
     @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
-    @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         print("SAMPLE_VOCAB", SAMPLE_VOCAB)
@@ -42,7 +38,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return tokenizer
 
     @unittest.skip("Chameleon processor add a sep_token at the end of each sample")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     def test_special_mm_token_truncation(self):
@@ -51,7 +47,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
 
         _ = processor(
             text=input_str,

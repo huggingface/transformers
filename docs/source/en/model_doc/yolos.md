@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-01 and added to Hugging Face Transformers on 2022-05-02.*
+*This model was published in HF papers on 2021-06-01 and contributed to Hugging Face Transformers on 2022-05-02.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -32,7 +32,7 @@ You can find all the original YOLOS checkpoints under the [HUST Vision Lab](http
 <small> YOLOS architecture. Taken from the <a href="https://huggingface.co/papers/2106.00666">original paper</a>.</small>
 
 > [!TIP]
-> This model wasa contributed by [nielsr](https://huggingface.co/nielsr).
+> This model was contributed by [nielsr](https://huggingface.co/nielsr).
 > Click on the YOLOS models in the right sidebar for more examples of how to apply YOLOS to different object detection tasks.
 
 The example below demonstrates how to detect objects with [`Pipeline`] or the [`AutoModel`] class.

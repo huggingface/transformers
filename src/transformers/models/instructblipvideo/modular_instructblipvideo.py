@@ -146,10 +146,10 @@ class InstructBlipVideoModel(InstructBlipModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        qformer_input_ids: torch.FloatTensor,
+        pixel_values: torch.Tensor,
+        qformer_input_ids: torch.Tensor,
         qformer_attention_mask: torch.LongTensor | None = None,
-        input_ids: torch.FloatTensor | None = None,
+        input_ids: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
@@ -182,6 +182,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -205,11 +206,11 @@ class InstructBlipVideoModel(InstructBlipModel):
                 attention_mask = torch.ones_like(input_ids)
         else:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
@@ -242,14 +243,14 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         qformer_input_ids: torch.LongTensor,
         qformer_attention_mask: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
             The sequence used as a prompt to be fed to the Q-Former module.
@@ -288,6 +289,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -312,36 +314,37 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
     def get_image_features(**super_kwargs):
         raise AttributeError("No need to inherit as this architecture only supports videos.")
 
-    def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
+    def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`.
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.video_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        qformer_input_ids: torch.FloatTensor,
+        pixel_values: torch.Tensor,
+        qformer_input_ids: torch.Tensor,
         qformer_attention_mask: torch.LongTensor | None = None,
-        input_ids: torch.FloatTensor | None = None,
+        input_ids: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         use_cache: bool | None = None,
+        mm_encoder_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         r"""
@@ -387,7 +390,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> # sample uniformly 4 frames from the video
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)
@@ -407,16 +410,21 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> print(generated_text)
         "A person is eating a bowl of pasta, and they are using a fork to eat it. The person is sitting at a table, and the plate of pasta is on the table in front"
         ```"""
-        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
-            pixel_values,
-            qformer_input_ids=qformer_input_ids,
-            qformer_attention_mask=qformer_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
-        )
-        language_model_inputs = video_features.pooler_output
-        qformer_outputs = video_features.qformer_outputs
-        vision_outputs = video_features.vision_outputs
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("video") is None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+                pixel_values,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                **kwargs,
+            )
+        language_model_inputs = mm_encoder_outputs["video"].pooler_output
+        qformer_outputs = mm_encoder_outputs["video"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["video"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -466,12 +474,12 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
     @torch.no_grad()
     def generate(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         qformer_input_ids: torch.LongTensor | None = None,
         qformer_attention_mask: torch.LongTensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
@@ -479,7 +487,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width) or
+            pixel_values (`torch.Tensor` of shape (batch_size, num_channels, height, width) or
                 (batch_size, num_frames, num_channels, height, width)): Input images or videos to be processed.
             qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 The sequence used as a prompt to be fed to the Q-Former module.
@@ -489,7 +497,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 The sequence used as a prompt for the generation.
             attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 Mask to avoid performing attention on padding token indices.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Embedded representation of the inputs. Should be float, not int tokens.
             interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
                 Whether to interpolate the positional encoding of the image embeddings.

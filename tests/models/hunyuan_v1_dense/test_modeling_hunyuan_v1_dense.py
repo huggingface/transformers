@@ -15,16 +15,19 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         HunYuanDenseV1Model,
     )
@@ -55,6 +58,8 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class HunYuanDenseV1IntegrationTest(unittest.TestCase):
+    model_id = "tencent/HY-MT1.5-1.8B"
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -65,3 +70,30 @@ class HunYuanDenseV1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         # TODO Need new Dense Model
         return True
+
+    @slow
+    @require_torch_accelerator
+    def test_generation_past_max_position_embeddings(self):
+        """The NTK-alpha frequencies are static, so decoding past the context window must not change them."""
+        config = AutoConfig.from_pretrained(self.model_id)
+        # Shrink the context window so that a short prompt already decodes past it
+        config.max_position_embeddings = 16
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, config=config, dtype=torch.bfloat16).to(
+            torch_device
+        )
+
+        # The checkpoint asks for `dynamic`, the module resolves it to the variant it actually implements
+        self.assertEqual(config.rope_parameters["rope_type"], "dynamic")
+        self.assertEqual(model.model.rotary_emb.rope_type, "ntk_alpha")
+
+        inputs = tokenizer("Machine translation is", return_tensors="pt").to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=32, min_new_tokens=32, do_sample=False)
+
+        # Before this was fixed, `@dynamic_rope_update` overwrote the frequencies and the continuation degenerated
+        EXPECTED_TEXT = (
+            "Machine translation is a process of interpreting the source text into another language. It can be "
+            "used to translate various types of content, such as documents, articles, websites, etc."
+        )
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_TEXT)

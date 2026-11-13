@@ -14,11 +14,11 @@
 # limitations under the License.
 
 
-from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available
+from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -26,9 +26,13 @@ if is_vision_available():
     from .image_processing_emu3 import Emu3ImageProcessorKwargs, smart_resize
 
 
-class Emu3TextKwargs(TextKwargs, total=False):
+logger = logging.get_logger(__name__)
+
+
+class DeprecatedEmu3TextKwargs(TextKwargs, total=False):
     """
-    return_for_image_generation (`bool`, *optional*, defaults to `False`):
+    return_for_image_generation (`bool`, *optional*):
+        Deprecated, use [`Emu3ProcessorKwargs.return_for_image_generation`] instead.
         Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
         inputs for image generation by appending image start tokens and size information to the prompt, and
         images should not be provided. When `False`, the processor prepares inputs for text generation from
@@ -39,23 +43,35 @@ class Emu3TextKwargs(TextKwargs, total=False):
 
 
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: Emu3TextKwargs
+    """
+    return_for_image_generation (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
+        inputs for image generation by appending image start tokens and size information to the prompt, and
+        images should not be provided. When `False`, the processor prepares inputs for text generation from
+        images and text, requiring both inputs to be provided.
+    ratio (`str`, *optional*, defaults to `"1:1"`):
+        The ratio of the image to resize the image.
+    image_area (`int`, *optional*, defaults to `518400`):
+        The area of the image to resize the image.
+    """
+
+    text_kwargs: DeprecatedEmu3TextKwargs
     images_kwargs: Emu3ImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {
-            "return_for_image_generation": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "ratio": "1:1",
-            "image_area": 518400,
-        },
-    }
+
+    return_for_image_generation: bool
+    ratio: str
+    image_area: int
 
 
 @auto_docstring
 @requires(backends=("vision",))
 class Emu3Processor(ProcessorMixin):
+    valid_processor_kwargs = Emu3ProcessorKwargs
+
+    return_for_image_generation = False
+    ratio = "1:1"
+    image_area = 518400
+
     def __init__(
         self,
         image_processor,
@@ -80,78 +96,61 @@ class Emu3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        # check if images and text inputs are reversed for BC
-
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
         output_kwargs = self._merge_kwargs(
-            Emu3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        return_for_image_generation = output_kwargs["text_kwargs"].pop("return_for_image_generation", False)
-        ratio = output_kwargs["images_kwargs"].pop("ratio", None)
-        image_area = output_kwargs["images_kwargs"].pop("image_area", None)
+        for key, modality in (
+            ("return_for_image_generation", "text_kwargs"),
+            ("ratio", "images_kwargs"),
+            ("image_area", "images_kwargs"),
+        ):
+            if key in output_kwargs[modality]:
+                logger.warning_once(
+                    f"Passing `{key}` in `{modality}` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+        # Modality-specific kwargs have priority for backwards compatibility.
+        return_for_image_generation = output_kwargs["text_kwargs"].pop(
+            "return_for_image_generation", output_kwargs["return_for_image_generation"]
+        )
+        ratio = output_kwargs["images_kwargs"].pop("ratio", output_kwargs["ratio"])
+        image_area = output_kwargs["images_kwargs"].pop("image_area", output_kwargs["image_area"])
 
-        if return_for_image_generation and images is not None:
-            raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
-
-        if not return_for_image_generation and text is None and images is None:
-            raise ValueError("You must provide either text or images when `return_for_image_generation=False`")
-
-        image_features = {}
-        image_start_tokens = f"{self.image_start_token}"
-        image_end_tokens = f"{self.eof_token}{self.image_end_token}"
-
-        # generate text from image + text input, so we add placeholders for image tokens
-        if not return_for_image_generation and images is not None:
-            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
-            image_sizes = iter(image_features.image_sizes)
-
-            prompt_strings = []
-            for sample in text:
-                while self.image_token in sample:
-                    image_size = next(image_sizes)
-                    height, width = image_size
-                    height = height // self.downsample_ratio
-                    width = width // self.downsample_ratio
-                    image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
-
-                    image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
-                    sample = sample.replace(self.image_token, image_placeholder, 1)
-                    sample = f"{self.bos_token}{sample}"  # add BOS because GPT tokenizer doesn't add it
-                prompt_strings.append(sample)
-            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
-
-        # generate image from text input, so we add begin-of-image tokens from where image generation starts
-        elif return_for_image_generation:
+        # take different processing path when generarating images cond on text
+        if return_for_image_generation:
+            if images is not None:
+                raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
             height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
-            image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
-            text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
-            image_features["image_sizes"] = [[height, width]] * len(text)
+            image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
+            if isinstance(text, str):
+                text = [text]
+            text = [f"{sample}{image_prompt}" for sample in text]
 
-        # else just generate from text-only input, and we do no special treatment for text
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        if return_for_image_generation:
+            model_inputs["image_sizes"] = [[height, width]] * len(text)
+        return model_inputs
 
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_features}, tensor_type=return_tensors)
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+        if text is not None and kwargs.get("add_special_tokens", True):
+            # Add BOS once per sample; GPT tokenizer doesn't add it automatically
+            text = [f"{self.bos_token}{sample}" for sample in text]
+        return images, text, None, None
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        height, width = image_inputs["image_sizes"][image_idx]
+        height = height // self.downsample_ratio
+        width = width // self.downsample_ratio
+        image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+        return (
+            f"{self.image_start_token}{height}*{width}"
+            f"{self.fake_token_around_image}"
+            f"{self.image_token * image_seq_length}"
+            f"{self.eof_token}{self.image_end_token}"
+        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -235,4 +234,5 @@ class Emu3Processor(ProcessorMixin):
             )
 
 
+__getattr__ = deprecate_attr(__name__, remove={"Emu3TextKwargs": (DeprecatedEmu3TextKwargs, "5.29.0")})
 __all__ = ["Emu3Processor"]

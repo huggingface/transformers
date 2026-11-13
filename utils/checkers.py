@@ -63,9 +63,43 @@ from collections import deque
 from pathlib import Path
 
 
+# Optional OpenTelemetry instrumentation. When transformers-ci[otel] is installed
+# and OTEL_* env is configured (e.g. by `configure-ci-otel` in CI), each checker
+# run emits a span; otherwise this is a complete no-op. The producer-side helper
+# lives in transformers-ci, so importing it must never be a hard dependency.
+try:
+    from transformersci.otel import instrument as _otel
+except ImportError:  # transformers-ci[otel] not installed → tracing disabled
+    _otel = None
+
+
+class _NullTrace:
+    """No-op with the same shape as transformersci.otel.instrument's Run/Step."""
+
+    def run(self, *args, **kwargs):
+        return self
+
+    def step(self, *args, **kwargs):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def set_exit_code(self, returncode, **kwargs):
+        pass
+
+
+_tracer = _otel if _otel is not None else _NullTrace()
+
+
 UTILS_DIR = Path(__file__).parent
 REPO_ROOT = UTILS_DIR.parent
 CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
+REQUIREMENTS_PATH = UTILS_DIR / "checkers-requirements.txt"
+REQUIREMENTS_STAMP_PATH = UTILS_DIR / ".checkers_requirements.json"
 
 # Required keys in each module's CHECKER_CONFIG dict.
 _CHECKER_CONFIG_KEYS = {"name", "label", "cache_globs", "check_args", "fix_args"}
@@ -82,6 +116,7 @@ def _discover_checkers() -> tuple[dict, dict]:
     """
     checkers = {}
     cache_globs = {}
+    needs_requirements = set()
 
     for py_file in sorted(UTILS_DIR.glob("*.py")):
         if py_file.name == Path(__file__).name:
@@ -132,8 +167,11 @@ def _discover_checkers() -> tuple[dict, dict]:
         )
         if config["cache_globs"] is not None:
             cache_globs[name] = config["cache_globs"]
+        # Optional: this checker needs something from checkers-requirements.txt.
+        if config.get("needs_requirements"):
+            needs_requirements.add(name)
 
-    return checkers, cache_globs
+    return checkers, cache_globs, needs_requirements
 
 
 # Inline checkers have no separate script file; they use custom runner functions below.
@@ -161,7 +199,6 @@ _INLINE_CACHE_GLOBS = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
@@ -173,7 +210,6 @@ _INLINE_CACHE_GLOBS = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
@@ -181,7 +217,7 @@ _INLINE_CACHE_GLOBS = {
 }
 
 # Build the registries: discovered modules + inline custom runners.
-_discovered_checkers, _discovered_cache_globs = _discover_checkers()
+_discovered_checkers, _discovered_cache_globs, CHECKERS_NEEDING_REQUIREMENTS = _discover_checkers()
 
 CHECKERS = {**_discovered_checkers, **_INLINE_CHECKERS}
 CHECKER_CACHE_GLOBS = {**_discovered_cache_globs, **_INLINE_CACHE_GLOBS}
@@ -277,7 +313,7 @@ def format_elapsed(seconds: float) -> str:
 
 
 class SlidingWindow:
-    """Displays a spinning title + sliding window of the last N output lines in a TTY."""
+    """Displays a spinning title with the elapsed time + sliding window of the last N output lines in a TTY."""
 
     def __init__(self, label, max_lines=10):
         self.label = label
@@ -286,10 +322,11 @@ class SlidingWindow:
         self.displayed = 0  # number of output lines currently on screen
         self.term_width = shutil.get_terminal_size().columns
         self._spinner = itertools.cycle(SPINNER_CHARS)
+        self._started = time.perf_counter()
         self._stop = threading.Event()
         self._lock = threading.Lock()
         # Print initial title line (will be overwritten by spinner)
-        print(f"{ORANGE}{next(self._spinner)} {label}{RESET}")
+        print(self._title())
         self._title_on_screen = True
         self._thread = threading.Thread(target=self._spin, daemon=True)
         self._thread.start()
@@ -309,7 +346,7 @@ class SlidingWindow:
             sys.stdout.write("\033[A\033[2K")
         self.displayed = 0
         # Redraw title with next spinner frame
-        print(f"{ORANGE}{next(self._spinner)} {self.label}{RESET}")
+        print(self._title())
         self._title_on_screen = True
         # Redraw output lines
         for line in self.lines:
@@ -317,9 +354,20 @@ class SlidingWindow:
         self.displayed = len(self.lines)
         sys.stdout.flush()
 
+    def _title(self):
+        """The spinner title, with whole seconds elapsed so a long quiet step visibly keeps going."""
+        minutes, seconds = divmod(int(time.perf_counter() - self._started), 60)
+        clock = f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
+        return f"{ORANGE}{next(self._spinner)} {self.label} ({clock}){RESET}"
+
     def add_line(self, line):
         with self._lock:
-            self.lines.append(line.rstrip()[: self.term_width])
+            # A line starting with "\r" redraws the previous one in place (e.g. a progress bar).
+            if line.startswith("\r") and self.lines:
+                self.lines.pop()
+            shown = line.lstrip("\r").rstrip()[: self.term_width]
+            # Truncation can cut a colored line before its reset code: never let the color bleed.
+            self.lines.append(shown + RESET if "\033[" in shown else shown)
             self._redraw()
 
     def finish(self, success, elapsed=None, show_lines=True):
@@ -365,7 +413,10 @@ def _run_cmd(cmd, line_callback=None):
     output_lines = []
     for raw_line in proc.stdout:
         line = raw_line.decode("utf-8", errors="replace")
-        output_lines.append(line)
+        # A line starting with "\r" replaces the previous one (progress bars): keep only the last state.
+        if line.startswith("\r") and output_lines:
+            output_lines.pop()
+        output_lines.append(line.lstrip("\r"))
         line_callback(line)
     proc.wait()
     return proc.returncode, "".join(output_lines)
@@ -388,7 +439,7 @@ def run_deps_table_checker(fix=False, line_callback=None):
     if before != after:
         msg = (
             "Error: the version dependency table is outdated.\n"
-            "Please run 'make fix-repo' and commit the changes. This requires Python 3.10.\n"
+            "Please run 'make fix-repo' and commit the changes. This requires Python 3.11.\n"
         )
         return 1, output + msg
     return 0, output
@@ -409,7 +460,6 @@ RUFF_TARGETS = [
     "utils",
     "scripts",
     ".circleci/create_circleci_config.py",
-    "benchmark",
     "benchmark_v2",
     "setup.py",
     "conftest.py",
@@ -484,6 +534,57 @@ def run_checker(name, fix=False, line_callback=None):
     return _run_cmd(cmd, line_callback=line_callback)
 
 
+def ensure_requirements(names):
+    """Install `utils/checkers-requirements.txt` if any of `names` declares it needs it.
+
+    Gated on the checkers actually about to run, because `pip` is the wrong thing to reach for
+    in most of the places these are invoked. `make style` runs under serge's normalize sandbox,
+    a read-only container with `--network none`, where an install cannot succeed and every
+    attempt costs pip's retry budget for nothing. A checker opts in with
+    ``"needs_requirements": True`` in its ``CHECKER_CONFIG``.
+
+    What the checkers need is not what `transformers` needs, and some of it cannot go in
+    `setup.py` at all — a `git+` URL there is a direct reference, which PyPI rejects when this
+    package is uploaded. Installing it here means nobody has to know that: running a checker, or
+    `make check-repo`, is enough.
+
+    A stamp keyed on the file *and* the interpreter keeps this to one `pip` call per environment,
+    which matters because pip re-clones a URL requirement every time it is asked. Failure is never
+    fatal: running the checkers offline is normal, and a checker that needs one of these packages
+    reports it itself.
+    """
+    if not CHECKERS_NEEDING_REQUIREMENTS.intersection(names):
+        return
+    if os.environ.get("TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS") or not REQUIREMENTS_PATH.exists():
+        return
+
+    stamp = hashlib.sha256(REQUIREMENTS_PATH.read_bytes() + sys.executable.encode()).hexdigest()
+    try:
+        if json.loads(REQUIREMENTS_STAMP_PATH.read_text())["stamp"] == stamp:
+            return
+    except (OSError, ValueError, KeyError):
+        pass  # no stamp, unreadable, or from another environment -- install and write a fresh one
+
+    # Displayed as `utils/<name>`, built from the path itself: REPO_ROOT is patched in tests, and
+    # `relative_to` on a path that is not under it raises.
+    display = f"{REQUIREMENTS_PATH.parent.name}/{REQUIREMENTS_PATH.name}"
+    print(f"Installing {display} (once per environment)")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS_PATH)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        print(f"  could not install: {detail[-1] if detail else 'pip failed'}")
+        print("  continuing; a checker that needs one of these will say so")
+        return
+    try:
+        REQUIREMENTS_STAMP_PATH.write_text(json.dumps({"stamp": stamp}))
+    except OSError:
+        pass  # a read-only checkout still gets the install, it just pays for it again next time
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run check/fix scripts.")
     parser.add_argument(
@@ -533,8 +634,14 @@ def main():
                 flush=True,
             )
 
+    # After the fix-mode filtering above, so this reflects what will actually run.
+    ensure_requirements(names)
+
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
+    if is_tty and "NO_COLOR" not in os.environ:
+        # Checkers write to a pipe, so they cannot see the terminal: tell them they may use color.
+        os.environ["CHECKERS_COLOR"] = "1"
 
     if not is_tty and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
@@ -545,82 +652,94 @@ def main():
     failures = []
     skipped = 0
     total_start = time.perf_counter()
-    for name in names:
-        label = CHECKERS[name][0]
+    # One trace per checkers run; one span per checker. No-op unless
+    # transformers-ci[otel] is installed and OTEL_* is configured. The job name
+    # rides in via OTEL_RESOURCE_ATTRIBUTES (set by configure-ci-otel), so the
+    # value below is only a fallback for un-wrapped local runs.
+    job = os.environ.get("TRANSFORMERS_TEST_OTEL_JOB", "local_checks")
+    with _tracer.run(job, attributes={"transformers.check.mode": "fix" if args.fix else "check"}) as otel_run:
+        for name in names:
+            label = CHECKERS[name][0]
+            with otel_run.step(
+                f"utils/checkers.py::{name}",
+                attributes={"transformers.check.name": name, "transformers.check.label": label},
+            ) as otel_step:
+                # Skip if all relevant files are unchanged since last clean run
+                if cache is not None and cache.is_current(name):
+                    skipped += 1
+                    otel_step.set_exit_code(0)
+                    if is_tty:
+                        print(f"{GREEN}✓ {label} (cached){RESET}\n")
+                    else:
+                        print(f"{label} (cached)\n", flush=True)
+                    continue
 
-        # Skip if all relevant files are unchanged since last clean run
-        if cache is not None and cache.is_current(name):
-            skipped += 1
-            if is_tty:
-                print(f"{GREEN}✓ {label} (cached){RESET}\n")
-            else:
-                print(f"{label} (cached)\n", flush=True)
-            continue
+                cmd_str = get_checker_command(name, fix=args.fix)
+                checker_start = time.perf_counter()
 
-        cmd_str = get_checker_command(name, fix=args.fix)
-        checker_start = time.perf_counter()
-
-        if is_tty:
-            window = SlidingWindow(label, max_lines=10)
-            if cmd_str:
-                window.add_line(f"$ {cmd_str}")
-            rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
-            elapsed = time.perf_counter() - checker_start
-            window.finish(success=(rc == 0), elapsed=elapsed, show_lines=(rc == 0))
-            if rc != 0:
-                print()
-                _print_output(output)
-            print()
-            if rc == 0 and cache is not None:
-                cache.update(name)
-            elif rc != 0:
-                if cache is not None:
-                    cache.invalidate(name)
-                failures.append(name)
-                if not args.keep_going:
-                    if cache is not None:
-                        cache.save()
-                    sys.exit(1)
-        else:
-            print(f"{label}", flush=True)
-            if cmd_str:
-                print(f"$ {cmd_str}", flush=True)
-            if is_ci:
-                streamed_output = []
-
-                def print_line(line):
-                    streamed_output.append(line)
-                    print(line, end="", flush=True)
-
-                rc, output = run_checker(name, fix=args.fix, line_callback=print_line)
-                if rc != 0 and output:
-                    streamed_text = "".join(streamed_output)
-                    if output.startswith(streamed_text):
-                        _print_output(output[len(streamed_text) :])
-                    elif output != streamed_text:
+                if is_tty:
+                    window = SlidingWindow(label, max_lines=10)
+                    if cmd_str:
+                        window.add_line(f"$ {cmd_str}")
+                    rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
+                    elapsed = time.perf_counter() - checker_start
+                    window.finish(success=(rc == 0), elapsed=elapsed, show_lines=(rc == 0))
+                    otel_step.set_exit_code(rc, command=cmd_str, output=output)
+                    if rc != 0:
+                        print()
                         _print_output(output)
-            else:
-                rc, output = run_checker(name, fix=args.fix)
-                if rc == 0:
-                    tail = output.splitlines()[-10:]
-                    if tail:
-                        print("\n".join(tail), flush=True)
+                    print()
+                    if rc == 0 and cache is not None:
+                        cache.update(name)
+                    elif rc != 0:
+                        if cache is not None:
+                            cache.invalidate(name)
+                        failures.append(name)
+                        if not args.keep_going:
+                            if cache is not None:
+                                cache.save()
+                            sys.exit(1)
                 else:
-                    _print_output(output)
-            elapsed = time.perf_counter() - checker_start
-            status = "OK" if rc == 0 else "FAILED"
-            print(f"{status} ({format_elapsed(elapsed)})", flush=True)
-            print(flush=True)
-            if rc == 0 and cache is not None:
-                cache.update(name)
-            elif rc != 0:
-                if cache is not None:
-                    cache.invalidate(name)
-                failures.append(name)
-                if not args.keep_going:
-                    if cache is not None:
-                        cache.save()
-                    sys.exit(1)
+                    print(f"{label}", flush=True)
+                    if cmd_str:
+                        print(f"$ {cmd_str}", flush=True)
+                    if is_ci:
+                        streamed_output = []
+
+                        def print_line(line):
+                            streamed_output.append(line)
+                            print(line, end="", flush=True)
+
+                        rc, output = run_checker(name, fix=args.fix, line_callback=print_line)
+                        if rc != 0 and output:
+                            streamed_text = "".join(streamed_output)
+                            if output.startswith(streamed_text):
+                                _print_output(output[len(streamed_text) :])
+                            elif output != streamed_text:
+                                _print_output(output)
+                    else:
+                        rc, output = run_checker(name, fix=args.fix)
+                        if rc == 0:
+                            tail = output.splitlines()[-10:]
+                            if tail:
+                                print("\n".join(tail), flush=True)
+                        else:
+                            _print_output(output)
+                    elapsed = time.perf_counter() - checker_start
+                    status = "OK" if rc == 0 else "FAILED"
+                    print(f"{status} ({format_elapsed(elapsed)})", flush=True)
+                    print(flush=True)
+                    otel_step.set_exit_code(rc, command=cmd_str, output=output)
+                    if rc == 0 and cache is not None:
+                        cache.update(name)
+                    elif rc != 0:
+                        if cache is not None:
+                            cache.invalidate(name)
+                        failures.append(name)
+                        if not args.keep_going:
+                            if cache is not None:
+                                cache.save()
+                            sys.exit(1)
 
     if cache is not None:
         cache.save()

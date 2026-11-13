@@ -57,7 +57,7 @@ def get_all_model_names():
 
 
 def get_tiny_model_names_from_repo():
-    with open("tests/utils/tiny_model_summary.json") as fp:
+    with open("tests/utils/tiny_model_summary.json", encoding="utf-8") as fp:
         tiny_model_info = json.load(fp)
     tiny_models_names = set()
     for model_base_name in tiny_model_info:
@@ -140,7 +140,7 @@ def get_tiny_model_summary_from_hub(output_path):
         content["model_classes"] = sorted(content["model_classes"])
 
         summary[model] = content
-        with open(os.path.join(output_path, "hub_tiny_model_summary.json"), "w") as fp:
+        with open(os.path.join(output_path, "hub_tiny_model_summary.json"), "w", encoding="utf-8") as fp:
             json.dump(summary, fp, ensure_ascii=False, indent=4)
 
 

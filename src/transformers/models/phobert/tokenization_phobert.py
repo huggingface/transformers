@@ -58,7 +58,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        bos_token (`st`, *optional*, defaults to `"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             <Tip>

@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-07-13 and added to Hugging Face Transformers on 2022-03-02.*
+*This model was published in HF papers on 2021-07-13 and contributed to Hugging Face Transformers on 2022-03-02.*
 
 # MaskFormer
 
@@ -53,7 +53,6 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 <PipelineTag pipeline="image-segmentation"/>
 
 - All notebooks that illustrate inference as well as fine-tuning on custom data with MaskFormer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MaskFormer).
-- Scripts for finetuning [`MaskFormer`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/instance-segmentation).
 
 ## MaskFormer specific outputs
 

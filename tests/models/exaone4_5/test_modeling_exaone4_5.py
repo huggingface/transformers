@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch EXAONE 4.5 model."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -23,6 +22,7 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -39,16 +39,13 @@ if is_torch_available():
         Exaone4_5_ForConditionalGeneration,
         Exaone4_5_Model,
         Exaone4_5_Processor,
-        Exaone4_5_VisionConfig,
-        Exaone4Config,
     )
 
 
 class Exaone4_5_ModelTester(VLMModelTester):
     base_model_class = Exaone4_5_Model
     config_class = Exaone4_5_Config
-    text_config_class = Exaone4Config
-    vision_config_class = Exaone4_5_VisionConfig
+
     conditional_generation_class = Exaone4_5_ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -56,9 +53,9 @@ class Exaone4_5_ModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("vision_start_token_id", 5)
         kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
@@ -73,17 +70,20 @@ class Exaone4_5_ModelTester(VLMModelTester):
         # Exaone4_5 vision config expects `in_channels` instead of `num_channels`.
         self.in_channels = self.num_channels
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # EXAONE 4.5 vision tower expects flattened patches:
         # (total_patches, channels * patch_size^2 * temporal_patch_size)
         return torch.rand(
-            self.batch_size * (self.image_size**2) // (self.patch_size**2),
+            batch_size * (self.image_size**2) // (self.patch_size**2),
             self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             device=torch_device,
         )
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device)}
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
     def get_config(self):
         config = super().get_config()
@@ -96,60 +96,17 @@ class Exaone4_5_ModelTester(VLMModelTester):
 @require_torch
 class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Exaone4_5_ModelTester
-    test_all_params_have_gradient = False
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    def test_mismatching_num_image_tokens(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)
-
-            # Test 1: fewer images than image placeholders -> should raise.
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            if "image_grid_thw" in curr_input_dict:
-                curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 2: one image but two prompts with image placeholders -> should raise.
-            curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
-            for key in ["input_ids", "attention_mask", "token_type_ids"]:
-                if key in curr_input_dict and curr_input_dict[key] is not None:
-                    curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 3: two images and two image placeholders -> should pass.
-            curr_input_dict["pixel_values"] = torch.cat(
-                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
-            )
-            if "image_grid_thw" in curr_input_dict:
-                curr_input_dict["image_grid_thw"] = torch.cat(
-                    [curr_input_dict["image_grid_thw"], curr_input_dict["image_grid_thw"]], dim=0
-                )
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = torch.cat(
-                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
-                )
-            _ = model(**curr_input_dict)
 
     @unittest.skip("Model parallel auto-sharding for EXAONE 4.5 VLM is not supported yet.")
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip("Beam search with model parallel auto device_map is not stable for EXAONE 4.5 VLM yet.")
-    def test_model_parallel_beam_search(self):
-        pass
-
 
 @require_torch
+@slow
 class Exaone4_5_IntegrationTest(unittest.TestCase):
     model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
     model = None
@@ -164,7 +121,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
+    @require_deterministic_for_xpu
     def test_model_logits(self):
         input_ids = [70045, 1109, 115406, 16943, 11697, 115365, 19816, 12137, 375]
         input_ids = torch.tensor([input_ids]).to(torch_device)
@@ -177,6 +134,9 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): torch.tensor(
                     [[44.8527, 45.7216, 71.1159, 36.9564, 44.3283, 22.0527, 28.3233, 62.5739, 46.0708]]
                 ),
+                ("xpu", None): torch.tensor(
+                    [[45.2173, 45.4939, 71.0896, 37.1218, 44.3504, 22.1194, 28.6795, 62.5956, 45.9839]]
+                ),
             }
         )
         EXPECTED_SLICE = Expectations(
@@ -184,17 +144,24 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): torch.tensor(
                     [42.2500, 43.0000, 42.5000, 44.7500, 49.5000, 46.0000, 46.5000, 46.5000, 45.7500, 46.2500]
                 ),
+                ("xpu", None): torch.tensor(
+                    [42.7500, 43.5000, 42.7500, 45.2500, 50.0000, 46.5000, 46.7500, 46.7500, 46.0000, 46.5000]
+                ),
             }
         )
 
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN.get_expectation(), atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE.get_expectation(), atol=1e-4, rtol=1e-4)
 
-    @slow
+    @require_deterministic_for_xpu
     def test_model_generation_text_only(self):
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", 8): (
+                    '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
+                    " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
+                ),
+                ("xpu", None): (
                     '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
                     " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
                 ),
@@ -215,15 +182,16 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(text, EXPECTED_TEXT.get_expectation())
 
-    @slow
+    @require_deterministic_for_xpu
     def test_model_generation_image_text(self):
-        IMAGE_URL = (
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        )
+        IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", 8): (
                     "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a fluffy, young lynx kitten walking across a snowy surface, its thick"
+                ),
+                ("xpu", 3): (
+                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat—likely a lynx kitten—walking through a"
                 ),
             }
         )
@@ -233,7 +201,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
                     },
                     {"type": "text", "text": "Describe the image."},
                 ],

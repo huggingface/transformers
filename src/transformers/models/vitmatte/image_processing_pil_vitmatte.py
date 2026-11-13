@@ -27,11 +27,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
-
-
-if is_torch_available():
-    pass
+from ...utils import TensorType, auto_docstring
 
 
 # Adapted from transformers.models.vitmatte.image_processing_vitmatte.VitMatteImageProcessorKwargs

@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...generation import GenerationMixin
@@ -738,8 +737,6 @@ else:
         This module wraps the xLSTM kernels and provides a high-level interface for training and inference.
         """
 
-        config_class = xLSTMConfig
-
         def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
@@ -1235,7 +1232,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     An abstract class for an interface to loading a pre-trained xLSTM model.
     """
 
-    config_class = xLSTMConfig
+    config: xLSTMConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
@@ -1252,6 +1249,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
         elif isinstance(module, nn.Linear):
@@ -1302,10 +1300,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(module.weight)
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
-        elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
-            init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class xLSTMCache:
@@ -1323,7 +1317,7 @@ class xLSTMCache:
             The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        seqlen_offset: int
+        seqlen_offset: torch.Tensor
         dtype: torch.dtype
 
     Example:
@@ -1351,7 +1345,11 @@ class xLSTMCache:
         device: str | None = None,
         **kwargs,
     ):
-        self.seqlen_offset = 0
+        # Follows the static-cache convention (`StaticLayer.cumulative_length` in cache_utils.py):
+        # compile/export-friendly caches store the position counter as a tensor, not a Python int,
+        # so it stays a tensor leaf in the cache pytree across `+= shape[i]` operations rather
+        # than getting promoted to a SymInt during dynamic-shape tracing.
+        self.seqlen_offset = torch.tensor([0], dtype=int, device=device)
         self.dtype = dtype
         self.config = config
         self.rnn_state = {
@@ -1387,16 +1385,16 @@ class xLSTMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: torch.FloatTensor | None
+    last_hidden_state: torch.Tensor | None
     cache_params: xLSTMCache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class xLSTMModel(xLSTMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
-        # use embbeding_dim and num_blocks once here to make use of them
+        # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
         self.blocks = nn.ModuleList([xLSTMBlock(config) for _ in range(config.num_blocks)])
         self.out_norm = xLSTMRMSNorm(config.hidden_size, eps=config.norm_eps)
@@ -1500,24 +1498,24 @@ class xLSTMModel(xLSTMPreTrainedModel):
 @dataclass
 class xLSTMCausalLMOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     cache_params (`xLSTMCache`, *optional*, carrying the RNN states):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     cache_params: xLSTMCache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
         self.backbone = xLSTMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1541,7 +1539,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         cache_params: xLSTMCache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1576,14 +1574,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(logits.device)
-            # Shift so that tokens < nstate predict nstate
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return xLSTMCausalLMOutput(
             loss=loss,

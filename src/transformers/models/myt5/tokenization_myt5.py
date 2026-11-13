@@ -43,7 +43,7 @@ class ByteRewriter:
 
     def __init__(self, rewriting_rules: str | dict[str, str]):
         if isinstance(rewriting_rules, str):
-            with open(rewriting_rules, "r") as f:
+            with open(rewriting_rules, "r", encoding="utf-8") as f:
                 rewriting_rules = json.load(f)
         elif not isinstance(rewriting_rules, dict):
             raise TypeError(
@@ -192,7 +192,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
         # Load byte maps
-        self.byte_maps = json.load(open(vocab_file, "r"))
+        self.byte_maps = json.load(open(vocab_file, "r", encoding="utf-8"))
 
         self.decompose_rewriter = ByteRewriter(self.byte_maps["decompose_map"])
         self.merge_rewriter = ByteRewriter(self.byte_maps["merge_map"])
@@ -346,9 +346,9 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
         out_tokens = []
         for token in tokens:
-            if token in self.added_tokens_decoder:
-                out_tokens.append(self.added_tokens_decoder[token])
-            elif token in self.added_tokens_encoder:
+            if token in self._added_tokens_decoder:
+                out_tokens.append(self._added_tokens_decoder[token])
+            elif token in self._added_tokens_encoder:
                 out_tokens.append(token)
             else:
                 out_tokens.append(token)

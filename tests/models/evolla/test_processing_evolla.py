@@ -43,6 +43,12 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        self.skipTest("EvollaProcessor requires `messages_list` and `proteins` inputs.")
+
+    def maybe_skip_typed_test_for_modality(self, modality: str, attributes: list):
+        self.skipTest("EvollaProcessor requires `messages_list` and `proteins` inputs.")
+
     def prepare_input_and_expected_output(self):
         amino_acid_sequence = "AAAA"
         foldseek_sequence = "dddd"
@@ -249,3 +255,9 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         proteins, messages_list = self.prepare_inputs()
         inputs = processor(messages_list=messages_list, proteins=proteins, padding="longest", return_tensors="pt")
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
+
+    @unittest.skip(
+        reason="Cannot remove protein_max_length and text_max_length arguments from __call__ without breaking BC."
+    )
+    def test_call_arguments_not_in_attributes(self):
+        pass

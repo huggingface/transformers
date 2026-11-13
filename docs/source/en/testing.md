@@ -36,7 +36,74 @@ RUN_SLOW=1 pytest tests/models/mymodel/ -v
 
 The Hugging Face CI runs model tests without `@slow` on every pull request, and slow tests run on a nightly schedule (see [Pull request checks](./pr_checks) for what the CI validates).
 
-## Write tests for a causal language model
+## Run Model Integration Contracts locally
+
+MICs check published model usage paths against reviewed baselines using small fixtures.
+The runner (`transformers-mic`) and `hf-doc-builder` come with the `testing` extra. From your Transformers checkout:
+
+```bash
+python -m pip install -e ".[testing]"
+```
+
+Then run:
+
+```bash
+make run-mic MODEL=bert  # only the contracts for this model directory under src/transformers/models/
+make run-mic MODEL=Wav2Vec2  # a model name works too (case and punctuation are ignored)
+make run-mic MODEL=qwen+    # every matching model directory: + stands for any characters
+make run-mic             # contracts affected by local changes
+make run-mic ALL=1       # all fixtures in the fleet
+make run-mic BASE=main   # use a different Git comparison base
+make run-mic FLEET=control  # the control fleet instead of the default prototypes fleet
+make run-mic ALL=1 JOBS=8   # number of runner processes working in parallel (default: cores / 4, up to 4)
+```
+
+The command uses this checkout's source and the fleet revision in `tests/contracts.lock`.
+It runs the prototypes fleet by default; `FLEET=control` selects the smaller control fleet.
+Like CI, it checks the prototypes fleet in `bfloat16` and the control fleet in both `default` and `bfloat16`.
+It downloads the pinned contracts, fixtures and baselines as needed, executes them locally,
+and prints one line per fixture plus a summary; any failing fixture fails the command.
+Contracts are split over parallel runner processes (`JOBS`, default up to 4, `JOBS=1` to run them one by one).
+Each runner uses `OMP_NUM_THREADS=4`, the thread count baselines are recorded with (set `OMP_NUM_THREADS`
+to override it), so the thread count does not add to the differences with CI.
+`make run-mic` is a wrapper around the `mic` checker (`python utils/checkers.py mic`), which is opt-in
+and not part of `make check-repo` or CI because it needs network access and model runtimes. It does not create or publish contracts.
+Model-specific runtime dependencies and a reviewed baseline for your platform are required;
+a fixture pass does not validate the full checkpoint.
+
+By default, changed files are the diff between the merge base with `origin/main` and your
+working tree, plus untracked files. This includes branch commits, staged and unstaged
+changes, and both paths of renames. A clean checkout has nothing to run.
+When the changes select every contract (for example `setup.py`, shared code or the fleet pin in
+`tests/contracts.lock`), nothing runs: the command says why, and you choose `MODEL=<name>` or `ALL=1`.
+
+MIC derives model dependencies from fixture configs (including nested models), architectures,
+and tokenizer/processor classes. Model directory changes select matching contracts; changes
+to shared Transformers code, Auto classes, dependency declarations, or the fleet pin select
+all contracts. Docs and ordinary test-only changes select
+nothing. The runner prints its selection and reasons; no matching contract means no coverage,
+not a successful model check. Selection is a heuristic, not a complete Python dependency graph;
+use `ALL=1` when unsure whether indirect dependencies are covered.
+
+`MODEL=bert` is narrower: it runs only the contracts whose fixture `config.json` has a
+`model_type` defined in `models/bert`. Composite models that merely embed BERT are not run;
+use the default changed-files selection (or `ALL=1`) to include them.
+
+## Pick a base test class
+
+Three base classes cover the most common model families. Pick the one that matches your model's modality.
+
+| Base class | Use for | Mixins |
+|---|---|---|
+| `CausalLMModelTest` | Causal language models | `ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`, `TrainingTesterMixin`, `TensorParallelTesterMixin` |
+| `VLMModelTest` | Vision-language models | `ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin` |
+| `ALMModelTest` | Audio-language models | `ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin` |
+
+`VLMModelTest` and `ALMModelTest` share a common `MultiModalModelTest` parent that nests sub-configs into a composite top-level config and places modality placeholder tokens in `input_ids` alongside the raw modality features (audio or vision). `CausalLMModelTest` doesn't use the multimodal parent. It builds on the three shared mixins and adds `TrainingTesterMixin` and `TensorParallelTesterMixin` for training and tensor-parallel coverage.
+
+For architectures that don't fit any of the three (encoder-only, encoder-decoder, etc.), build the test infrastructure directly from the [two-class pattern](#modeltester-and-modeltest) and [test mixins](#test-mixins) described below.
+
+## CausalLMModelTest
 
 `CausalLMModelTest` is the recommended base class for testing causal language models. It inherits from five [test mixins](#test-mixins) and auto-generates tests for save/load, generation, pipelines, training, and tensor parallelism.
 
@@ -66,7 +133,7 @@ These two classes give full test coverage for `MyModel` and all its head classes
 
 `CausalLMModelTester` only requires `base_model_class`. The tester strips the `Model` suffix to get a base name (`LlamaModel` becomes `Llama`), then appends suffixes like `Config` or `ForCausalLM` to discover related classes. If a class doesn't exist in the module, the attribute stays `None` and the tester skips the corresponding tests.
 
-### Overriding defaults
+### Overriding defaults in the CausalLMTester
 
 If your model doesn't follow standard naming, or you need to customize behavior, override attributes on the tester or test class.
 
@@ -98,7 +165,7 @@ class YoutuModelTester(CausalLMModelTester):
         self.q_lora_rank = q_lora_rank
 ```
 
-## Write tests for a vision-language model
+## VLMModelTest
 
 `VLMModelTest` is the base class for vision-language models. It inherits from three mixins (`ModelTesterMixin`, `GenerationTesterMixin`, `PipelineTesterMixin`) and sets `_is_composite = True` to handle multiple sub-models.
 
@@ -134,7 +201,7 @@ class MyVLMTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MyVLMTester
 ```
 
-### Overriding defaults
+### Overriding defaults in the VLMModelTester
 
 When the VLM needs custom vision parameters or non-default config values, override `__init__`. Set defaults with `setdefault` before calling `super().__init__(parent, **kwargs)`. The example below shows the first few defaults from [tests/models/qianfan_ocr/test_modeling_qianfan_ocr.py](https://github.com/huggingface/transformers/blob/main/tests/models/qianfan_ocr/test_modeling_qianfan_ocr.py).
 
@@ -161,6 +228,50 @@ VLM tests differ from `CausalLMModelTest` in a few ways.
 - `VLMModelTest` doesn't include `TrainingTesterMixin` or `TensorParallelTesterMixin`.
 - The tester's `__init__` accepts vision parameters (`image_size`, `patch_size`, `num_channels`, `num_image_tokens`) from `**kwargs` and `setdefault()`.
 - `ConfigTester` uses `has_text_modality=False` because the top-level config is a composite config rather than a text model config.
+
+## ALMModelTest
+
+`ALMModelTest` is the base class for audio-language models (ALMs) like Qwen2Audio, AudioFlamingo3, and GraniteSpeech. It mirrors the VLM pattern with the same `MultiModalModelTest` parent and auto-discovery of head classes. The vision-side machinery is swapped for audio features, an audio sub-config, and an audio-token placement strategy.
+
+```py
+class MyALMTester(ALMModelTester):
+    config_class = MyALMConfig
+    text_config_class = MyALMTextConfig
+    audio_config_class = MyALMAudioConfig
+    conditional_generation_class = MyALMForConditionalGeneration
+    audio_mask_key = "feature_attention_mask"
+
+
+class MyALMTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = MyALMTester
+```
+
+### Overriding defaults in the ALMModelTester
+
+The tester's `__init__` sets ALM-specific defaults (`feat_seq_length=128`, `num_mel_bins=80`, `audio_token_id=0`). Override them with `setdefault` before calling `super().__init__(parent, **kwargs)`.
+
+Two class attributes tell the tester how your model names things.
+
+- `audio_mask_key`: the kwarg name your model expects for the audio mask (`"feature_attention_mask"`, `"input_features_mask"`, etc.). Leave it `None` if your model doesn't consume a separate audio mask.
+- `audio_config_key`: the attribute name your top-level config uses to nest the audio sub-config. Defaults to `"audio_config"` but models like GraniteSpeech use `"encoder_config"`.
+
+```py
+class Qwen2AudioModelTester(ALMModelTester):
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("feat_seq_length", 60)
+        kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
+        super().__init__(parent, **kwargs)
+```
+
+`ALMModelTester` requires you to override one hook, `get_audio_embeds_mask(audio_mask)`, and exposes a few more optional ones for customization.
+
+- `get_audio_embeds_mask(audio_mask)`: returns the per-batch mask of audio embedding positions after the encoder's downsampling. The tester uses its row-wise sum to decide how many `audio_token_id` placeholders to insert into `input_ids`, so the count must match what your encoder emits.
+- `create_audio_features()`: returns the audio feature tensor. Default shape is `[batch_size, num_mel_bins, feat_seq_length]`. Override when your model, like GraniteSpeech, expects time-first features (`[batch_size, feat_seq_length, num_mel_bins]`).
+- `create_audio_mask()`: returns the audio-level attention mask. The default builds a random contiguous valid region per row in the batch. Override with a deterministic full-length mask if your tests compare two `prepare_config_and_inputs_for_common()` invocations against each other, or if your audio encoder dispatches to a backend that rejects non-null masks.
+- `place_audio_tokens(input_ids, config, num_audio_tokens)`: places audio placeholder tokens contiguously after `BOS`. Override only if your model needs a different layout.
+- `get_audio_feature_key()`: returns the inputs-dict key for audio features (`"input_features"` by default).
+
+In addition to the inherited multimodal tests, `ALMModelTest` adds `test_mismatching_num_audio_tokens`. The test asserts the model raises a clear `ValueError` when the number of audio features doesn't match the number of audio placeholder tokens in `input_ids`, and verifies that a prompt with multiple audio segments still forwards successfully.
 
 ## Write tests for other architectures
 
@@ -256,20 +367,14 @@ Mixin tests use tiny configs with random weights to verify model behavior quickl
 
 ### Writing integration tests
 
-Place integration tests in a separate test class and mark them with `@slow`. Each test downloads real weights, runs inference, and checks outputs against expected values. Call `cleanup(torch_device, gc_collect=False)` in `setUp` and `tearDown` to avoid memory residuals.
+Place integration tests in a separate test class, mark them with `@slow`, and mix in `MemoryCleanupMixin`. Each test downloads real weights, runs inference, and checks outputs against expected values. The mixin frees the memory each test takes and runs the test methods under `torch.no_grad()` — see [Releasing memory between tests](#releasing-memory-between-tests) for what it does and how to opt out.
 
 ```py
 import torch
 from transformers import AutoTokenizer
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import MemoryCleanupMixin, require_torch, slow, torch_device
 
-class MyModelIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        cleanup(torch_device, gc_collect=False)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
-
+class MyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     @require_torch
     def test_inference(self):
@@ -277,8 +382,7 @@ class MyModelIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("myorg/mymodel-base")
         inputs = tokenizer("Hello, world", return_tensors="pt").to(torch_device)
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
         # check against expected values
         expected_slice = torch.tensor([[-0.1234, 0.5678, -0.9012]])
@@ -286,6 +390,23 @@ class MyModelIntegrationTest(unittest.TestCase):
 ```
 
 Mark any test with `@slow` if it downloads weights, loads a large dataset, or takes more than a few seconds. The [pull request CI](./pr_checks) skips slow tests, but the nightly schedule runs them.
+
+#### Releasing memory between tests
+
+Integration tests load real checkpoints, so a test that keeps a reference to its model can OOM whatever runs after it. `MemoryCleanupMixin`, in `tests/test_memory_cleanup_mixin.py`, handles that for the whole class:
+
+- Runs `cleanup(torch_device, gc_collect=True)` before and after every test so leftovers do not carry over.
+- Deletes attributes the test added on `self` (including `@cached_property` caches) and on the class (for example `cls.model = ...` in `setUpClass`). Pytest keeps test instances alive for the session, so `gc.collect()` cannot free objects those references still hold.
+- Runs test methods under `torch.no_grad()` so a forward pass does not retain activations.
+
+Classes that train or call `backward()` set `run_under_no_grad = False`. A class that mixes both puts `@with_grad` or `@with_no_grad` on the individual test methods instead.
+
+Attributes assigned in the class body are kept, and everything added later is dropped. If you override `setUp`, call `super().setUp()`: the mixin snapshots the instance attributes there and errors out without it.
+
+> [!TIP]
+> `MemoryCleanupTestCase` combines the mixin with `TestCasePlus`, for tests that also want auto-removed temporary dirs.
+
+To find a leaking test, set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB` to a budget in MiB; any test that leaves more than that allocated on the device is reported with its peak usage. Add `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to fail instead of warn. The check is off by default and you should turn it on when looking for leftovers. The mixin's usual teardown already runs `gc.collect`, which can clear the allocation you'd want to inspect while reproducing a leak.
 
 #### Generation integration tests
 

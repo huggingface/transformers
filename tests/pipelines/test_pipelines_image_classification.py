@@ -86,7 +86,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
         ]
         return image_classifier, examples
 
@@ -106,7 +106,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         outputs = image_classifier(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
                 # RGBA
                 self._dataset[0]["image"],
                 # LA
@@ -150,7 +150,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         small_model = "hf-internal-testing/tiny-random-vit"
         image_classifier = pipeline("image-classification", model=small_model)
 
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
@@ -158,8 +160,8 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
         outputs = image_classifier(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ],
             top_k=2,
         )
@@ -169,6 +171,13 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
                 [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
             ],
+        )
+
+        image_classifier.model.config.problem_type = "regression"
+        outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"label": "LABEL_1", "score": 0.1426}, {"label": "LABEL_0", "score": -0.1557}],
         )
 
     def test_custom_tokenizer(self):
@@ -186,7 +195,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         image_classifier = pipeline(
             "image-classification", model="hf-internal-testing/tiny-random-vit", dtype=torch.float16
         )
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
 
         self.assertEqual(
             nested_simplify(outputs, decimals=3),
@@ -198,7 +209,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         image_classifier = pipeline(
             "image-classification", model="hf-internal-testing/tiny-random-vit", dtype=torch.bfloat16
         )
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
 
         self.assertEqual(
             nested_simplify(outputs, decimals=3),
@@ -212,7 +225,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         # That is because the type of feature_extractor and model preprocessor need to be kept
         # in sync, which is not the case in the current design
         image_classifier = pipeline("image-classification", model="deepmind/vision-perceiver-conv")
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -225,7 +240,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
 
         image_classifier = pipeline("image-classification", model="deepmind/vision-perceiver-fourier")
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -238,7 +255,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
 
         image_classifier = pipeline("image-classification", model="deepmind/vision-perceiver-learned")
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -259,7 +278,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         image_classifier = pipeline("image-classification", model=small_model)
         image_classifier.model.config.problem_type = "multi_label_classification"
 
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = image_classifier(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [{"label": "LABEL_1", "score": 0.5356}, {"label": "LABEL_0", "score": 0.4612}],
@@ -267,8 +288,8 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
         outputs = image_classifier(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ]
         )
         self.assertEqual(
@@ -288,7 +309,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         image_classifier = pipeline("image-classification", model=small_model)
 
         outputs = image_classifier(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             function_to_apply="sigmoid",
         )
         self.assertEqual(

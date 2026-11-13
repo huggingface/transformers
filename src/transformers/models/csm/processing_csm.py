@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available
+from ...utils.import_utils import requires, requires_backends
 
 
 if is_torch_available():
@@ -47,27 +48,30 @@ class CsmAudioKwargs(AudioKwargs, total=False):
 
 class CsmProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: CsmAudioKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-        },
-        "audio_kwargs": {
-            "encoded_length_kwargs": {
-                "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
-                "strides": [1, 1, 1, 4, 1, 1, 5, 1, 1, 6, 1, 1, 8, 1, 2],
-                "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                "use_causal_conv": True,
-            },
-            "sampling_rate": 24000,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class CsmProcessor(ProcessorMixin):
+    valid_processor_kwargs = CsmProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "encoded_length_kwargs": {
+            "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
+            "strides": [1, 1, 1, 4, 1, 1, 5, 1, 1, 6, 1, 1, 8, 1, 2],
+            "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "use_causal_conv": True,
+        },
+        "sampling_rate": 24000,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         feature_extractor,
@@ -135,8 +139,7 @@ class CsmProcessor(ProcessorMixin):
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         # ensure correct audio input
         audio = make_list_of_audio(audio)
@@ -151,7 +154,6 @@ class CsmProcessor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            CsmProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -167,6 +169,7 @@ class CsmProcessor(ProcessorMixin):
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
         audio: AudioInput | None = None,
+        # Should be processor kwargs but need to stay for BC.
         output_labels: bool | None = False,
         depth_decoder_labels_ratio: float | None = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
@@ -192,7 +195,6 @@ class CsmProcessor(ProcessorMixin):
         """
 
         output_kwargs = self._merge_kwargs(
-            CsmProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

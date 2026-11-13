@@ -21,7 +21,6 @@ import pytest
 from transformers import Data2VecVisionConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -222,13 +221,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_inputs_embeds(self):
         pass
 
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="Data2VecVision has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -283,7 +275,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                     [self.model_tester.batch_size, height, width], device=torch_device
                 ).long()
             model = model_class(config)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)

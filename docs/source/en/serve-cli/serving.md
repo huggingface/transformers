@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -27,6 +27,7 @@ The `transformers serve` command spawns a local server compatible with the [Open
 - `/v1/completions` for legacy text completions from a freeform prompt
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
+- `/v1/systemone` answers typed questions (choice, score, yes/no) with a probability for every allowed answer
 - `/v1/models` lists available models for third-party integrations
 - `/load_model` streams model loading progress via SSE
 
@@ -463,7 +464,7 @@ Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) a
 
 ```python
 import base64
-import httpx
+from huggingface_hub.utils import httpx
 from huggingface_hub import InferenceClient
 
 audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
@@ -495,7 +496,7 @@ This week, I traveled to Chicago to deliver my final farewell address to the nat
 
 ```python
 import base64
-import httpx
+from huggingface_hub.utils import httpx
 from huggingface_hub import InferenceClient
 
 audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
@@ -530,7 +531,7 @@ This week, I traveled to Chicago to deliver my final farewell address to the nat
 
 ```python
 import base64
-import httpx
+from huggingface_hub.utils import httpx
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
@@ -564,7 +565,7 @@ This week, I traveled to Chicago to deliver my final farewell address to the nat
 
 ```python
 import base64
-import httpx
+from huggingface_hub.utils import httpx
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
@@ -1313,7 +1314,7 @@ data: {"content_index":0,"delta":"The ","item_id":"msg_f47ac10b","output_index":
 
 ```python
 import base64
-import httpx
+from huggingface_hub.utils import httpx
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
@@ -1344,7 +1345,7 @@ This week, I traveled to Chicago to deliver my final farewell address to the nat
 
 ```python
 import base64
-import httpx
+from huggingface_hub.utils import httpx
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
@@ -1649,6 +1650,176 @@ The follow-up question "How many people live there?" relies on the prior context
 As of 2021, Paris has a population of approximately 2.8 million people.
 ```
 
+## v1/systemone
+
+The `v1/systemone` endpoint answers typed questions about a shared `state`, following [TypeSafe’s System One API](https://api.typesafe.ai/openapi.json). Use it for decisions such as routing a support ticket, rating urgency, or choosing an action.
+
+Requests are answered by [`DecisionPipeline`] around the served model, so the endpoint and the pipeline build the same prompts and return the same answers. The model scores the allowed answers without generating text, in one forward pass per prompt. This endpoint supports autoregressive models with a chat template;
+
+Send a model, the state to evaluate, and questions keyed by name:
+
+<hfoptions id="systemone-http">
+<hfoption id="curl">
+
+```shell
+curl http://localhost:8000/v1/systemone \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "state": "Our integration has been failing for 3 days and we are losing sales!",
+    "questions": {
+      "team": {
+        "type": "choice",
+        "instructions": "Which team handles this?",
+        "criteria": {"billing": null, "technical": "Bugs or integration problems"}
+      },
+      "urgency": {
+        "type": "score",
+        "instructions": "How urgent is this ticket?",
+        "criteria": ["low", "medium", "high"]
+      },
+      "upset": {"type": "noul", "instructions": "Is the customer upset?"}
+    }
+  }'
+```
+
+</hfoption>
+<hfoption id="TypeSafe (TypeScript)">
+
+Install the [TypeSafe SDK](https://github.com/typesafe-ai/typesafe-sdk-js) for Node.js 20 or newer:
+
+```shell
+npm install @typesafe-ai/sdk
+```
+
+Set `baseURL` to the server root; the SDK adds `/v1/systemone`. The SDK requires an API key, but a placeholder works with the local server.
+
+```typescript
+import { choice, noul, score, TypeSafeClient } from "@typesafe-ai/sdk";
+
+const client = new TypeSafeClient({
+  baseURL: "http://localhost:8000",
+  apiKey: "<random_string>",
+});
+
+const response = await client.systemOne({
+  model: "Qwen/Qwen2.5-1.5B-Instruct",
+  state: "Our integration has been failing for 3 days and we are losing sales!",
+  questions: {
+    team: choice("Which team handles this?", {
+      billing: null,
+      technical: "Bugs or integration problems",
+    }),
+    urgency: score("How urgent is this ticket?", ["low", "medium", "high"]),
+    upset: noul("Is the customer upset?"),
+  },
+});
+
+console.log(response.answers.team.choice);
+console.log(response.answers.urgency.score);
+console.log(response.answers.upset.noul);
+```
+
+The client prints the selected team, urgency score, and probability that the customer is upset. For example:
+
+```shell
+technical
+1.6739138662815094
+0.851952850818634
+```
+
+</hfoption>
+</hfoptions>
+
+Answers use the same question names. For example:
+
+```json
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "answers": {
+    "team": {"type": "choice", "choice": "technical", "probabilities": {"billing": 0.000006962256520637311, "technical": 0.999993085861206}, "confidence": 0.9999861717224121},
+    "urgency": {"type": "score", "score": 1.6739138662815094, "legend": {"0": "low", "1": "medium", "2": "high"}, "probabilities": {"0": 0.0031353600788861513, "1": 0.31981542706489563, "2": 0.6770492196083069}, "confidence": 0.5108707791659981},
+    "upset": {"type": "noul", "noul": 0.851952850818634}
+  },
+  "usage": {"input_tokens": 213, "output_tokens": 0}
+}
+```
+
+| Question type | `criteria` | Answer |
+| :--- | :--- | :--- |
+| `choice` | Option names mapped to descriptions, which can be `null`. | The most likely option, option probabilities, and confidence. |
+| `score` | Level descriptions ordered from lowest to highest. | The probability-weighted level index, probabilities, a legend, and confidence. |
+| `noul` | Optional descriptions for `true` and `false`. | The probability of `true`. |
+
+`state`, optional `instructions`, and descriptions can contain text or JSON objects and arrays. Each request accepts up to 64 questions, with at least one choice or score level per question and at most one per answer label (26 with the default `A`–`Z` labels).
+
+Questions are validated like [`DecisionPipeline`]'s, before the model is loaded. An invalid request returns a `422` whose message lists every invalid question, each with an example of a valid one, and suggests close matches for misspelled types and fields:
+
+```text
+Question 'team': expected a `type` among noul, choice, score, got type 'Choice'. Did you mean 'choice'?
+Question 'upset': unknown field 'instruction'. Did you mean 'instructions'? A noul question looks like {"type": "noul", ...}
+```
+
+For vision-capable models, add `assets`, as in the System One API: up to four images keyed by a placeholder of your choice (a UUID is safest). Wherever a placeholder appears in a string of the `state`, the `instructions`, or the `criteria`, the model sees the image there. An asset is `{"type": "image", "format": "png", "data_base64": "..."}`; remote image URLs are not accepted. The model needs a processor that handles images.
+
+```json
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "state": "The customer sent 6f1c0e2a and asks if it is damaged.",
+  "assets": {"6f1c0e2a": {"type": "image", "format": "png", "data_base64": "iVBORw0..."}},
+  "questions": {"damaged": {"type": "noul", "instructions": "Is the product in the photo damaged?"}}
+}
+```
+
+### Decision configuration
+
+Decision models do not yet share a standard for storing prompts, answer labels, and calibration settings. These vary across model implementations, so `--decision-config` lets you provide them explicitly.
+
+By default, questions use a fallback prompt and the model's chat template with thinking disabled. Answer labels are `A`–`Z` for choices and scores, and `Yes`/`No` for booleans. Probabilities are the softmax over these labels at temperature 1.
+
+Pass `--decision-config` to override these defaults for a model:
+
+```shell
+transformers serve openjev/openjev --decision-config decision.json
+```
+
+The JSON file supports three optional fields:
+
+| Field | Meaning |
+| :--- | :--- |
+| `labels` | Answer labels by question type, in option order (`true`, then `false` for `noul`). Each must be a distinct, known single token. |
+| `temperature` | Positive temperatures by question type, applied as `softmax(label_logits / temperature)`. |
+| `chat_template` | An inline Jinja template replacing the full prompt, including chat formatting and the assistant prefix. |
+
+For example, to change labels and calibration while keeping the default prompt:
+
+```json
+{
+  "labels": {"noul": ["A", "B"]},
+  "temperature": {"choice": 0.85, "score": 0.85, "noul": 1.5547129}
+}
+```
+
+A custom template, here for Gemma 3, writes the whole prompt and `<|mark|>` where the answer is read. Strings with images arrive as lists of text and image parts:
+
+```jinja
+{%- macro text(x) -%}
+{%- if x is string or x is none %}{{ x or "" }}{% elif x is mapping %}{{ x|tojson }}{% else -%}
+{%- for part in x %}{% if part.type == "image" %}<start_of_image>{% else %}{{ part.text }}{% endif %}{% endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+<start_of_turn>user
+{{ text(state) }}
+
+{{ text(question.instructions) }}
+{% for option in question.options %}{{ question.labels[loop.index0] }}. {{ option }}: {{ text(question.descriptions[loop.index0]) }}
+{% endfor %}<end_of_turn>
+<start_of_turn>model
+<|mark|>
+```
+
+Inline it as `chat_template` in the `--decision-config` file, or ship it as `decision_template.jinja` next to `decision.json` in a model repo.
+
 ## v1/audio/transcriptions
 
 The `v1/audio/transcriptions` endpoint transcribes audio using speech-to-text models. It follows the [Audio transcription API](https://platform.openai.com/docs/api-reference/audio/createTranscription) format.
@@ -1914,6 +2085,219 @@ final_response = client.responses.create(
     stream=False,
 )
 print(final_response.output_text)
+```
+
+</hfoption>
+</hfoptions>
+
+## Reasoning
+
+Reasoning models emit a hidden chain-of-thought before the final answer. The server detects these thinking spans, strips the delimiters from the visible answer, and surfaces the reasoning text in a dedicated field so clients can render it separately.
+
+- Chat Completions returns reasoning as `reasoning_content` on the assistant message.
+- The Responses API returns reasoning as a `reasoning` output item that precedes the `message` item.
+
+Reasoning detection relies on a [response template](../chat_response_parsing), which tells the server where a thinking span starts and ends. The server looks for one in two places, in order.
+
+1. The tokenizer's `response_template` attribute, if the model ships one.
+2. A built-in fallback matched on the model architecture, for tokenizers that don't ship a template yet.
+
+Models with neither are served without response parsing. The raw decoded text is returned as `content` and no reasoning field is surfaced, even if the model emits `<think>...</think>` tags.
+
+### Enable reasoning on the server
+
+Use `--reasoning` to control whether the chat template emits thinking tokens.
+
+| Value | Behavior |
+|---|---|
+| `auto` (default) | Defer to the chat template's default. |
+| `on` | Force thinking on by setting `enable_thinking=True` in the chat template kwargs. |
+| `off` | Force thinking off by setting `enable_thinking=False`. |
+
+```sh
+transformers serve Qwen/Qwen3-1.7B --reasoning on
+```
+
+> [!WARNING]
+> Not all models support reasoning. `--reasoning` only works when the model's chat template handles the `enable_thinking` variable (or when its tokenizer declares thinking delimiters). For other models, the flag is silently ignored.
+
+`--reasoning on` and `--reasoning off` work by setting the chat template variable `enable_thinking`. Some chat templates use a different variable name to toggle thinking, or accept extra variables that change how the prompt is rendered. Pass any chat template variable directly with `--chat-template-kwargs` as a JSON object.
+
+```sh
+transformers serve Qwen/Qwen3-1.7B \
+  --chat-template-kwargs '{"enable_thinking": true}'
+```
+
+Clients can also send `chat_template_kwargs` in the request body to override the server defaults for a single request, without restarting the server.
+
+### Chat Completions
+
+Non-streaming responses include `reasoning_content` alongside `content` on the assistant message.
+
+<hfoptions id="reasoning-chat">
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[{"role": "user", "content": "What is 17 * 23?"}],
+)
+message = completion.choices[0].message
+print("reasoning:", message.reasoning_content)
+print("answer:", message.content)
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+Streaming emits `reasoning_content` deltas before `content` deltas. Concatenate each field separately.
+
+```python
+chunks = list(
+    client.chat.completions.create(
+        model="Qwen/Qwen3-1.7B",
+        messages=[{"role": "user", "content": "What is 17 * 23?"}],
+        stream=True,
+    )
+)
+reasoning = "".join(getattr(c.choices[0].delta, "reasoning_content", None) or "" for c in chunks)
+content = "".join(c.choices[0].delta.content or "" for c in chunks)
+```
+
+</hfoption>
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen3-1.7B",
+    "messages": [{"role": "user", "content": "What is 17 * 23?"}],
+    "chat_template_kwargs": {"enable_thinking": true}
+  }'
+```
+
+The response includes `reasoning_content` on the assistant message.
+
+```json
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "17 * 23 = 391.",
+        "reasoning_content": "Let me compute 17 * 23. 17 * 20 = 340, 17 * 3 = 51, so 340 + 51 = 391."
+      },
+      "finish_reason": "stop",
+      "index": 0
+    }
+  ]
+}
+```
+
+</hfoption>
+</hfoptions>
+
+### Responses API
+
+The Responses API returns reasoning as a separate `reasoning` output item that precedes the `message` item.
+
+<hfoptions id="reasoning-responses">
+<hfoption id="openai">
+
+```python
+response = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=False,
+)
+reasoning_item = next(i for i in response.output if i.type == "reasoning")
+message_item = next(i for i in response.output if i.type == "message")
+print("reasoning:", reasoning_item.content[0].text)
+print("answer:", message_item.content[0].text)
+```
+
+</hfoption>
+<hfoption id="openai (stream)">
+
+Streaming opens the reasoning item first and emits `response.reasoning_text.delta` events, then closes it and opens the message item to emit `response.output_text.delta` events.
+
+```python
+stream = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=True,
+)
+
+for event in stream:
+    if event.type == "response.reasoning_text.delta":
+        print(event.delta, end="")
+    elif event.type == "response.output_text.delta":
+        print(event.delta, end="")
+```
+
+</hfoption>
+</hfoptions>
+
+### Multi-turn round trip
+
+For multi-turn conversations, include the reasoning text from the previous response in the next request. The server passes it to the chat template, which can render it as part of the prior assistant turn so the model sees its own earlier thought process.
+
+<hfoptions id="reasoning-multiturn">
+<hfoption id="v1/chat/completions">
+
+Attach `reasoning_content` to the prior assistant message.
+
+```python
+first = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[{"role": "user", "content": "What is 17 * 23?"}],
+).choices[0].message
+
+second = client.chat.completions.create(
+    model="Qwen/Qwen3-1.7B",
+    messages=[
+        {"role": "user", "content": "What is 17 * 23?"},
+        {
+            "role": "assistant",
+            "content": first.content,
+            "reasoning_content": first.reasoning_content,
+        },
+        {"role": "user", "content": "Now multiply that result by 2."},
+    ],
+)
+print(second.choices[0].message.content)
+```
+
+</hfoption>
+<hfoption id="v1/responses">
+
+Pass the prior `reasoning` item back as an input item before the assistant message.
+
+```python
+first = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input="What is 17 * 23?",
+    stream=False,
+)
+reasoning_item = next(i for i in first.output if i.type == "reasoning")
+message_item = next(i for i in first.output if i.type == "message")
+
+second = client.responses.create(
+    model="Qwen/Qwen3-1.7B",
+    input=[
+        {"role": "user", "content": "What is 17 * 23?"},
+        reasoning_item.model_dump(exclude_none=True),
+        {"role": "assistant", "content": message_item.content[0].text},
+        {"role": "user", "content": "Now multiply that result by 2."},
+    ],
+    stream=False,
+)
+print(second.output_text)
 ```
 
 </hfoption>

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2026-02-06.*
+*This model was published in HF papers on 2025-08-26 and contributed to Hugging Face Transformers on 2026-02-06.*
 
 # VibeVoice Acoustic Tokenizer
 
@@ -31,7 +31,7 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 
 ## Architecture
 
-The architecture is a mirror-symmetric encoder-decoder structure. The encoder employs a hierarchical design with 7 stages of ConvNeXt-like blocks, which use 1D depth-wise causal convolutionsfor efficient streaming processing. Six downsampling layers achieve a cumulative 3200X downsampling rate from a 24kHz input, yielding 7.5 tokens/frames per second. Each encoder/decoder component has approximately 340M parameters, for a total of around 680M parameters The training objective follows that of [DAC](./dac), including its discriminator and loss designs.
+The architecture is a mirror-symmetric encoder-decoder structure. The encoder employs a hierarchical design with 7 stages of ConvNeXt-like blocks, which use 1D depth-wise causal convolutions for efficient streaming processing. Six downsampling layers achieve a cumulative 3200X downsampling rate from a 24kHz input, yielding 7.5 tokens/frames per second. Each encoder/decoder component has approximately 340M parameters, for a total of around 680M parameters The training objective follows that of [DAC](./dac), including its discriminator and loss designs.
 
 Acoustic Tokenizer adopts the principles of a Variational Autoencoder (VAE). The encoder maps the input audio to the parameters of a latent distribution, namely the mean. Along with a fixed standard deviation, a latent vector is then sampled using the reparameterization trick. Please refer to the [technical report](https://huggingface.co/papers/2508.19205) for further details.
 
@@ -45,7 +45,7 @@ import torch
 from scipy.io import wavfile
 
 from transformers import AutoFeatureExtractor, VibeVoiceAcousticTokenizerModel
-from transformers.audio_utils import load_audio_librosa
+from transformers.audio_utils import load_audio
 
 
 model_id = "microsoft/VibeVoice-AcousticTokenizer"
@@ -57,7 +57,7 @@ print("Model loaded on device:", model.device)
 print("Model dtype:", model.dtype)
 
 # load audio
-audio = load_audio_librosa(
+audio = load_audio(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
     sampling_rate=feature_extractor.sampling_rate,
 )
@@ -96,7 +96,7 @@ import torch
 from scipy.io import wavfile
 
 from transformers import AutoFeatureExtractor, VibeVoiceAcousticTokenizerModel
-from transformers.audio_utils import load_audio_librosa
+from transformers.audio_utils import load_audio
 
 
 model_id = "microsoft/VibeVoice-AcousticTokenizer"
@@ -108,7 +108,7 @@ print("Model loaded on device:", model.device)
 print("Model dtype:", model.dtype)
 
 # load audio
-audio = load_audio_librosa(
+audio = load_audio(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
     sampling_rate=feature_extractor.sampling_rate,
 )
@@ -122,7 +122,7 @@ inputs = feature_extractor(
 print("Input audio shape:", inputs.input_values.shape)
 # Input audio shape: torch.Size([1, 1, 224000])
 
-# chache will be initialized after a first pass
+# cache will be initialized after a first pass
 encoder_cache = None
 decoder_cache = None
 with torch.no_grad():

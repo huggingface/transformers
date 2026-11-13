@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import VptqConfig
 
 from ..utils import is_accelerate_available, is_torch_available, is_vptq_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -37,9 +36,6 @@ class VptqHfQuantizer(HfQuantizer):
 
     requires_calibration = True
     quantization_config: "VptqConfig"
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-02-06 and added to Hugging Face Transformers on 2026-03-21.*
+*This model was contributed to Hugging Face Transformers on 2026-03-21.*
 
 # UVDoc
 
@@ -45,7 +45,7 @@ model = AutoModel.from_pretrained(
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg", stream=True).raw)
 
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
@@ -76,7 +76,7 @@ model = AutoModel.from_pretrained(
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg", stream=True).raw)
 
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)

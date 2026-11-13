@@ -35,7 +35,6 @@ from ..utils import is_torch_flex_attn_available, logging
 from ..utils.import_utils import (
     get_torch_version,
     is_torch_greater_or_equal,
-    is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
 
@@ -78,12 +77,10 @@ class WrappedFlexAttention:
         """
         if not self._is_flex_compiled or training != self.training:
             self.training = training
-            if is_torch_less_or_equal("2.5.1"):
-                self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            elif version.parse(get_torch_version()).base_version == "2.6.0" and training:
+            if version.parse(get_torch_version()).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
@@ -242,8 +239,7 @@ def make_flex_block_causal_mask(
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
-        # compiling the mask is not BC with older torch
-        _compile=not is_torch_less_or_equal("2.5.1"),
+        _compile=True,
     )
 
 
@@ -268,6 +264,7 @@ def flex_attention_forward(
     scaling: float | None = None,
     softcap: float | None = None,
     s_aux: torch.Tensor | None = None,
+    position_bias: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     if kwargs.get("dropout", 0.0) > 0:
@@ -291,6 +288,8 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if score_mask is not None:
             score = score + score_mask[batch_idx][0][q_idx][kv_idx]
+        if position_bias is not None:
+            score = score + position_bias[batch_idx, head_idx, q_idx, kv_idx]
         # Note: attention sinks cannot be correctly implemented in score_mod
         # because it requires operating on the full attention matrix before softmax.
         # ==> this is done after flex attention

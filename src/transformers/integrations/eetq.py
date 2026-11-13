@@ -97,7 +97,7 @@ def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = N
     from .hub_kernels import get_kernel
 
     global eetq_kernels_hub
-    eetq_kernels_hub = get_kernel("kernels-community/quantization-eetq")
+    eetq_kernels_hub = get_kernel("kernels-community/quantization-eetq", version=1)
 
     has_been_replaced = False
     # we need this to correctly materialize the weights during quantization

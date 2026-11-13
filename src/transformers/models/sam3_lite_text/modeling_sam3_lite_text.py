@@ -53,20 +53,19 @@ from .configuration_sam3_lite_text import (
 if is_torchvision_available():
     import torchvision
 
-
 logger = logging.get_logger(__name__)
 
 
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Full sequence of hidden states from the text encoder.
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, projection_dim)`):
         EOT-pooled output projected to `projection_dim` via the internal CLIP-style projection.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+    hidden_states (`tuple(torch.Tensor)`, *optional*):
         Tuple of hidden states at each layer, returned when `output_hidden_states=True`.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
+    attentions (`tuple(torch.Tensor)`, *optional*):
         Tuple of attention weights at each transformer layer, returned when `output_attentions=True`.
     """
 
@@ -307,7 +306,7 @@ class Sam3LiteTextTextEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -342,7 +341,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -370,7 +369,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
@@ -422,27 +421,27 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
 @dataclass
 class Sam3LiteTextVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    fpn_hidden_states (`tuple[torch.FloatTensor]`):
+    fpn_hidden_states (`tuple[torch.Tensor]`):
         Tuple of multi-level FPN feature maps.
-    fpn_position_encoding (`tuple[torch.FloatTensor]`):
+    fpn_position_encoding (`tuple[torch.Tensor]`):
         Tuple of position encodings for each FPN level.
     """
 
-    fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
-    fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
+    fpn_hidden_states: tuple[torch.Tensor, ...] = None
+    fpn_position_encoding: tuple[torch.Tensor, ...] = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_prompts, hidden_size)`):
         Encoded geometry prompt features (boxes).
     attention_mask (`torch.BoolTensor` of shape `(batch_size, num_prompts)`, *optional*):
         Attention mask for geometry prompts where True indicates valid positions and False indicates padding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: torch.Tensor = None
     attention_mask: torch.BoolTensor | None = None
 
 
@@ -450,116 +449,116 @@ class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
 @dataclass
 class Sam3LiteTextDETREncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Encoded vision features (flattened from multi-level features).
-    pos_embeds_flattened (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    pos_embeds_flattened (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Flattened position embeddings for the vision features.
-    text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`, *optional*):
+    text_features (`torch.Tensor` of shape `(batch_size, text_seq_len, hidden_size)`, *optional*):
         Text features (may be pooled after encoder processing).
     spatial_shapes (`torch.LongTensor` of shape `(num_levels, 2)`, *optional*):
         Spatial shapes (height, width) for each feature pyramid level.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all encoder layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from all encoder layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pos_embeds_flattened: torch.FloatTensor | None = None
-    text_features: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor = None
+    pos_embeds_flattened: torch.Tensor | None = None
+    text_features: torch.Tensor | None = None
     spatial_shapes: torch.LongTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextDETRDecoderOutput(ModelOutput):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
         Decoder hidden states from all layers.
-    reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`):
+    reference_boxes (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, 4)`):
         Predicted reference boxes from all decoder layers in (cx, cy, w, h) format.
-    presence_logits (`torch.FloatTensor` of shape `(num_layers, batch_size, 1)`):
+    presence_logits (`torch.Tensor` of shape `(num_layers, batch_size, 1)`):
         Presence logits from all decoder layers indicating object presence confidence.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all decoder layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from all decoder layers (self-attention and cross-attention).
     """
 
-    intermediate_hidden_states: torch.FloatTensor = None
-    reference_boxes: torch.FloatTensor = None
-    presence_logits: torch.FloatTensor = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    intermediate_hidden_states: torch.Tensor = None
+    reference_boxes: torch.Tensor = None
+    presence_logits: torch.Tensor = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextMaskDecoderOutput(ModelOutput):
     r"""
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
-    semantic_seg (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+    semantic_seg (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
         Semantic segmentation output.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from mask decoder cross-attention layers.
     """
 
-    pred_masks: torch.FloatTensor = None
-    semantic_seg: torch.FloatTensor | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    pred_masks: torch.Tensor = None
+    semantic_seg: torch.Tensor | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     r"""
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Predicted bounding boxes in (x1, y1, x2, y2) format.
-    pred_logits (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+    pred_logits (`torch.Tensor` of shape `(batch_size, num_queries)`, *optional*):
         Classification confidence scores for each query, computed via dot product between
         decoder query features and text features.
-    presence_logits (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
+    presence_logits (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Presence logits from the DETR decoder presence token (last layer only). These indicate whether objects
         are present in the scene. Can be used to compute final scores by multiplying with pred_logits:
         `final_scores = pred_logits.sigmoid() * presence_logits.sigmoid()`.
-    semantic_seg (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+    semantic_seg (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
         Semantic segmentation output.
-    decoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    decoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all DETR decoder layers. Each tensor has shape `(batch_size, num_queries, hidden_size)`.
-    decoder_reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`, *optional*):
+    decoder_reference_boxes (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, 4)`, *optional*):
         Reference boxes from all DETR decoder layers.
-    encoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    encoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all DETR encoder layers.
-    vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    vision_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all vision encoder (ViT) layers.
-    vision_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    vision_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from vision encoder (ViT) layers.
-    detr_encoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    detr_encoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from DETR encoder layers.
-    detr_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    detr_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from DETR decoder layers (self-attention and cross-attention).
-    mask_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    mask_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from mask decoder layers.
     """
 
-    pred_masks: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    pred_logits: torch.FloatTensor | None = None
-    presence_logits: torch.FloatTensor | None = None
-    semantic_seg: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_reference_boxes: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    vision_attentions: tuple[torch.FloatTensor] | None = None
-    detr_encoder_attentions: tuple[torch.FloatTensor] | None = None
-    detr_decoder_attentions: tuple[torch.FloatTensor] | None = None
-    mask_decoder_attentions: tuple[torch.FloatTensor] | None = None
+    pred_masks: torch.Tensor = None
+    pred_boxes: torch.Tensor = None
+    pred_logits: torch.Tensor | None = None
+    presence_logits: torch.Tensor | None = None
+    semantic_seg: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_reference_boxes: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    vision_hidden_states: tuple[torch.Tensor] | None = None
+    vision_attentions: tuple[torch.Tensor] | None = None
+    detr_encoder_attentions: tuple[torch.Tensor] | None = None
+    detr_decoder_attentions: tuple[torch.Tensor] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor] | None = None
 
 
 class Sam3LiteTextMLP(nn.Module):
@@ -669,12 +668,16 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
@@ -693,8 +696,8 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
         x_embed = x * self.scale
         y_embed = y * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).to(x.dtype)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=x.device).to(x.dtype)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features)
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
@@ -710,11 +713,11 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
             boxes: Box coordinates [batch_size, num_queries, 4] in (x, y, w, h) format
 
         Returns:
-            Position embeddings [batch_size, num_queries, num_pos_feats*4]
+            Position embeddings [batch_size, num_queries, num_position_features*4]
         """
         assert boxes.size(-1) == 4, f"Expected 4D box coordinates (x, y, w, h), got shape {boxes.shape}"
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
 
         x_embed = boxes[:, :, 0] * self.scale
         y_embed = boxes[:, :, 1] * self.scale
@@ -735,26 +738,42 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
 
         return pos
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=4)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -762,6 +781,17 @@ class Sam3LiteTextSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class Sam3LiteTextGeometryEncoderLayer(nn.Module):
@@ -884,7 +914,7 @@ class Sam3LiteTextGeometryEncoder(nn.Module):
         self.roi_size = config.roi_size
 
         self.position_encoding = Sam3LiteTextSinePositionEmbedding(
-            num_pos_feats=config.hidden_size // 2, normalize=True
+            num_position_features=config.hidden_size // 2, normalize=True
         )
         self.label_embed = nn.Embedding(2, self.hidden_size)
         self.cls_embed = nn.Embedding(1, self.hidden_size)
@@ -1109,6 +1139,7 @@ class Sam3LiteTextDetrEncoder(Sam3LiteTextPreTrainedModel):
     resolutions) and fuses them with text prompts through a stack of transformer encoder layers.
     """
 
+    config: Sam3LiteTextDETREncoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextDetrEncoderLayer,
         "attentions": Sam3LiteTextAttention,
@@ -1377,6 +1408,7 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
     - Presence token is used
     """
 
+    config: Sam3LiteTextDETRDecoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextDetrDecoderLayer,
         "attentions": Sam3LiteTextAttention,
@@ -1410,7 +1442,7 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
         self.box_rpb_embed_y = Sam3LiteTextDecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
 
         self.position_encoding = Sam3LiteTextSinePositionEmbedding(
-            num_pos_feats=config.hidden_size // 2, normalize=False
+            num_position_features=config.hidden_size // 2, normalize=False
         )
 
         self.post_init()
@@ -1761,6 +1793,7 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
     Also produces a semantic segmentation output and supports cross-attention to prompts.
     """
 
+    config: Sam3LiteTextMaskDecoderConfig
     _can_record_outputs = {
         "attentions": Sam3LiteTextAttention,
     }
@@ -1943,7 +1976,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         ```python
         >>> from transformers import Sam3LiteTextModel, Sam3LiteTextProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3LiteTextModel.from_pretrained("facebook/sam3_lite_text")
@@ -1972,7 +2005,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
     @auto_docstring
     def get_vision_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3LiteTextVisionEncoderOutput:
         r"""
@@ -1981,7 +2014,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         ```python
         >>> from transformers import Sam3LiteTextModel, Sam3LiteTextProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3LiteTextModel.from_pretrained("facebook/sam3_lite_text")
@@ -2006,12 +2039,12 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         vision_embeds: Sam3LiteTextVisionEncoderOutput | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        text_embeds: torch.FloatTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        text_embeds: torch.Tensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_boxes_labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3LiteTextImageSegmentationOutput:
@@ -2019,10 +2052,10 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         vision_embeds (`Sam3LiteTextVisionEncoderOutput`, *optional*):
             Pre-computed vision embeddings. Can be used to easily reuse vision embeddings. If provided, `pixel_values`
             should not be passed. Mutually exclusive with `pixel_values`.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        text_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Pre-computed text embeddings. Can be used to easily reuse text embeddings. If provided, `input_ids`
             should not be passed. Mutually exclusive with `input_ids`.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
             Normalized box coordinates in [0, 1] range, in (cx, cy, w, h) format.
         input_boxes_labels (`torch.LongTensor` of shape `(batch_size, num_boxes)`, *optional*):
             Labels for boxes: 1 (positive), 0 (negative).
@@ -2031,7 +2064,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
@@ -2072,12 +2105,9 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
 
         if text_embeds is None:
-            text_features = self.get_text_features(
-                input_ids=input_ids, attention_mask=attention_mask, return_dict=True
-            ).pooler_output
-        else:
-            text_features = text_embeds
+            text_embeds = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
 
+        text_features = text_embeds.pooler_output
         text_mask = attention_mask.bool() if attention_mask is not None else None
         has_geometry_prompts = input_boxes is not None and input_boxes.numel() > 0
 

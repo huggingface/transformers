@@ -13,17 +13,8 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-import numpy as np
-import PIL.Image
-import torch
-from torchvision.transforms.v2 import functional as tvF
-
 from ...image_processing_backends import TorchvisionBackend
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring, logging
 
@@ -33,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class ChameleonImageProcessor(TorchvisionBackend):
-    """Torchvision backend for Chameleon with custom convert_to_rgb."""
+    """Torchvision backend for Chameleon."""
 
     resample = PILImageResampling.LANCZOS
     image_mean = [1.0, 1.0, 1.0]
@@ -50,55 +41,6 @@ class ChameleonImageProcessor(TorchvisionBackend):
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """
-        Convert image to RGB by blending the transparency layer if it's in RGBA format.
-        If image is not `PIL.Image`, it is simply returned without modifications.
-        """
-        if not isinstance(image, PIL.Image.Image):
-            return image
-        elif image.mode == "RGB":
-            return image
-
-        img_rgba = np.array(image.convert("RGBA"))
-
-        # If there is no transparency layer, simple convert and return.
-        if not (img_rgba[:, :, 3] < 255).any():
-            return image.convert("RGB")
-
-        # There is a transparency layer, blend it with a white background.
-        alpha = img_rgba[:, :, 3] / 255.0
-        img_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * img_rgba[:, :, :3]
-        return PIL.Image.fromarray(img_rgb.astype("uint8"), "RGB")
-
-    def resize(
-        self,
-        image: "torch.Tensor",
-        size: "SizeDict",
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        **kwargs,
-    ) -> "torch.Tensor":
-        """Resize with LANCZOS fallback to BICUBIC."""
-        interpolation = (
-            resample if isinstance(resample, (tvF.InterpolationMode, int)) else tvF.InterpolationMode.BILINEAR
-        )
-        if resample is None:
-            interpolation = tvF.InterpolationMode.BILINEAR
-        elif isinstance(resample, PILImageResampling):
-            if resample == PILImageResampling.LANCZOS:
-                logger.warning_once(
-                    "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                    "BICUBIC resample will be used as an alternative. Please fall back to slow image processor if you "
-                    "want full consistency with the original model."
-                )
-                interpolation = tvF.InterpolationMode.BICUBIC
-            else:
-                from ...image_utils import pil_torch_interpolation_mapping
-
-                interpolation = pil_torch_interpolation_mapping[resample]
-
-        return super().resize(image=image, size=size, resample=interpolation, **kwargs)
 
 
 __all__ = ["ChameleonImageProcessor"]

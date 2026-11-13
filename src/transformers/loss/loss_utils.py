@@ -17,14 +17,18 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
+from .loss_ctc import ForCTCLoss
 from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_deimv2 import Deimv2ForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+from .loss_lsd import PocketTTSForConditionalGenerationLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
+from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .loss_tdt import ParakeetForTDTLoss
 
 
 def fixed_cross_entropy(
@@ -179,6 +183,7 @@ LOSS_MAPPING = {
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
+    "ForCTC": ForCTCLoss,
     "ForConditionalGeneration": ForCausalLMLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
@@ -192,6 +197,10 @@ LOSS_MAPPING = {
     "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "PocketTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
+    "GradiumPhononTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
+    "ParakeetForRNNT": ParakeetForRNNTLoss,
+    "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
 }

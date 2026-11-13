@@ -63,6 +63,10 @@ model = AutoModel.from_pretrained(
 )
 ```
 
+Loading from a branch or tag pins every file in that call to one commit, then fetches every file from that commit.
+
+That pin lasts for the call only. For reproducibility across runs, pass an explicit commit hash or a tag you treat as fixed. Do not rely on `main` or another moving branch staying fixed between runs.
+
 Model repositories also support [gating](https://hf.co/docs/hub/models-gated) to control who can access a model. Gating is common for allowing a select group of users to preview a research model before it's made public.
 
 <div class="flex justify-center">
@@ -71,7 +75,7 @@ Model repositories also support [gating](https://hf.co/docs/hub/models-gated) to
 
 A model repository also includes an inference [widget](https://hf.co/docs/hub/models-widgets) for users to directly interact with a model on the Hub.
 
-Check out the Hub [Models](https://hf.co/docs/hub/models) documentation to for more information.
+Check out the Hub [Models](https://hf.co/docs/hub/models) documentation for more information.
 
 ## Uploading a model
 
@@ -97,6 +101,12 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 trainer.push_to_hub()
+```
+
+To upload the model to a private repository, set `hub_private_repo=True` in [`TrainingArguments`]. If the repository hasn't been created yet (for example, when `push_to_hub=False` in [`TrainingArguments`]), you can also pass `private=True` to [`~transformers.Trainer.push_to_hub`] instead. The `private` argument only takes effect when the repository is created, so it doesn't change the visibility of an existing repository.
+
+```py
+trainer.push_to_hub(private=True)
 ```
 
 ### PushToHubMixin

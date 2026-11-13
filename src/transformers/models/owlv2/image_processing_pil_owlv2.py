@@ -57,11 +57,11 @@ def box_area(boxes):
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
     Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+        boxes (`torch.Tensor` of shape `(number_of_boxes, 4)`):
             Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
             < x2` and `0 <= y1 < y2`.
     Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
+        `torch.Tensor`: a tensor containing the area for each box.
     """
     boxes = _upcast(boxes)
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -103,10 +103,10 @@ def _preprocess_resize_output_shape(image, output_shape):
         output_shape (`Tuple`):
             The output shape converted to tuple.
 
-    Raises ------ ValueError:
+    Raises: ValueError:
         If output_shape length is smaller than the image number of dimensions.
 
-    Notes ----- The input image is reshaped if its number of dimensions is not equal to output_shape_length.
+    Notes: The input image is reshaped if its number of dimensions is not equal to output_shape_length.
 
     """
     output_shape = tuple(output_shape)
@@ -187,7 +187,6 @@ def _scale_boxes(boxes, target_sizes):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class Owlv2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN

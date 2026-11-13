@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -267,13 +266,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_resize_tokens_embeddings(self):
         pass
 
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["facebook/maskformer-swin-small-coco"]:
@@ -488,6 +480,10 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
             elif model.__class__.__name__ == "MaskFormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+
+    @unittest.skip(reason="hidden states are concatenated weirdly inside the model")
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
 
 
 TOLERANCE = 2e-4

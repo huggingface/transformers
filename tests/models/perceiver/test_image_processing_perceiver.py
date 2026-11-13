@@ -17,11 +17,10 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
@@ -32,98 +31,25 @@ if is_torch_available():
     import torch
 
 
-class PerceiverImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=40,
-        do_center_crop=True,
-        crop_size=None,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        resample=PILImageResampling.BICUBIC,
-    ):
-        self.crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
-        self.size = size if size is not None else {"height": 224, "width": 224}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.num_images = num_images
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_center_crop = do_center_crop
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
+class PerceiverImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 1)
+        kwargs.setdefault("max_resolution", 40)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "resample": self.resample,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
 @require_vision
 class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = PerceiverImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_center_crop"))
-            self.assertTrue(hasattr(image_processing, "crop_size"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "resample"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
+    image_processor_tester_class = PerceiverImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

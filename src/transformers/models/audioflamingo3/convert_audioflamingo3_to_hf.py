@@ -100,6 +100,7 @@ def write_processor(src_root: Path, dst_root: Path):
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
     )
+    processor.tokenizer.model_max_length = 32768
     processor.save_pretrained(str(dst_root))
 
     logger.info("processor (tokenizer + preprocessor)")
@@ -167,7 +168,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         vocab_size=len(tok),
         hidden_size=3584,
         intermediate_size=18944,
-        model_max_length=8192,
+        model_max_length=32768,
         num_attention_heads=28,
         num_hidden_layers=28,
         num_key_value_heads=4,
@@ -175,7 +176,6 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         use_cache=False,
     )
     config = AudioFlamingo3Config(text_config=text_config, audio_token_id=tok.get_vocab()["<sound>"])
-    model = AudioFlamingo3ForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     # Update state dict to new key names if necessary
     projector_key_mapping = {
@@ -188,14 +188,16 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         if old_key in state:
             state[new_key] = state.pop(old_key)
 
-    # Load weights into the instantiated model so we can push via `push_to_hub` later.
-    load_res = model.load_state_dict(state, strict=True)
+    # Load weights so we can push via `push_to_hub` later.
+    model, loading_info = AudioFlamingo3ForConditionalGeneration.from_pretrained(
+        None, config=config, state_dict=state, dtype=torch.bfloat16, output_loading_info=True
+    )
     # Enforce a clean load
-    if getattr(load_res, "missing_keys", None) and load_res.missing_keys:
-        mk = load_res.missing_keys
+    if loading_info["missing_keys"]:
+        mk = sorted(loading_info["missing_keys"])
         raise ValueError(f"Missing keys when loading: {mk[:10]}{' ...' if len(mk) > 10 else ''}")
-    if getattr(load_res, "unexpected_keys", None) and load_res.unexpected_keys:
-        uk = load_res.unexpected_keys
+    if loading_info["unexpected_keys"]:
+        uk = sorted(loading_info["unexpected_keys"])
         raise ValueError(f"Unexpected keys when loading: {uk[:10]}{' ...' if len(uk) > 10 else ''}")
 
     generation_config = GenerationConfig(
@@ -233,7 +235,7 @@ python src/transformers/models/audioflamingo3/convert_audioflamingo3_to_hf.py \
   --dst_dir audio-flamingo-3-hf
 ```
 
-3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
+3) Convert and push directly to the Hub (requires `hf auth login` or `HF_TOKEN`):
 
 ```
 python src/transformers/models/audioflamingo3/convert_audioflamingo3_to_hf.py \

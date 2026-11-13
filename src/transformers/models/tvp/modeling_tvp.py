@@ -1,14 +1,14 @@
 # Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License=, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing=, software
-# distributed under the License is distributed on an "AS IS" BASIS=,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch TVP Model"""
@@ -22,6 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -36,20 +37,20 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TvpVideoGroundingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Temporal-Distance IoU loss for video grounding.
-    logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+    logits (`torch.Tensor` of shape `(batch_size, 2)`):
         Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
         input texts.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class TvpLoss(nn.Module):
@@ -114,9 +115,9 @@ class TvpLoss(nn.Module):
         This performs the loss computation.
 
         Args:
-            logits (`torch.FloatTensor`):
+            logits (`torch.Tensor`):
                 The output logits of head module.
-            labels (`list[torch.FloatTensor]`):
+            labels (`list[torch.Tensor]`):
                 List of tensors ([start, end, duration]), which contains start time, end time of the video corresponding to the text, and also the duration.
         """
         duration, start_time, end_time = labels
@@ -524,20 +525,14 @@ class TvpPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Conv2d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.constant_(module.bias, 0)
         elif isinstance(module, TvpModel):
             init.normal_(module.text_prompt)
 
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
         if hasattr(module, "pad_up"):
             init.normal_(module.pad_up)
         if hasattr(module, "pad_down"):
@@ -687,7 +682,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
     """
 )
 class TvpModel(TvpPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TvpConfig):
         super().__init__(config)
         self.config = config
         self.vision_model = TvpVisionModel(config)
@@ -713,7 +708,7 @@ class TvpModel(TvpPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -750,16 +745,18 @@ class TvpModel(TvpPreTrainedModel):
         if attention_mask is not None:
             # (batch_size, visual_sequence_length)
             visual_attention_mask = attention_mask.new_ones(visual_embedding_output.shape[:2])
-            pt_mask = torch.ones(attention_mask.shape[0], 10).to(
-                device=attention_mask.device, dtype=attention_mask.dtype
-            )
+            pt_mask = torch.ones(attention_mask.shape[0], 10, device=attention_mask.device, dtype=attention_mask.dtype)
             attention_mask = torch.cat([pt_mask, attention_mask, visual_attention_mask], dim=-1)
-            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-            # ourselves in which case we just need to make it broadcastable to all heads.
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_ids.size()).to(input_ids.device)
+
         text_prompt = self.text_prompt.expand(text_embedding_output.shape[0], -1, -1)
         # (batch_size, sequence_length + visual_sequence_length, hidden_size)
         embedding_output = torch.cat([text_prompt, text_embedding_output, visual_embedding_output], dim=1)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -802,7 +799,7 @@ class TvpVideoGroundingHead(nn.Module):
     """
 )
 class TvpForVideoGrounding(TvpPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TvpConfig):
         super().__init__(config)
         self.config = config
         self.model = TvpModel(config)
@@ -814,7 +811,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         labels: tuple[torch.Tensor] | None = None,
         output_attentions: bool | None = None,
@@ -824,7 +821,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         **kwargs,
     ) -> tuple | TvpVideoGroundingOutput:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.
 
         Examples:

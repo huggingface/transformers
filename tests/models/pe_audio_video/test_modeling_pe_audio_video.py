@@ -210,7 +210,7 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_resize_embeddings = False
     _is_composite = True
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent audio-video alignment
 
     def setUp(self):
         self.model_tester = PeAudioVideoEncoderTester(self)
@@ -231,6 +231,13 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(
+        "TimmWrapper sets _supports_sdpa=True (timm uses F.scaled_dot_product_attention internally) but does not "
+        "support flash-only dispatch via sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip("PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector.")
@@ -282,10 +289,10 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="TODO when released")
     def test(self):
         video_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_videos", filename="audiobox.mp4", repo_type="dataset"
         )
         audio_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_videos", filename="audiobox.mp4", repo_type="dataset"
         )
 
         inputs = self.processor(

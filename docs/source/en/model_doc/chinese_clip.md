@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-02 and added to Hugging Face Transformers on 2022-12-01.*
+*This model was published in HF papers on 2022-11-02 and contributed to Hugging Face Transformers on 2022-12-01.*
 
 # Chinese-CLIP
 
@@ -43,7 +43,7 @@ from transformers import ChineseCLIPModel, ChineseCLIPProcessor
 model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16", device_map="auto")
 processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 # Squirtle, Bulbasaur, Charmander, Pikachu in English
 texts = ["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"]

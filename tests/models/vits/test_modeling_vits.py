@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch VITS model."""
 
 import copy
+import math
 import os
 import tempfile
 import unittest
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     require_torch_fp16,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -150,7 +150,8 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual((self.batch_size, 624), result.waveform.shape)
+        expected_length = result.spectrogram.shape[-1] * math.prod(config.upsample_rates)
+        self.parent.assertEqual((self.batch_size, expected_length), result.waveform.shape)
 
 
 @require_torch
@@ -162,7 +163,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent guard in duration predictor
     has_attentions = False
 
     def setUp(self):
@@ -181,36 +182,11 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_pipeline_feature_extraction_fp16(self):
         super().test_pipeline_feature_extraction_fp16()
 
-    @unittest.skip(reason="Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
         global_rng.seed(12345)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
-
-    @require_torch_multi_gpu
-    # override to force all elements of the batch to have the same sequence length across GPUs
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_stochastic_duration_prediction = False
-
-        # move input tensors to cuda:O
-        for key, value in inputs_dict.items():
-            if torch.is_tensor(value):
-                # make all elements of the batch the same -> ensures the output seq lengths are the same for DP
-                value[1:] = value[0]
-                inputs_dict[key] = value.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
-            set_seed(555)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class)).waveform
 
     @unittest.skip(reason="VITS is not deterministic")
     def test_determinism(self):

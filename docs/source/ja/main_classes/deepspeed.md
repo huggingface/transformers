@@ -182,18 +182,6 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 
 `deepspeed`ランチャーを使用し、利用可能なすべての GPU を使用したい場合は、`--num_gpus`フラグを省略するだけです。
 
-以下は、利用可能なすべての GPU をデプロイする DeepSpeed で`run_translation.py`を実行する例です。
-
-```bash
-deepspeed examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
-
 DeepSpeed のドキュメントには、`--deepspeed --deepspeed_config ds_config.json`が表示される可能性が高いことに注意してください。
 DeepSpeed 関連の引数が 2 つありますが、簡単にするためであり、処理すべき引数がすでに非常に多いためです。
 この 2 つを 1 つの引数に結合しました。
@@ -204,22 +192,6 @@ DeepSpeed 関連の引数が 2 つありますが、簡単にするためであ�
 
 
 ### Deployment with one GPU
-
-1 つの GPU で DeepSpeed をデプロイするには、[`Trainer`] コマンド ライン引数を次のように調整します。
-
-```bash
-deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
-
-これは複数の GPU の場合とほぼ同じですが、ここでは、DeepSpeed に 1 つの GPU だけを使用するように明示的に指示します。
-`--num_gpus=1`。デフォルトでは、DeepSpeed は指定されたノード上で認識できるすべての GPU をデプロイします。起動する GPU が 1 つだけの場合
-の場合、この引数は必要ありません。次の [ドキュメント](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) では、ランチャー オプションについて説明しています。
 
 1 つの GPU だけで DeepSpeed を使用したいのはなぜですか?
 
@@ -256,17 +228,6 @@ DeepSpeed を使用するには、構成ファイルに少なくとも次の構�
 このタイプのデプロイメントの実際的な使用例については、この [投稿](https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685) を参照してください。
 
 このドキュメントで詳しく説明されているように、CPU および NVMe オフロードを備えた ZeRO-3 を試すこともできます。
-
-ノート：
-
-- GPU 0 とは異なる特定の GPU で実行する必要がある場合、`CUDA_VISIBLE_DEVICES` を使用して制限することはできません。
-  利用可能な GPU の表示範囲。代わりに、次の構文を使用する必要があります。
-
-  ```bash
-  deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
-  ```
-
-  この例では、DeepSpeed に GPU 1 (2 番目の GPU) を使用するように指示します。
 
 <a id='deepspeed-multi-node'></a>
 
@@ -450,29 +411,6 @@ cat <<'EOT' > ds_config_zero3.json
 }
 EOT
 ```
-
-トレーニング スクリプトがノートブックのセルではなく通常のファイルにある場合は、次のようにして`deepspeed`を通常どおり起動できます。
-細胞からのシェル。たとえば、`run_translation.py` を使用するには、次のように起動します。
-
-```python no-style
-!git clone https://github.com/huggingface/transformers
-!cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
-```
-
-または、`%%bash` マジックを使用すると、シェル プログラムを実行するための複数行のコードを記述することができます。
-
-```python no-style
-%%bash
-
-git clone https://github.com/huggingface/transformers
-cd transformers
-deepspeed examples/pytorch/translation/run_translation.py ...
-```
-
-そのような場合、このセクションの最初に示したコードは必要ありません。
-
-注: `%%bash` マジックは優れていますが、現時点では出力をバッファリングするため、プロセスが終了するまでログは表示されません。
-完了します。
 
 <a id='deepspeed-config'></a>
 
@@ -1730,9 +1668,6 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-公式のサンプル スクリプトを使用していて、コマンド ライン引数に `--deepspeed ds_config.json` が含まれている場合
-ZeRO-3 設定を有効にすると、これがサンプル スクリプトの記述方法であるため、すべてがすでに完了しています。
-
 注: モデルの fp16 重みが単一の GPU のメモリに収まらない場合は、この機能を使用する必要があります。
 
 この方法とその他の関連機能の詳細については、[大規模モデルの構築](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models) を参照してください。
@@ -1777,21 +1712,6 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds
 
 唯一重要なことは、ZeRO-2 には何の利点もないため、ZeRO-3 構成を使用する必要があるということです。
 ZeRO-3 のみがパラメーターのシャーディングを実行するのに対し、ZeRO-1 は勾配とオプティマイザーの状態をシャーディングするため、推論に役立ちます。
-
-以下は、利用可能なすべての GPU をデプロイする DeepSpeed で`run_translation.py`を実行する例です。
-
-
-```bash
-deepspeed examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --output_dir output_dir \
---do_eval --max_eval_samples 50 --warmup_steps 50  \
---max_source_length 128 --val_max_target_length 128 \
---per_device_eval_batch_size 4 \
---predict_with_generate --dataset_config "ro-en" --fp16 \
---source_lang en --target_lang ro --dataset_name wmt16 \
---source_prefix "translate English to Romanian: "
-```
 
 推論のために、オプティマイザーの状態と勾配によって使用される追加の大きなメモリは必要ないため、
 はるかに大きなバッチやシーケンス長を同じハードウェアに適合できる必要があります。
@@ -1883,8 +1803,6 @@ SW: Model with 2783M total params, 65M largest layer params.
    出発点。
 
 5. 不可能でない限り、カスタムデータセットではなく、常に使用できる標準データセットを使用してください。
-
-6. 可能であれば、既存の [サンプル](https://github.com/huggingface/transformers/tree/main/examples/pytorch) のいずれかを使用して問題を再現してみてください。
 
 - Deepspeed が問題の原因ではないことがよくあります。
 
@@ -2189,15 +2107,8 @@ DeepSpeed 統合を含む PR を送信する場合は、CircleCI PR CI セット
 DeepSpeed テストを実行するには、少なくとも以下を実行してください。
 
 ```bash
-RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
+RUN_SLOW=1 pytest tests/trainer/distributed/test_trainer_distributed_deepspeed.py
 ```
-
-モデリングまたは pytorch サンプル コードのいずれかを変更した場合は、Model Zoo テストも実行します。以下はすべての DeepSpeed テストを実行します。
-
-```bash
-RUN_SLOW=1 pytest tests/deepspeed
-```
-
 
 ## Main DeepSpeed Resources
 

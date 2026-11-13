@@ -12,13 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import tempfile
 import unittest
 
 from parameterized import parameterized
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers import DataCollatorWithFlattening, is_torch_available
+from transformers.testing_utils import (
+    require_causal_conv1d,
+    require_flash_linear_attention,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_accelerator,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_flash_linear_attention_available
 
 
 if is_torch_available():
@@ -26,7 +36,12 @@ if is_torch_available():
 
     from transformers import (
         DynamicCache,
+        Qwen3NextForCausalLM,
         Qwen3NextModel,
+    )
+    from transformers.models.qwen3_next.modeling_qwen3_next import (
+        torch_chunk_gated_delta_rule,
+        torch_recurrent_gated_delta_rule,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -47,12 +62,29 @@ class Qwen3NextModelTester(CausalLMModelTester):
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
         self.attention_probs_dropout_prob = 0.0
+        self.hidden_act = "silu"
         self.layer_types = ["linear_attention", "full_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
         self.linear_num_key_heads = 4
         self.linear_num_value_heads = 8
+
+    def get_gated_delta_rule_inputs(
+        self, batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=False
+    ):
+        query = torch.randn(
+            batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=requires_grad
+        )
+        key = torch.randn(
+            batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=requires_grad
+        )
+        value = torch.randn(
+            batch_size, seq_length, num_v_heads, v_head_dim, device=torch_device, requires_grad=requires_grad
+        )
+        g = -torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)  # log-decays, must be <= 0
+        beta = torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)
+        return query, key, value, g, beta
 
 
 @require_torch
@@ -163,6 +195,52 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
 
+    @require_causal_conv1d
+    @require_flash_linear_attention
+    @require_torch_gpu
+    def test_padding_free_matches_padded_fast_path_regression(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        model = Qwen3NextForCausalLM(config).to(torch_device).eval()
+
+        data_collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+        )
+        test_cases = [
+            (
+                torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device),
+                torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}],
+            ),
+            (
+                torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 6]], device=torch_device),
+                torch.tensor([[0, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3, 4, 5]}, {"input_ids": [6]}],
+            ),
+        ]
+
+        for padded_input_ids, attention_mask, features in test_cases:
+            position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
+            padding_free_batch = data_collator(features)
+            padding_free_batch = {
+                key: value.to(torch_device) if torch.is_tensor(value) else value
+                for key, value in padding_free_batch.items()
+            }
+
+            with torch.no_grad():
+                res_padded = model(
+                    input_ids=padded_input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    use_cache=False,
+                )
+                res_padfree = model(**padding_free_batch, use_cache=False)
+
+            logits_padded = res_padded.logits[attention_mask.bool()]
+            logits_padfree = res_padfree.logits[0]
+
+            torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self,
@@ -189,15 +267,11 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             enable_kernels,
         )
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_can_use_device_map(self):
         """
-        Test that this model can be dispatched on multiple gpus. It's not obvious as the Cache is not standard,
-        ant each layer need to use the correct device on which it reside (i.e. it needs to be lazy initialized).
+        Test that this model can be dispatched on multiple accelerators. It's not obvious as the Cache is not standard,
+        and each layer need to use the correct device on which it reside (i.e. it needs to be lazy initialized).
         """
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -227,6 +301,77 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # This should not crash
                 _ = model.generate(**inputs_dict, max_new_tokens=5, min_new_tokens=5)
+
+    # seq_length 3 fits in one padded chunk, 12 spans exactly 3 chunks, 13 spans 4 chunks with padding
+    @parameterized.expand(itertools.product([3, 12, 13], [False, True]))
+    def test_gdn_chunked_matches_recurrent(self, seq_length: int, with_initial_state: bool):
+        """Ensures that the GDN implementation matches the recurrent one. This does not test if the GDN implementation
+        is still correct, for this check PR #47625 or https://gist.github.com/remi-or/40397649f763f2dd38f8f7e453f08cb3
+        """
+        torch.manual_seed(0)
+        batch_size, num_heads, k_head_dim, v_head_dim = 2, 3, 8, 16
+        query, key, value, g, beta = self.model_tester.get_gated_delta_rule_inputs(
+            batch_size, seq_length, num_heads, num_heads, k_head_dim, v_head_dim
+        )
+        initial_state = None
+        if with_initial_state:
+            initial_state = torch.randn(batch_size, num_heads, k_head_dim, v_head_dim, device=torch_device)
+
+        # `g` and `beta` by keyword: FLA's fused recurrent kernel takes `gk` and `gv` between them
+        chunk_out, chunk_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g,
+            beta=beta,
+            chunk_size=4,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_out, recurrent_state = torch_recurrent_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g,
+            beta=beta,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        # FLA's chunked kernel runs its dot products in TF32 (largest gap measured on a B200: 1.5e-3), the torch path in fp32
+        atol, rtol = (5e-3, 5e-3) if is_flash_linear_attention_available() else (1e-5, 1e-4)
+        torch.testing.assert_close(chunk_out, recurrent_out, rtol=rtol, atol=atol)
+        torch.testing.assert_close(chunk_state, recurrent_state, rtol=rtol, atol=atol)
+
+    @parameterized.expand([("chunked", True), ("recurrent", False)])
+    def test_gdn_grouped_value_heads_match_repeated_query_key(self, name: str, chunked: bool):
+        """Passing fewer query/key heads than value heads (grouped value attention, as in Qwen3.5 checkpoints) must
+        match repeating each query/key head over its group of value heads, for the torch path and FLA kernels alike."""
+        torch.manual_seed(0)
+        batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim = 2, 13, 2, 6, 8, 16
+        group_size = num_v_heads // num_k_heads
+        query, key, value, g, beta = self.model_tester.get_gated_delta_rule_inputs(
+            batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=True
+        )
+        gated_delta_rule = torch_chunk_gated_delta_rule if chunked else torch_recurrent_gated_delta_rule
+        # By keyword: FLA's fused recurrent kernel takes `gk` and `gv` between `g` and `beta`
+        kwargs = {"g": g, "beta": beta, "output_final_state": True, "use_qk_l2norm_in_kernel": True}
+
+        grouped_out, grouped_state = gated_delta_rule(query, key, value, **kwargs)
+        repeated_out, repeated_state = gated_delta_rule(
+            query.repeat_interleave(group_size, dim=2), key.repeat_interleave(group_size, dim=2), value, **kwargs
+        )
+        torch.testing.assert_close(grouped_out, repeated_out, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(grouped_state, repeated_state, rtol=1e-4, atol=1e-5)
+
+        # FLA's fused recurrent kernel is forward-only; training goes through the chunked kernel
+        if chunked:
+            grad_out = torch.randn_like(grouped_out)
+            grouped_grads = torch.autograd.grad(grouped_out, (query, key, value), grad_out)
+            repeated_grads = torch.autograd.grad(repeated_out, (query, key, value), grad_out)
+            for grouped_grad, repeated_grad in zip(grouped_grads, repeated_grads):
+                torch.testing.assert_close(grouped_grad, repeated_grad, rtol=1e-4, atol=1e-5)
 
 
 @slow

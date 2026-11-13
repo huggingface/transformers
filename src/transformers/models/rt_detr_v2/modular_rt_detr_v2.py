@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import warnings
 
 import torch
@@ -20,8 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import Tensor
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ..auto import AutoConfig
@@ -102,7 +102,7 @@ class RTDetrV2Config(PreTrainedConfig):
     matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-        The relative weight of the giou loss of used by the Hungarian Matcher.
+        The relative weight of the giou loss used by the Hungarian Matcher.
     use_focal_loss (`bool`, *optional*, defaults to `True`):
         Parameter informing if focal loss should be used.
     focal_loss_alpha (`float`, *optional*, defaults to 0.75):
@@ -139,7 +139,11 @@ class RTDetrV2Config(PreTrainedConfig):
     """
 
     model_type = "rt_detr_v2"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="rt_detr_resnet", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+    }
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -202,15 +206,6 @@ class RTDetrV2Config(PreTrainedConfig):
     decoder_method: str = "default"
     tie_word_embeddings: bool = True
 
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="rt_detr_resnet",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
-
 
 def multi_scale_deformable_attention_v2(
     value: Tensor,
@@ -268,7 +263,7 @@ def multi_scale_deformable_attention_v2(
                 .repeat(1, sampling_coord.shape[1])
             )
             sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
-            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+            sampling_value_l_ = sampling_value_l_.transpose(1, 2).reshape(
                 batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
             )
         sampling_value_list.append(sampling_value_l_)
@@ -332,7 +327,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
-        self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
+        self.n_points_scale = nn.Buffer(torch.tensor(n_points_scale, dtype=torch.float32))
 
     def forward(
         self,
@@ -450,8 +445,8 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
                 for _ in range(config.decoder_layers)
             ]
         )
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
 
         # Initialize weights and apply final processing
         self.post_init()

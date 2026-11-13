@@ -10,11 +10,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-03-13 and added to Hugging Face Transformers on 2024-02-21.*
+*This model was published in HF papers on 2024-03-13 and contributed to Hugging Face Transformers on 2024-02-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -98,7 +98,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="sdpa"
 )
 
-input_text = "LLMs generate text through a process known as."
+input_text = "LLMs generate text through a process known as"
 input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(
     **input_ids,
@@ -133,8 +133,8 @@ visualizer("LLMs generate text through a process known as")
    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
    model = AutoModelForCausalLM.from_pretrained(
        "google/gemma-2b",
-          device_map="auto",
-       attn_implementation="sdpa"
+        device_map="auto",
+        attn_implementation="sdpa"
    )
    input_text = "LLMs generate text through a process known as"
    input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
@@ -150,10 +150,6 @@ visualizer("LLMs generate text through a process known as")
 ## GemmaTokenizer
 
 [[autodoc]] GemmaTokenizer
-
-## GemmaTokenizerFast
-
-[[autodoc]] GemmaTokenizerFast
 
 ## GemmaModel
 

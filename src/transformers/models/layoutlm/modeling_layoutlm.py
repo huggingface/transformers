@@ -61,9 +61,7 @@ class LayoutLMEmbeddings(nn.Module):
         self.LayerNorm = LayoutLMLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -170,7 +168,7 @@ class LayoutLMSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -224,7 +222,7 @@ class LayoutLMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -281,7 +279,7 @@ class LayoutLMLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -313,7 +311,7 @@ class LayoutLMEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         for layer_module in self.layer:
@@ -395,6 +393,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
     config: LayoutLMConfig
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": LayoutLMLayer,
         "attentions": LayoutLMSelfAttention,
@@ -412,7 +411,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LayoutLMModel(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.config = config
 
@@ -436,10 +435,10 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -533,7 +532,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         "cls.predictions.decoder.weight": "layoutlm.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
 
         self.layoutlm = LayoutLMModel(config)
@@ -558,10 +557,10 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
@@ -571,10 +570,6 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Examples:
 
@@ -649,7 +644,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -668,10 +663,10 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
@@ -681,10 +676,6 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -777,7 +768,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -796,10 +787,10 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
@@ -809,8 +800,6 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 
@@ -879,7 +868,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
 @auto_docstring
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
-    def __init__(self, config, has_visual_segment_embedding=True):
+    def __init__(self, config: LayoutLMConfig, has_visual_segment_embedding=True):
         r"""
         has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
             Whether or not to add visual segment embeddings.
@@ -902,10 +891,10 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

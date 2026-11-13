@@ -26,7 +26,7 @@ class CLIPSegProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
     @auto_docstring
-    def __call__(self, text=None, images=None, visual_prompt=None, return_tensors=None, **kwargs):
+    def __call__(self, text=None, images=None, visual_prompt=None, **kwargs):
         r"""
         visual_prompt (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
             The visual prompt image or batch of images to be prepared. Each visual prompt image can be a PIL image,
@@ -48,22 +48,16 @@ class CLIPSegProcessor(ProcessorMixin):
         if text is not None and visual_prompt is not None:
             raise ValueError("You have to specify exactly one type of prompt. Either text or visual prompt.")
 
-        output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **output_kwargs["text_kwargs"])
+            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if visual_prompt is not None:
-            prompt_features = self.image_processor(
-                visual_prompt, return_tensors=return_tensors, **output_kwargs["images_kwargs"]
-            )
+            prompt_features = self.image_processor(visual_prompt, **output_kwargs["images_kwargs"])
 
         if images is not None:
-            image_features = self.image_processor(
-                images, return_tensors=return_tensors, **output_kwargs["images_kwargs"]
-            )
+            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
 
         if visual_prompt is not None and images is not None:
             encoding = {
@@ -82,7 +76,7 @@ class CLIPSegProcessor(ProcessorMixin):
             }
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(data=dict(**image_features))
 
 
 __all__ = ["CLIPSegProcessor"]

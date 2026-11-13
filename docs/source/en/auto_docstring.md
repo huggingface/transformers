@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -97,20 +97,20 @@ Also apply `@auto_docstring` to classes that inherit from [`~utils.ModelOutput`]
 @dataclass
 class MyModelOutput(ImageClassifierOutput):
     r"""
-    loss (`torch.FloatTensor`, *optional*):
+    loss (`torch.Tensor`, *optional*):
         The loss of the model.
-    custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         A custom output field specific to this model.
     """
 
     # Standard fields (hidden_states, logits, attentions, etc.) are documented automatically when
     # the description matches the standard text. Loss typically varies per model, so document it above.
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: Optional[torch.Tensor] = None
+    hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+    attentions: Optional[tuple[torch.Tensor, ...]] = None
     # Custom fields need to be documented in the docstring above
-    custom_field: Optional[torch.FloatTensor] = None
+    custom_field: Optional[torch.Tensor] = None
 ```
 
 ### Config classes
@@ -134,11 +134,11 @@ class MyModelConfig(PreTrainedConfig):
         Description of another model-specific parameter.
 
     ```python
-    >>> from transformers import MyModelConfig, MyModel
+    from transformers import MyModelConfig, MyModel
 
-    >>> configuration = MyModelConfig()
-    >>> model = MyModel(configuration)
-    >>> configuration = model.config
+    configuration = MyModelConfig()
+    model = MyModel(configuration)
+    configuration = model.config
     ```
     """
 
@@ -164,10 +164,18 @@ from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...utils import auto_docstring
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {"text_kwargs": {"padding": False}}
+    """
+    custom_call_kwarg (`bool`, *optional*, defaults to `False`):
+        A parameter with a default that can passed to __call__ which is not
+        covered by the standard processor arguments (including each modality).
+    """
+    custom_call_kwarg: bool
 
 @auto_docstring
 class MyModelProcessor(ProcessorMixin):
+    valid_processor_kwargs = MyModelProcessorKwargs
+    custom_call_kwarg = False
+
     def __init__(self, image_processor=None, tokenizer=None, custom_param: int = 4, **kwargs):
         r"""
         custom_param (`int`, *optional*, defaults to 4):
@@ -280,8 +288,8 @@ Write `Returns` and `Examples` sections manually in the docstring to override th
         Example:
 
         ```python
-        >>> model = MyModel.from_pretrained("org/my-model")
-        >>> output = model(input_ids)
+        model = MyModel.from_pretrained("org/my-model")
+        output = model(input_ids)
         ```
         """
         # ...
@@ -365,7 +373,7 @@ The `@auto_docstring` decorator generates docstrings through the following steps
 3. Each parameter's description follows this priority chain:
 
     - A manual docstring (`r""" """` block or `custom_args`) takes priority.
-    - The predefined source dict ([`ModelArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
+    - The predefined source dict ([`ModelArgs`], [`ModelForArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
     - If neither source has a description, the parameter is flagged with `[ERROR]` in the build output.
 
 4. For model classes with standard names like `ModelForCausalLM`, or classes that map to a pipeline, `@auto_docstring` generates the intro. For multimodal processors, the intro lists which components (tokenizer, image processor, and so on) the class wraps. See [ClassDocstring](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/auto_docstring.py#L2437) for the full list.

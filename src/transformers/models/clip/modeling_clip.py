@@ -73,14 +73,14 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 @dataclass
 class CLIPVisionModelOutput(ModelOutput):
     r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    image_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -91,31 +91,31 @@ class CLIPVisionModelOutput(ModelOutput):
 @dataclass
 class CLIPTextModelOutput(ModelOutput):
     r"""
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    text_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    text_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
 class CLIPOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+    logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`CLIPTextModel`].
@@ -123,11 +123,11 @@ class CLIPOutput(ModelOutput):
         The output of the [`CLIPVisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -156,7 +156,7 @@ class CLIPVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -199,7 +199,7 @@ class CLIPVisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
@@ -227,15 +227,13 @@ class CLIPTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -366,7 +364,7 @@ class CLIPEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -383,6 +381,12 @@ class CLIPEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         return hidden_states
+
+
+def _init_child_weight(child: nn.Module, std: float) -> None:
+    """Initialize `child.weight` if the child module still carries one. Guards against quantization methods that set `weight` to `None`."""
+    if getattr(child, "weight", None) is not None:
+        init.normal_(child.weight, std=std)
 
 
 @auto_docstring
@@ -405,58 +409,38 @@ class CLIPPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, CLIPTextEmbeddings):
-            init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
-            init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            _init_child_weight(module.token_embedding, factor * 0.02)
+            _init_child_weight(module.position_embedding, factor * 0.02)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, CLIPVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            _init_child_weight(module.patch_embedding, module.config.initializer_range * factor)
+            _init_child_weight(module.position_embedding, module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, CLIPAttention):
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            init.normal_(module.q_proj.weight, std=in_proj_std)
-            init.normal_(module.k_proj.weight, std=in_proj_std)
-            init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            _init_child_weight(module.q_proj, in_proj_std)
+            _init_child_weight(module.k_proj, in_proj_std)
+            _init_child_weight(module.v_proj, in_proj_std)
+            _init_child_weight(module.out_proj, out_proj_std)
         elif isinstance(module, CLIPMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            _init_child_weight(module.fc1, fc_std)
+            _init_child_weight(module.fc2, in_proj_std)
         elif isinstance(module, CLIPModel):
-            init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * factor,
-            )
-            init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * factor,
-            )
+            _init_child_weight(module.text_projection, module.text_embed_dim**-0.5 * factor)
+            _init_child_weight(module.visual_projection, module.vision_embed_dim**-0.5 * factor)
         elif isinstance(module, CLIPVisionModelWithProjection):
-            init.normal_(
-                module.visual_projection.weight,
-                std=self.config.hidden_size**-0.5 * factor,
-            )
+            _init_child_weight(module.visual_projection, self.config.hidden_size**-0.5 * factor)
         elif isinstance(module, CLIPTextModelWithProjection):
-            init.normal_(
-                module.text_projection.weight,
-                std=self.config.hidden_size**-0.5 * factor,
-            )
+            _init_child_weight(module.text_projection, self.config.hidden_size**-0.5 * factor)
         elif isinstance(module, CLIPForImageClassification):
-            init.normal_(
-                module.classifier.weight,
-                std=self.config.vision_config.hidden_size**-0.5 * factor,
-            )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
+            _init_child_weight(module.classifier, self.config.vision_config.hidden_size**-0.5 * factor)
 
 
 class CLIPEncoder(nn.Module):
@@ -619,7 +603,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -628,7 +612,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, CLIPVisionModel
 
@@ -725,7 +709,7 @@ class CLIPModel(CLIPPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -764,7 +748,7 @@ class CLIPModel(CLIPPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
@@ -841,6 +825,7 @@ class CLIPModel(CLIPPreTrainedModel):
 @auto_docstring
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config: CLIPTextConfig
+    base_model_prefix = "text_model"
     input_modalities = ("text",)
 
     def __init__(self, config: CLIPTextConfig):
@@ -904,6 +889,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 @auto_docstring
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config: CLIPVisionConfig
+    base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
@@ -923,7 +909,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CLIPVisionModelOutput:
@@ -996,12 +982,6 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
             **kwargs,

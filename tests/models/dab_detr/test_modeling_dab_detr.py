@@ -31,7 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     import torch.nn.functional as F
-    from safetensors import safe_open
+    from safetensors.torch import save_file
 
     from transformers import (
         DabDetrForObjectDetection,
@@ -231,44 +231,16 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_dab_detr_object_detection_head_model(*config_and_inputs)
 
-    def test_load_save_without_tied_weights(self):
-        # DabDetrForObjectDetection forces `bbox_embed` to be tied by `self.x = y`
-        # Run only DabDetrModel by overriding
+    def test_load_bbox_head_saved_under_decoder_name(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = False
-        config.get_text_config().tie_word_embeddings = False
+        model = DabDetrForObjectDetection(config)
+        state_dict = {key: value for key, value in model.state_dict().items() if not key.startswith("bbox_predictor.")}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            save_file(state_dict, f"{tmp_dir}/model.safetensors")
+            model_reloaded = DabDetrForObjectDetection.from_pretrained(tmp_dir)
 
-        model = DabDetrModel(config)  # we init the model without tie
-        # if this test fails later on, it means init tied the weights
-        with tempfile.TemporaryDirectory() as d:
-            model.save_pretrained(d)
-            with safe_open(f"{d}/model.safetensors", framework="pt") as f:
-                serialized_keys = f.keys()
-
-                model_reloaded, infos = DabDetrModel.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
-
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model.state_dict().items():
-                    with self.subTest(k):
-                        torch.testing.assert_close(
-                            v,
-                            reloaded_state[k],
-                            msg=lambda x: f"DabDetrModel: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
-                        )
-
-            # Checking there was no complain of missing weights
-            self.assertEqual(
-                infos["missing_keys"],
-                set(),
-                "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
-                    This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
-            )
-
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
+        torch.testing.assert_close(model_reloaded.bbox_predictor.state_dict(), model.bbox_predictor.state_dict())
 
     @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

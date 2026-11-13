@@ -87,10 +87,12 @@ class DiaMultiChannelEmbedding(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_channels = config.num_channels
         offsets = torch.arange(config.num_channels, dtype=torch.long) * config.vocab_size  # (C,)
-        self.register_buffer("offsets", offsets, persistent=False)
+        self.offsets = nn.Buffer(offsets, persistent=False)
 
     def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
-        tokens = (audio_codes + self.offsets.to(audio_codes.device)).squeeze(1)
+        tokens = (audio_codes + self.offsets.to(audio_codes.device)).view(
+            -1, audio_codes.shape[1] * audio_codes.shape[2]
+        )
         embeds = self.embed(tokens).view(tokens.shape[0], audio_codes.shape[1], -1, self.hidden_size)
         return embeds.sum(dim=2)
 
@@ -217,7 +219,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
         self_attn_output, _ = self.self_attention(
@@ -237,6 +239,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
 
 
 class DiaEncoder(DiaPreTrainedModel):
+    config: DiaEncoderConfig
     _can_record_outputs = {
         "hidden_states": DiaEncoderLayer,
         "attentions": DiaSelfAttention,
@@ -352,9 +355,11 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
+    config: DiaDecoderConfig
     _can_record_outputs = {
         "hidden_states": DiaDecoderLayer,
-        "attentions": [DiaSelfAttention, DiaCrossAttention],
+        "attentions": DiaSelfAttention,
+        "cross_attentions": DiaCrossAttention,
     }
 
     def __init__(self, config: DiaDecoderConfig):
@@ -378,7 +383,7 @@ class DiaDecoder(DiaPreTrainedModel):
         input_ids: torch.Tensor,
         position_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -495,7 +500,7 @@ class DiaModel(DiaPreTrainedModel):
                 "You should either provide text ids or the cached text encodings. Neither has been found."
             )
 
-        if self.is_gradient_checkpointing and self.training:
+        if self.is_activation_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

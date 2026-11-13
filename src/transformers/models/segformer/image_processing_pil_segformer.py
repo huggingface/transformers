@@ -22,6 +22,7 @@
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -32,14 +33,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
 
 if is_torch_available():
-    pass
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+    import torch
 
 
 class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
@@ -53,7 +52,7 @@ class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-@requires(backends=("torch", "torchvision"))
+@auto_docstring
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""
 
@@ -120,7 +119,7 @@ class SegformerImageProcessorPil(PilBackend):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest resample is used for segmentation maps instead of BILINEAR.
-                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
+                    "resample": PILImageResampling.NEAREST,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -174,7 +173,9 @@ class SegformerImageProcessorPil(PilBackend):
         return processed_images
 
     @requires(backends=("torch",))
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
 
@@ -184,11 +185,18 @@ class SegformerImageProcessorPil(PilBackend):
             target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map. When `True`, each element of
+                the returned list is a [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation`
+                (class IDs, shape `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`).
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            `list[torch.Tensor]` or `list[SemanticSegmentationPostProcessorOutput]`: When
+            `return_segmentation_scores=False` (default), a list of length `batch_size` where each item is a
+            segmentation map of shape `(height, width)` with class IDs. When `return_segmentation_scores=True`,
+            a list of [`SemanticSegmentationPostProcessorOutput`] with fields `segmentation` (class IDs, shape
+            `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
+            `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
         import torch
         import torch.nn.functional as F
@@ -212,10 +220,22 @@ class SegformerImageProcessorPil(PilBackend):
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                semantic_segmentation.append(
+                    SemanticSegmentationPostProcessorOutput(
+                        data={"segmentation": semantic_map, "segmentation_scores": resized_logits[0]}
+                    )
+                )
         else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            seg_maps = logits.argmax(dim=1)
+            semantic_segmentation = [
+                SemanticSegmentationPostProcessorOutput(
+                    data={"segmentation": seg_maps[i], "segmentation_scores": logits[i]}
+                )
+                for i in range(logits.shape[0])
+            ]
+
+        if not return_segmentation_scores:
+            semantic_segmentation = [item.segmentation for item in semantic_segmentation]
 
         return semantic_segmentation
 

@@ -22,6 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -48,19 +49,19 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BrosSpadeOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    initial_token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    initial_token_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Classification scores for entity initial tokens (before SoftMax).
-    subsequent_token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
+    subsequent_token_logits (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
         Classification scores for entity sequence tokens (before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    initial_token_logits: torch.FloatTensor | None = None
-    subsequent_token_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    initial_token_logits: torch.Tensor | None = None
+    subsequent_token_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class BrosPositionalEmbedding1D(nn.Module):
@@ -74,7 +75,7 @@ class BrosPositionalEmbedding1D(nn.Module):
         inv_freq = 1 / (
             10000 ** (torch.arange(0.0, self.dim_bbox_sinusoid_emb_1d, 2.0) / self.dim_bbox_sinusoid_emb_1d)
         )
-        self.register_buffer("inv_freq", inv_freq)
+        self.inv_freq = nn.Buffer(inv_freq)
 
     def forward(self, pos_seq: torch.Tensor) -> torch.Tensor:
         seq_size = pos_seq.size()
@@ -131,9 +132,8 @@ class BrosTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.register_buffer(
-            "token_type_ids",
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.token_type_ids = nn.Buffer(
             torch.zeros(
                 self.position_ids.size(),
                 dtype=torch.long,
@@ -347,9 +347,9 @@ class BrosLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         bbox_pos_emb: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -465,7 +465,7 @@ class BrosPreTrainedModel(PreTrainedModel):
 
 
 class BrosEncoder(BrosPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
         self.post_init()
@@ -476,9 +476,9 @@ class BrosEncoder(BrosPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         bbox_pos_emb: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
         for layer_module in self.layer:
@@ -498,7 +498,7 @@ class BrosEncoder(BrosPreTrainedModel):
 
 @auto_docstring
 class BrosModel(BrosPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BrosConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -535,7 +535,7 @@ class BrosModel(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
@@ -576,20 +576,19 @@ class BrosModel(BrosPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         # if bbox has 2 points (4 float tensors) per token, convert it to 4 points (8 float tensors) per token
         if bbox.shape[-1] == 4:
@@ -600,9 +599,9 @@ class BrosModel(BrosPreTrainedModel):
         encoder_outputs: BaseModelOutputWithCrossAttentions = self.encoder(
             embedding_output,
             bbox_pos_emb=bbox_position_embeddings,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]
@@ -621,7 +620,7 @@ class BrosModel(BrosPreTrainedModel):
 class BrosForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -649,11 +648,11 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
-        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        bbox_first_token_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -721,7 +720,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
 class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -762,11 +761,11 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BrosSpadeOutput:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
-        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        bbox_first_token_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -811,11 +810,13 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         inv_attention_mask = 1 - attention_mask
         batch_size, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
-        invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([batch_size, 1]).to(device)], axis=1).bool()
+        invalid_token_mask = torch.cat(
+            [inv_attention_mask, torch.zeros([batch_size, 1], dtype=inv_attention_mask.dtype, device=device)], axis=1
+        ).bool()
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )
-        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
+        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1, device=device, dtype=torch.bool)
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             self_token_mask[None, :, :], torch.finfo(subsequent_token_logits.dtype).min
         )
@@ -862,7 +863,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -891,11 +892,11 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
-        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        bbox_first_token_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -939,7 +940,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             batch_size, max_seq_length = attention_mask.shape
             device = attention_mask.device
 
-            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1, device=device, dtype=torch.bool)
 
             mask = bbox_first_token_mask.view(-1)
             bbox_first_token_mask = torch.cat(

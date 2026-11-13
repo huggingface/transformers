@@ -47,8 +47,8 @@ from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
-import httpx
 from huggingface_hub import create_repo, delete_repo
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from transformers import logging as transformers_logging
@@ -72,6 +72,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    MISTRAL_COMMON_MIN_VERSION,
     SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
     WEIGHTS_INDEX_NAME,
@@ -79,21 +80,26 @@ from .utils import (
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
+    is_audio_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_diffusers_available,
     is_essentia_available,
+    is_executorch_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -108,7 +114,6 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipython_available,
     is_jinja_available,
-    is_jmespath_available,
     is_jumanpp_available,
     is_kernels_available,
     is_levenshtein_available,
@@ -119,13 +124,18 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
+    is_onnxruntime_available,
+    is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
+    is_peft_greater_or_equal,
     is_phonemizer_available,
     is_pretty_midi_available,
     is_psutil_available,
@@ -143,6 +153,7 @@ from .utils import (
     is_sentencepiece_available,
     is_seqio_available,
     is_serve_available,
+    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -153,6 +164,7 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
+    is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -162,11 +174,13 @@ from .utils import (
     is_torch_optimi_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    is_torch_tpu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -228,12 +242,40 @@ _VLM_COMMON_MODEL_NAMES_MAP = {
     "conditional_generation_class": "ForConditionalGeneration",
 }
 
+# Shared text-model defaults for CausalLMModelTester and MultiModalModelTester.
+_TEXT_MODEL_TESTER_DEFAULTS = {
+    "batch_size": 13,
+    "seq_length": 7,
+    "is_training": True,
+    "use_input_mask": True,
+    "use_labels": True,
+    "vocab_size": 99,
+    "hidden_size": 32,
+    "num_hidden_layers": 2,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 2,
+    "intermediate_size": 32,
+    "hidden_act": "gelu",
+    "max_position_embeddings": 512,
+    "pad_token_id": 0,
+    "bos_token_id": 1,
+    "eos_token_id": 2,
+    "expert_interval": 1,
+    "moe_layer_start_index": 0,
+    "moe_intermediate_size": 16,
+    "shared_expert_intermediate_size": 36,
+    "shared_expert_gate": True,
+    "moe_num_shared_experts": 2,
+    "num_experts_per_tok": 2,
+    "num_experts": 8,
+}
+
 
 if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -285,6 +327,8 @@ _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 _run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
+_run_expert_parallel_tests = parse_flag_from_env("RUN_EXPERT_PARALLEL_TESTS", default=True)
+_run_fsdp_tests = parse_flag_from_env("RUN_FSDP_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -367,6 +411,38 @@ def is_tensor_parallel_test(test_case):
             return pytest.mark.is_tensor_parallel_test()(test_case)
 
 
+def is_expert_parallel_test(test_case):
+    """
+    Decorator marking a test as an expert parallel test. If RUN_EXPERT_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_expert_parallel_tests:
+        return unittest.skip(reason="test is expert parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_expert_parallel_test()(test_case)
+
+
+def is_fsdp_test(test_case):
+    """
+    Decorator marking a test as an FSDP test. If RUN_FSDP_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_fsdp_tests:
+        return unittest.skip(reason="test is fsdp test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_fsdp_test()(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow.
@@ -374,6 +450,12 @@ def slow(test_case):
     Slow tests are skipped by default. Set the RUN_SLOW environment variable to a truthy value to run them.
 
     """
+    try:
+        import pytest  # We don't need a hard dependency on pytest in the main library
+
+        test_case = pytest.mark.slow(test_case)
+    except ImportError:
+        pass
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
 
@@ -529,7 +611,7 @@ def require_triton(min_version: str = TRITON_MIN_VERSION):
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """
-    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    Decorator marking a test that requires gguf. These tests are skipped when gguf isn't installed.
     """
     return unittest.skipUnless(is_gguf_available(min_version), f"test requires gguf version >= {min_version}")(
         test_case
@@ -566,15 +648,28 @@ def require_jinja(test_case):
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
 
 
-def require_jmespath(test_case):
-    """
-    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
-    """
-    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
-
-
 def require_onnx(test_case):
     return unittest.skipUnless(is_onnx_available(), "test requires ONNX")(test_case)
+
+
+def require_onnxscript(test_case):
+    return unittest.skipUnless(is_onnxscript_available(), "test requires ONNXScript")(test_case)
+
+
+def require_onnxruntime(test_case):
+    return unittest.skipUnless(is_onnxruntime_available(), "test requires ONNX Runtime")(test_case)
+
+
+def require_executorch(test_case):
+    return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
+def require_openvino(test_case):
+    return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
+
+
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
 
 
 def require_timm(test_case):
@@ -622,6 +717,21 @@ def require_torch_greater_or_equal(version: str):
     return decorator
 
 
+def require_torchcodec_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires torchcodec version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_torchcodec_greater_or_equal(version), f"test requires PyTorch version >= {version}"
+        )(test_case)
+
+    return decorator
+
+
 def require_huggingface_hub_greater_or_equal(version: str):
     """
     Decorator marking a test that requires huggingface_hub version >= `version`.
@@ -644,16 +754,8 @@ def require_flash_attn(test_case):
     These tests are skipped when Flash Attention isn't installed.
 
     """
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
-    except Exception as _:
-        kernels_available = False
-
-    return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
+    return unittest.skipUnless(flash_attn_available, "test requires Flash Attention")(test_case)
 
 
 def require_kernels(test_case):
@@ -685,24 +787,43 @@ def require_flash_attn_4(test_case):
 
 
 def require_all_flash_attn(test_case):
-    flash_attn_available = is_flash_attn_2_available()
-    kernels_available = is_kernels_available()
-    try:
-        from kernels import get_kernel
-
-        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
-    except Exception as _:
-        kernels_available = False
+    flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
 
     return unittest.skipUnless(
         all(
             (
-                flash_attn_available | kernels_available,
+                flash_attn_available,
                 is_flash_attn_3_available(),
                 is_flash_attn_4_available(),
             )
         ),
         "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
+def require_flash_linear_attention(test_case):
+    """
+    Decorator marking a test that requires Flash Linear Attention.
+
+    These tests are skipped when Flash Linear Attention isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available(),
+        "test requires `flash-linear-attention`",
+    )(test_case)
+
+
+def require_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires causal-conv1d.
+
+    These tests are skipped when causal-conv1d isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_causal_conv1d_available(),
+        "test requires `causal-conv1d`",
     )(test_case)
 
 
@@ -716,6 +837,21 @@ def require_peft(test_case):
     return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
+def require_peft_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PEFT version >= `version`.
+
+    These tests are skipped when PEFT version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_peft_greater_or_equal(version), f"test requires PEFT version >= {version}")(
+            test_case
+        )
+
+    return decorator
+
+
 def require_torchvision(test_case):
     """
     Decorator marking a test that requires Torchvision.
@@ -726,6 +862,21 @@ def require_torchvision(test_case):
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
 
 
+def require_torchvision_video_decoding(test_case):
+    """
+    Decorator marking a test that requires the torchvision video decoding API.
+
+    These tests are skipped when torchvision isn't installed, or when it is too recent to still ship the video
+    decoding API (removed in `torchvision==0.26`).
+
+    """
+    from .video_utils import is_torchvision_video_decoding_available
+
+    return unittest.skipUnless(
+        is_torchvision_video_decoding_available(), "test requires Torchvision with video decoding support"
+    )(test_case)
+
+
 def require_torchcodec(test_case):
     """
     Decorator marking a test that requires Torchcodec.
@@ -734,6 +885,14 @@ def require_torchcodec(test_case):
 
     """
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
+
+
+def require_audio(test_case):
+    """
+    Decorator marking a test that requires the audio dependencies (soundfile and soxr, installed with
+    `transformers[audio]`). These tests are skipped when they aren't installed.
+    """
+    return unittest.skipUnless(is_audio_available(), "test requires audio")(test_case)
 
 
 def require_torchaudio(test_case):
@@ -766,7 +925,7 @@ def require_seqio(test_case):
 
 def require_scipy(test_case):
     """
-    Decorator marking a test that requires Scipy. These tests are skipped when SentencePiece isn't installed.
+    Decorator marking a test that requires Scipy. These tests are skipped when Scipy isn't installed.
     """
     return unittest.skipUnless(is_scipy_available(), "test requires Scipy")(test_case)
 
@@ -846,6 +1005,19 @@ def require_torch_multi_accelerator(test_case):
     )
 
 
+def require_torch_n_accelerators(n: int):
+    """Decorator marking a test that requires at least `n` accelerators (in PyTorch)."""
+
+    def decorator(test_case):
+        if not is_torch_available():
+            return unittest.skip(reason="test requires PyTorch")(test_case)
+        return unittest.skipUnless(backend_device_count(torch_device) >= n, f"test requires >= {n} accelerators")(
+            test_case
+        )
+
+    return decorator
+
+
 def require_torch_non_multi_gpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
@@ -906,6 +1078,13 @@ def require_torch_neuroncore(test_case):
     return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
         test_case
     )
+
+
+def require_torch_tpu(test_case):
+    """
+    Decorator marking a test that requires TPU (in PyTorch via torch_tpu).
+    """
+    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
 def require_torch_npu(test_case):
@@ -1013,6 +1192,14 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mps" and not torch.backends.mps.is_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
+            )
+        if torch_device == "tpu" and not is_torch_tpu_available():
+            raise ValueError(
+                "TRANSFORMERS_TEST_DEVICE=tpu, but TPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1031,6 +1218,8 @@ if is_torch_available():
         torch_device = "hpu"
     elif is_torch_xpu_available():
         torch_device = "xpu"
+    elif is_torch_tpu_available():
+        torch_device = "tpu"
     else:
         torch_device = "cpu"
 else:
@@ -1065,21 +1254,149 @@ def require_torch_gpu(test_case):
 
 
 def require_torch_mps(test_case):
-    """Decorator marking a test that requires CUDA and PyTorch."""
+    """Decorator marking a test that requires MPS and PyTorch.
+
+    MPS is not auto-detected as `torch_device` -- a Mac reports `cpu` unless asked otherwise -- so
+    these run under `TRANSFORMERS_TEST_DEVICE=mps`.
+    """
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
-def require_large_cpu_ram(test_case, memory: float = 80):
-    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+def require_rocm(test_case):
+    """Decorator marking a test that requires a ROCm (AMD) GPU and PyTorch."""
+    return unittest.skipUnless(torch_device == "cuda" and IS_ROCM_SYSTEM, "test requires a ROCm (AMD) GPU")(test_case)
+
+
+def get_cgroup_memory_limit_bytes() -> int | None:
+    """
+    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
+
+    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
+    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
+    process may use before it is SIGKILLed.
+    """
+    candidates = (
+        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
+    )
+    for path, unlimited_marker in candidates:
+        try:
+            with open(path, encoding="utf-8") as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw == unlimited_marker:
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
+        if limit <= 0 or limit >= 2**62:
+            return None
+        return limit
+    return None
+
+
+# Set by `patch_psutil_cpu_memory` to the pre-patch `psutil.virtual_memory`, so the guards below can still read
+# the machine's real RAM after conftest has capped what the rest of the session sees.
+_UNPATCHED_VIRTUAL_MEMORY = None
+
+
+def get_physical_cpu_ram_gib() -> float | None:
+    """
+    RAM physically present on this machine, in GiB, or `None` when psutil is unavailable.
+
+    Deliberately reads *past* the `patch_psutil_cpu_memory` cap: that cap is a `device_map="auto"` planning budget
+    (`CI_CPU_MEMORY_LIMIT_GB` per accelerator), not a statement about the machine. Note this is the wrong number
+    inside a pod, where it reports the whole node -- `get_cpu_ram_total_gib` is what combines it with the cgroup
+    limit to get an answer that holds in both places.
+    """
     if not is_psutil_available():
-        return test_case
+        return None
 
     import psutil
 
-    return unittest.skipUnless(
-        psutil.virtual_memory().total / 1024**3 > memory,
-        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
-    )(test_case)
+    virtual_memory = _UNPATCHED_VIRTUAL_MEMORY or psutil.virtual_memory
+    return virtual_memory().total / 1024**3
+
+
+def get_ci_cpu_memory_budget_gib() -> float | None:
+    """
+    CPU RAM budget this CI runner is entitled to, in GiB, or `None` outside CI.
+
+    `CI_CPU_MEMORY_LIMIT_GB` is a *per-accelerator* budget: a single-accelerator A10 runner gets 60 GiB, and a
+    runner with more accelerators gets proportionally more, because `device_map="auto"` can legitimately use more
+    CPU RAM for intermediate storage when more devices are present. So the budget is the variable times the
+    accelerator count -- reading the variable raw would report 60 GiB on a 2-accelerator runner that has 180.
+
+    This is the single source of truth for that arithmetic, shared with the `patch_psutil_cpu_memory` call in
+    `conftest.py`.
+    """
+    limit_per_device = os.environ.get("CI_CPU_MEMORY_LIMIT_GB")
+    if limit_per_device is None:
+        return None
+    try:
+        limit_per_device = float(limit_per_device)
+    except ValueError:
+        return None
+
+    num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
+    return limit_per_device * num_accelerators
+
+
+def get_cpu_ram_total_gib() -> float:
+    """
+    CPU RAM this process may actually use, in GiB.
+
+    Prefers what can be *measured* -- the cgroup limit the OOM killer enforces, and the machine's physical RAM --
+    taking the smaller of the two, since each is wrong on its own: there is no cgroup limit outside a container,
+    and physical RAM reports the whole node inside a pod.
+
+    Falls back to the CI budget (`get_ci_cpu_memory_budget_gib`) only when neither can answer, because that budget
+    is an allocation policy rather than a measurement: it is deliberately `CI_CPU_MEMORY_LIMIT_GB` per accelerator,
+    so on a 2-accelerator runner it reads 120 GiB where the runner really has 180. Using it as a term in the `min`
+    would make every guard on such a runner over-skip.
+
+    Returns `inf` when nothing can answer at all -- no cgroup, no psutil, no CI budget. That is an ordinary local
+    setup rather than a broken one, so callers run their test instead of silently dropping coverage; a guard is
+    only useful where the limit is actually knowable.
+    """
+    measured = []
+
+    cgroup_limit = get_cgroup_memory_limit_bytes()
+    if cgroup_limit is not None:
+        measured.append(cgroup_limit / 1024**3)
+
+    physical_ram = get_physical_cpu_ram_gib()
+    if physical_ram is not None:
+        measured.append(physical_ram)
+
+    if measured:
+        return min(measured)
+
+    ci_budget = get_ci_cpu_memory_budget_gib()
+    return ci_budget if ci_budget is not None else float("inf")
+
+
+def require_large_cpu_ram(test_case=None, *, memory: float = 80):
+    """
+    Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory.
+
+    Usable bare (`@require_large_cpu_ram`) or with a budget (`@require_large_cpu_ram(memory=48)`). The default 80
+    is not an estimate of any particular model: it was picked as "more than the 60 GiB of our GPU runners", so a
+    bare use means "do not run this on a CI GPU runner". Pass `memory=` when the test has a real footprint.
+    """
+
+    def memory_decorator(tc):
+        # `get_cpu_ram_total_gib` returns `inf` when it cannot measure anything (psutil missing and no cgroup), so
+        # an undetermined budget runs the test instead of silently dropping coverage.
+        return unittest.skipUnless(
+            get_cpu_ram_total_gib() > memory,
+            f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_large_gpu(test_case, memory: float = 20):
@@ -1109,6 +1426,41 @@ def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
     return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
+def get_accelerator_total_memory_gib() -> float:
+    """
+    Total memory of *all* visible accelerators, in GiB.
+
+    Use this rather than the memory of a single device for tests that spread one model over every visible device
+    (`device_map="auto"`, tensor parallelism, ...). Returns 0 on CPU, and on the backends that do not expose
+    `get_device_properties(...).total_memory` -- so callers treat "we cannot tell" the same as "it does not fit",
+    which is the safe direction: guessing too high OOM-kills the whole test process.
+    """
+    # Same restriction as `require_torch_large_accelerator`: only cuda and xpu report `total_memory`. ROCm is
+    # covered by the cuda branch -- a HIP build of torch reports `torch_device == "cuda"`, see `IS_ROCM_SYSTEM`.
+    if not is_torch_available() or torch_device not in ("cuda", "xpu"):
+        return 0.0
+
+    torch_accel = getattr(torch, torch_device)
+    total = sum(torch_accel.get_device_properties(i).total_memory for i in range(torch_accel.device_count()))
+    return total / 1024**3
+
+
+def require_torch_accelerator_memory(test_case=None, *, memory: float):
+    """
+    Decorator marking a test that needs at least `memory` GiB of accelerator memory *in total*, summed over every
+    visible accelerator. Prefer this over `require_torch_large_accelerator` (which only looks at device 0) for tests
+    that shard a single model across all visible devices.
+    """
+
+    def memory_decorator(tc):
+        return unittest.skipUnless(
+            get_accelerator_total_memory_gib() >= memory,
+            f"test requires {memory} GiB of accelerator memory in total",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
+
+
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
@@ -1123,6 +1475,11 @@ def require_torch_fp16(test_case):
     )(test_case)
 
 
+def require_flex_attention(test_case):
+    """Decorator marking a test that requires FlexAttention."""
+    return unittest.skipUnless(is_torch_flex_attn_available(), "test requires FlexAttention")(test_case)
+
+
 def require_fp8(test_case):
     """Decorator marking a test that requires supports for fp8"""
     return unittest.skipUnless(is_accelerate_available() and is_fp8_available(), "test requires fp8 support")(
@@ -1131,11 +1488,14 @@ def require_fp8(test_case):
 
 
 def require_cuda_capability_at_least(major, minor):
-    """Decorator to skip tests when CUDA capability is below the given version."""
+    """Decorator: when running on CUDA, skip if device capability is below the given
+    threshold. On non-CUDA backends this is a no-op — pair with :func:`require_torch_gpu`
+    if the test is CUDA-only, or leave alone if it should also run on other backends
+    (which won't be capability-gated)."""
     import torch
 
     if not torch.cuda.is_available():
-        return unittest.skip("CUDA not available")
+        return lambda test_case: test_case
     capability = torch.cuda.get_device_capability()
     return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
 
@@ -1161,6 +1521,46 @@ def require_deterministic_for_xpu(test_case):
             return test_case(*args, **kwargs)
 
     return wrapper
+
+
+def require_deterministic_for_accelerator(test_case=None, *, devices=None):
+    """Decorator that enables deterministic algorithms for the duration of a test.
+
+    Uses ``get_device_properties()`` to detect the device type — no per-backend
+    ``is_torch_*_available()`` conditions needed. On CPU the test runs unchanged.
+
+    Args:
+        devices: Optional list of device type strings (e.g. ``["cuda", "xpu"]``). If given,
+            deterministic mode is only enabled when the active device matches one of them.
+            If ``None`` (default), deterministic mode is enabled for all non-CPU accelerators.
+
+    Can be used with or without arguments::
+
+        @require_deterministic_for_accelerator
+        def test_foo(self): ...
+
+        @require_deterministic_for_accelerator(devices=["cuda"])
+        def test_bar(self): ...
+    """
+
+    def decorator(tc):
+        @wraps(tc)
+        def wrapper(*args, **kwargs):
+            device_type = get_device_properties()[0]
+            should_enable = device_type != "cpu" and (devices is None or device_type in devices)
+            if should_enable:
+                original_state = torch.are_deterministic_algorithms_enabled()
+                try:
+                    torch.use_deterministic_algorithms(True)
+                    return tc(*args, **kwargs)
+                finally:
+                    torch.use_deterministic_algorithms(original_state)
+            else:
+                return tc(*args, **kwargs)
+
+        return wrapper
+
+    return decorator if test_case is None else decorator(test_case)
 
 
 def require_torch_tf32(test_case):
@@ -1233,6 +1633,13 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_diffusers(test_case):
+    """
+    Decorator marking a test that requires diffusers
+    """
+    return unittest.skipUnless(is_diffusers_available(), "test requires diffusers")(test_case)
 
 
 def require_clearml(test_case):
@@ -1422,6 +1829,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+    """
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
+
+
 def require_multipart(test_case):
     """
     Decorator marking a test that requires python-multipart
@@ -1519,11 +1933,13 @@ def require_serve(test_case):
     return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
-def require_mistral_common(test_case):
+def require_mistral_common(test_case, min_version: str = MISTRAL_COMMON_MIN_VERSION):
     """
     Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
     """
-    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
+    return unittest.skipUnless(
+        is_mistral_common_available(min_version), f"test requires mistral-common version >= {min_version}"
+    )(test_case)
 
 
 def get_gpu_count():
@@ -1612,6 +2028,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
@@ -1634,6 +2051,7 @@ def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
     target_names = (
         "LayerNorm",
+        "LayerNorm1P",
         "GroupNorm",
         "BatchNorm",
         "RMSNorm",
@@ -2218,7 +2636,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 
@@ -2298,7 +2716,7 @@ def pytest_terminal_summary_main(tr, id):
                 dlist.append(rep)
     if dlist:
         dlist.sort(key=lambda x: x.duration, reverse=True)
-        with open(report_files["durations"], "w") as f:
+        with open(report_files["durations"], "w", encoding="utf-8") as f:
             durations_min = 0.05  # sec
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
@@ -2328,25 +2746,25 @@ def pytest_terminal_summary_main(tr, id):
 
     # report failures with line/short/long styles
     config.option.tbstyle = "auto"  # full tb
-    with open(report_files["failures_long"], "w") as f:
+    with open(report_files["failures_long"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
     # config.option.tbstyle = "short" # short tb
-    with open(report_files["failures_short"], "w") as f:
+    with open(report_files["failures_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         summary_failures_short(tr)
 
     config.option.tbstyle = "line"  # one line per error
-    with open(report_files["failures_line"], "w") as f:
+    with open(report_files["failures_line"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
-    with open(report_files["errors"], "w") as f:
+    with open(report_files["errors"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_errors()
 
-    with open(report_files["warnings"], "w") as f:
+    with open(report_files["warnings"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_warnings()  # normal warnings
         tr.summary_warnings()  # final warnings
@@ -2360,11 +2778,11 @@ def pytest_terminal_summary_main(tr, id):
     #     tr._tw = create_terminal_writer(config, f)
     #     tr.summary_passes()
 
-    with open(report_files["summary_short"], "w") as f:
+    with open(report_files["summary_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.short_test_summary()
 
-    with open(report_files["stats"], "w") as f:
+    with open(report_files["stats"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_stats()
 
@@ -2511,7 +2929,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -2740,16 +3158,22 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
         test_case.fail(f"{results['error']}")
 
 
+# Devices locked to the process that opens them; a device spec adds its own with `SINGLE_PROCESS_DEVICE = True`
+SINGLE_PROCESS_DEVICES = {"tpu"}
+
+
 def run_test_using_subprocess(func):
     """
     To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
     issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+
+    On devices in `SINGLE_PROCESS_DEVICES`, the test runs in the current process instead.
     """
     import pytest
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
+        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1" or torch_device in SINGLE_PROCESS_DEVICES:
             func(*args, **kwargs)
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
@@ -2816,7 +3240,7 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblock_pattern = r"(```(?:python|py)[^\S\n]*\n\s*>>> )(.*?```)"
     codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
@@ -3064,6 +3488,17 @@ if is_torch_xpu_available():
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
 
 
+if is_torch_available() and is_torch_tpu_available():
+    # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
+    # falls back to the `default` entry of its table rather than being faked here.
+    BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
+    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
+    BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
+    if hasattr(torch.tpu, "empty_cache"):
+        BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache
+
+
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
     BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
@@ -3157,6 +3592,9 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
 
+        if getattr(device_spec_module, "SINGLE_PROCESS_DEVICE", False):
+            SINGLE_PROCESS_DEVICES.add(torch_device)
+
 
 def compare_pipeline_output_to_hub_spec(output, hub_spec):
     missing_keys = []
@@ -3207,23 +3645,25 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        major, minor = torch.cuda.get_device_capability()
-        if IS_ROCM_SYSTEM:
-            return ("rocm", major, minor)
-        else:
-            return ("cuda", major, minor)
-    elif IS_XPU_SYSTEM:
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            if IS_ROCM_SYSTEM:
+                return ("rocm", major, minor)
+            else:
+                return ("cuda", major, minor)
+    if IS_XPU_SYSTEM:
         import torch
 
-        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
-        arch = torch.xpu.get_device_capability()["architecture"]
-        gen_mask = 0x000000FF00000000
-        gen = (arch & gen_mask) >> 32
-        return ("xpu", gen, None)
-    elif IS_NPU_SYSTEM:
-        return ("npu", None, None)
-    else:
-        return (torch_device, None, None)
+        if torch.xpu.is_available():
+            # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+            arch = torch.xpu.get_device_capability()["architecture"]
+            gen_mask = 0x000000FF00000000
+            gen = (arch & gen_mask) >> 32
+            return ("xpu", gen, None)
+    if IS_NPU_SYSTEM:
+        if torch.npu.is_available():
+            return ("npu", None, None)
+    return (torch_device, None, None)
 
 
 def unpack_device_properties(
@@ -3242,6 +3682,40 @@ def unpack_device_properties(
     else:
         major, minor = major_minor
     return device_type, major, minor
+
+
+@functools.lru_cache(maxsize=1)
+def supports_sdpa_flash_backend() -> bool | None:
+    """Whether torch's SDPA flash backend can actually dispatch on this device.
+
+    Ask torch instead of guessing from the ROCm architecture number: CDNA
+    (flash-capable) reports major 9 while RDNA parts report 10/11/12, so a
+    "major >= 9" gate admits RDNA hardware that has no flash kernel. Returns
+    None when torch's capability API is unavailable.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+    try:
+        from torch.backends.cuda import SDPAParams, can_use_flash_attention
+    except ImportError:
+        return None
+    try:
+        q = torch.empty(1, 1, 1, 16, device="cuda", dtype=torch.float16)
+        return bool(can_use_flash_attention(SDPAParams(q, q, q, None, 0.0, False, False), False))
+    except Exception:
+        return None
+
+
+def rocm_has_sdpa_flash_backend(major: int) -> bool:
+    """Whether this ROCm device can dispatch the SDPA flash backend, falling back
+    to the historical "major >= 9" heuristic when torch's query is unavailable.
+    """
+    supported = supports_sdpa_flash_backend()
+    if supported is None:
+        return major >= 9
+    return supported
 
 
 class Expectations(UserDict[PackedDeviceProperties, Any]):
@@ -3322,6 +3796,14 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return f"{self.data}"
 
 
+def get_json_expectation(expectations: dict[str, Any]) -> Any:
+    """
+    Same as `Expectations.get_expectation`, for expectations stored in a JSON fixture. JSON only allows string keys, so
+    they are written as their `Expectations` counterpart repr, e.g. `"(None, None)"` or `"('xpu', 5)"`.
+    """
+    return Expectations({ast.literal_eval(key): value for key, value in expectations.items()}).get_expectation()
+
+
 def patch_torch_compile_force_graph():
     """
     Patch `torch.compile` to always use `fullgraph=True`.
@@ -3346,6 +3828,60 @@ def patch_torch_compile_force_graph():
             return orig_method(*args, **kwargs)
 
         torch.compile = patched
+
+
+def patch_psutil_cpu_memory(limit_bytes: int):
+    """
+    Patch `psutil.virtual_memory` to cap the reported CPU memory to `limit_bytes`.
+
+    In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
+    owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
+    leading to GPU OOM at runtime. Calling this function caps `total`, `available`, `used`, and `percent`
+    so the entire test session sees a realistic per-runner memory budget.
+    """
+    global _UNPATCHED_VIRTUAL_MEMORY
+
+    import psutil
+
+    # Keep the honest reader reachable: the cap described in the docstring is a `device_map="auto"` planning budget,
+    # but a guard that asks "will this OOM-kill the container?" needs the machine's real RAM.
+    # See `get_physical_cpu_ram_gib`.
+    # If already patched, always use the stored original so a second call doesn't chain patches on top of each other.
+    if _UNPATCHED_VIRTUAL_MEMORY is not None:
+        _original_virtual_memory = _UNPATCHED_VIRTUAL_MEMORY
+    else:
+        _original_virtual_memory = psutil.virtual_memory
+        _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
+
+    def _capped_virtual_memory():
+        mem = _original_virtual_memory()
+        total = min(mem.total, limit_bytes)
+        available = min(mem.available, limit_bytes)
+        used = min(mem.used, total)
+        percent = 100 * used / total if total > 0 else 0.0
+        return mem._replace(total=total, available=available, used=used, percent=percent)
+
+    psutil.virtual_memory = _capped_virtual_memory
+
+
+@contextlib.contextmanager
+def cap_psutil_cpu_memory(limit_bytes: int):
+    """
+    Context manager that temporarily caps `psutil.virtual_memory` to `limit_bytes`, then restores the
+    previous value on exit.
+
+    Use this inside individual tests that need a tighter CPU memory budget than the session-wide cap set
+    by conftest (e.g. to force `device_map="auto"` to use disk offload during `from_pretrained`), without
+    affecting the rest of the test session.
+    """
+    import psutil
+
+    prev = psutil.virtual_memory
+    patch_psutil_cpu_memory(limit_bytes)
+    try:
+        yield
+    finally:
+        psutil.virtual_memory = prev
 
 
 def _get_test_info():
@@ -3435,13 +3971,13 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(actual_test_file) as fp:
+    with open(actual_test_file, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
 
     # Get the code context in the caller (to the patched function/method).
-    with open(caller_path) as fp:
+    with open(caller_path, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
@@ -3531,7 +4067,7 @@ def _prepare_debugging_info(test_info, info):
     info = f"{test_info}\n\n{info}"
     p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
     # TODO (ydshieh): This is not safe when we use pytest-xdist with more than 1 worker.
-    with open(p, "a") as fp:
+    with open(p, "a", encoding="utf-8") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
     return info
@@ -3675,7 +4211,9 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
-            info = _prepare_debugging_info(test_info, info)
+            # An empty `info` means the call site's expressions could not be matched to this call
+            # (a delegated call, see `_parse_call_info`): don't append a record with no values.
+            info = _prepare_debugging_info(test_info, info) if info else ""
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
@@ -3728,6 +4266,12 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
+    # Source expressions only match direct calls. Delegation can add args (e.g. assertListEqual ->
+    # assertSequenceEqual), so counts may differ; indexing would misattribute expressions or crash.
+    # Report nothing instead.
+    if len(args) != len(call_argument_expressions["positional_args"]):
+        return ""
+
     param_position_mapping = {param_name: idx for idx, param_name in enumerate(signature_names)}
 
     arg_info = {}
@@ -3774,6 +4318,9 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(
         unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
     )
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertSequenceEqual", _parse_call_info, target_args=("seq1", "seq2")
+    )
     _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
     _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
     _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
@@ -3786,7 +4333,7 @@ def patch_testing_methods_to_collect_info():
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+    with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".py") as tmp:
         tmp.write(script)
         tmp.flush()
         tmp.seek(0)
@@ -3825,6 +4372,12 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         # We work directly with the string representation instead the tensor itself
         t_str = str(t)
+
+        # A non-default dtype is repr'd as a trailing kwarg, e.g.
+        # `tensor([83, 362], dtype=torch.int16)`. It is not part of the value, and
+        # stripping only `tensor(` / `)` leaves it stranded inside the literal,
+        # which then does not parse (integer tensors hit this).
+        t_str = re.sub(r",\s*dtype=torch\.\w+", "", t_str)
 
         # remove `tensor( ... )` so keep only the content
         t_str = t_str.replace("tensor(", "").replace(")", "")
@@ -3881,6 +4434,11 @@ def _quote_string(s):
 
     We choice double quotes over single quote despite `str(s)` would give `'abc'` instead of `"abc"`.
     """
+    # Backslashes first: escaping the quotes below adds none, but a backslash
+    # already in `s` would otherwise escape whatever follows it -- a value ending
+    # in one swallows the closing quote and the literal no longer parses.
+    s = s.replace("\\", "\\\\")
+
     has_single_quote = "'" in s
     has_double_quote = '"' in s
 
@@ -4040,10 +4598,14 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             else:
                 groups.append(buf)
 
+        # a 1-element tuple needs its trailing comma or the value changes type:
+        # `(5)` parses back as the int 5, not as `(5,)`
+        trailing = "," if isinstance(obj, tuple) and len(obj) == 1 else ""
+
         output = f"{' ' * 4 * indent}{p1}\n"
         element_strings = [f"{' ' * (4 * (indent + 1))}" + ", ".join(buf) for buf in groups]
         output += ",\n".join(element_strings)
-        output += f"\n{' ' * 4 * indent}{p2}"
+        output += f"{trailing}\n{' ' * 4 * indent}{p2}"
 
         # if all elements are in one-line
         no_new_line_in_elements = all("\n" not in x for x in element_strings)
@@ -4054,7 +4616,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
         # will be `True`.
         if could_use_one_line:
             one_line_form = ", ".join([x.lstrip() for x in element_strings])
-            one_line_form = f"{p1}{one_line_form}{p2}"
+            one_line_form = f"{p1}{one_line_form}{trailing}{p2}"
 
             if mode == "one-line":
                 return output
@@ -4080,10 +4642,17 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                             return False
 
                         # only one element that is iterable, but not the same type as `obj` --> no one line repr.
-                        if type(obj) is not type(obj[0]):
+                        # (`obj[0]` on a dict is a *key* lookup, not positional: use its single value)
+                        only_element = next(iter(obj.values())) if type(obj) is dict else obj[0]
+                        if type(obj) is not type(only_element):
                             return False
 
                         # one-line repr. if possible, without width limit
+                        return no_new_line_in_elements
+
+                    # empty container: nothing to inspect, and `element_types[0]`
+                    # below would raise IndexError
+                    if not element_types:
                         return no_new_line_in_elements
 
                     # all elements are of simple types, but more than one type --> no one line repr.
@@ -4108,6 +4677,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             # width condition combined with specific mode conditions
             if use_one_line_repr(obj):
                 output = f"{' ' * 4 * indent}{one_line_form}"
+    else:
+        # anything else (e.g. `torch.Size`, `numpy` scalars): fall back to `repr`, which stays copy-pastable
+        output = repr(obj)
 
     cache[(id(obj), indent, mode, prefix)] = output
 
@@ -4115,12 +4687,12 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
 
 def write_file(file, content):
-    with open(file, "w") as f:
+    with open(file, "w", encoding="utf-8") as f:
         f.write(content)
 
 
 def read_json_file(file):
-    with open(file, "r") as fh:
+    with open(file, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -4356,7 +4928,7 @@ def convert_all_safetensors_to_bins(folder: str):
         # Adapt the index as well
         elif file == SAFE_WEIGHTS_INDEX_NAME:
             new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 index = json.loads(f.read())
             os.remove(path)
             if "weight_map" in index.keys():
@@ -4365,7 +4937,7 @@ def convert_all_safetensors_to_bins(folder: str):
                 for k, v in weight_map.items():
                     new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
             index["weight_map"] = new_weight_map
-            with open(new_path, "w") as f:
+            with open(new_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(index, indent=4))
 
 
@@ -4386,3 +4958,568 @@ def force_serialization_as_bin_files():
         yield
     finally:
         PreTrainedModel.save_pretrained = original_save
+
+
+@contextmanager
+def preserve_module_forwards(model: "PreTrainedModel"):
+    """
+    A context to keep track of __dict__["forward"] for each module. Upon entering, the context creates a dict where keys
+    are module and values module.__dict__["forward"]; on exit those entries are restored (if there was no "forward" key
+    in __dict__, we only pop the "forward" key).
+    This cancels the effect of a call to "kernelize" because it re-routes module.forward by adding a "forward" key to
+    the modules' __dict__ object. Exists mainly because `kernels` does not provide an `unkernelize` function.
+    """
+    original_fw = {}
+    _fw_not_set = object()  # has a unique id
+
+    # Before entering: create the dictionnary of original __dict__["forward"]
+    for _, module in model.named_modules():
+        # This is a dictionnary w/ keys -> module that can be kernelized
+        _kernel_funcs = getattr(module, "_kernel_funcs", {})
+        kernelizable_modules = list(_kernel_funcs.values())
+        # If the module is simply a wrapper around a kernel function, it has the attribute "kernel_layer_name"
+        if hasattr(type(module), "kernel_layer_name"):
+            kernelizable_modules.append(module)
+        # Go through kernelizable modules and keep track of the original forward
+        for k_module in kernelizable_modules:
+            original_fw[k_module] = k_module.__dict__.get("forward", _fw_not_set)
+
+    # Enter context manager
+    try:
+        yield
+
+    # On exit: restore the original __dict__["forward"] if they were set, otherwise pop them
+    finally:
+        for module, original_forward in original_fw.items():
+            if original_forward is _fw_not_set:
+                module.__dict__.pop("forward", None)
+            else:
+                module.__dict__["forward"] = original_forward
+
+
+# ---------------------------------------------------------------------------
+# Import chain tracker — records the full call chain for every transformers.*
+# import statement (cached or not) by overriding sys.modules with a dict
+# subclass whose .get() is called by importlib._bootstrap for every import.
+# ---------------------------------------------------------------------------
+
+_ci_deps_chains: list[dict[str, object]] = []
+_ci_deps_by_file: dict[tuple[str, str], set[str]] = {}  # (test_file, phase) -> set of src_files
+_ci_deps_tracker_reentrant = threading.local()
+# Set to True via CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to also record collection-phase imports
+# in deps_chain.json. Default False: collection imports are noise (not attributed to any test).
+_ci_record_collection_phase: bool = False
+# Set to True via CI_RECORD_DEPS_INCLUDE_CHAIN=1 to record call stack in each chain entry.
+_ci_record_chain: bool = False
+# Tracks which test file is currently being collected (set by pytest_collectstart hook).
+_ci_currently_collecting_file: str | None = None
+_ci_source_deps_repo_root: Path | None = None
+_ci_source_deps_src_root: Path | None = None
+_ci_current_phase: str = "startup"
+_ci_current_test_id: str | None = None
+# Module dependency graph: parent_module_name → set of directly-imported child module names.
+# Built as module bodies execute (one entry per unique (parent, child) pair).
+# Used at session end to compute the full transitive dep set for each test file — including
+# modules whose bodies didn't re-execute for later test files (sys.modules caching).
+_ci_module_graph: dict[str, set[str]] = {}
+# Stack of module names whose bodies are currently executing.
+# Pushed before _original_import when the module is new; popped after it returns.
+_ci_module_loading_stack: list[str] = []
+
+
+def set_ci_collecting_file(path: str | None) -> None:
+    global _ci_currently_collecting_file
+    _ci_currently_collecting_file = path
+
+
+def scan_preloaded_test_module_deps(nodeid: str) -> None:
+    """Record deps for a test module that was pre-loaded before its pytest_collectstart.
+
+    When a test file is imported as a side-effect of another test file's module-level
+    import (e.g. ``test_modeling_auto`` does ``from ..bert.test_modeling_bert import
+    BertModelTester`` at the top level), the importing module's body runs while
+    ``_ci_currently_collecting_file`` points to the *other* test file.  By the time
+    pytest fires ``pytest_collectstart`` for the pre-loaded file, the module is already
+    in ``sys.modules`` and its body does not re-execute, so our ``builtins.__import__``
+    hook never fires for its imports under the correct collecting-file context.
+
+    This function is called from ``pytest_collectstart`` in ``conftest.py``, *after*
+    ``set_ci_collecting_file`` has already set the correct context.  It checks whether
+    the module is pre-loaded and, if so, walks its ``__dict__`` to find every
+    transformers object and records its defining module via ``__module__``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set or the module is not yet in
+    ``sys.modules`` (normal path — the import hook handles fresh loads).
+    """
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    if _ci_currently_collecting_file is None:
+        return
+
+    # Convert nodeid path to Python module name.
+    # nodeid looks like "tests/models/bert/test_modeling_bert.py"
+    module_name = nodeid.replace("\\", "/").removesuffix(".py").replace("/", ".")
+    module = sys.modules.get(module_name)
+    if module is None:
+        return  # Not pre-loaded; the normal import hook will handle it.
+
+    # Module is already in sys.modules — its body already ran under a different context.
+    # Scan its __dict__ for every object whose __module__ points into transformers/ or tests/.
+    for obj in module.__dict__.values():
+        mod_name = getattr(obj, "__module__", None)
+        if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+            _record_import_chain(mod_name)
+
+
+def set_ci_deps_phase(phase: str, test_id: str | None = None) -> None:
+    global _ci_current_phase, _ci_current_test_id
+    _ci_current_phase = phase
+    _ci_current_test_id = test_id
+
+
+def _record_import_chain(module_name: str) -> None:
+    _ci_deps_tracker_reentrant.active = True
+    try:
+        module_obj = sys.modules.get(module_name)
+        if module_obj is None:
+            return
+
+        src_file = getattr(module_obj, "__file__", None)
+        if not src_file:
+            return
+
+        src_root = _ci_source_deps_src_root
+        repo_root = _ci_source_deps_repo_root
+        if src_root is None or repo_root is None:
+            return
+
+        resolved = Path(src_file).resolve()
+        try:
+            rel = resolved.relative_to(src_root)
+            src_file_rel = f"src/transformers/{rel.as_posix()}"
+        except ValueError:
+            # Not under src/transformers/ — check if it's under tests/
+            try:
+                rel = resolved.relative_to(repo_root)
+                rel_str = rel.as_posix()
+                if not rel_str.startswith("tests/"):
+                    return
+                src_file_rel = rel_str
+            except ValueError:
+                return
+
+        # Determine the dedup key: (test_file, phase_bucket) to allow same src_file
+        # to appear once per phase (collection + execution) per test file.
+        if _ci_current_test_id is not None:
+            dedup_key = (_ci_current_test_id.split("::")[0], "execution")
+        elif _ci_currently_collecting_file is not None:
+            dedup_key = (_ci_currently_collecting_file, "collection")
+        elif _ci_record_collection_phase:
+            dedup_key = ("__collection__", "collection")
+        else:
+            # No active context — import is "lost" (fired before collecting_file was set, e.g. xdist)
+            return
+
+        # Fast path: skip frame walk entirely for already-seen files (the common case
+        # after the first few imports).  Correctness is preserved: a false-positive first
+        # call is still caught by the frame walk below (file not yet in set); a legitimate
+        # first call adds the file; subsequent calls (legitimate or false-positive) are
+        # harmlessly skipped here.
+        if src_file_rel in _ci_deps_by_file.get(dedup_key, ()):
+            return
+
+        # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+        # These are registry side-effects, not real test deps — applies to both collection
+        # and execution phases (e.g. get_values(MODEL_FOR_PRETRAINING_MAPPING) at class
+        # definition time during collection pulls in all 98 registered models).
+        # Use sys._getframe() — much cheaper than inspect.stack() (no source line reads).
+        frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
+        load_attr_filtered = False
+        while frame is not None:
+            if frame.f_code.co_name == "_load_attr_from_module":
+                load_attr_filtered = True
+                break
+            frame = frame.f_back
+
+        if load_attr_filtered:
+            return
+
+        _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
+
+        if _ci_record_chain:
+            chain: list = []
+            repo_str = repo_root.as_posix() + "/"
+            for fi in inspect.stack(context=0)[2:]:
+                fn = fi.filename.replace("\\", "/") if fi.filename else ""
+                fn = fn.removeprefix(repo_str)
+                if "tests/" in fn or "src/transformers/" in fn:
+                    chain.append({"file": fn, "line": fi.lineno, "func": fi.function})
+            entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
+            if _ci_current_test_id is not None:
+                entry["test_id"] = _ci_current_test_id
+            elif _ci_currently_collecting_file is not None:
+                entry["test_file"] = _ci_currently_collecting_file
+            _ci_deps_chains.append(entry)
+    except Exception:  # noqa: S110
+        pass
+    finally:
+        _ci_deps_tracker_reentrant.active = False
+
+
+def _record_module_graph_edge(module_name: str) -> None:
+    """Record a direct dep edge in the module graph: loading_stack[-1] → module_name.
+
+    Called from the import hook for every transformers/tests import.  When the loading
+    stack is non-empty, the top entry is the module whose body is currently executing —
+    we record that it directly imports ``module_name``.  When the stack is empty the
+    import is a seed (from test file code) and no graph edge is needed (the seed is
+    already captured by ``_record_import_chain``).
+
+    Edges triggered by ``_LazyAutoMapping`` bulk iteration (``_load_attr_from_module``)
+    are filtered out — same rule as in ``_record_import_chain``.
+    """
+    if not _ci_module_loading_stack:
+        return
+    parent = _ci_module_loading_stack[-1]
+    if parent == module_name:
+        return  # self-loop
+    # Fast path: already recorded this edge — skip the frame walk.
+    parent_set = _ci_module_graph.get(parent)
+    if parent_set is not None and module_name in parent_set:
+        return
+    # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+    frame = sys._getframe(0)
+    while frame is not None:
+        if frame.f_code.co_name == "_load_attr_from_module":
+            return
+        frame = frame.f_back
+    _ci_module_graph.setdefault(parent, set()).add(module_name)
+
+
+def install_ci_source_deps_tracker() -> None:
+    """Override builtins.__import__ to record import call chains for CI dep analysis.
+
+    ``builtins.__import__`` is called by the IMPORT_NAME bytecode for every ``import``
+    statement — cached or not — so we intercept all transformers.* imports with no
+    re-import cost.  No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.
+    Called from ``pytest_sessionstart`` in conftest.py.
+    """
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    global _ci_source_deps_repo_root, _ci_source_deps_src_root, _ci_record_collection_phase, _ci_record_chain
+
+    _ci_record_collection_phase = os.environ.get("CI_RECORD_DEPS_INCLUDE_COLLECTION", "") == "1"
+    _ci_record_chain = os.environ.get("CI_RECORD_DEPS_INCLUDE_CHAIN", "") == "1"
+    _ci_source_deps_repo_root = Path(__file__).parent.parent.parent.resolve()
+    _ci_source_deps_src_root = _ci_source_deps_repo_root / "src" / "transformers"
+
+    import builtins
+    import importlib as _importlib
+    import importlib.util as _importlib_util
+
+    _original_import = builtins.__import__
+    _original_import_module = _importlib.import_module
+
+    def _tracking_import(name, globals=None, locals=None, fromlist=(), level=0):
+        # ── 1. Resolve the module name BEFORE calling the real import ──────────
+        # We need the resolved name early to check sys.modules and manage the
+        # loading stack (which module body is currently executing).
+        resolved_name = name
+        if isinstance(name, str) and level > 0 and globals is not None:
+            pkg = globals.get("__package__") or ""
+            parts = pkg.split(".")
+            if level <= len(parts):
+                # Trim off `level - 1` components (level=1 → same pkg, level=2 → parent, …)
+                base = ".".join(parts[: max(0, len(parts) - (level - 1))])
+                resolved_name = f"{base}.{name}" if name else base
+            # else: keep resolved_name = name (edge case, shouldn't happen in valid Python)
+
+        top = resolved_name.split(".")[0] if isinstance(resolved_name, str) else ""
+        is_relevant = top in ("transformers", "tests")
+        reentrant = getattr(_ci_deps_tracker_reentrant, "active", False)
+
+        # ── 2. Push to loading stack if this module is being loaded fresh ──────
+        # The stack lets _record_module_graph_edge know which parent module body
+        # is executing when a child import fires.
+        is_new = is_relevant and not reentrant and resolved_name not in sys.modules
+        if is_new:
+            _ci_module_loading_stack.append(resolved_name)
+
+        # ── 3. Run the real import (may execute module body recursively) ───────
+        try:
+            result = _original_import(name, globals, locals, fromlist, level)
+        finally:
+            # ── 4. Pop loading stack (always, even on exception) ───────────────
+            if is_new:
+                _ci_module_loading_stack.pop()
+
+        # ── 5. Record graph edge + test-file seed ─────────────────────────────
+        if is_relevant and not reentrant:
+            # Graph edge: whoever is loading right now → resolved_name.
+            # If stack is empty this is a top-level seed (recorded via _record_import_chain).
+            _record_module_graph_edge(resolved_name)
+            # Existing per-test-file attribution (unchanged behaviour).
+            _record_import_chain(resolved_name)
+
+            # Also record submodules loaded as fromlist side-effects.
+            if fromlist:
+                for item in fromlist:
+                    if item == "*":
+                        continue
+                    submodule = f"{resolved_name}.{item}"
+                    if submodule in sys.modules:
+                        _record_module_graph_edge(submodule)
+                        _record_import_chain(submodule)
+                    else:
+                        # attr.__module__ gives the real defining module when the attr is
+                        # already cached in transformers.__dict__ (skips __getattr__).  # noqa: NC001
+                        parent_mod = sys.modules.get(resolved_name)
+                        if parent_mod is not None:
+                            attr = parent_mod.__dict__.get(item)
+                            if attr is not None:
+                                mod_name = getattr(attr, "__module__", None)
+                                if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+                                    _record_module_graph_edge(mod_name)
+                                    _record_import_chain(mod_name)
+        return result
+
+    def _tracking_import_module(name, package=None):
+        # Resolve name before the call so we can manage the loading stack.
+        resolved = _importlib_util.resolve_name(name, package) if (package and name.startswith(".")) else name
+        is_relevant = isinstance(resolved, str) and resolved.split(".")[0] in ("transformers", "tests")
+        reentrant = getattr(_ci_deps_tracker_reentrant, "active", False)
+
+        is_new = is_relevant and not reentrant and resolved not in sys.modules
+        if is_new:
+            _ci_module_loading_stack.append(resolved)
+        try:
+            result = _original_import_module(name, package)
+        finally:
+            if is_new:
+                _ci_module_loading_stack.pop()
+
+        if is_relevant and not reentrant:
+            _record_module_graph_edge(resolved)
+            _record_import_chain(resolved)
+        return result
+
+    builtins.__import__ = _tracking_import
+    _importlib.import_module = _tracking_import_module
+
+
+def _ci_record_target(out_dir: Path, base_name: str) -> tuple[Path, bool]:
+    """Return (target_path, is_controller) for xdist-aware writing.
+
+    xdist worker  → writes to ``<base_name>_<worker_id>.json`` (unique, no races).
+    xdist controller → is_controller=True; caller must merge worker files then write ``base_name``.
+    non-xdist     → writes directly to ``base_name``.
+    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker_id:
+        stem, ext = base_name.rsplit(".", 1) if "." in base_name else (base_name, "json")
+        return out_dir / f"{stem}_{worker_id}.{ext}", False
+    # Detect xdist controller by checking whether worker output files already exist on disk.
+    # Workers always run pytest_sessionfinish before the controller, so their gw*.json files
+    # are present by the time this code runs on the controller process.
+    # (PYTEST_XDIST_TESTRUNUID is only set in workers, not the controller, so cannot be used.)
+    stem = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+    is_controller = bool(list(out_dir.glob(f"{stem}_gw*.json")))
+    return out_dir / base_name, is_controller
+
+
+def record_ci_source_deps_chains() -> None:
+    """Write recorded import chains to ``deps_chain.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges them.
+    """
+    if not _ci_record_chain:
+        return
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_chain.json")
+    if is_controller:
+        merged: list = []
+        for f in sorted(out_dir.glob("deps_chain_gw*.json")):
+            try:
+                merged.extend(json.loads(f.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        data = merged
+    else:
+        data = _ci_deps_chains
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def write_ci_module_graph() -> None:
+    """Write the module dependency graph to ``module_graph.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    Output format::
+
+        {
+            "transformers.models.bert.modeling_bert": [
+                "transformers.models.bert.configuration_bert",
+                "transformers.activations",
+                ...
+            ],
+            ...
+        }
+
+    Each key is a Python module name whose body was observed executing during this session.
+    Values are the module names that were *directly* imported from that body — one hop only.
+    The full transitive closure is computed from this graph in ``record_ci_source_deps_by_file``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges with set union.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "module_graph.json")
+    if is_controller:
+        merged: dict[str, set] = {}
+        for f in sorted(out_dir.glob("module_graph_gw*.json")):
+            try:
+                fragment = json.loads(f.read_text(encoding="utf-8"))
+                for k, v in fragment.items():
+                    merged.setdefault(k, set()).update(v)
+            except (OSError, json.JSONDecodeError):
+                pass
+        data = {k: sorted(v) for k, v in sorted(merged.items())}
+    else:
+        data = {k: sorted(v) for k, v in sorted(_ci_module_graph.items())}
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def record_ci_source_deps_by_file() -> None:
+    """Write a per-test-file import dict to ``deps_by_file.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    Output format::
+
+        {
+            "tests/models/clip/test_processing_clip.py": {
+                "collection": ["src/transformers/models/clip/processing_clip.py", ...],
+                "execution":  ["src/transformers/models/clip/image_processing_clip.py", ...]
+            },
+            ...
+        }
+
+    Both phases are kept separate so consumers can union them for a complete picture or
+    inspect each independently.  ``collate_ci_source_deps.py`` unions them when building
+    the fetcher map.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges them.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_by_file.json")
+    if is_controller:
+        merged_by_file: dict[str, dict[str, set]] = {}
+        for wf in sorted(out_dir.glob("deps_by_file_gw*.json")):
+            try:
+                worker_data = json.loads(wf.read_text(encoding="utf-8"))
+                for test_file, phases in worker_data.items():
+                    entry = merged_by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+                    for phase, srcs in phases.items():
+                        entry.setdefault(phase, set()).update(srcs)
+            except (OSError, json.JSONDecodeError):
+                pass
+        out = {
+            tf: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+            for tf, phases in sorted(merged_by_file.items())
+        }
+    else:
+        # Accumulate per-file, per-phase sets; always emit both keys for a consistent schema.
+        by_file: dict[str, dict[str, set[str]]] = {}
+        for (test_file, phase), src_files in _ci_deps_by_file.items():
+            if test_file.startswith("__"):
+                continue  # skip global __collection__ pool
+            entry = by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+            entry.setdefault(phase, set()).update(src_files)
+        out = {
+            test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+            for test_file, phases in sorted(by_file.items())
+        }
+
+    # BFS from each test file's seeds through the module graph to recover transitive deps
+    # missed because sys.modules caching prevented module bodies from re-executing on
+    # 2nd+ encounters.  Results stored under "graph_transitive" key.  # noqa: NC001, NC002
+
+    src_root = _ci_source_deps_src_root
+    repo_root = _ci_source_deps_repo_root
+
+    def _mod_to_path(mod_name: str) -> str | None:
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            return None
+        f = getattr(mod, "__file__", None)
+        if not f:
+            return None
+        resolved = Path(f).resolve()
+        try:
+            return f"src/transformers/{resolved.relative_to(src_root).as_posix()}"
+        except (ValueError, TypeError):
+            pass
+        try:
+            rel = resolved.relative_to(repo_root).as_posix()
+            if rel.startswith("tests/"):
+                return rel
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    if src_root is not None and repo_root is not None and _ci_module_graph:
+        # Convert module-name graph → file-path graph (built once per session).
+        file_graph: dict[str, set[str]] = {}
+        for parent_mod, child_mods in _ci_module_graph.items():
+            p_path = _mod_to_path(parent_mod)
+            if p_path is None:
+                continue
+            for child_mod in child_mods:
+                c_path = _mod_to_path(child_mod)
+                if c_path is None or c_path == p_path:
+                    continue
+                file_graph.setdefault(p_path, set()).add(c_path)
+
+        # BFS per test file.
+        for test_file, phases in out.items():
+            seeds: set[str] = set()
+            for files in phases.values():
+                seeds.update(files)
+            if not seeds:
+                continue
+            frontier = list(seeds)
+            visited = set(seeds)
+            while frontier:
+                cur = frontier.pop()
+                for dep in file_graph.get(cur, ()):
+                    if dep not in visited:
+                        visited.add(dep)
+                        frontier.append(dep)
+            new_via_graph = sorted(visited - seeds)
+            if new_via_graph:
+                out[test_file]["graph_transitive"] = new_via_graph
+
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2)
+    except OSError:
+        pass

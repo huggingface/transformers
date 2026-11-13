@@ -20,6 +20,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -31,9 +32,10 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-class JanusTextKwargs(TextKwargs, total=False):
+class DeprecatedJanusTextKwargs(TextKwargs, total=False):
     """
     generation_mode (`str`, *optional*, defaults to `"text"`):
+        Deprecated, use [`JanusProcessorKwargs.generation_mode`] instead.
         The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
         to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
         for image generation by appending image start tokens to the prompt.
@@ -43,21 +45,45 @@ class JanusTextKwargs(TextKwargs, total=False):
 
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: JanusTextKwargs
-    _defaults = {
-        "text_kwargs": {"padding": False, "padding_side": "left", "generation_mode": "text"},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    generation_mode (`str`, *optional*, defaults to `"text"`):
+        The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
+        to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
+        for image generation by appending image start tokens to the prompt.
+    """
+
+    text_kwargs: DeprecatedJanusTextKwargs
+
+    generation_mode: str
 
 
 @auto_docstring
 class JanusProcessor(ProcessorMixin):
-    def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
+    valid_processor_kwargs = JanusProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {"return_tensors": "pt"}
+    generation_mode = "text"
+
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        chat_template: str | None = None,
+        use_default_system_prompt: bool = False,
+        num_image_tokens: int = 576,
+        **kwargs,
+    ):
         r"""
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Use default system prompt for Text Generation.
+        num_image_tokens (`int`, *optional*, defaults to `576`):
+            The number of placeholder image tokens needed per one image.
         """
-        self.num_image_tokens = 576
+        self.num_image_tokens = num_image_tokens
         self.image_token = tokenizer.image_token
         self.image_start_token = tokenizer.boi_token
         self.image_end_token = tokenizer.eoi_token
@@ -83,41 +109,29 @@ class JanusProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        output_kwargs = self._merge_kwargs(
-            JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        merged_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
-        if text is None and images is None:
-            raise ValueError("You must specify either text or images.")
+        if "generation_mode" in merged_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `generation_mode` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # generation_mode in text_kwargs has priority for backwards compatibility
+        generation_mode = merged_kwargs["text_kwargs"].pop("generation_mode", merged_kwargs["generation_mode"])
 
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        if isinstance(text, str):
+            text = [text]
+        if self.use_default_system_prompt and generation_mode == "text":
+            text = [f"{DEFAULT_SYSTEM_PROMPT}{sample}" for sample in text]
+        elif generation_mode == "image":
+            text = [f"{sample}{self.image_start_token}" for sample in text]
 
-        generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
+        model_inputs = super().__call__(images=images, text=text, **merged_kwargs)
+        return model_inputs
 
-        # Replace the image token with expanded image tokens.
-        prompt_strings = []
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
-        for prompt in text:
-            prompt = prompt.replace(self.image_token, one_img_tokens)
-            if self.use_default_system_prompt and generation_mode == "text":
-                prompt = DEFAULT_SYSTEM_PROMPT + prompt
-            if generation_mode == "image":
-                prompt += self.image_start_token
-            prompt_strings.append(prompt)
-
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-
-        # Process images if pixel values are provided.
-        if images is not None and generation_mode != "image":
-            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["images_kwargs"])[
-                "pixel_values"
-            ]
-
-        return BatchFeature(data=data)
+        return one_img_tokens
 
     def postprocess(self, images: ImageInput, **kwargs):
         """
@@ -163,4 +177,5 @@ class JanusProcessor(ProcessorMixin):
             )
 
 
+__getattr__ = deprecate_attr(__name__, remove={"JanusTextKwargs": (DeprecatedJanusTextKwargs, "5.29.0")})
 __all__ = ["JanusProcessor"]

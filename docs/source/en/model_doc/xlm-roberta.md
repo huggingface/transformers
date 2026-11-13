@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-11-05 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-11-05 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -83,9 +83,9 @@ print(f"The predicted token is: {predicted_token}")
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization) overview for more available quantization backends.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) the quantive the weights to 4 bits
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4 bits
 
 ```python
 import torch
@@ -121,37 +121,37 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="text-classification"/>
 
 - A blog post on how to [finetune XLM RoBERTa for multiclass classification with Habana Gaudi on AWS](https://www.philschmid.de/habana-distributed-training)
-- [`XLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
-- [Text classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
+- [`XLMRobertaForSequenceClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
+- [Text classification](../tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
 - [Text classification task guide](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`XLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
+- [`XLMRobertaForTokenClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Token classification task guide](../tasks/token_classification)
 
 <PipelineTag pipeline="text-generation"/>
 
-- [`XLMRobertaForCausalLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [Causal language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
+- [`XLMRobertaForCausalLM`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [Causal language modeling](../tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`XLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`XLMRobertaForMaskedLM`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Masked language modeling](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`XLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
+- [`XLMRobertaForQuestionAnswering`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 - [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Question answering task guide](../tasks/question_answering)
 
 **Multiple choice**
 
-- [`XLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
+- [`XLMRobertaForMultipleChoice`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
 - [Multiple choice task guide](../tasks/multiple_choice)
 
 🚀 Deploy
@@ -160,7 +160,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <Tip>
 
-This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
+This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](./roberta) for usage examples as well as the information relative to the inputs and outputs.
 </Tip>
 
 ## XLMRobertaConfig
@@ -172,10 +172,6 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
 [[autodoc]] XLMRobertaTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## XLMRobertaTokenizerFast
-
-[[autodoc]] XLMRobertaTokenizerFast
 
 ## XLMRobertaModel
 

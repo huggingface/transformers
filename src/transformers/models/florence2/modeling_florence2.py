@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -95,7 +95,7 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         pos_idx_to_embed[:, 0::2] = sine
         pos_idx_to_embed[:, 1::2] = cosine
         # Save the positional embeddings in a constant buffer.
-        self.register_buffer("pos_idx_to_embed", pos_idx_to_embed)
+        self.pos_idx_to_embed = nn.Buffer(pos_idx_to_embed)
 
     @staticmethod
     def get_sinusoid_embeddings(max_positions: int, embed_dim: int):
@@ -486,7 +486,7 @@ class Florence2VisionBlock(nn.Module):
 
 @auto_docstring
 class Florence2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Florence2VisionConfig
+    config: Florence2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
@@ -599,12 +599,12 @@ class Florence2MultiModalProjector(nn.Module):
 @dataclass
 class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_image_tokens, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -616,16 +616,16 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
 @dataclass
 class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_image_tokens, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    image_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -634,7 +634,7 @@ class Florence2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -643,7 +643,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _supports_attention_backend = False
-    config_class = Florence2Config
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -672,12 +671,6 @@ class Florence2Model(Florence2PreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -686,7 +679,7 @@ class Florence2Model(Florence2PreTrainedModel):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
@@ -695,7 +688,7 @@ class Florence2Model(Florence2PreTrainedModel):
         return image_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -703,7 +696,7 @@ class Florence2Model(Florence2PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -711,9 +704,9 @@ class Florence2Model(Florence2PreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
@@ -723,14 +716,14 @@ class Florence2Model(Florence2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
@@ -780,7 +773,7 @@ class Florence2Model(Florence2PreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if encoder_outputs is None and pixel_values is not None else None,
         )
 
     def get_encoder(self, modality=None):
@@ -815,18 +808,13 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.model = Florence2Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -842,30 +830,25 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
@@ -908,14 +891,17 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=labels,
+                **kwargs,
             )
 
         return Florence2Seq2SeqLMOutput(
@@ -931,46 +917,14 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
-
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         return self.model.get_placeholder_mask(
             input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
         )
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -978,23 +932,30 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
-        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
-        pixel_values = model_kwargs.pop("pixel_values", None)
+        if model_kwargs.get("encoder_outputs") is not None:
+            return model_kwargs
 
+        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+        if (image_outputs := model_kwargs.pop("mm_encoder_outputs", {}).get("image")) is not None:
+            if model_kwargs.get("pixel_values") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input images")
+
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
-            None, model_kwargs, model_input_name, generation_config
+        model_kwargs = self._prepare_text_encoder_decoder_kwargs_for_generation(
+            inputs_tensor=None,
+            model_kwargs=model_kwargs,
+            model_input_name=model_input_name,
+            generation_config=generation_config,
         )
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs
