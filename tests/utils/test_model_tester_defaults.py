@@ -13,11 +13,15 @@
 # limitations under the License.
 
 import ast
+import importlib
 import unittest
 from pathlib import Path
 
+from transformers.testing_utils import require_torch
+
 from ..alm_tester import ALMModelTester
 from ..causal_lm_tester import CausalLMModelTester
+from ..model_tester_config import ModelTesterConfigMixin
 from ..models.mistral_large4.test_modeling_mistral_large4 import MistralLarge4VisionText2TextModelTester
 from ..multimodal_tester import MultiModalModelTester
 from ..vlm_tester import VLMModelTester
@@ -180,3 +184,168 @@ class MergedSmallConfigDefaultsTest(unittest.TestCase):
         tester = MistralLarge4VisionText2TextModelTester(self)
         for name, value in values.items():
             self.assertEqual(getattr(tester, name), value)
+
+
+# Testers that still set values in their own `__init__`, so `get_small_config_defaults()` doesn't
+# return what they build. Move those values into `small_config_overrides` (or a derived value in
+# `get_small_config_defaults`) and remove the tester from this list. Don't add new entries.
+TESTERS_NOT_YET_STATIC = {
+    "afmoe::AfmoeModelTester",
+    "apertus::ApertusModelTester",
+    "aria::AriaVisionText2TextModelTester",
+    "audioflamingo3::AudioFlamingo3ModelTester",
+    "axk1::AXK1ModelTester",
+    "axk2::AXK2ModelTester",
+    "bailing_hybrid::BailingHybridModelTester",
+    "beam::BeamModelTester",
+    "blt::BltModelTester",
+    "cohere2_moe::Cohere2MoeModelTester",
+    "cohere_compass::CohereCompassModelTester",
+    "cohere_compass::CohereCompassTextModelTester",
+    "cosmos3_edge::Cosmos3EdgeVisionText2TextModelTester",
+    "cosmos3_omni::Cosmos3OmniVisionText2TextModelTester",
+    "dbrx::DbrxModelTester",
+    "deepseek_ocr2::DeepseekOcr2VisionText2TextModelTester",
+    "deepseek_v2::DeepseekV2ModelTester",
+    "deepseek_v32::DeepseekV32ModelTester",
+    "deepseek_v4::DeepseekV4ModelTester",
+    "deepseek_vl::DeepseekVLVisionText2TextModelTester",
+    "dots1::Dots1ModelTester",
+    "ernie4_5_vl_moe::Ernie4_5_VLMoeVisionText2TextModelTester",
+    "exaone4::Exaone4ModelTester",
+    "exaone4_5::Exaone4_5_ModelTester",
+    "falcon::FalconModelTester",
+    "flex_olmo::FlexOlmoModelTester",
+    "flint::FlintModelTester",
+    "fun_asr_nano::FunAsrNanoModelTester",
+    "gemma3::Gemma3TextModelTester",
+    "gemma3::Gemma3Vision2TextModelTester",
+    "gemma3n::Gemma3nTextModelTester",
+    "gemma4::Gemma4Audio2TextModelTester",
+    "gemma4::Gemma4TextModelTester",
+    "gemma4::Gemma4Vision2TextModelTester",
+    "gemma4_unified::Gemma4UnifiedTextModelTester",
+    "glm4::Glm4ModelTester",
+    "glm4_moe::Glm4MoeModelTester",
+    "glm4_moe_lite::Glm4MoeLiteModelTester",
+    "glm5_next::Glm5NextVisionText2TextModelTester",
+    "glm::GlmModelTester",
+    "glm_moe_dsa::GlmMoeDsaModelTester",
+    "glmasr::GlmAsrModelTester",
+    "gpt2::GPT2ModelTester",
+    "granite4_vision::Granite4VisionModelTester",
+    "granite_speech::GraniteSpeechModelTester",
+    "granite_speech_plus::GraniteSpeechPlusForConditionalGenerationModelTester",
+    "granitemoe::GraniteMoeModelTester",
+    "granitemoeshared::GraniteMoeSharedModelTester",
+    "hrm_text::HrmTextModelTester",
+    "hunyuan_vl::HunYuanVLVisionText2TextModelTester",
+    "hy_v4::HYV4ModelTester",
+    "hyperclovax_vision_v2::HCXVisionV2VisionText2TextModelTester",
+    "inkling::InklingAudio2TextModelTester",
+    "inkling::InklingTextModelTester",
+    "inkling::InklingVision2TextModelTester",
+    "jetmoe::JetMoeModelTester",
+    "kimi_k25::Kimi_K25VisionText2TextModelTester",
+    "kimi_linear::KimiLinearModelTester",
+    "kolibri1::Kolibri1ModelTester",
+    "laguna::LagunaModelTester",
+    "lfm2::Lfm2ModelTester",
+    "lfm2_moe::Lfm2MoeModelTester",
+    "lfm2_vl::Lfm2VlModelTester",
+    "lfm3::Lfm3ModelTester",
+    "lfm3_vl::Lfm3VlVisionText2TextModelTester",
+    "llava_next::LlavaNextVisionText2TextModelTester",
+    "longcat_flash::LongcatFlashModelTester",
+    "mellum::MellumModelTester",
+    "mimo_v2_flash::MiMoV2FlashModelTester",
+    "minicpm3::MiniCPM3ModelTester",
+    "minicpm_ocr::MiniCPMOcrVisionText2TextModelTester",
+    "minicpmv4_6::MiniCPMV4_6VisionText2TextModelTester",
+    "minicpmv4_7::MiniCPMV4_7VisionText2TextModelTester",
+    "minimax::MiniMaxModelTester",
+    "minimax_m3_vl::MiniMaxM3VLVisionText2TextModelTester",
+    "molmo2::Molmo2VisionText2TextModelTester",
+    "moss_transcribe_diarize::MossTranscribeDiarizeModelTester",
+    "muse_glimmer::MuseGlimmerVision2TextModelTester",
+    "muse_spark::MuseSparkVision2TextModelTester",
+    "musicflamingo::MusicFlamingoModelTester",
+    "nemotron3_5_transcribe::Nemotron3_5TranscribeModelTester",
+    "nemotron_h_omni::NemotronHOmniAudio2TextModelTester",
+    "nemotron_h_omni::NemotronHOmniVision2TextModelTester",
+    "olmo3::Olmo3ModelTester",
+    "olmo_hybrid::OlmoHybridModelTester",
+    "phi3::Phi3ModelTester",
+    "pp_formulanet::PPFormulaNetModelTester",
+    "qianfan_ocr::QianfanOCRVisionText2TextModelTester",
+    "qwen2_audio::Qwen2AudioModelTester",
+    "qwen3::Qwen3ModelTester",
+    "qwen3_5::Qwen3_5TextModelTester",
+    "qwen3_5_moe::Qwen3_5MoeTextModelTester",
+    "qwen3_5_moe::Qwen3_5MoeVisionText2TextModelTester",
+    "qwen3_asr::Qwen3ASRModelTester",
+    "qwen3_next::Qwen3NextModelTester",
+    "qwen3_vl::Qwen3VLVisionText2TextModelTester",
+    "qwen3_vl_moe::Qwen3VLMoeVisionText2TextModelTester",
+    "qwen4_exp::Qwen4ExpTextModelTester",
+    "qwen4_exp::Qwen4ExpVisionText2TextModelTester",
+    "recurrent_gemma::RecurrentGemmaModelTester",
+    "seed_oss::SeedOssModelTester",
+    "shieldgemma2::ShieldGemma2ModelTester",
+    "solar_open::SolarOpenModelTester",
+    "step3p7::Step3p7VisionText2TextModelTester",
+    "ultravbert::UltraVBertModelTester",
+    "unlimited_ocr::UnlimitedOcrVisionText2TextModelTester",
+    "voxtral::VoxtralModelTester",
+    "voxtral_realtime::VoxtralRealtimeModelTester",
+    "youtu::YoutuModelTester",
+    "zaya::ZayaModelTester",
+}
+
+_TESTER_BASE_NAMES = ("CausalLMModelTester", "VLMModelTester", "ALMModelTester", "MultiModalModelTester")
+
+
+def _static_runtime_mismatches(tester):
+    """Fields where a built tester differs from its class-level `get_small_config_defaults()`."""
+    static = type(tester).get_small_config_defaults()
+    runtime = {
+        name: value
+        for name, value in vars(tester).items()
+        if name != "parent" and isinstance(value, (int, float, str, bool, type(None), list, tuple, dict))
+    }
+    return sorted(name for name, value in runtime.items() if name not in static or static[name] != value)
+
+
+@require_torch
+class StaticRuntimeParityTest(unittest.TestCase):
+    def test_static_defaults_match_built_testers(self):
+        models_dir = Path(__file__).parents[1] / "models"
+        mismatches, seen = {}, set()
+        for path in sorted(models_dir.glob("*/test_modeling_*.py")):
+            if not any(name in path.read_text() for name in _TESTER_BASE_NAMES):
+                continue
+            module = importlib.import_module(f"tests.models.{path.parent.name}.{path.stem}")
+            for case in vars(module).values():
+                if not (isinstance(case, type) and issubclass(case, unittest.TestCase)):
+                    continue
+                tester_class = getattr(case, "model_tester_class", None)
+                if case.__module__ != module.__name__ or not (
+                    isinstance(tester_class, type) and issubclass(tester_class, ModelTesterConfigMixin)
+                ):
+                    continue
+                test_case = case(next(name for name in dir(case) if name.startswith("test_")))
+                test_case.setUp()
+                key = f"{path.parent.name}::{type(test_case.model_tester).__name__}"
+                seen.add(key)
+                fields = _static_runtime_mismatches(test_case.model_tester)
+                if fields:
+                    mismatches.setdefault(key, set()).update(fields)
+
+        new = {key: sorted(fields) for key, fields in mismatches.items() if key not in TESTERS_NOT_YET_STATIC}
+        self.assertFalse(
+            new,
+            "These testers build values that `get_small_config_defaults()` doesn't return. Declare them in "
+            f"`small_config_overrides` instead of setting them in `__init__`: {new}",
+        )
+        fixed = sorted(TESTERS_NOT_YET_STATIC - mismatches.keys())
+        self.assertFalse(fixed, f"These testers now match or no longer exist; remove them from the list: {fixed}")
