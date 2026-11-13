@@ -582,8 +582,8 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs = processor(
                 text=f"This is an image {self.image_token}",
                 images=[image],
-                return_mm_token_type_ids=True,
+                return_text_replacement_offsets=True,
                 return_tensors="pt",
             )
-            self.assertEqual(inputs.mm_token_type_ids.sum().item(), num_image_tokens)
+            self.assertListEqual(self._count_embed_tokens(processor, inputs, "image"), [num_image_tokens])
             self.assertEqual(len(inputs.pixel_values), num_image_patches)

@@ -124,22 +124,22 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 text = [f"This is an image {self.image_token}"] * len(image_inputs)
                 images = [[image] for image in image_inputs]
                 inputs = processor(
-                    text=text, images=images, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                    text=text, images=images, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
                 )
-                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
                 num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
                 self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
                 text = [f"These are two images {self.image_token}{self.image_token}"] * len(image_inputs)
                 images = [[image, image] for image in image_inputs]
                 inputs = processor(
-                    text=text, images=images, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                    text=text, images=images, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
                 )
-                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
-                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
-                self.assertEqual(
-                    sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"])
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
+                    image_sizes=[s for s in image_sizes for _ in range(2)]
                 )
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
