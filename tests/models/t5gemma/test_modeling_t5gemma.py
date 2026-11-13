@@ -270,7 +270,7 @@ class T5GemmaModelTester:
         )
 
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(
@@ -408,7 +408,7 @@ class T5GemmaModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -417,9 +417,9 @@ class T5GemmaModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, encoder_hidden_states=encoder_hidden_states)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, encoder_hidden_states=encoder_hidden_states, past_key_values=past_key_values
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, encoder_hidden_states=encoder_hidden_states, cache=cache)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -450,7 +450,7 @@ class T5GemmaModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(
+        output, cache = model(
             input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attn_mask, use_cache=True
         ).to_tuple()
 
@@ -476,7 +476,7 @@ class T5GemmaModelTester:
         output_from_past = model(
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attn_mask,
         )["last_hidden_state"]
 
@@ -507,7 +507,7 @@ class T5GemmaModelTester:
             input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attention_mask, use_cache=True
         )
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -524,7 +524,7 @@ class T5GemmaModelTester:
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )["last_hidden_state"]
 
         # select random slice
@@ -537,7 +537,7 @@ class T5GemmaModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_values(
+    def create_and_check_generate_with_cache(
         self,
         config,
         input_ids,
@@ -743,9 +743,9 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -930,8 +930,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -992,10 +992,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_load_with_mismatched_shapes(self):
         pass
 
-    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_past_key_values
+    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_cache
     # Updated decoder_attention_mask to consider the appended bos token
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if model_class == self.model_tester.token_classification_class:
@@ -1029,10 +1029,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -1053,7 +1053,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
 
             # It must be encoder-decoder models
@@ -1081,7 +1081,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # The two sets of generated text and past kv should be equal to each other
             assert_similar_generate_outputs(outputs, outputs_cached)
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
     # Update encoder and decoder embeddings
@@ -1294,7 +1294,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             use_cache=True,
             return_dict_in_generate=True,
         )
-        self.assertFalse(any(out.past_key_values.cross_attention_cache.is_sliding))
+        self.assertFalse(any(out.cache.cross_attention_cache.is_sliding))
 
 
 class T5GemmaEncoderOnlyModelTester:

@@ -16,6 +16,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
+from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1390,6 +1391,8 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
+    # `self.kernel` weights are used directly in `F.conv1d` below, so its hooks have to be fired explicitly
+    @force_accelerate_hooks("kernel")
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if is_peft_available():
             from peft.tuners.lora import LoraLayer

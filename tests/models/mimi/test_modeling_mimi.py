@@ -20,18 +20,14 @@ import unittest
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from pytest import mark
 
 from tests.utils.test_audio_utils import normalize_waveform
 from transformers import AutoFeatureExtractor, MimiConfig, MimiDecoderConfig, MimiEncoderConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -297,12 +293,10 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
+    def flash_attn_inference_equivalence(self, attn_implementation, padding_side="left"):
+        if padding_side == "right":
+            self.skipTest("The MimiModel does not support right padding")
+
         for model_class in self.all_model_classes:
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
@@ -312,7 +306,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
@@ -330,10 +324,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 logits_fa = outputs_fa[1]
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-    @unittest.skip(reason="The MimiModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
     @pytest.mark.torch_compile_test
@@ -425,7 +415,7 @@ class MimiIntegrationTest(unittest.TestCase):
                 decoder_outputs_first_part = model.decode(audio_codes[:, :, : audio_codes.shape[2] // 2])
                 decoder_outputs_second_part = model.decode(
                     audio_codes[:, :, audio_codes.shape[2] // 2 :],
-                    decoder_past_key_values=decoder_outputs_first_part.decoder_past_key_values,
+                    decoder_cache=decoder_outputs_first_part.decoder_cache,
                 )
 
                 audio_output_entire_context = model.decode(audio_codes)[0]
@@ -469,7 +459,7 @@ class MimiIntegrationTest(unittest.TestCase):
         audio_codes = model.encode(inputs["input_values"]).audio_codes
 
         # streaming chunk by chunk
-        encoder_past_key_values = None
+        encoder_cache = None
         padding_cache = None
         encoded_frames_list = []
 
@@ -478,10 +468,10 @@ class MimiIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(
                 input_values_chunk,
                 padding_cache=padding_cache,
-                encoder_past_key_values=encoder_past_key_values,
+                encoder_cache=encoder_cache,
                 use_streaming=True,
             )
-            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            encoder_cache = encoder_outputs.encoder_cache
             padding_cache = encoder_outputs.padding_cache
             encoded_frames_list.append(encoder_outputs.audio_codes)
 

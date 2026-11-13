@@ -31,6 +31,7 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     DataCollatorForLanguageModeling,
+    DataCollatorForMultipleChoice,
     DataCollatorForPermutationLanguageModeling,
     DataCollatorForSeq2Seq,
     DataCollatorForTokenClassification,
@@ -573,6 +574,31 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
         for return_tensors in ["pt", "np"]:
             collator = DataCollatorForTokenClassification(tokenizer, return_tensors=return_tensors)
             self._check_immutability(collator, self._get_features())
+
+
+# =============================================================================
+# DataCollatorForMultipleChoice tests
+# =============================================================================
+
+
+@require_torch
+class TestDataCollatorForMultipleChoice(DataCollatorTestMixin, unittest.TestCase):
+    def test_reusing_examples_preserves_labels(self):
+        collator = DataCollatorForMultipleChoice(BertTokenizer(self.vocab_file))
+        for label_name in ("label", "labels"):
+            with self.subTest(label_name=label_name):
+                features = [
+                    {"input_ids": [[1, 2], [1, 4, 2]], label_name: 1},
+                    {"input_ids": [[1, 4, 2], [1, 2]], label_name: 0},
+                ]
+                original = copy.deepcopy(features)
+
+                for _ in range(2):
+                    batch = collator(features)
+                    self.assertEqual(batch["labels"].tolist(), [1, 0])
+                    self.assertEqual(batch["input_ids"].shape, (2, 2, 3))
+
+                self.assertEqual(features, original)
 
 
 # =============================================================================
