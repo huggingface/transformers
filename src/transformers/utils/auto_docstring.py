@@ -76,6 +76,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
     "inkling": "InklingConfig",
+    "inkling2": "Inkling2Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
@@ -2430,6 +2431,24 @@ class ModelForArgs:
     Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
     config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
     loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForCausalLM:
+        labels = {
+            "description": """
+    Labels for computing the causal language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+    The labels are **shifted internally** so that `labels[..., 1:]` are used to predict `logits[..., :-1, :]`.
+    Pass unshifted labels matching `input_ids` (i.e. `labels = input_ids`). Do **not** shift the labels
+    yourself before passing them.
+
+    If the labels are already shifted (for example with sequence parallelism), pass them as the `shift_labels`
+    keyword argument and they are used as is. `labels` must still be passed for the loss to be computed.
     """,
             "shape": "of shape `(batch_size, sequence_length)`",
             "type": "torch.LongTensor",

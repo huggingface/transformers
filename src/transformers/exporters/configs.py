@@ -15,10 +15,10 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import dataclass
-from enum import Enum
-from os import PathLike
-from typing import TYPE_CHECKING, Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..utils import logging
 
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class ExportFormat(Enum):
+class ExportFormat(StrEnum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
@@ -49,7 +49,7 @@ class ExportConfigMixin:
     during deserialisation.
     """
 
-    export_format: ExportFormat
+    export_format: ExportFormat | str
 
     @classmethod
     def from_dict(cls, config_dict):
@@ -63,8 +63,7 @@ class ExportConfigMixin:
         Returns:
             [`ExportConfigMixin`]: The configuration object instantiated from those parameters.
         """
-        config = cls(**config_dict)
-        return config
+        return cls(**config_dict)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -74,6 +73,16 @@ class ExportConfigMixin:
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return copy.deepcopy(self.__dict__)
+
+    def to_json_string(self) -> str:
+        """Serializes this instance to a JSON string, without its quantizer (the export records what it did). Values
+        JSON can't hold (`Dim`s) are written as their `repr`.
+
+        Returns:
+            `str`: String containing all the attributes that make up this configuration instance in JSON format.
+        """
+        values = {name: value for name, value in self.__dict__.items() if name != "quantizer"}
+        return json.dumps(values, indent=2, sort_keys=True, default=repr)
 
     def __iter__(self):
         yield from self.__dict__.items()
@@ -130,37 +139,29 @@ class OnnxConfig(DynamoConfig):
     `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
-        output_path (`str` or `PathLike`, *optional*):
-            Output path for the `.onnx` file. When `None` (default) the
-            exported model is kept in memory as an `ONNXProgram` and not
-            written to disk.
         opset_version (`int`, *optional*):
             ONNX opset version to target. Defaults to the latest opset
             supported by the installed `onnxscript` version.
-        external_data (`bool`, *optional*, defaults to `True`):
-            Store large weight tensors in a separate `.onnx_data` sidecar
-            file instead of embedding them in the protobuf. Required for
-            models whose weights exceed the 2 GB protobuf limit.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that
             hit upstream `onnxscript` optimiser bugs.
-        export_params (`bool`, *optional*, defaults to `True`):
-            Embed model weights in the ONNX graph. Set to `False` to export
-            a weight-free graph (weights must be supplied at runtime).
-        keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
-            Expose weight initializers as explicit graph inputs. Required by
-            some older ONNX runtimes (opset < 9).
+        ort_fusions (`str`, *optional*):
+            Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
+            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
-    output_path: str | PathLike | None = None
     opset_version: int | None = None
-    external_data: bool = True
     optimize: bool = True
-    export_params: bool = True
-    keep_initializers_as_inputs: bool = False
+    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
+
+    def __post_init__(self):
+        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml"):
+            raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_fusions!r}")
+        if self.ort_fusions is not None and not self.optimize:
+            raise ValueError("`ort_fusions` requires `optimize=True`.")
 
 
 @dataclass
@@ -209,12 +210,9 @@ class OpenVINOConfig(DynamoConfig):
     `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
-        output_path (`str` or `PathLike`, *optional*):
-            Output path for the `.xml` file (the matching `.bin` is written alongside). When
-            `None` (default) the converted model is kept in memory as an ``openvino.Model``.
-        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
-            Compress floating-point weights to FP16 when saving — halves on-disk size with
-            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        compress_to_fp16 (`bool`, *optional*, defaults to `False`):
+            Compress the converted model's `float32` weights to `float16`, halving its size. Off by default
+            for the narrower range.
         stateful (`bool`, *optional*, defaults to `True`):
             Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
             variables (``ReadValue``/``Assign``). The runtime then carries state across
@@ -226,6 +224,5 @@ class OpenVINOConfig(DynamoConfig):
 
     export_format: ExportFormat = ExportFormat.OPENVINO
 
-    output_path: str | PathLike | None = None
-    compress_to_fp16: bool = True
+    compress_to_fp16: bool = False
     stateful: bool = True

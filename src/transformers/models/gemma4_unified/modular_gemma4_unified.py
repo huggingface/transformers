@@ -31,6 +31,7 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_attr
+from ...utils.generic import is_flash_attention_requested
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -743,6 +744,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                     position_embeddings,
                     causal_mask_mapping,
                     logits_to_keep,
+                    past_key_values=past_key_values,
                     **kwargs,
                 )
 
@@ -770,6 +772,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         position_embeddings,
         causal_mask_mapping,
         logits_to_keep,
+        past_key_values,
         **kwargs,
     ):
         """
@@ -792,10 +795,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         # Flex cannot slice mask
         elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
             can_optimize = False
-        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        # Flash cannot slice mask
+        elif is_flash_attention_requested(self.config):
+            can_optimize = False
+        # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
         elif (
             self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
-            and logits_to_keep > 1
+            and (logits_to_keep > 1 or getattr(past_key_values, "is_compileable", False))
             and any(mask is None for mask in causal_mask_mapping.values())
         ):
             can_optimize = False

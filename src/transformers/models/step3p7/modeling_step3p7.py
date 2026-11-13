@@ -107,8 +107,8 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_hw = freq.flatten(1)
-        return torch.cat((freq_hw, freq_hw), dim=-1)
+        freq_wh = freq.flip(1).flatten(1)
+        return torch.cat((freq_wh, freq_wh), dim=-1)
 
 
 class Step3p7VisionMLP(nn.Module):
