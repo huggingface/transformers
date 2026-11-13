@@ -150,9 +150,12 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             return
 
         orig_layer_init = layer_cls.__init__
+        orig_layer_init_signature = inspect.signature(orig_layer_init)
 
         @wraps(orig_layer_init)
-        def _patched_layer_init(self, config, *args, **kwargs):
+        def _patched_layer_init(self, *args, **kwargs):
+            bound_arguments = orig_layer_init_signature.bind(self, *args, **kwargs)
+            config = bound_arguments.arguments.get("config")
             context = next(
                 (
                     context
@@ -161,14 +164,14 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                 ),
                 None,
             )
-            if context is None or not getattr(config, "is_heterogeneous", False):
-                return orig_layer_init(self, config, *args, **kwargs)
+            if context is None:
+                return orig_layer_init(self, *args, **kwargs)
             heterogeneous_modeling_spec = context.heterogeneous_modeling_specs[layer_cls]
 
             # --- Resolve layer index ---
             layer_idx = heterogeneous_modeling_spec.layer_idx_resolver.resolve(
                 layer_init=orig_layer_init,
-                args=(self, config, *args),
+                args=(self, *args),
                 kwargs=kwargs,
                 model=context.model,
             )
@@ -180,7 +183,8 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
             # --- Apply per-layer config ---
             layer_config = config.per_layer_config[layer_idx]
-            orig_layer_init(self, layer_config, *args, **kwargs)
+            bound_arguments.arguments["config"] = layer_config
+            orig_layer_init(*bound_arguments.args, **bound_arguments.kwargs)
 
             # --- Replace skipped members ---
             if layer_config.skip:

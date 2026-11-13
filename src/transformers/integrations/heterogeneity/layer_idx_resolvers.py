@@ -49,8 +49,7 @@ class LayerIdxResolver(ABC):
             layer_init (`FunctionType`):
                 The original `__init__` of the spec's `layer_cls`, before patching.
             args (`tuple[Any, ...]`):
-                The positional arguments of the `__init__` call. The first two are always the layer (`self`) and the
-                model's config.
+                The positional arguments of the `__init__` call. The first is always the layer (`self`).
             kwargs (`dict[str, Any]`):
                 The keyword arguments of the `__init__` call.
             model ([`PreTrainedModel`]):
