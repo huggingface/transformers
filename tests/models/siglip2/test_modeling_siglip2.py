@@ -327,6 +327,24 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
+    def test_resize_positional_embeddings_of_images_of_different_sizes(self):
+        """Each image gets its grid of position embeddings resized to its own size with antialiased bilinear
+        interpolation, then padded with its first position."""
+        from transformers.models.siglip2.modeling_siglip2 import Siglip2VisionEmbeddings
+
+        grid = torch.randn(4, 4, 8, device=torch_device)
+        spatial_shapes = torch.tensor([[8, 8], [4, 8], [8, 2], [3, 5]], device=torch_device)
+        resized = Siglip2VisionEmbeddings.resize_positional_embeddings(grid, spatial_shapes, max_length=64)
+        for image, (height, width) in enumerate(spatial_shapes.tolist()):
+            expected = nn.functional.interpolate(
+                grid.permute(2, 0, 1)[None], size=(height, width), mode="bilinear", align_corners=False, antialias=True
+            )
+            expected = expected.reshape(grid.shape[-1], height * width).T
+            torch.testing.assert_close(resized[image, : height * width], expected, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                resized[image, height * width :], expected[:1].expand(64 - height * width, -1), rtol=1e-5, atol=1e-5
+            )
+
 
 class Siglip2TextModelTester:
     def __init__(
