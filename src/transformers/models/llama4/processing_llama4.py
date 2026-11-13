@@ -131,19 +131,6 @@ class Llama4Processor(ProcessorMixin):
         )
         return self._prompt_split_image(image_inputs["aspect_ratios"][image_idx], num_patches_per_chunk)
 
-    @property
-    def image_token_ids(self) -> list[int]:
-        return self.tokenizer.convert_tokens_to_ids(
-            [
-                self.image_token,
-                self.img_patch_token,
-                self.tile_token,
-                self.tile_global_token,
-                self.start_of_img_token,
-                self.end_of_img_token,
-            ]
-        )
-
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
@@ -169,11 +156,7 @@ class Llama4Processor(ProcessorMixin):
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            # Global tile plus BOI/EOI/image tokens, and each local tile followed by a separator
-            num_image_tokens = [
-                num_patches_per_chunk + 3 + (num_patches - 1) * (num_patches_per_chunk + 1)
-                for num_patches in num_image_patches
-            ]
+            num_image_tokens = [num_patches_per_chunk * num_patches for num_patches in num_image_patches]
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)

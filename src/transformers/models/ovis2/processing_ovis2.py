@@ -38,8 +38,6 @@ class Ovis2Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token = "<image>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        # `<image>` is expanded into `<IMG_ATOM>` tokens, which are the ones holding the image features
-        self.image_token_ids = [tokenizer.convert_tokens_to_ids("<IMG_ATOM>")]
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:

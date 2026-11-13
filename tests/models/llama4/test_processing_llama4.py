@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import Llama4Processor
 from transformers.testing_utils import require_vision
 
@@ -32,3 +34,24 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Small size (20×20) keeps tensor allocations minimal.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(max_patches=1, size={"height": 20, "width": 20})
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        # `mm_token_type_ids` only marks `<|image|>`, so count the `<|patch|>` tokens in each replacement
+        processor = self.get_processor()
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        images = [np.random.randint(255, size=(h, w, 3), dtype=np.uint8) for h, w in image_sizes]
+        text = [f"This is an image {processor.image_token}"] * len(images)
+        tiling_kwargs = dict(max_patches=4, size={"height": 56, "width": 56})
+        inputs = processor(
+            text=text,
+            images=images,
+            **tiling_kwargs,
+            padding=True,
+            return_tensors="pt",
+            return_text_replacement_offsets=True,
+        )
+
+        replacements = [r["replacement"] for offsets in inputs["text_replacement_offsets"] for r in offsets]
+        num_image_tokens_from_call = [r.count(processor.img_patch_token) for r in replacements]
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes, **tiling_kwargs)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
