@@ -1,0 +1,63 @@
+# Caller for huggingface/transformers: .github/workflows/rerun-failed-cpu.yml
+#
+# Dispatched only by the transformers-ci PR dashboard's "Re-run failed tests"
+# action (via serge's GitHub App), after it has cancelled the runs the
+# person confirmed. It runs exactly the selected failed tests of one PR, with
+# the environment the original CPU job used; see the reusable workflow in
+# huggingface/transformers-ci for the allowlist and the checks.
+#
+# The run-name carries the PR and the action's correlation id: the dashboard
+# finds its run by the id, and ci-github-status files the run under the PR by
+# the "PR #N" part. Keep both formats unchanged.
+name: Rerun failed tests (CPU)
+run-name: "Rerun failed tests (CPU) · PR #${{ inputs.pr_number }} · ${{ inputs.correlation_id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number
+        required: true
+        type: string
+      head_sha:
+        description: PR head commit the selection was made against
+        required: true
+        type: string
+      tested_sha:
+        description: Immutable PR merge commit tested by the source attempt
+        required: true
+        type: string
+      selection:
+        description: Selected tests (JSON, written by the dashboard)
+        required: true
+        type: string
+      correlation_id:
+        description: Dashboard action id
+        required: true
+        type: string
+      source_run:
+        description: Source workflow run and attempt (RUN_ID:ATTEMPT)
+        required: true
+        type: string
+
+# A new request replaces the previous rerun for this PR and lane. The dashboard
+# tracks each request independently through its correlation id.
+concurrency:
+  group: rerun-failed-cpu-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  rerun:
+    uses: huggingface/transformers-ci/.github/workflows/rerun-failed-cpu.yml@main
+    with:
+      pr_number: ${{ inputs.pr_number }}
+      head_sha: ${{ inputs.head_sha }}
+      tested_sha: ${{ inputs.tested_sha }}
+      selection: ${{ inputs.selection }}
+      correlation_id: ${{ inputs.correlation_id }}
+      source_run: ${{ inputs.source_run }}
