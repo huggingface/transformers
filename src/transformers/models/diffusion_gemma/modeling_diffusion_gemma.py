@@ -1001,6 +1001,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
 class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
@@ -1479,6 +1480,8 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
         "encoder.language_model.embed_tokens.weight": "decoder.embed_tokens.weight",
     }
 
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
         self.encoder = DiffusionGemmaEncoderModel(config)
@@ -1595,6 +1598,8 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)

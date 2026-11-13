@@ -576,6 +576,8 @@ class EmbeddingGemma2Model(Gemma4Model):
         r"(^|\.)embed_audio\.",
     ]
 
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
+
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
         # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)

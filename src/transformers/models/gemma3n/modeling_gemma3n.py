@@ -1927,6 +1927,7 @@ class Gemma3nMultimodalEmbedder(nn.Module):
 class Gemma3nModel(Gemma3nPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
@@ -2189,6 +2190,8 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
     accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3nConfig):
