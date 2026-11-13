@@ -299,7 +299,7 @@ class Lfm3VlVisionModel(Qwen2VisionTransformerPretrainedModel):
 
         hidden_states = self.patch_embed(pixel_values)
         hidden_states = self.embedding_norm(hidden_states)
-        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer in self.layers:
             hidden_states = layer(

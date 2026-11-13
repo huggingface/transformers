@@ -127,9 +127,7 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
 
 class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     # override: this model uses standard config names (`hidden_size`) opposed to `embed_dim`
-    def compute_axial_rope_parameters(
-        config: Qwen2_5_VLVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Qwen2_5_VLVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -145,7 +143,7 @@ class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 class Qwen2_5_VLPatchMerger(PatchMerger):
@@ -218,7 +216,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             embed_dim=config.hidden_size,
         )
 
-        self.rotary_pos_emb = Qwen2_5_VLVisionRotaryEmbedding(config)
+        self.rotary_emb = Qwen2_5_VLVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([Qwen2_5_VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen2_5_VLPatchMerger(
@@ -269,7 +267,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         seq_len, _ = hidden_states.size()
         hidden_states = self.permute_input_for_window_attn(hidden_states, window_index, seq_len=seq_len)
 
-        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         position_embeddings = tuple(
             self.permute_input_for_window_attn(freq, window_index, seq_len=seq_len) for freq in position_embeddings
         )

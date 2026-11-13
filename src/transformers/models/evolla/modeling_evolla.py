@@ -162,18 +162,17 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
-    def __init__(self, config: SaProtConfig, device=None):
+    def __init__(self, config: SaProtConfig):
         super().__init__()
 
         self.config = config
-        self.rope_type = {}
+        self.rope_type = "default"
 
-        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config)
-        self.inv_freq = nn.Buffer(curr_inv_freq)
-        setattr(self, "attention_scaling", curr_attention_scaling)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(self.config)
+        self.inv_freq = nn.Buffer(inv_freq)
 
     @staticmethod
-    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: SaProtConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -194,14 +193,11 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
-        inv_freq = getattr(self, "inv_freq")
-        attention_scaling = getattr(self, "attention_scaling")
-
-        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+    def forward(self, x, position_ids):
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * attention_scaling
-        sin = emb.sin() * attention_scaling
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -556,15 +552,15 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EvollaSaProtRotaryEmbedding):
-            curr_inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            init.copy_(getattr(module, "inv_freq"), curr_inv_freq)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
-        self.rotary_embeddings = EvollaSaProtRotaryEmbedding(config=config)
+        self.rotary_emb = EvollaSaProtRotaryEmbedding(config=config)
         self.encoder = EvollaSaProtEncoder(config)
         self.post_init()
 
@@ -597,7 +593,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         )
 
         position_ids = torch.arange(seq_length, device=device).unsqueeze(0)
-        position_embeddings = self.rotary_embeddings(inputs_embeds, position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         encoder_outputs = self.encoder(
             inputs_embeds, attention_mask=attention_mask, position_embeddings=position_embeddings, **kwargs

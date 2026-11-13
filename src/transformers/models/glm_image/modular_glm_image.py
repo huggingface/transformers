@@ -405,7 +405,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
         self.head_dim = head_dim
 
         del self.merger
-        del self.rotary_pos_emb
+        del self.rotary_emb
         del self.post_conv_layernorm
         del self.downsample
         del self.post_layernorm

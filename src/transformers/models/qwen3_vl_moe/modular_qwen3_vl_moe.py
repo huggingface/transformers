@@ -31,6 +31,7 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
@@ -48,7 +49,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionAttention,
     Qwen3VLVisionBlock,
     Qwen3VLVisionModel,
-    Qwen3VLVisionRotaryEmbedding,
 )
 
 
@@ -220,7 +220,7 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
 
 
-class Qwen3VLMoeVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
+class Qwen3VLMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

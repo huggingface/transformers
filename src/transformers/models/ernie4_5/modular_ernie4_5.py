@@ -13,10 +13,8 @@
 # limitations under the License.
 """PyTorch Ernie 4.5 model"""
 
-import torch
 from torch import nn
 
-from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
 from ...utils.generic import no_inherit_decorator
 from ..glm.modeling_glm import rotate_half
@@ -30,16 +28,7 @@ from .configuration_ernie4_5 import Ernie4_5Config
 
 
 class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        # keeping it in full precision
-        return cos, sin
+    pass
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):

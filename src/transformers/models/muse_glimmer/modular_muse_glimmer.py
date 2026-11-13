@@ -53,7 +53,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2Model,
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
-    Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
@@ -67,7 +66,7 @@ from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25VisionEncoderLayer,
     Kimi_K25VisionMLP,
 )
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaRotaryEmbedding, eager_attention_forward
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 
@@ -698,7 +697,7 @@ class MuseGlimmerTextMLP(Gemma2MLP):
     pass
 
 
-class MuseGlimmerTextRotaryEmbedding(Gemma2RotaryEmbedding):
+class MuseGlimmerTextRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

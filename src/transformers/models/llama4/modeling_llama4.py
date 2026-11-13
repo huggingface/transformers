@@ -1028,7 +1028,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
         self.positional_embedding_vlm = nn.Parameter(self.scale * torch.randn(self.num_patches, self.hidden_size))
-        self.rotary_embedding = Llama4VisionRotaryEmbedding(config)
+        self.rotary_emb = Llama4VisionRotaryEmbedding(config)
 
         # layer norms
         self.layernorm_pre = nn.LayerNorm(self.hidden_size)
@@ -1110,7 +1110,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         hidden_state = self.layernorm_pre(hidden_state)
 
         hidden_state = hidden_state.view(batch_size_times_num_tiles, -1, hidden_dim)
-        freqs_ci = self.rotary_embedding(pixel_values)
+        freqs_ci = self.rotary_emb(pixel_values)
 
         output = self.model(
             hidden_state,

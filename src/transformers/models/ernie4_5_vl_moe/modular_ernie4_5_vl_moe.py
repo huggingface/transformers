@@ -659,7 +659,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
             embed_dim=config.hidden_size,
         )
 
-        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(config)
+        self.rotary_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(config)
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -678,7 +678,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for block in self.blocks:
             hidden_states = block(

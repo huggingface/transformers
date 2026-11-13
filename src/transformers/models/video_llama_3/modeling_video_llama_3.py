@@ -65,9 +65,7 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: VideoLlama3VisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: VideoLlama3VisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -83,11 +81,11 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -100,9 +98,8 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class VideoLlama3VisionEmbeddings(nn.Module):
@@ -416,7 +413,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
-        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(config)
+        self.rotary_emb = VideoLlama3VisionRotaryEmbedding(config)
         self.embeddings = VideoLlama3VisionEmbeddings(config)
         self.encoder = VideoLlama3VisionEncoder(config)
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -469,7 +466,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
-        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,

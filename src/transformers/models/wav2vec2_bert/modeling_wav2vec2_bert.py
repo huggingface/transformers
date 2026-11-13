@@ -38,7 +38,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
-class Wav2Vec2BertRotaryPositionalEmbedding(nn.Module):
+class Wav2Vec2BertRotaryEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
     """
@@ -506,7 +506,7 @@ class Wav2Vec2BertEncoder(nn.Module):
         if config.position_embeddings_type == "relative":
             self.embed_positions = Wav2Vec2BertRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
-            self.embed_positions = Wav2Vec2BertRotaryPositionalEmbedding(config)
+            self.embed_positions = Wav2Vec2BertRotaryEmbedding(config)
         else:
             self.embed_positions = None
 
@@ -768,7 +768,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
         elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
             init.normal_(module.weight)
-        elif isinstance(module, Wav2Vec2BertRotaryPositionalEmbedding):
+        elif isinstance(module, Wav2Vec2BertRotaryEmbedding):
             dim = self.config.hidden_size // self.config.num_attention_heads
             base = self.config.rotary_embedding_base
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))

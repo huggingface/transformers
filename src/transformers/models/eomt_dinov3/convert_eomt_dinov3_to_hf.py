@@ -487,7 +487,7 @@ def _collect_original_backbone_states(model, pixel_values: torch.Tensor) -> Back
 def _collect_hf_backbone_states(
     model: EomtDinov3ForUniversalSegmentation, pixel_values: torch.Tensor
 ) -> BackboneVerificationOutputs:
-    position_embeddings = model.rope_embeddings(pixel_values)
+    position_embeddings = model.rotary_emb(pixel_values)
     hidden_states = model.embeddings(pixel_values)
     patch_embeddings = hidden_states.detach().clone()
 

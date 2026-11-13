@@ -29,11 +29,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3Model,
     Qwen3RMSNorm,
-    Qwen3RotaryEmbedding,
     TransformersKwargs,
 )
 
@@ -148,7 +148,7 @@ class Dots1RMSNorm(Qwen3RMSNorm):
     pass
 
 
-class Dots1RotaryEmbedding(Qwen3RotaryEmbedding):
+class Dots1RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

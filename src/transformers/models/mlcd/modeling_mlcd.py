@@ -70,7 +70,7 @@ class MLCDRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(config: MLCDVisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: MLCDVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -86,11 +86,11 @@ class MLCDRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -103,9 +103,8 @@ class MLCDRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class MLCDVisionEmbeddings(nn.Module):
@@ -477,7 +476,7 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MLCDEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.vision_rotary_embedding = MLCDRotaryEmbedding(config)
+        self.rotary_emb = MLCDRotaryEmbedding(config)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
         self.post_init()
 
@@ -528,7 +527,7 @@ class MLCDVisionModel(MLCDPreTrainedModel):
             torch.arange(num_patches_width, device=pixel_values.device).unsqueeze(0).expand(num_patches_height, -1)
         )
         pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
-        position_embeddings = self.vision_rotary_embedding(hidden_states, pos_ids)
+        position_embeddings = self.rotary_emb(hidden_states, pos_ids)
         class_pos_emb = torch.cat([self.class_pos_emb, self.class_pos_emb], dim=-1)
         position_embeddings = [
             torch.cat([class_pos_emb.cos(), position_embeddings[0]], dim=0),

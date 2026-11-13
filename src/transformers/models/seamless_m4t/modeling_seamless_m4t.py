@@ -275,8 +275,8 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2->SeamlessM4T, num_attention_heads->speech_encoder_attention_heads
-class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryEmbedding with Wav2Vec2->SeamlessM4T, num_attention_heads->speech_encoder_attention_heads
+class SeamlessM4TConformerRotaryEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
     """
@@ -694,7 +694,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
         if config.position_embeddings_type == "relative":
             self.embed_positions = SeamlessM4TConformerRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
-            self.embed_positions = SeamlessM4TConformerRotaryPositionalEmbedding(config)
+            self.embed_positions = SeamlessM4TConformerRotaryEmbedding(config)
         else:
             self.embed_positions = None
 
@@ -1334,7 +1334,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)
-        elif isinstance(module, SeamlessM4TConformerRotaryPositionalEmbedding):
+        elif isinstance(module, SeamlessM4TConformerRotaryEmbedding):
             dim = self.config.hidden_size // self.config.speech_encoder_attention_heads
             base = self.config.rotary_embedding_base
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))

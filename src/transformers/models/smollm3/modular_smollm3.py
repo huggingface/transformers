@@ -32,10 +32,11 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2RotaryEmbedding
+from ..qwen2.modeling_qwen2 import Qwen2Model
 
 
 logger = logging.get_logger(__name__)
@@ -131,7 +132,7 @@ class SmolLM3Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class SmolLM3RotaryEmbedding(Qwen2RotaryEmbedding):
+class SmolLM3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

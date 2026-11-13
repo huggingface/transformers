@@ -43,9 +43,9 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
-    Glm4vVisionRotaryEmbedding,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import load_balancing_loss_func
 
 
@@ -226,7 +226,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _can_record_outputs = {}
 
 
-class Glm4vMoeVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+class Glm4vMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

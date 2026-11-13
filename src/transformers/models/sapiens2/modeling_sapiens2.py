@@ -270,7 +270,7 @@ def augment_patches_center_coordinates(
     return coords
 
 
-class Sapiens2RopePositionEmbedding(nn.Module):
+class Sapiens2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
     def __init__(self, config: Sapiens2Config):
@@ -830,7 +830,7 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.mask_token)
         elif isinstance(module, Sapiens2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
-        elif isinstance(module, Sapiens2RopePositionEmbedding):
+        elif isinstance(module, Sapiens2RotaryEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, (Sapiens2Head, Sapiens2PointmapScaleHead)):
@@ -868,7 +868,7 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.embeddings = Sapiens2Embeddings(config)
-        self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
+        self.rotary_emb = Sapiens2RotaryEmbedding(config)
         self.model = Sapiens2Encoder(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         # Initialize weights and apply final processing
@@ -912,7 +912,7 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        position_embeddings = self.rope_embeddings(pixel_values)
+        position_embeddings = self.rotary_emb(pixel_values)
 
         encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
         sequence_output = self.norm(encoder_outputs.last_hidden_state)
@@ -930,7 +930,7 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.embeddings = Sapiens2Embeddings(config)
-        self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
+        self.rotary_emb = Sapiens2RotaryEmbedding(config)
         self.model = Sapiens2Encoder(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -971,7 +971,7 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values)
-        position_embeddings = self.rope_embeddings(pixel_values)
+        position_embeddings = self.rotary_emb(pixel_values)
 
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
         output: BaseModelOutput = self.model(hidden_states, position_embeddings, **kwargs)

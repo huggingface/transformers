@@ -73,6 +73,7 @@ from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessorKwargs,
     SinusoidsPositionEmbedding,
 )
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
@@ -102,7 +103,6 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeTextRotaryEmbedding,
     Qwen3VLMoeVisionAttention,
     Qwen3VLMoeVisionModel,
-    Qwen3VLMoeVisionRotaryEmbedding,
 )
 
 
@@ -1067,14 +1067,12 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
         return hidden
 
 
-class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
-    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
-        super().__init__(config, device=device)
+class Qwen3OmniMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig):
+        super().__init__(config)
 
-    def compute_axial_rope_parameters(
-        config: Qwen3OmniMoeVisionEncoderConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        return super().compute_axial_rope_parameters(config, device=device, **kwargs)
+    def compute_axial_rope_parameters(config: Qwen3OmniMoeVisionEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_axial_rope_parameters(config, **kwargs)
 
 
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
