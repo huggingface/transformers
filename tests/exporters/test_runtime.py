@@ -297,7 +297,7 @@ class ExportedModelTest(unittest.TestCase):
                         outputs["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
                     )
                     # Shared outputs are right until the next call.
-                    shared = runtime.runners["model"](**inputs, share_inputs=False, share_outputs=True)
+                    shared = runtime(**inputs, share_inputs=False, share_outputs=True)
                     torch.testing.assert_close(
                         shared["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
                     )

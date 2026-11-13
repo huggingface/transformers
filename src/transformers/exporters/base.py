@@ -146,9 +146,11 @@ class ExportedModel(PushToHubMixin):
 
     def __call__(self, **kwargs) -> Any:
         """Run a single-graph export, returning what the source model returns. Kwargs the export was not traced with
-        are dropped, so a processor's whole output can be passed."""
+        are dropped, so a processor's whole output can be passed; the runner's `share_inputs` and `share_outputs` go to
+        it (see [`ModelRunner.__call__`])."""
         name = self._single_component()
         runner = self.runners[name]
+        runner_options = {key: kwargs.pop(key) for key in ("share_inputs", "share_outputs") if key in kwargs}
         traced_kwargs = runner.metadata.kwargs
         if self.config is not None and any(key not in kwargs for key in traced_kwargs):
             kwargs = precompute_export_inputs(self.config, kwargs)
@@ -156,7 +158,7 @@ class ExportedModel(PushToHubMixin):
         if unused:
             logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
         inputs = {key: value for key, value in kwargs.items() if key in traced_kwargs}
-        return runner(**inputs)
+        return runner(**runner_options, **inputs)
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
