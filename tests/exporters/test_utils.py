@@ -354,6 +354,24 @@ class LeafTensorInvariantsTest(unittest.TestCase):
         self.assertEqual(out["hidden"].dtype, torch.float16)
 
 
+@require_torch
+class AutoDynamicShapesTest(unittest.TestCase):
+    def test_batch_feature_keeps_its_nested_structure(self):
+        """A processor's `BatchFeature` exports like the dict of its items, a list under one key included (a
+        deepstack tower's per-layer features)."""
+        from transformers import BatchFeature
+        from transformers.exporters import DynamoExporter
+
+        class Model(nn.Module):
+            def forward(self, hidden, deepstack):
+                return hidden + deepstack[0] + deepstack[1]
+
+        inputs = BatchFeature({"hidden": torch.randn(2, 4), "deepstack": [torch.randn(2, 4), torch.randn(2, 4)]})
+        exported = DynamoExporter().export(Model().eval(), inputs, DynamoConfig(dynamic=True))
+        hidden, deepstack = torch.randn(3, 4), [torch.randn(3, 4), torch.randn(3, 4)]
+        torch.testing.assert_close(exported(hidden=hidden, deepstack=deepstack), hidden + deepstack[0] + deepstack[1])
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # decompose_prefill_decode guard (dead code without this test — no real generator
 # calls forward < 2 times, so the branch would rot silently)
@@ -439,12 +457,17 @@ class DecomposeMultimodalTest(unittest.TestCase):
 
     def test_embedded_inputs_drop_the_modality_side_inputs(self):
         """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
-        `image_position_ids`), which a text-only call doesn't carry."""
+        `image_position_ids`, LLaVA-OneVision's `batch_num_images`, LFM2-VL's `spatial_shapes`, an audio tower's
+        `input_features_mask`), which a text-only call doesn't carry."""
         inputs = {
             "inputs_embeds": torch.randn(2, 6, 16),
             "attention_mask": torch.ones(2, 6, dtype=torch.long),
             "pixel_values": torch.randn(2, 16, 48),
             "image_position_ids": torch.zeros(2, 16, 2, dtype=torch.long),
+            "batch_num_images": torch.ones(2, dtype=torch.long),
+            "spatial_shapes": torch.ones(2, 2, dtype=torch.long),
+            "input_features": torch.randn(2, 10, 8),
+            "input_features_mask": torch.ones(2, 10, dtype=torch.bool),
         }
         self.assertEqual(sorted(embedded_inputs(inputs, {})), ["attention_mask", "inputs_embeds"])
 
