@@ -80,6 +80,7 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    scoped_non_kernels,
     slow,
     torch_device,
 )
@@ -134,6 +135,7 @@ def flush_memory(flush_compile: bool = True) -> None:
     gc.collect()
 
 
+@scoped_non_kernels
 def get_tokenizer_and_model(
     model_id: str,
     attn_implementation: str,
