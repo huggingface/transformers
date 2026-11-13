@@ -8,7 +8,7 @@ from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..decision.modeling_utils import DecisionMixin, process_scores
+    from ..decision.modeling_utils import DecisionMixin, batch_prompts, process_scores
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -81,21 +81,15 @@ class DecisionPipeline(Pipeline):
         return {"prompts": self.decision_config.prepare_inputs(request, self.processor or self.tokenizer)}
 
     def _forward(self, model_inputs):
-        # TODO: batch / continious batching
         model, decision_config, prompts = self.model, self.decision_config, model_inputs["prompts"]
+        batch, questions = batch_prompts(prompts), [questions for _, questions in prompts]
         if isinstance(model, DecisionMixin):
-            scores = [
-                model.decide(**inputs, decision_questions=q, decision_config=decision_config) for inputs, q in prompts
-            ]
+            scores = model.decide(**batch, decision_questions=questions, decision_config=decision_config)
             return {"prompts": prompts, "scores": scores}
-        scores = []
-        for inputs, questions in prompts:  # the logits of the labels before each mark
-            inputs = dict(inputs)
-            marks = inputs.pop("marks")
-            logits = model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
-            labels = [logits[i, self.label_token_ids(tuple(q.labels))] for i, q in enumerate(questions)]
-            scores.append(process_scores(decision_config, inputs["input_ids"], marks, questions, labels))
-        return {"prompts": prompts, "scores": scores}
+        logits = model(**batch, use_cache=False).logits  # the logits before each mark: one row per question
+        flat = [question for group in questions for question in group]
+        labels = [logits[i, self.label_token_ids(tuple(q.labels))] for i, q in enumerate(flat)]
+        return {"prompts": prompts, "scores": process_scores(decision_config, batch, questions, labels)}
 
     def postprocess(self, model_outputs):
         answers = {}

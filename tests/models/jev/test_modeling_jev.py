@@ -30,7 +30,7 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 if is_torch_available():
     import torch
 
-    from transformers import JevForDecision
+    from transformers import AutoModelForDecision, JevForDecision
 
 
 @require_torch
@@ -70,6 +70,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             Path(tmp, "decision_config.json").write_text(json.dumps(settings), encoding="utf-8")
             save_file({"weight": readout}, f"{tmp}/readout.safetensors", metadata={"format": "pt"})
             model = JevForDecision.from_pretrained(tmp)
+            eager = AutoModelForDecision.from_pretrained(tmp, attn_implementation="eager")
             decide = pipeline("decision", model=tmp)
         with tempfile.TemporaryDirectory() as tmp:  # saved as a decision model, with its decision config
             model.save_pretrained(tmp)
@@ -78,6 +79,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         torch.testing.assert_close(reloaded.proj.weight, readout)
         self.assertEqual(model.config.num_verbalizers, 3)
         self.assertFalse(model.config.text_config.is_causal)
+        self.assertEqual(eager.model.config._attn_implementation, "eager")  # not lost to the config of its head
         torch.testing.assert_close(model.proj.weight, readout)
         self.assertIsInstance(decide.model, JevForDecision)
         self.assertEqual(decide.decision_config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
@@ -127,9 +129,9 @@ DECIDERS = {
 class JevIntegrationTest(unittest.TestCase):
     def test_jev_9b(self):
         expected = {
-            "intent": {"refund": 0.9999, "track": 0.0000, "other": 0.0001},
-            "urgent": 0.5419,
-            "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
+            "intent": {"refund": 0.9998, "track": 0.0000, "other": 0.0002},
+            "urgent": 0.5292,
+            "anger": {"0": 0.0216, "1": 0.1246, "2": 0.5156, "3": 0.2958, "4": 0.0410, "5": 0.0014},
         }
         check_decision(
             self, "hf-internal-testing/JEV-9B", "hf-internal-testing/JEV-9B", expected, atol=1e-2, dtype="bfloat16"
@@ -138,9 +140,9 @@ class JevIntegrationTest(unittest.TestCase):
     def test_jev_35b(self):
         # System 1 merged into the weights: its head is rows of the `lm_head`
         expected = {
-            "intent": {"refund": 0.9981, "track": 0.0001, "other": 0.0018},
-            "urgent": 0.7539,
-            "anger": {"0": 0.0155, "1": 0.0859, "2": 0.4147, "3": 0.3896, "4": 0.0872, "5": 0.007},
+            "intent": {"refund": 0.9969, "track": 0.0001, "other": 0.0030},
+            "urgent": 0.7632,
+            "anger": {"0": 0.0145, "1": 0.0825, "2": 0.4165, "3": 0.3914, "4": 0.0878, "5": 0.0073},
         }
         check_decision(self, "hf-internal-testing/JEV-35B", "hf-internal-testing/JEV-35B", expected, atol=1e-2)
 
