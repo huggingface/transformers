@@ -140,7 +140,7 @@ starting with backend preparation (see
 
 A backend is an [`HfExporter`] subclass, plus a config. `export_program` traces one graph and returns the
 backend's program with the metadata recorded while tracing it, `save_program` writes one program to disk, and
-`load_program` reads it back. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportArtifacts`] on top of
+`load_program` reads it back. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportedModel`] on top of
 them. Subclassing [`DynamoExporter`] reuses its trace and its metadata, so a backend only converts the
 `ExportedProgram`:
 
@@ -176,17 +176,19 @@ class MyExporter(DynamoExporter):
 register_backend(MyExporter)
 ```
 
-The auto classes then dispatch `"my_format"` to them, and [`ExportArtifacts.from_pretrained`] loads its saved exports:
+To call its exports, register a [`ModelRunner`] with it: `register_backend(MyExporter, MyRunner)`.
+
+The auto classes then dispatch `"my_format"` to them, and [`ExportedModel.from_pretrained`] loads its saved exports:
 
 ```python
-from transformers.exporters import AutoExportConfig, AutoHfExporter, ExportArtifacts
+from transformers.exporters import AutoExportConfig, AutoHfExporter, ExportedModel
 
 config = AutoExportConfig.from_dict({"export_format": "my_format", "dynamic": True})
 exported = AutoHfExporter.from_config(config).export(model, inputs, config)
 exported.save_pretrained("my-model-my_format")  # model.bin, export.json, config.json
 exported.push_to_hub("my-org/my-model-my_format")
 
-loaded = ExportArtifacts.from_pretrained("my-org/my-model-my_format")
+loaded = ExportedModel.from_pretrained("my-org/my-model-my_format")
 ```
 
 ## Known upstream workarounds

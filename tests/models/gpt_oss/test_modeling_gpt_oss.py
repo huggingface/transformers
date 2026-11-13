@@ -132,8 +132,14 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = _FA3_KERNEL
-        # `kernels>=0.15` requires an explicit version/revision pin on `get_kernel(...)`.
-        flash = get_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel))
+
+        try:
+            flash = get_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel))
+        except RuntimeError as e:
+            if "does not support the current device" in str(e):
+                self.skipTest("FA3 kernel is not supported on this device")
+            raise
+
         if flash is None:
             self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 

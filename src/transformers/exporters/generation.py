@@ -18,22 +18,25 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_outputs import BaseModelOutput
-from ...utils import is_torch_available
-from ..cache import advance_cache_length, causal_mask, mask_width, materialize_cache_layers
-from ..decompose import _MODALITY_SPECS, DEEPSTACK_INPUTS, decode_graph_name
-from ..metadata import load_treespec
-from ..precompute import get_rope_index_from_config
-from .base import ExportedModel, ModelRunner
+from ..generation import GenerationConfig, GenerationMixin
+from ..modeling_outputs import BaseModelOutput
+from ..utils import is_torch_available
+from .base import ExportedModel
+from .cache import advance_cache_length, causal_mask, mask_width, materialize_cache_layers
+from .decompose import _MODALITY_SPECS, DEEPSTACK_INPUTS, decode_graph_name
+from .metadata import load_treespec
 from .multimodal import ExportedMultimodalModel
+from .precompute import get_rope_index_from_config
+from .runners.base import ModelRunner
 
 
 if is_torch_available():
     import torch
 
 if TYPE_CHECKING:
-    from ...configuration_utils import PreTrainedConfig
+    from ..configuration_utils import PreTrainedConfig
+    from .base import ExportedComponent
+    from .configs import ExportFormat
 
 
 def _with_signature(function, names) -> Any:
@@ -51,18 +54,20 @@ class _ExportedEncoder:
 
     main_input_name = "input_ids"
 
-    def __init__(self, runner: ModelRunner, output_class: type = BaseModelOutput):
-        self.runner = runner
-        # The class the decode graph was traced with: `torch.export` checks it.
-        self.output_class = output_class
+    def __init__(self, model: ExportedModelForSeq2SeqLM):
+        # Its runner is looked up on each call: `ExportedModel.to` replaces them.
+        self.model = model
         self.cross_states = {}
-        self.forward = _with_signature(lambda **kwargs: self(**kwargs), runner.metadata.kwargs)
+        traced = model.components["encoder_model"].metadata.kwargs
+        self.forward = _with_signature(lambda **kwargs: self(**kwargs), traced)
 
     def __call__(self, **kwargs) -> BaseModelOutput:
-        traced = self.runner.metadata.kwargs
-        outputs = self.runner(**{name: value for name, value in kwargs.items() if name in traced})
+        runner = self.model.runners["encoder_model"]
+        traced = runner.metadata.kwargs
+        outputs = runner(**{name: value for name, value in kwargs.items() if name in traced})
         self.cross_states = {name: value for name, value in outputs.items() if name.startswith("cross_")}
-        return self.output_class(**{name: value for name, value in outputs.items() if not name.startswith("cross_")})
+        output_class = self.model._encoder_output_class()
+        return output_class(**{name: value for name, value in outputs.items() if not name.startswith("cross_")})
 
 
 class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
@@ -87,20 +92,29 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
 
     def __init__(
         self,
-        runners: dict[str, ModelRunner],
-        config: PreTrainedConfig,
+        components: dict[str, ExportedComponent],
+        export_format: ExportFormat | str,
+        config: PreTrainedConfig | None = None,
         generation_config: GenerationConfig | None = None,
+        generation: bool = True,
     ):
-        super().__init__(runners[decode_graph_name(runners)], config)
-        self.generation_config = (
-            generation_config if generation_config is not None else GenerationConfig.from_model_config(config)
-        )
+        super().__init__(components, export_format, config, generation_config, generation=True)
+        if self.generation_config is None:
+            self.generation_config = GenerationConfig.from_model_config(config)
         self.forward = _with_signature(lambda **kwargs: self._step(**kwargs), self._forward_names())
         self._generating = False
 
+    @property
+    def runner(self) -> ModelRunner:
+        """The decode graph's runner."""
+        return self.runners[decode_graph_name(self.components)]
+
+    def _decode_metadata(self):
+        return self.components[decode_graph_name(self.components)].metadata
+
     def _forward_names(self) -> list[str]:
         """What `forward` declares, so `generate` builds them: the kwargs the decode graph was traced with."""
-        return list(self.runner.metadata.kwargs)
+        return list(self._decode_metadata().kwargs)
 
     def __call__(self, **kwargs) -> Any:
         return self.forward(**kwargs)
@@ -121,6 +135,16 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         """The graphs are already compiled."""
         return self.__call__
 
+    def prepare_inputs_for_generation(self, *args, attention_mask=None, **kwargs):
+        """[`~GenerationMixin.prepare_inputs_for_generation`], with the padding mask as `generate` keeps it for a graph
+        traced on a 4D mask: `_causal_mask` builds that one, not `generate` from a config it may not match."""
+        model_inputs = super().prepare_inputs_for_generation(*args, attention_mask=attention_mask, **kwargs)
+        padding_mask = attention_mask
+        traced = self._decode_metadata().kwargs.get("attention_mask", {})
+        if not self.config.is_encoder_decoder and traced.get("rank") == 4 and getattr(padding_mask, "ndim", 0) == 2:
+            model_inputs["attention_mask"] = padding_mask
+        return model_inputs
+
     def generate(self, *args, **kwargs):
         """[`~GenerationMixin.generate`]. A stateful decode graph (OpenVINO's) hands out its own output buffers instead
         of copies meanwhile: it only returns the logits (the cache is its state), and `generate` copies the row it
@@ -136,7 +160,13 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
     ):
         """`generate`'s cache, materialized the way the decode graph was traced on it; a backend keeping the cache as
         state starts it over."""
-        if hasattr(self.runner, "reset_state"):
+        if self.runner.stateful:
+            # Before `generate` makes its own: one here was passed in to continue from.
+            if model_kwargs.get("cache") is not None:
+                raise ValueError(
+                    "This export keeps its cache as its own state, which a cache passed in can't restore: generate from "
+                    "the whole conversation as the prompt instead."
+                )
             self.runner.reset_state()
         # A fixed-size cache is the size the decode graph was traced on, whatever this call generates.
         traced_length = self.runner.metadata.cache_geometry.get("max_cache_len")
@@ -150,7 +180,7 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         super()._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
-        cache = model_kwargs.get("past_key_values")
+        cache = model_kwargs.get("cache")
         if cache is not None:
             # Beam search and several returned sequences expand the batch before the first step.
             batch_size *= max(generation_config.num_beams, generation_config.num_return_sequences)
@@ -185,8 +215,8 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         outputs = None
         for index in range(query_length):
             outputs = self._call(**self._token(kwargs, index, query_length))
-            if getattr(outputs, "past_key_values", None) is not None:
-                kwargs["past_key_values"] = outputs.past_key_values
+            if getattr(outputs, "cache", None) is not None:
+                kwargs["cache"] = outputs.cache
         return outputs
 
     @staticmethod
@@ -246,17 +276,17 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                     else value
                     for layer_type, value in mask.items()
                 }
-        stateful = "beam_idx" in self.runner.metadata.input_names
+        stateful = self.runner.stateful
         inputs = {name: value for name, value in kwargs.items() if name in traced}
         outputs = self.runner(share_outputs=stateful and self._generating, **inputs)
         # A backend keeping the cache as state (OpenVINO's stateful model) never hands the loop's cache back advanced.
-        if "beam_idx" in self.runner.metadata.input_names and kwargs.get("past_key_values") is not None:
+        if stateful and kwargs.get("cache") is not None:
             text = next(
                 kwargs[name]
                 for name in ("inputs_embeds", "decoder_input_ids", "input_ids")
                 if kwargs.get(name) is not None
             )
-            advance_cache_length(kwargs["past_key_values"], text.shape[1])
+            advance_cache_length(kwargs["cache"], text.shape[1])
         return outputs
 
     def _causal_mask(self, kwargs: dict, padding_mask, dtype: str):
@@ -269,39 +299,33 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             for name in ("input_ids", "decoder_input_ids", "inputs_embeds")
             if kwargs.get(name) is not None
         )
-        cache = kwargs.get("past_key_values")
+        cache = kwargs.get("cache")
         cache = getattr(cache, "self_attention_cache", cache)
         width = mask_width(cache, text.shape[1])
-        positions = kwargs.get("position_ids")
-        if positions is None:
-            past = width - text.shape[1] if cache is None else cache.get_seq_length()
-            positions = torch.arange(past, past + text.shape[1], device=text.device).expand(text.shape[0], -1)
-        mask = causal_mask(positions, width)
+        # The cache slots the step writes, not `position_ids`, which left padding shifts back.
+        past = width - text.shape[1] if cache is None else cache.get_seq_length()
+        slots = torch.arange(past, past + text.shape[1], device=text.device).expand(text.shape[0], -1)
+        mask = causal_mask(slots, width)
         if padding_mask is not None:
             padding = torch.nn.functional.pad(
                 padding_mask.bool(), (0, max(width - padding_mask.shape[1], 0)), value=True
             )
             mask = mask & padding[:, None, None, :width]
-        return mask.to(getattr(torch, dtype))
+        dtype = getattr(torch, dtype)
+        if dtype.is_floating_point:
+            # Added to the scores: zero where a key is seen, the lowest value where it isn't.
+            return torch.zeros(mask.shape, dtype=dtype, device=mask.device).masked_fill(~mask, torch.finfo(dtype).min)
+        return mask.to(dtype)
 
 
 # What the prompt's embedding consumes: laid out by item (image, video, audio clip), not by prompt
 _MODALITY_INPUTS = {key for spec in _MODALITY_SPECS for key in (*spec.input_keys, spec.grid_key)} | {"image_sizes"}
 
 
-class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM):
+class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM, ExportedMultimodalModel):
     """A multimodal causal LM's generation export: the prompt's token ids are embedded and each modality's features
     scattered into their placeholder rows, as [`ExportedMultimodalModel`] does, before the decode graph runs on
     `inputs_embeds`."""
-
-    def __init__(
-        self,
-        runners: dict[str, ModelRunner],
-        config: PreTrainedConfig,
-        generation_config: GenerationConfig | None = None,
-    ):
-        self.embedder = ExportedMultimodalModel(runners, config)
-        super().__init__(runners, config, generation_config)
 
     def _forward_names(self) -> list[str]:
         # The step's ids, embedded here: the decode graph takes `inputs_embeds`.
@@ -316,7 +340,7 @@ class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM):
         """Embeds the prompt before `generate` repeats it for each beam or returned sequence: the modality inputs are
         laid out by item (an image's patches, a grid per image), not by prompt, so only their embeddings repeat."""
         if expand_size > 1 and input_ids is not None and model_kwargs.get("inputs_embeds") is None:
-            embedded, _ = self.embedder.embed(input_ids=input_ids, **model_kwargs)
+            embedded, _ = self.embed(input_ids=input_ids, **model_kwargs)
             model_kwargs = {key: value for key, value in model_kwargs.items() if key not in _MODALITY_INPUTS}
 
             def repeat_rows(features):
@@ -341,14 +365,14 @@ class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM):
             return positions
         rope_positions = rope_index[0]
         # A graph traced with one more row takes the text positions in front, as the model's forward builds them.
-        traced_shape = self.runner.metadata.kwargs.get("position_ids", {}).get("shape", [])
+        traced_shape = self._decode_metadata().kwargs.get("position_ids", {}).get("shape", [])
         if len(traced_shape) == 3 and traced_shape[0] == rope_positions.shape[0] + 1:
             return torch.cat([positions[None].to(rope_positions), rope_positions], dim=0)
         return rope_positions
 
     def _step(self, **kwargs) -> Any:
         if kwargs.get("input_ids") is not None:
-            embedded, _ = self.embedder.embed(**kwargs)
+            embedded, _ = self.embed(**kwargs)
             kwargs.update(embedded)
         return super()._step(**kwargs)
 
@@ -359,18 +383,23 @@ class ExportedModelForSeq2SeqLM(ExportedModelForCausalLM):
 
     def __init__(
         self,
-        runners: dict[str, ModelRunner],
-        config: PreTrainedConfig,
+        components: dict[str, ExportedComponent],
+        export_format: ExportFormat | str,
+        config: PreTrainedConfig | None = None,
         generation_config: GenerationConfig | None = None,
+        generation: bool = True,
     ):
-        super().__init__(runners, config, generation_config)
-        kwargs_spec = load_treespec(self.runner.metadata.in_spec).children_specs[1]
-        traced = dict(zip(kwargs_spec.context, kwargs_spec.children_specs))
-        output_class = traced["encoder_outputs"].type if "encoder_outputs" in traced else BaseModelOutput
-        self.encoder = _ExportedEncoder(runners["encoder_model"], output_class)
+        super().__init__(components, export_format, config, generation_config, generation)
+        self.encoder = _ExportedEncoder(self)
 
     def get_encoder(self):
         return self.encoder
+
+    def _encoder_output_class(self) -> type:
+        """The class the decode graph took its `encoder_outputs` as: `torch.export` checks it."""
+        kwargs_spec = load_treespec(self._decode_metadata().in_spec).children_specs[1]
+        traced = dict(zip(kwargs_spec.context, kwargs_spec.children_specs))
+        return traced["encoder_outputs"].type if "encoder_outputs" in traced else BaseModelOutput
 
     def _prepare_cache_for_generation(
         self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
@@ -380,7 +409,7 @@ class ExportedModelForSeq2SeqLM(ExportedModelForCausalLM):
         super()._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
-        cache = model_kwargs.get("past_key_values")
+        cache = model_kwargs.get("cache")
         if cache is None or not self.encoder.cross_states:
             return
         batch_size *= max(generation_config.num_beams, generation_config.num_return_sequences)

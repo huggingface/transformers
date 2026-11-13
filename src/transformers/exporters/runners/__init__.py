@@ -17,9 +17,7 @@ from ...utils import _LazyModule
 
 
 _import_structure = {
-    "base": ["ExportedModel", "ModelRunner"],
-    "generation": ["ExportedModelForCausalLM", "ExportedModelForSeq2SeqLM", "ExportedMultimodalModelForCausalLM"],
-    "multimodal": ["ExportedMultimodalModel"],
+    "base": ["ModelRunner"],
     "runner_dynamo": ["DynamoModelRunner"],
     "runner_executorch": ["ExecutorchModelRunner"],
     "runner_onnx": ["OnnxModelRunner"],
@@ -27,9 +25,7 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
-    from .base import ExportedModel, ModelRunner
-    from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM
-    from .multimodal import ExportedMultimodalModel
+    from .base import ModelRunner
     from .runner_dynamo import DynamoModelRunner
     from .runner_executorch import ExecutorchModelRunner
     from .runner_onnx import OnnxModelRunner

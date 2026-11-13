@@ -497,7 +497,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 "decoder_input_ids",
                 "decoder_attention_mask",
                 "encoder_outputs",
-                "past_key_values",
+                "cache",
                 "labels",
                 "decoder_inputs_embeds",
                 "use_cache",

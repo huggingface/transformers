@@ -59,16 +59,6 @@ Each rule below lists what it enforces and a diff showing the fix. Run `python u
 
 <!-- BEGIN RULES REFERENCE -->
 
-### TRF001
-
-Checks that <Model>PreTrainedModel's config_class is named <Model>Config. A mismatch can break loading, auto classes and developer expectations.
-
-```diff
-class AcmePreTrainedModel(PreTrainedModel):
--    config_class = WileConfig
-+    config_class = AcmeConfig
-```
-
 ### TRF002
 
 Checks base_model_prefix is a non-empty, whitespace-free string literal. Invalid prefixes can break weight-loading key mapping and base-model access.
@@ -118,7 +108,7 @@ Checks the shape of _no_split_modules when present. Malformed values can break d
 Checks that cache arguments in a forward signature are used in the body. An unused cache argument suggests incomplete caching support and inconsistent API behavior.
 
 ```diff
-def forward(self, x, past_key_values=None, use_cache=False):
+def forward(self, x, cache=None, use_cache=False):
 +    if use_cache:
 +        ...
      return x
@@ -634,18 +624,18 @@ class AcmeAttention(nn.Module):
 
 ### TRF044
 
-Flags a parameter named cache_position on any function in modeling_*.py and modular_*.py. cache_position was removed from all models in v5. Reintroducing it (usually copied from pre-v5 sources) threads a dead argument through every layer; the cache update is past_key_values.update(key_states, value_states, self.layer_idx), with no position threading.
+Flags a parameter named cache_position on any function in modeling_*.py and modular_*.py. cache_position was removed from all models in v5. Reintroducing it (usually copied from pre-v5 sources) threads a dead argument through every layer; the cache update is cache.update(key_states, value_states, self.layer_idx), with no position threading.
 
 ```diff
 def forward(
      self,
      hidden_states,
-     past_key_values=None,
+     cache=None,
 -    cache_position=None,
      **kwargs,
  ):
--    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_position)
-+    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+-    key_states, value_states = cache.update(key_states, value_states, self.layer_idx, cache_position)
++    key_states, value_states = cache.update(key_states, value_states, self.layer_idx)
 ```
 
 ### TRF045
@@ -776,13 +766,16 @@ if labels is not None:
 
 ### TRF055
 
-Flags `config = SomeConfig` as a class attribute on PreTrainedModel subclasses in modeling_*.py and modular_*.py. `PreTrainedModel.__init_subclass__` derives `config_class` from a `config` **annotation**, via `inspect.get_annotations(cls)`. An assignment creates a stray class attribute that call does not report, so the subclass silently keeps the parent's `config_class`. A bare annotation has no runtime value, creates no attribute, and is picked up correctly.
+Flags `config_class`, a `config = SomeConfig` assignment, a `<Model>PreTrainedModel` without a `config` annotation, and an `__init__` whose `config` argument is unannotated or names another config. A class built from a sub-config (`AcmeTextModel(config.text_config)`) must declare that sub-config. A `modular_*.py` file is checked through the files it generates. `PreTrainedModel` derives `config_class` from the `config` annotation. An assignment or a hand-written `config_class` keeps or drifts from the parent's, and a mismatched `__init__` builds the model from one config while it advertises another.
 
 ```diff
 class Gemma4VisionModel(Gemma4PreTrainedModel):
      """The Gemma 4 Vision Encoder."""
 -    config = Gemma4VisionConfig
 +    config: Gemma4VisionConfig
+
+-    def __init__(self, config):
++    def __init__(self, config: Gemma4VisionConfig):
 ```
 
 ### TRF056
@@ -799,7 +792,7 @@ In modeling_*.py and modular_*.py, flags `.item()` and `.tolist()` calls inside 
 
 ### TRF057
 
-Checks `@auto_docstring` on public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors and `ProcessorMixin` subclasses, and on their public methods `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A `modular_*.py` is checked against the files generated from it. Without it a class ships with no intro and no parameter documentation, and a method with no argument documentation, no `Returns` section and no usage example -- all of which then have to be hand-written per model instead of coming from `auto_docstring.py`.
+Checks `@auto_docstring` on public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors, video processors and `ProcessorMixin` subclasses, and on their public methods `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A `modular_*.py` is checked against the files generated from it. Without it, the class and its methods ship without parameter, return and example documentation, which then has to be written by hand for each model.
 
 ```diff
 +@auto_docstring
@@ -836,6 +829,149 @@ class AcmeExperts(nn.Module):
 -    def forward(self, hidden_states):
 +    def forward(self, hidden_states, top_k_index, top_k_weights):
          ...
+```
+
+### TRF060
+
+Flags `from transformers... import X` and `import transformers...` under `src/transformers/models/` and suggests the relative form (`from ...modeling_utils import X`). `convert_*.py` scripts are skipped. An absolute import inside the package goes through the lazy top-level `transformers/__init__.py`, which can cause circular imports, and can resolve to another installed copy of transformers.
+
+```diff
+-from transformers.modeling_utils import PreTrainedModel
+-from transformers.models.acme.configuration_acme import AcmeConfig
+-from transformers import initialization as init
++from ...modeling_utils import PreTrainedModel
++from .configuration_acme import AcmeConfig
++from ... import initialization as init
+```
+
+### TRF061
+
+In modular_*.py, flags a class whose base is defined earlier in the same file. Bases imported from another model, `<Model>PreTrainedModel` subclasses and backward-compatibility aliases are not flagged. The converter inlines bases imported from other models but keeps a same-file base, so the generated modeling file keeps the inheritance and its classes can no longer be read one at a time.
+
+```diff
+from ..llama.modeling_llama import LlamaDecoderLayer
+
+
+ class AcmeDecoderLayer(LlamaDecoderLayer):
+     pass
+
+
+-class AcmeSparseDecoderLayer(AcmeDecoderLayer):
++class AcmeSparseDecoderLayer(LlamaDecoderLayer):
+     def __init__(self, config, layer_idx):
+         super().__init__(config, layer_idx)
+         self.mlp = AcmeSparseMoeBlock(config)
+```
+
+### TRF062
+
+Flags in-place `torch.nn.init` initializers (`nn.init.normal_(...)`, however imported) called inside `_init_weights`. Helpers that only compute a value, such as `calculate_gain`, are not flagged. The transformers `init` functions skip tensors already loaded from a checkpoint. `torch.nn.init` relies on a patch applied during `from_pretrained`, which a function imported by name escapes, so a loaded weight can be silently re-initialized.
+
+```diff
+from torch import nn
++
++from ... import initialization as init
+
+
+ def _init_weights(self, module):
+     super()._init_weights(module)
+     if isinstance(module, AcmeLayerScale):
+-        nn.init.constant_(module.lambda1, self.config.layer_scale_init_value)
++        init.constant_(module.lambda1, self.config.layer_scale_init_value)
+```
+
+### TRF063
+
+Follows every relative import a model file runs at import time and flags it when the imported files need a backend the importing file does not declare: through its base requirements, the weakest `@requires` among its `__all__` objects, or an `is_<backend>_available()` guard. A `modular_*.py` file is checked through the files it generates. The lazy module imports a file once its declared backends are installed. If that file imports a sibling that needs more, `from transformers import *` crashes in that environment: a vision-only processor importing a torchvision image processor breaks installs with Pillow but no torch.
+
+```diff
+if is_vision_available():
+-    from .image_processing_acme import AcmeImageProcessorKwargs
++    from .image_processing_pil_acme import AcmeImageProcessorKwargs
+ 
+ @requires(backends=("vision",))
+ class AcmeProcessor(ProcessorMixin):
+```
+
+### TRF064
+
+In processing_*.py and modular_*.py, flags a `ProcessingKwargs` subclass that assigns or re-annotates `_defaults`, `text_kwargs`, `images_kwargs`, `videos_kwargs` or `audio_kwargs`. `ProcessingKwargs._defaults` is deprecated: defaults are class attributes of the processor, inherited and overridden like any other. The modality fields keep their default types, because the available arguments are only known once sub-processors are loaded at runtime.
+
+```diff
+class AcmeProcessorKwargs(ProcessingKwargs, total=False):
+-    images_kwargs: AcmeImagesKwargs
+-    _defaults = {
+-        "text_kwargs": {"padding": False},
+-        "images_kwargs": {"num_crops": 4},
+-    }
++    num_crops: int
+
+
+ class AcmeProcessor(ProcessorMixin):
+     valid_processor_kwargs = AcmeProcessorKwargs
++    text_kwargs = {"padding": False}
++    num_crops: int = 4
+```
+
+### TRF065
+
+In processing_*.py, flags any class extending `ImagesKwargs`, `TextKwargs`, `AudioKwargs` or `VideosKwargs`, directly or through another model's subclass. In modular_*.py, which also holds sub-processors, a subclass is allowed when named `<Model>ImageProcessorKwargs`, `<Model>VideoProcessorKwargs`, `<Model>VideoProcessorInitKwargs` or `<Model>AudioProcessorKwargs`. Modality kwargs belong in the sub-processor files (`image_processing_*.py`, `video_processing_*.py`, ...). In processing_*.py they stay untyped, since sub-processors are loaded dynamically.
+
+```diff
+-class AcmeImagesKwargs(ImagesKwargs, total=False):
+-    num_crops: int
+-
+-
+ class AcmeProcessorKwargs(ProcessingKwargs, total=False):
+-    images_kwargs: AcmeImagesKwargs
++    num_crops: int
+```
+
+### TRF066
+
+Flags backends in `@requires` that repeat the file's implicit requirements or, for a method, its enclosing class's explicit requirements. Also flags `requires_backends(...)` if it could be written as a `@requires` decorator instead, and a `@requires` placed above `@classmethod` or `@staticmethod`. The cutoff exempts older models from everything except the misplaced decorator. Repeating backend requirements obscures which dependencies a method actually adds. An unconditional check at the start of a function belongs in `@requires(backends=...)`, which exposes dependency metadata and performs the check when the function is called. Keep `requires_backends` for conditional requirements. `@requires` wraps a plain function, so above `@classmethod` or `@staticmethod` it wraps the descriptor instead and every call raises `TypeError`: it must sit below them.
+
+```diff
+# image_processing_pil_acme.py already requires vision.
+-@requires(backends=("vision", "torch"))
++@requires(backends=("torch",))
+ class AcmeImageProcessorPil(PilBackend):
+-    @requires(backends=("torch",))
+     def post_process(self, outputs):
+         return outputs
+
++    @requires(backends=("scipy",))
+     def refine(self, outputs):
+-        requires_backends(self, ["scipy"])
+         return outputs
+```
+
+### TRF067
+
+In modeling_*.py and modular_*.py, flags a call that switches on every hidden state (`output_hidden_states=True`, or setting it in `**kwargs`) when the function then only reads `.hidden_states[...]` by index. Code that uses the whole tuple (iterating, slicing, stacking or returning it) and `@filter_output_hidden_states` backbones are exempt. Every layer's hidden state stays alive until the call returns, so peak memory grows with depth. `output_hidden_states` also accepts an index or a list of indices and captures only those: decorate a method that forwards `**kwargs` with `@select_hidden_states`, or pass the index directly.
+
+```diff
++from ...utils.output_capturing import select_hidden_states
+ ...
++    @select_hidden_states("vision_feature_layer")
+     def get_image_features(self, pixel_values, vision_feature_layer=None, **kwargs):
+-        kwargs["output_hidden_states"] = True
+         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+ ...
+-        outputs = self.img_processor(img_embeds, output_hidden_states=True)
++        outputs = self.img_processor(img_embeds, output_hidden_states=self.layer_idx)
+         return outputs.hidden_states[self.layer_idx]
+```
+
+### TRF068
+
+Checks each `_no_split_modules` entry against the classes the modeling file defines or imports. A `modular_*.py` file is checked through the files it generates on disk, so regenerate before linting. accelerate matches these names against submodule class names. A name that is not a class never matches, so the layer can be split across devices. It usually comes from a modular file inheriting `_no_split_modules`: the converter renames the prefix, not the class.
+
+```diff
+class Qwen4ExpModel(Qwen3_5MoeModel):
+-    # inherits ["Qwen3_5MoeDecoderLayer"] -> converted to "Qwen4ExpDecoderLayer", which does not exist
++    _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
 ```
 
 <!-- END RULES REFERENCE -->

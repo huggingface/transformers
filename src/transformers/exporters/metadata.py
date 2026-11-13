@@ -24,14 +24,14 @@ from typing import Any
 
 from .. import __version__
 from ..utils.import_utils import _is_package_available, is_torch_available
-from .utils import get_leaf_tensors
+from .utils import module_dtype
 
 
 if is_torch_available():
     import torch
 
 
-def _traced_kwarg(value: Any) -> dict[str, Any]:
+def _describe_traced_kwarg(value: Any) -> dict[str, Any]:
     """How one traced kwarg was shaped, as JSON: rank/shape/dtype for a tensor, per leaf for a mapping, per item for a
     list of tensors, the value for a scalar, and the kind for anything else."""
     if isinstance(value, torch.Tensor):
@@ -41,20 +41,13 @@ def _traced_kwarg(value: Any) -> dict[str, Any]:
             "dtype": str(value.dtype).removeprefix("torch."),
         }
     if isinstance(value, Mapping):
-        return {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+        return {"leaves": {str(key): _describe_traced_kwarg(leaf) for key, leaf in value.items()}}
     if isinstance(value, (list, tuple)) and value and all(isinstance(item, torch.Tensor) for item in value):
-        return {"items": [_traced_kwarg(item) for item in value]}
+        return {"items": [_describe_traced_kwarg(item) for item in value]}
     # A scalar (or `None`) is a constant of the program: its value, which a torch program still takes.
     if value is None or isinstance(value, (bool, int, float, str)):
         return {"value": value}
     return {"container": type(value).__name__}
-
-
-def traced_output_names(exported_program) -> list[str]:
-    """The model's output leaf names in order, read off the program's output pytree."""
-    spec = exported_program.call_spec.out_spec
-    placeholders = [torch.empty(0) for _ in range(spec.num_leaves)]
-    return list(get_leaf_tensors(torch.utils._pytree.tree_unflatten(placeholders, spec)))
 
 
 def _package_versions(packages: Iterable[str]) -> dict[str, str]:
@@ -73,58 +66,78 @@ class ExportMetadata:
 
     architecture: str | None = None
     packages: dict[str, str] = field(default_factory=dict)
-    dtype: str | None = None
-    device: str | None = None
+    export_config: dict[str, Any] = field(default_factory=dict)
+    export_dtype: str | None = None
+    export_device: str | None = None
     kwargs: dict[str, dict] = field(default_factory=dict)
-    # Flat graph order.
-    input_names: list[str] = field(default_factory=list)
-    output_names: list[str] = field(default_factory=list)
-    # `torch.export`'s input and output pytree specs, as `treespec_dumps` writes them.
+    # Pytree specs, from `treespec_dumps`.
     in_spec: str | None = None
     out_spec: str | None = None
+    # Scalar kwargs traced as constants.
+    in_constants: dict[str, Any] = field(default_factory=dict)
+    # Non-tensor output leaves, as `[leaf index, value]`.
+    out_constants: list = field(default_factory=list)
     # The traced cache's per-layer key/value shapes, sparse-indexer slots and linear-attention state shapes, which
     # a runtime materializes the cache it feeds with.
     cache_geometry: dict[str, dict] = field(default_factory=dict)
-    export_config: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, values: Mapping[str, Any]) -> ExportMetadata:
+        """Build the metadata from its saved dict, skipping fields this class doesn't have (added by a newer version)."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{name: value for name, value in values.items() if name in known})
 
 
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
-) -> dict[str, Any]:
-    """Record a graph's precision, traced kwargs and flat input/output order. Precision and device are read off the
-    parameters, since a split-out component is a plain `nn.Module` with no `.dtype`."""
-    metadata = {
-        "architecture": type(model).__name__,
-        "packages": _package_versions(packages),
-        "dtype": str(
-            next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
-        ).removeprefix("torch."),
-        "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
-        "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
-    }
-    input_specs = exported_program.graph_signature.input_specs
-    metadata["input_names"] = [spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"]
-    metadata["output_names"] = traced_output_names(exported_program)
-    cache = next((inputs[name] for name in ("past_key_values", "cache_params") if inputs.get(name) is not None), None)
-    if cache is not None:
-        from ..cache_utils import StaticCache
-        from .cache import indexer_layers_of, kv_geometry_of, linear_states_of
-
-        cache = getattr(cache, "self_attention_cache", cache)
-        geometry = {
-            "kv": kv_geometry_of(cache),
-            "indexers": indexer_layers_of(cache),
-            "linear_states": linear_states_of(cache),
-        }
-        if isinstance(cache, StaticCache):
-            # The decode graph only takes a cache of the length it was traced on.
-            lengths = [getattr(layer, "max_cache_len", None) for layer in cache.layers]
-            geometry["max_cache_len"] = max(length for length in lengths if length is not None)
-        # As it saves: JSON keys are strings and its sequences lists.
-        metadata["cache_geometry"] = json.loads(json.dumps(geometry))
-    metadata["in_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec)
-    metadata["out_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec)
+) -> ExportMetadata:
+    """Record a graph's precision, traced kwargs, constants, pytree specs and cache geometry."""
+    metadata = ExportMetadata(
+        architecture=type(model).__name__,
+        packages=_package_versions(packages),
+        export_dtype=str(module_dtype(model) or torch.get_default_dtype()).removeprefix("torch."),
+        export_device=str(next((p.device for p in model.parameters()), torch.device("cpu"))),
+        kwargs={name: _describe_traced_kwarg(value) for name, value in inputs.items()},
+        in_constants={
+            name: value
+            for name, value in inputs.items()
+            if value is None or isinstance(value, (bool, int, float, str))
+        },
+        in_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec),
+        out_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec),
+    )
+    if (cache := inputs.get("cache")) is not None:
+        metadata.cache_geometry = _cache_geometry(cache)
     return metadata
+
+
+def _cache_geometry(cache) -> dict[str, Any]:
+    """The traced cache's layout, as it saves: JSON keys are strings and its sequences lists."""
+    from ..cache_utils import StaticCache
+    from .cache import indexer_layers_of, kv_geometry_of, linear_states_of
+
+    cache = getattr(cache, "self_attention_cache", cache)
+    geometry = {
+        "kv": kv_geometry_of(cache),
+        "indexers": indexer_layers_of(cache),
+        "linear_states": linear_states_of(cache),
+    }
+    if isinstance(cache, StaticCache):
+        # The decode graph only takes a cache of the length it was traced on.
+        lengths = [getattr(layer, "max_cache_len", None) for layer in cache.layers]
+        geometry["max_cache_len"] = max(length for length in lengths if length is not None)
+    return json.loads(json.dumps(geometry))
+
+
+def record_output_structure(metadata: ExportMetadata, outputs: Any) -> None:
+    """Record what the model returned for a graph that returns its tensors only: the spec, and the other leaves."""
+    leaves, spec = torch.utils._pytree.tree_flatten(outputs)
+    constants = [[index, leaf] for index, leaf in enumerate(leaves) if not isinstance(leaf, torch.Tensor)]
+    unsaveable = [leaf for _, leaf in constants if not (leaf is None or isinstance(leaf, (bool, int, float, str)))]
+    if unsaveable:
+        raise ValueError(f"The model returns {unsaveable}, which an export can't save: only tensors and scalars.")
+    metadata.out_spec = torch.utils._pytree.treespec_dumps(spec)
+    metadata.out_constants = constants
 
 
 def register_treespec_types(dumped: str) -> None:
@@ -142,9 +155,3 @@ def load_treespec(dumped: str):
     """A spec written by `treespec_dumps`."""
     register_treespec_types(dumped)
     return torch.utils._pytree.treespec_loads(dumped)
-
-
-def export_config_metadata(config) -> dict[str, Any]:
-    """`config` as JSON, without its quantizer. Values JSON can't hold (`Dim`s) are written as their `repr`."""
-    values = {f.name: getattr(config, f.name) for f in fields(config) if f.name != "quantizer"}
-    return json.loads(json.dumps(values, default=repr))

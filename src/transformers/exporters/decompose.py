@@ -372,8 +372,34 @@ _MODALITY_SPECS = (
     ModalitySpec(
         "vision_embeddings_model",
         "get_image_features",
-        ("pixel_values", "pixel_values_images", "flattened_patches", "image_patches"),
-        ("image_patches_indices", "image_embeds_position_mask", "pixel_attention_mask", "target_sizes"),
+        (
+            "pixel_values",
+            "pixel_values_images",
+            "flattened_patches",
+            "image_patches",
+            "pixel_values_local",
+            "high_res_pixel_values",
+        ),
+        (
+            "image_patches_indices",
+            "image_embeds_position_mask",
+            "pixel_attention_mask",
+            "target_sizes",
+            "image_position_ids",
+            "batch_num_images",
+            "spatial_shapes",
+            "pixel_mask",
+            "image_grids",
+            "image_token_pooling",
+            "image_merge_sizes",
+            "image_grid_hw",
+            "num_local_patches",
+            "patches_grid",
+            "images_per_sample",
+            "qformer_input_ids",
+            "qformer_attention_mask",
+            "tile_fine_mask",
+        ),
         "image_grid_thw",
         "image_token_id",
     ),
@@ -381,7 +407,16 @@ _MODALITY_SPECS = (
         "video_embeddings_model",
         "get_video_features",
         ("pixel_values_videos",),
-        ("target_sizes_videos",),
+        (
+            "target_sizes_videos",
+            "video_position_ids",
+            "num_frames_per_video",
+            "video_grids",
+            "video_token_pooling",
+            "video_merge_sizes",
+            "qformer_input_ids",
+            "qformer_attention_mask",
+        ),
         "video_grid_thw",
         "video_token_id",
     ),
@@ -389,7 +424,15 @@ _MODALITY_SPECS = (
         "audio_embeddings_model",
         "get_audio_features",
         ("input_features", "audio_input_ids", "input_values"),
-        ("padding_mask",),
+        (
+            "padding_mask",
+            "input_features_mask",
+            "feature_attention_mask",
+            "audio_feature_lengths",
+            "input_values_mask",
+            "audio_input_ids_mask",
+            "chunk_sample_lengths",
+        ),
         None,
         "audio_token_id",
     ),
@@ -482,7 +525,8 @@ def decompose_multimodal(
 
     Components, named as Optimum Intel names them: `text_embeddings_model`, one `<modality>_embeddings_model` per
     modality present (`get_<modality>_features`), and `language_model`: `model` itself on `inputs_embeds`, so its head
-    and anything after the text stack stay in the graph. The `masked_scatter` merge stays outside the graphs.
+    and anything after the text stack stay in the graph. The `masked_scatter` merge stays outside the graphs. A model
+    that reads its modality inputs without any getter (a contrastive one: SigLIP2, CLIP) stays whole, as `model`.
 
     Raises:
         `ValueError`: if no known multi-modal submodules are found on the model.
@@ -515,6 +559,8 @@ def decompose_multimodal(
         raise RuntimeError(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
+    if active_modalities and not any(captured_features.values()):
+        return {"model": Component(model, inputs)}
 
     components = (
         {"language_model": Component(model, _main_inputs(model, inputs, decoder_calls[-1]))} if decoder_calls else {}
@@ -590,7 +636,7 @@ def _fold_cross_cache_into_encoder(model, components: dict, writers: dict) -> di
     encoder = components.get("encoder")
     if not writers or encoder is None:
         return components
-    captured = components["decode"].inputs.get("past_key_values")
+    captured = components["decode"].inputs.get("cache")
     layers = getattr(getattr(captured, "cross_attention_cache", None), "layers", [])
     if not layers:
         return components
@@ -628,7 +674,7 @@ def _write_cross_cache_in_decoder(components: dict) -> tuple[dict, bool]:
     and whether the decode graph now writes the cross cache.
     """
     decode = components["decode"]
-    cache = decode.inputs.get("past_key_values")
+    cache = decode.inputs.get("cache")
     # BLT keeps a self-attention cache in the cross half and takes no `encoder_outputs`.
     if not isinstance(cache, EncoderDecoderCache) or decode.inputs.get("encoder_outputs") is None:
         return components, False
@@ -640,7 +686,7 @@ def _write_cross_cache_in_decoder(components: dict) -> tuple[dict, bool]:
         if layer.keys is not None:
             layer.keys, layer.values = layer.keys[..., :0, :], layer.values[..., :0, :]
         cache.is_updated[index] = False
-    return {**components, "decode": replace(decode, inputs={**decode.inputs, "past_key_values": cache})}, True
+    return {**components, "decode": replace(decode, inputs={**decode.inputs, "cache": cache})}, True
 
 
 def _capture_generation(
@@ -869,7 +915,7 @@ def _prefill_call(model, prefill_inputs: dict, decode_inputs: dict, components: 
     nothing is padded, and embeddings on a multi-modal model."""
     prefill_inputs = copy.copy(prefill_inputs)
     materialize_cache_like(model, prefill_inputs, decode_inputs)
-    cache, decode_cache = prefill_inputs.get("past_key_values"), decode_inputs.get("past_key_values")
+    cache, decode_cache = prefill_inputs.get("cache"), decode_inputs.get("cache")
     if isinstance(cache, EncoderDecoderCache) and isinstance(decode_cache, EncoderDecoderCache):
         # The cross half depends only on the encoder's output, the same for both calls: taken as the encoder graph
         # (or the decode graph's own write) leaves it.
@@ -904,7 +950,7 @@ def _prefill_mask(prefill_inputs: dict, decode_mask: Any) -> Any:
         return {key: _prefill_mask(prefill_inputs, mask) for key, mask in decode_mask.items()}
     text = next(prefill_inputs[key] for key in ("input_ids", "inputs_embeds") if prefill_inputs.get(key) is not None)
     batch_size, query_length = text.shape[:2]
-    cache_len = mask_width(prefill_inputs.get("past_key_values"), query_length)
+    cache_len = mask_width(prefill_inputs.get("cache"), query_length)
     if decode_mask.dim() == 2:
         return torch.ones(batch_size, cache_len, dtype=decode_mask.dtype, device=decode_mask.device)
     # An empty cache: the prefill step's positions start at 0 when the model takes none.

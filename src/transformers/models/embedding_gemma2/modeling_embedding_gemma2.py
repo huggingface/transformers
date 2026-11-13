@@ -40,6 +40,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -406,6 +407,7 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -510,6 +512,7 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -676,6 +679,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 "Image features were requested, but the model was initialized without a vision_config. "
                 "Cannot process images without a vision tower and vision embedder."
             )
+        return_flat = kwargs.pop("return_flat", False)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             pixel_position_ids=image_position_ids,
@@ -684,6 +688,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         last_hidden_state = vision_outputs.last_hidden_state
         pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
         non_pad_mask = (image_position_ids != -1).all(dim=-1)
@@ -739,6 +746,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -901,6 +909,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 "Video features were requested, but the model was initialized without a vision_config. "
                 "Cannot process video without a vision tower and vision embedder."
             )
+        return_flat = kwargs.pop("return_flat", False)
         if num_frames_per_video is None:
             raise ValueError(
                 "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
@@ -916,6 +925,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         last_hidden_state = vision_outputs.last_hidden_state
         pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        if return_flat:
+            vision_outputs.pooler_output = pooler_output
+            return vision_outputs
         k_squared = self.config.vision_config.pooling_kernel_size**2
         non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
         num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared
