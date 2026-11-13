@@ -833,6 +833,25 @@ class LogitsProcessorTest(unittest.TestCase):
         filtered_scores = bias_dist_proc(input_ids, scores)
         self.assertListEqual(filtered_scores.tolist(), [[-5.0, 0.0, 0.0, 0.0, 0.0]])
 
+    def test_bias_dist_processor_shared_last_token(self):
+        # sequences of the same and of different lengths ending in the same token add up their biases, and sequences
+        # whose prefix is longer than the context are ignored
+        vocab_size = 6
+        sequence_bias = {(1, 2): -1.0, (3, 1, 2): -2.0, (0, 1, 2): -4.0, (1, 4): 3.0, (5, 5, 5, 5, 5, 1): 10.0}
+        bias_dist_proc = SequenceBiasLogitsProcessor(sequence_bias=sequence_bias)
+        scores = torch.zeros((2, vocab_size), dtype=torch.float, device=torch_device)
+
+        input_ids = torch.tensor([[0, 1, 3, 1], [2, 2, 0, 1]], device=torch_device, dtype=torch.long)
+        filtered_scores = bias_dist_proc(input_ids, scores)
+        self.assertListEqual(
+            filtered_scores.tolist(), [[0.0, 0.0, -3.0, 0.0, 3.0, 0.0], [0.0, 0.0, -5.0, 0.0, 3.0, 0.0]]
+        )
+
+        # the bias tensors prepared on the first call are reused on the next ones
+        input_ids = torch.tensor([[1, 1, 1, 1], [0, 0, 0, 0]], device=torch_device, dtype=torch.long)
+        filtered_scores = bias_dist_proc(input_ids, scores)
+        self.assertListEqual(filtered_scores.tolist(), [[0.0, 0.0, -1.0, 0.0, 3.0, 0.0], [0.0] * vocab_size])
+
     def test_no_bad_words_prefix_equal_to_context(self):
         # a banned sequence whose prefix is exactly the whole context should still be blocked
         vocab_size = 6
@@ -1077,10 +1096,10 @@ class LogitsProcessorTest(unittest.TestCase):
         logits_uncond = torch.tensor([[[1.0, 0, 1.5]]])
         logits_cond = torch.tensor([[[1.0, 1.0, 1.0]]])
 
-        def dummy_model(input_ids, attention_mask, use_cache=True, past_key_values=None):
+        def dummy_model(input_ids, attention_mask, use_cache=True, cache=None):
             out = Namespace()
             out.logits = logits_uncond
-            out.past_key_values = None
+            out.cache = None
             return out
 
         def lsm(x):

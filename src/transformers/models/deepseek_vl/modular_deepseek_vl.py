@@ -23,6 +23,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ..auto import AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
@@ -145,20 +146,10 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
-    valid_processor_kwargs = DeepseekVLProcessorKwargs
+    text_kwargs = {"return_tensors": "pt"}
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,
@@ -180,6 +171,8 @@ class DeepseekVLProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "DeepseekVLConfig",

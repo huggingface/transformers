@@ -24,6 +24,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_av,
     require_torch,
@@ -241,10 +242,12 @@ class Cosmos3EdgeForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = self.model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = self.processor.decode(output[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        expected_text = (
-            "A bumblebee is the main subject of this image, positioned centrally on a vibrant pink flower. The bee "
-            "is captured in a side profile, with its head and thorax clearly visible as it faces"
-        )
+        expected_text = Expectations(
+            {
+                (None, None): "A bumblebee is the main subject of this image, positioned centrally on a vibrant pink flower. The bee is captured in a side profile, with its head and thorax clearly visible as it faces",
+                ("cuda", (8, 6)): "A bumblebee is the main subject of this image, positioned in the center of a vibrant pink flower.",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)
 
     @require_av

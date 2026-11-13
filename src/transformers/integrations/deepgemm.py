@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shutil
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -849,6 +850,16 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
+# By EP group, then shape: allocating one is a slow collective, so every layer of a group shares it.
+_SYMM_BUFFERS: defaultdict[str, dict] = defaultdict(dict)
+
+
+def destroy_megamoe_buffers():
+    """Free the Mega MoE symmetric buffers of every EP group. Call it on every rank, before the process groups are
+    destroyed."""
+    _SYMM_BUFFERS.clear()
+
+
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -863,9 +874,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    `process_group` is supplied automatically by `MoeTensorParalellExperts._prepare_input_fn`
-    when the module is wrapped for TP — it's required for the symm-buffer rendezvous
-    on first forward. `top_k_index` is GLOBAL expert ids (`-1` marks skipped slots).
+    `process_group` is the EP group, passed by the `deepgemm_megamoe` expert-parallel implementation.
+    `top_k_index` holds global expert ids, with `-1` for skipped slots.
 
     Caller-managed `self` attributes:
       - `gate_up_proj`, `gate_up_proj_scale_inv`: L1 weight + UE8M0 SF.
@@ -879,6 +889,11 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.
     _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
 
+    if torch.is_grad_enabled() and hidden_states.requires_grad:
+        raise NotImplementedError(
+            "DeepGEMM Mega MoE has no backward: run it under `torch.no_grad()` or `torch.inference_mode()`."
+        )
+
     if self.gate_up_proj.dtype != torch.int8:
         raise NotImplementedError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
@@ -887,8 +902,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     if process_group is None:
         raise ValueError(
-            "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
-            "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
+            "DeepGEMM Mega MoE requires a `process_group`, the EP group its symmetric buffers rendezvous over. The "
+            "`deepgemm_megamoe` expert-parallel implementation supplies it; pass it explicitly otherwise."
         )
 
     deepgemm = load_deepgemm_kernel()
@@ -908,9 +923,18 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     intermediate_hidden = self.gate_up_proj.size(1) // 2
     num_global_experts = num_local_experts * process_group.size()
 
-    # Lazily (re)allocate the symmetric buffer when the cached one is too small.
-    if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
-        self.symm_buffer = deepgemm.get_symm_buffer_for_mega_moe(
+    # Allocate the symmetric buffer for this shape on first use, and again only for a larger batch, at that batch's size
+    # (DeepGEMM aligns it up to its token block): it is a collective and costs about 1 MiB per token per rank at
+    # DeepSeek-V4 sizes, so warming up once at the largest batch allocates it once. The old buffer goes first, once no
+    # rank still reads it, so its memory is reused instead of stacking up.
+    symm_buffers = _SYMM_BUFFERS[process_group.group_name]
+    buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
+    if buffer_key not in symm_buffers or symm_buffers[buffer_key].num_max_tokens_per_rank < num_tokens:
+        if buffer_key in symm_buffers:
+            torch.cuda.synchronize()
+            torch.distributed.barrier(group=process_group)
+            symm_buffers.pop(buffer_key).destroy()
+        symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
@@ -920,10 +944,12 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         )
 
     x_fp8, x_sf = deepgemm.per_token_cast_to_fp8(hidden_states, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
-    self.symm_buffer.x[:num_tokens].copy_(x_fp8)
-    self.symm_buffer.x_sf[:num_tokens].copy_(x_sf)
-    self.symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
-    self.symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
+
+    symm_buffer = symm_buffers[buffer_key]
+    symm_buffer.x[:num_tokens].copy_(x_fp8)
+    symm_buffer.x_sf[:num_tokens].copy_(x_sf)
+    symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
+    symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
 
     # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
     # fused SwiGLU sees the same value range the model was calibrated for.
@@ -932,7 +958,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         y,
         (self.gate_up_proj, self.gate_up_proj_scale_inv),
         (self.down_proj, self.down_proj_scale_inv),
-        self.symm_buffer,
+        symm_buffer,
         activation_clamp=getattr(getattr(self, "config", None), "swiglu_limit", None),
     )
     return y.to(hidden_states.dtype)

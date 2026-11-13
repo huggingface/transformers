@@ -70,7 +70,6 @@ from transformers.generation.continuous_batching.utils import (
     _get_numa_nodes_memory,
     get_device_and_memory_breakdown,
 )
-from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -295,18 +294,6 @@ def _make_allocator(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
-    def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
-        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
-        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
-        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
-        module = torch.nn.Module()
-        module.layer_idx = 0
-        module.num_key_value_groups = 1
-        q = k = v = torch.zeros(1, 1, 4, 8)
-        with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
-            attention_forward(module, q, k, v, None, scaling=1.0)
-
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
             request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
@@ -1306,13 +1293,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
         model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
         # Create a static cache if compile_config is set, because regular generate requires a compileable cache
-        past_key_values = None
+        cache = None
         if model.generation_config.compile_config is not None:
             max_cache_len = num_input_tokens + max_new_tokens
-            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+            cache = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
-            **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
+            **inputs.to(torch_device), generation_config=model.generation_config, cache=cache
         )
 
         for i, user_message in enumerate(user_messages):

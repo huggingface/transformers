@@ -45,6 +45,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -265,12 +266,13 @@ class T5Gemma2SelfAttention(nn.Module):
         self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -286,8 +288,8 @@ class T5Gemma2SelfAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -344,6 +346,7 @@ class T5Gemma2MergedAttention(nn.Module):
         self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         # decoder self-attention inputs
@@ -353,7 +356,7 @@ class T5Gemma2MergedAttention(nn.Module):
         # cross-attention inputs
         encoder_hidden_states: torch.Tensor,
         # cache inputs
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         # others
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -374,26 +377,26 @@ class T5Gemma2MergedAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
+        if cache is not None:
             # self-attention.
-            self_attention_cache = past_key_values.self_attention_cache
+            self_attention_cache = cache.self_attention_cache
             key_states, value_states = self_attention_cache.update(key_states, value_states, self.layer_idx)
 
             # cross-attention.
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
-            cross_attention_cache = past_key_values.cross_attention_cache
+            is_updated = cache.is_updated.get(self.layer_idx)
+            cross_attention_cache = cache.cross_attention_cache
 
-        if past_key_values is None or not is_updated:
+        if cache is None or not is_updated:
             cross_key_states = self.k_proj(encoder_hidden_states).view(cross_hidden_shape).transpose(1, 2)
             cross_value_states = self.v_proj(encoder_hidden_states).view(cross_hidden_shape).transpose(1, 2)
 
             cross_key_states = self.k_norm(cross_key_states)
 
-            if past_key_values is not None:
+            if cache is not None:
                 cross_key_states, cross_value_states = cross_attention_cache.update(
                     cross_key_states, cross_value_states, self.layer_idx
                 )
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
         else:
             cross_key_states = cross_attention_cache.layers[self.layer_idx].keys
             cross_value_states = cross_attention_cache.layers[self.layer_idx].values
@@ -469,7 +472,7 @@ class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=None,
+            cache=None,
             **kwargs,
         )
         hidden_states = self.post_self_attn_layernorm(hidden_states)
@@ -507,13 +510,14 @@ class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         merged_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         use_cache: bool | None = False,
         encoder_hidden_states: torch.Tensor | None = None,
         **kwargs,
@@ -526,7 +530,7 @@ class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             merged_attention_mask=merged_attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             encoder_hidden_states=encoder_hidden_states,
             **kwargs,
@@ -637,7 +641,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
 
     # Mask creation is incompatible
     # FA due to non-default creation / SWA
@@ -775,8 +779,8 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
-        kwargs.pop("past_key_values", None)
+        # As we want to pass `cache=None` explicitly everywhere, we need to pop them from kwargs if present
+        kwargs.pop("cache", None)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -961,12 +965,13 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
@@ -981,11 +986,11 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if not self.training and use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache())
+        if not self.training and use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache())
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -996,7 +1001,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
+                "cache": cache.self_attention_cache if cache is not None else None,
                 "position_ids": position_ids,
                 "allow_is_causal_skip": False,
             }
@@ -1042,7 +1047,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
                 position_embeddings[self.config.layer_types[i]],
                 merged_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
-                past_key_values,
+                cache,
                 use_cache,
                 encoder_hidden_states,
                 **kwargs,
@@ -1052,7 +1057,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         hidden_states = self.dropout(hidden_states)
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1086,6 +1091,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         # encoder inputs
@@ -1099,7 +1105,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         decoder_position_ids: torch.LongTensor | None = None,
         # others (mainly inference or cache related)
         encoder_outputs: BaseModelOutput | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -1130,7 +1136,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
             attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             use_cache=use_cache,
@@ -1140,7 +1146,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1198,6 +1204,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         # encoder inputs
@@ -1211,7 +1218,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         decoder_position_ids: torch.LongTensor | None = None,
         # others (mainly inference or cache related)
         encoder_outputs: BaseModelOutput | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1238,7 +1245,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1263,7 +1270,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         return Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.decoder_hidden_states,
             decoder_attentions=decoder_outputs.decoder_attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1282,7 +1289,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     ) -> bool:
         """Override cache preparation to support T5Gemma2-specific EncoderDecoder Cache."""
 
-        # Build cache and past_key_values structure first and then override as needed.
+        # Build cache and cache structure first and then override as needed.
         super()._prepare_cache_for_generation(
             generation_config,
             model_kwargs,
@@ -1313,25 +1320,25 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             "offloading": offload_cache,
         }
 
-        past_key_values = model_kwargs.get("past_key_values")
-        if past_key_values is not None:
-            if not isinstance(past_key_values, EncoderDecoderCache):
+        cache = model_kwargs.get("cache")
+        if cache is not None:
+            if not isinstance(cache, EncoderDecoderCache):
                 raise ValueError(
-                    "The `past_key_values` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma2 model."
+                    "The `cache` in `model_kwargs` must be of type `EncoderDecoderCache` for T5Gemma2 model."
                 )
 
             # Cache already established, no need to re-initialize.
-            if len(past_key_values.is_updated) > 0 and past_key_values.is_updated.get(0):
+            if len(cache.is_updated) > 0 and cache.is_updated.get(0):
                 return
 
-            cross_attn_cls = type(past_key_values.cross_attention_cache)
+            cross_attn_cls = type(cache.cross_attention_cache)
             if cross_attn_cls == StaticCache:
                 cross_attn_cache_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
             # Update cross-attention cache only (switch from sliding_window to full).
-            past_key_values.cross_attention_cache = cross_attn_cls(**cross_attn_cache_kwargs)
+            cache.cross_attention_cache = cross_attn_cls(**cross_attn_cache_kwargs)
         else:
             # Initialize new cache.
-            model_kwargs["past_key_values"] = EncoderDecoderCache(
+            model_kwargs["cache"] = EncoderDecoderCache(
                 DynamicCache(
                     **{
                         "config": self.config.get_text_config(decoder=True),
@@ -1345,7 +1352,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             if not isinstance(self._cache, EncoderDecoderCache):
                 raise ValueError("The internal cache must be of type `EncoderDecoderCache` for T5Gemma2 model.")
 
-            self._cache = model_kwargs["past_key_values"]
+            self._cache = model_kwargs["cache"]
 
 
 @auto_docstring

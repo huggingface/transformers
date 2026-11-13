@@ -16,6 +16,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
+from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
@@ -541,9 +542,10 @@ class Wav2Vec2BertEncoder(nn.Module):
 
         for layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            skip_the_layer = False
+            if self.training and self.config.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 hidden_states = layer(
@@ -592,9 +594,12 @@ class Wav2Vec2BertAdapter(nn.Module):
             sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(hidden_states.device)
 
         for layer in self.layers:
-            layerdrop_prob = torch.rand([])
             sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
-            if not self.training or (layerdrop_prob > self.layerdrop):
+            to_drop = False
+            if self.training and self.layerdrop > 0.0:
+                layerdrop_prob = torch.rand([])
+                to_drop = layerdrop_prob <= self.layerdrop
+            if not to_drop:
                 hidden_states = layer(
                     hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths, **kwargs
                 )
@@ -1331,6 +1336,8 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
+    # `self.kernel` weights are used directly in `F.conv1d` below, so its hooks have to be fired explicitly
+    @force_accelerate_hooks("kernel")
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if is_peft_available():
             from peft.tuners.lora import LoraLayer

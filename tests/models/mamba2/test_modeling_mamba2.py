@@ -198,7 +198,7 @@ class Mamba2ModelTester:
             input_ids[:, -1:],
             attention_mask=attention_mask[:, -1:],
             use_cache=True,
-            cache_params=outputs.cache_params,
+            cache=outputs.cache,
         )
         output_two = outputs.last_hidden_state
 
@@ -226,14 +226,14 @@ class Mamba2ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, cache_params=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, cache_params=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, cache_params=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, cache_params=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -318,6 +318,34 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
+    def test_mamba2_grouped_rmsnorm(self):
+        config = self.model_tester.get_config()
+        for n_groups in (1, 2, 8):
+            with self.subTest(n_groups=n_groups):
+                config.n_groups = n_groups
+                norm = Mamba2Mixer(config, layer_idx=0).norm
+                hidden_size = config.expand * config.hidden_size
+                norm.weight = torch.nn.Parameter(torch.linspace(0.5, 1.5, hidden_size))
+                hidden_states = torch.arange(1.0, hidden_size + 1).reshape(1, 1, -1).requires_grad_()
+                gate = torch.linspace(-1.0, 1.0, hidden_size).reshape_as(hidden_states).requires_grad_()
+                gated_states = hidden_states * torch.nn.functional.silu(gate)
+                expected = torch.cat(
+                    [
+                        torch.nn.functional.rms_norm(group, (group.shape[-1],), eps=norm.variance_epsilon)
+                        for group in gated_states.chunk(n_groups, dim=-1)
+                    ],
+                    dim=-1,
+                )
+                expected = expected * norm.weight
+                actual = norm(hidden_states, gate)
+                torch.testing.assert_close(actual, expected)
+                inputs = (hidden_states, gate, norm.weight)
+                torch.testing.assert_close(
+                    torch.autograd.grad(actual.sum(), inputs), torch.autograd.grad(expected.sum(), inputs)
+                )
+                for empty_states in (hidden_states[:0], hidden_states[:, :0]):
+                    torch.testing.assert_close(norm(empty_states), empty_states)
 
     def test_kwargs_reach_mamba2_mixer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

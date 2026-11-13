@@ -57,7 +57,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
     default_theta = 500000.0
 

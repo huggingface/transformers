@@ -93,7 +93,7 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if k == "past_key_values":
+                if k == "cache":
                     continue
                 if element is None:
                     # This can happen for optional data that get passed around

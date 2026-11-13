@@ -147,7 +147,7 @@ def main():
     )
 
     if training_args.do_train:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
 
     if training_args.do_eval:
         eval_metrics = trainer.evaluate()

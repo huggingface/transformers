@@ -229,7 +229,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         static_cache = StaticCache(config=config, max_cache_len=padded_ids.shape[1])
         static_inputs = model.prepare_inputs_for_generation(
             padded_ids,
-            past_key_values=static_cache,
+            cache=static_cache,
             attention_mask=attention_mask,
             is_first_iteration=True,
         )
@@ -239,7 +239,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = [model(padded_ids, attention_mask=attention_mask, use_cache=False).logits[:, -3:]]
             static_output = model(**static_inputs).logits[:, -3:]
             dynamic_output = model(
-                input_ids=padded_ids, attention_mask=attention_mask, past_key_values=DynamicCache(config=config)
+                input_ids=padded_ids, attention_mask=attention_mask, cache=DynamicCache(config=config)
             ).logits[:, -3:]
             outputs.append(static_output)
             outputs.append(dynamic_output)
@@ -269,8 +269,8 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             actual_outputs = [
                 torch.cat(
                     [
-                        model(input_ids[:, :split_idx], past_key_values=chunk_cache, use_cache=True).last_hidden_state,
-                        model(input_ids[:, split_idx:], past_key_values=chunk_cache, use_cache=True).last_hidden_state,
+                        model(input_ids[:, :split_idx], cache=chunk_cache, use_cache=True).last_hidden_state,
+                        model(input_ids[:, split_idx:], cache=chunk_cache, use_cache=True).last_hidden_state,
                     ],
                     dim=1,
                 )
@@ -283,7 +283,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                         [
                             model(
                                 input_ids[:, token_idx : token_idx + 1],
-                                past_key_values=cache,
+                                cache=cache,
                                 use_cache=True,
                             ).last_hidden_state
                             for token_idx in range(input_ids.shape[1])

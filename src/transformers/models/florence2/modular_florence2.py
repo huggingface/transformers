@@ -27,15 +27,15 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
-from ..llava.processing_llava import LlavaProcessorKwargs
 from ..swin.modeling_swin import SwinDropPath
 
 
@@ -139,20 +139,11 @@ class Florence2Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
 
-class Florence2ProcessorKwargs(LlavaProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
-
-
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
-    valid_processor_kwargs = Florence2ProcessorKwargs
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
 
     def __init__(
         self,
@@ -1371,6 +1362,7 @@ class Florence2Model(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1380,7 +1372,7 @@ class Florence2Model(LlavaModel):
         decoder_attention_mask: torch.LongTensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         encoder_outputs: list[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
@@ -1416,7 +1408,7 @@ class Florence2Model(LlavaModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1424,7 +1416,7 @@ class Florence2Model(LlavaModel):
 
         return Florence2Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1453,6 +1445,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1461,7 +1454,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: list[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1509,7 +1502,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1533,7 +1526,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         return Florence2Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1586,6 +1579,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Florence2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Florence2Config",

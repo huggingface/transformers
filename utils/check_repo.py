@@ -182,9 +182,7 @@ IGNORE_NON_TESTED = [
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
-    "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
-    "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
     "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
     "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
@@ -448,6 +446,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
         "Florence2VisionBackbone",  # Building part of a bigger model
         "HiggsAudioV2Model",  # Building part of a bigger model
+        "Dots3NoteAudioModel",  # Building part of Dots3NoteForConditionalGeneration
+        "Dots3NoteVisionModel",  # Building part of Dots3NoteForConditionalGeneration
         "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
         "Qwen3OmniMoeCode2WavTransformerModel",  # Building part of a bigger model
         "Qwen3OmniMoeTalkerCodePredictorModel",  # Building part of a bigger model
@@ -489,6 +489,8 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling_audio", "inkling"),
         ("inkling_vision", "inkling"),
         ("inkling_mm_model", "inkling"),
+        ("inkling2_text", "inkling2"),
+        ("inkling2_vision", "inkling2"),
         ("nemo_speechlm", "nemotron3_5_transcribe"),
     ]
 )

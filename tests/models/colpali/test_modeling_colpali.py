@@ -184,6 +184,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
     test_missing_keys = False
     additional_model_inputs = ["token_type_ids"]
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = ColPaliForRetrievalModelTester(self)
