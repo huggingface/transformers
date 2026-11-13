@@ -39,7 +39,8 @@ class TimeSeriesTransformerConfig(PreTrainedConfig):
         multivariate targets.
     lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
         The lags of the input time series as covariates often dictated by the frequency of the data. Default is
-        `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
+        `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately. Set to `[]` to
+        disable lagged target features.
     scaling (`string` or `bool`, *optional* defaults to `"mean"`):
         Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
         scaler is set to "mean".
