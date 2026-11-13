@@ -65,7 +65,7 @@ class BenchmarkConfig:
         self,
         warmup_iterations: int = 5,
         measurement_iterations: int = 20,
-        gpu_monitoring: bool = True,  # NOTE: you may want to disable this at times as we have obsvered it could heavily slow down benchmarks on AMD
+        gpu_monitoring: bool = False,  # NOTE: the monitor polls the GPU during measurements, which adds noise to them
         continuous_batching: bool = False,
         batch_size: int = 1,
         sequence_length: int = 128,
@@ -240,7 +240,7 @@ def adapt_configs(
     batch_size: int | list[int] = 1,
     sequence_length: int | list[int] = 128,
     num_tokens_to_generate: int | list[int] = 128,
-    gpu_monitoring: bool | list[bool] = True,
+    gpu_monitoring: bool | list[bool] = False,
 ) -> list[BenchmarkConfig]:
     parameters = (
         x if isinstance(x, list) else [x]

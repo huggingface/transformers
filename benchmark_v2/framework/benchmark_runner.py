@@ -11,6 +11,7 @@ from queue import Queue
 from typing import Any
 
 import torch
+import tqdm
 from datasets import Dataset
 from huggingface_hub import HfApi
 from tqdm import trange
@@ -107,6 +108,10 @@ def flush_memory(flush_compile: bool = True) -> None:
         torch.xpu.empty_cache()
         torch.xpu.synchronize()
     gc.collect()
+
+
+# tqdm starts a monitor thread that wakes up every 10 seconds, including during measurements
+tqdm.tqdm.monitor_interval = 0
 
 
 class BenchmarkStreamer(BaseStreamer):
@@ -272,17 +277,24 @@ class BenchmarkRunner:
         else:
             gpu_monitor = None
 
-        # Generate and time
+        # Generate and time. The garbage collector is paused so a collection cannot land inside the measurement (memory
+        # was flushed just before), and the device is synchronized before the end time is taken.
         if config.continuous_batching:
             inputs = self.inputs["input_ids"].tolist()
-            wall_time_0 = time.perf_counter()
-            outputs = self.model.generate_batch(inputs, allow_block_sharing=False, record_timestamps=True)
         else:
             streamer = BenchmarkStreamer()
+        gc.collect()
+        gc.disable()
+        try:
             wall_time_0 = time.perf_counter()
-            outputs = self.model.generate(**self.inputs, streamer=streamer)
-
-        wall_time_1 = time.perf_counter()
+            if config.continuous_batching:
+                outputs = self.model.generate_batch(inputs, allow_block_sharing=False, record_timestamps=True)
+            else:
+                outputs = self.model.generate(**self.inputs, streamer=streamer)
+            self.torch_accelerator_module.synchronize()
+            wall_time_1 = time.perf_counter()
+        finally:
+            gc.enable()
         gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
 
         # Retrieve timestamps and results in a way that allows similar post-processing
