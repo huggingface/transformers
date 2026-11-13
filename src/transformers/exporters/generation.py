@@ -113,8 +113,12 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         return self.components[decode_graph_name(self.components)].metadata
 
     def _forward_names(self) -> list[str]:
-        """What `forward` declares, so `generate` builds them: the kwargs the decode graph was traced with."""
-        return list(self._decode_metadata().kwargs)
+        """What `forward` declares, so `generate` builds them: the kwargs the decode graph was traced with, and the
+        positions a graph traced on `cache_position` takes it from (`generate` builds them, not it)."""
+        names = list(self._decode_metadata().kwargs)
+        if "cache_position" in names and "position_ids" not in names:
+            names.append("position_ids")
+        return names
 
     def __call__(self, **kwargs) -> Any:
         return self.forward(**kwargs)
@@ -282,6 +286,9 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                     else value
                     for layer_type, value in mask.items()
                 }
+        if "cache_position" in traced and kwargs.get("cache_position") is None:
+            # The step's cache slots, as its positions: such a graph (optimum-executorch's) takes a batch of one.
+            kwargs["cache_position"] = kwargs["position_ids"][0]
         stateful = self.runner.stateful
         inputs = {name: value for name, value in kwargs.items() if name in traced}
         outputs = self.runner(share_outputs=stateful and self._generating, **inputs)

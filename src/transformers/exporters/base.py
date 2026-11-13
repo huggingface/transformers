@@ -289,14 +289,15 @@ class ExportedModel(PushToHubMixin):
             **download_kwargs,
         )
         if manifest_file is None:
-            from .optimum_intel import is_optimum_intel, load_optimum_intel
+            from .optimum import load_optimum_export, optimum_library
 
-            if not is_optimum_intel(pretrained_model_name_or_path, **download_kwargs):
+            # optimum writes no manifest: its exports are read off their graphs
+            if optimum_library(pretrained_model_name_or_path, **download_kwargs) is None:
                 raise OSError(
                     f"{pretrained_model_name_or_path} has no {EXPORT_MANIFEST_FILE}: it isn't an export saved with "
-                    "`ExportedModel.save_pretrained`."
+                    "`ExportedModel.save_pretrained`, nor one optimum wrote."
                 )
-            model = load_optimum_intel(pretrained_model_name_or_path, **download_kwargs)
+            model = load_optimum_export(pretrained_model_name_or_path, **download_kwargs)
             if not isinstance(model, cls):
                 raise TypeError(
                     f"{pretrained_model_name_or_path} runs as a {type(model).__name__}, not a {cls.__name__}: load it "

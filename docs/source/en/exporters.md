@@ -262,14 +262,21 @@ lowered for. [`ExportedModel.from_pretrained`] returns the class an export runs 
 multimodal split, an [`ExportedModelForCausalLM`] (or its multimodal and seq2seq variants) for a generation export,
 driven by `generate`.
 
-### optimum-intel exports
+### optimum exports
 
-[`ExportedModel.from_pretrained`] also loads an OpenVINO model exported by optimum-intel, such as the OpenVINO
-organization's on the Hub, as a legacy format: optimum-intel writes no export metadata, so it is rebuilt from the IR's
-ports and the model's config. A stateful causal LM and an encoder-decoder (Whisper) run through `generate`, and an
-encoder (feature extraction, classification) is called with the IR's inputs and returns a dict by the IR's output
-names. A multimodal optimum-intel export isn't read: its vision graphs are split differently. Re-export the model with
-[`OpenVINOExporter`] for the full runtime.
+[`ExportedModel.from_pretrained`] also loads models exported by optimum-intel (OpenVINO), optimum-onnx (ONNX) and
+optimum-executorch (ExecuTorch), such as the OpenVINO, onnx-community and executorch-community organizations' on the
+Hub. None writes export metadata, so it is rebuilt from the graphs and the model's config.
+
+- A causal LM runs through `generate`: optimum-intel's stateful one, optimum-onnx's taking and returning its cache
+  (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
+- An optimum-intel encoder-decoder (Whisper) runs through `generate` too.
+- An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
+  returns a dict by its output names.
+
+Multimodal exports, optimum-onnx's encoder-decoders and decoders split in two graphs, and optimum-executorch's other
+programs aren't read: their graphs are laid out differently. Re-export the model with [`OpenVINOExporter`],
+[`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
 
 ```python
 model = ExportedModel.from_pretrained("OpenVINO/Qwen3-0.6B-int4-ov", device="cpu")  # an ExportedModelForCausalLM
