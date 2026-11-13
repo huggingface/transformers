@@ -21,11 +21,10 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...utils import TensorType, logging
-from ...utils.import_utils import is_timm_available, is_torch_available, is_torchvision_available, requires
+from ...utils.import_utils import is_timm_available, is_torch_available, requires
 
 
-# timm requires torchvision under the hood, in CI we force remove torchvision for some tests
-if is_timm_available() and is_torchvision_available():
+if is_timm_available():
     import timm
 
 if is_torch_available():

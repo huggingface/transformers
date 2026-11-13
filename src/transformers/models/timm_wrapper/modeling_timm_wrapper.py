@@ -19,12 +19,11 @@ from torch import Tensor
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_timm_available, is_torchvision_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
-# timm requires torchvision under the hood, in CI we force remove torchvision for some tests
-if is_timm_available() and is_torchvision_available():
+if is_timm_available():
     import timm
 
 
