@@ -220,6 +220,7 @@ IGNORE_NON_TESTED = [
     "SLANetBackbone",
     "CsmBackboneModel",
     "PeAudioVideoModel",  # FIXME @eustlib, model isn't covered as backbone
+    "OmniASRAudioModel",  # Building part of bigger (tested) model. Tested implicitly through OmniASRForConditionalGeneration.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
