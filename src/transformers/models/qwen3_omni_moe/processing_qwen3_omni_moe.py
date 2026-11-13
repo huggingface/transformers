@@ -170,7 +170,7 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> BatchFeature:
-        audio_kwargs = dict(kwargs.get("audio_kwargs", {}))
+        audio_kwargs = dict(kwargs.pop("audio_kwargs", {}))
         if "n_window" in audio_kwargs:
             logger.warning_once(
                 "Passing `n_window` in `audio_kwargs` is deprecated "
@@ -178,7 +178,6 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
-        kwargs["audio_kwargs"] = audio_kwargs
         videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
         for key in ("seconds_per_chunk", "position_id_per_seconds"):
             if key in videos_kwargs:
@@ -196,7 +195,13 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             )
             kwargs["load_audio_from_video"] = True
         return super().__call__(
-            images=images, text=text, videos=videos, audio=audio, videos_kwargs=videos_kwargs, **kwargs
+            images=images,
+            text=text,
+            videos=videos,
+            audio=audio,
+            audio_kwargs=audio_kwargs,
+            videos_kwargs=videos_kwargs,
+            **kwargs,
         )
 
     def validate_inputs(
@@ -429,6 +434,9 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
+        if "n_window" in kwargs:
+            kwargs["audio_kwargs"] = dict(kwargs.get("audio_kwargs", {}))
+            kwargs["audio_kwargs"].setdefault("n_window", kwargs.pop("n_window"))
 
         vision_data = {}
         merged_kwargs = self._merge_kwargs(**kwargs)
@@ -488,17 +496,6 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
                 + ["video_second_per_grid"]
             )
         )
-
-    def _merge_kwargs(
-        self,
-        ModelProcessorKwargs: ProcessingKwargs | None = None,
-        tokenizer_init_kwargs: dict | None = None,
-        **kwargs,
-    ) -> dict[str, dict]:
-        output_kwargs = super()._merge_kwargs(ModelProcessorKwargs, tokenizer_init_kwargs, **kwargs)
-        # Token estimation enters here directly and must use the same window as audio processing.
-        output_kwargs["audio_kwargs"].setdefault("n_window", output_kwargs.get("n_window", self.n_window))
-        return output_kwargs
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return super().apply_chat_template(conversations, chat_template, **kwargs)

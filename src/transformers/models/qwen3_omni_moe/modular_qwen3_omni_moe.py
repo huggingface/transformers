@@ -42,7 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import OmniModalProcessorMixin, ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import OmniModalProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr
@@ -2835,7 +2835,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         audio: AudioInput | None = None,
         **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> BatchFeature:
-        audio_kwargs = dict(kwargs.get("audio_kwargs", {}))
+        audio_kwargs = dict(kwargs.pop("audio_kwargs", {}))
         if "n_window" in audio_kwargs:
             logger.warning_once(
                 "Passing `n_window` in `audio_kwargs` is deprecated "
@@ -2843,19 +2843,40 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
-        kwargs["audio_kwargs"] = audio_kwargs
-        return super().__call__(text=text, images=images, videos=videos, audio=audio, **kwargs)
+        videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
+        for key in ("seconds_per_chunk", "position_id_per_seconds"):
+            if key in videos_kwargs:
+                logger.warning_once(
+                    f"Passing `{key}` in `videos_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+                # "videos_kwargs" has priority for backwards compatibility
+                kwargs[key] = videos_kwargs.pop(key)
 
-    def _merge_kwargs(
-        self,
-        ModelProcessorKwargs: ProcessingKwargs | None = None,
-        tokenizer_init_kwargs: dict | None = None,
-        **kwargs,
-    ) -> dict[str, dict]:
-        output_kwargs = super()._merge_kwargs(ModelProcessorKwargs, tokenizer_init_kwargs, **kwargs)
-        # Token estimation enters here directly and must use the same window as audio processing.
-        output_kwargs["audio_kwargs"].setdefault("n_window", output_kwargs.get("n_window", self.n_window))
-        return output_kwargs
+        if kwargs.pop("use_audio_in_video", False) or videos_kwargs.pop("use_audio_in_video", False):
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            kwargs["load_audio_from_video"] = True
+        return OmniModalProcessorMixin.__call__(
+            self,
+            images=images,
+            text=text,
+            videos=videos,
+            audio=audio,
+            audio_kwargs=audio_kwargs,
+            videos_kwargs=videos_kwargs,
+            **kwargs,
+        )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
+        if "n_window" in kwargs:
+            kwargs["audio_kwargs"] = dict(kwargs.get("audio_kwargs", {}))
+            kwargs["audio_kwargs"].setdefault("n_window", kwargs.pop("n_window"))
+        return super()._get_num_multimodal_tokens(
+            image_sizes=image_sizes, video_sizes=video_sizes, audio_lengths=audio_lengths, **kwargs
+        )
 
     def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:
         """
