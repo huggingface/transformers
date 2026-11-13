@@ -99,6 +99,56 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
         actual_target_logits = self.translator.get_target_logits(assistant_logits)
         self.assertTrue(torch.equal(actual_target_logits, expected_target_logits))
 
+    def test_pruned_lm_head_unordered_vocab(self):
+        """Test that pruned LM head correctly maps logits and target IDs when assistant vocab dict order differs from token IDs."""
+        target_tokenizer = MagicMock()
+        target_tokenizer.get_vocab.return_value = {"a": 0, "b": 1}
+        target_tokenizer.return_value = {"input_ids": []}
+
+        # Dict order {"b": 1, "a": 0, "c": 2} does not match ascending token IDs [0, 1, 2]
+        assistant_tokenizer = MagicMock()
+        assistant_tokenizer.get_vocab.return_value = {"b": 1, "a": 0, "c": 2}
+        assistant_tokenizer.return_value = {"input_ids": []}
+
+        assistant_model = MagicMock()
+        assistant_model.device = torch_device
+        dummy_lm_head = torch.nn.Linear(4, 3, bias=False, device=torch_device)
+        with torch.no_grad():
+            dummy_lm_head.weight.copy_(
+                torch.tensor([[1.0, 0, 0, 0], [2.0, 0, 0, 0], [3.0, 0, 0, 0]], device=torch_device)
+            )
+        current_lm_head = dummy_lm_head
+        assistant_model.get_output_embeddings.side_effect = lambda: current_lm_head
+
+        def set_out(head):
+            nonlocal current_lm_head
+            current_lm_head = head
+
+        assistant_model.set_output_embeddings.side_effect = set_out
+        assistant_model.get_input_embeddings.return_value = torch.nn.Embedding(3, 4, device=torch_device)
+
+        translator = AssistantToTargetTranslator(
+            target_tokenizer=target_tokenizer,
+            assistant_tokenizer=assistant_tokenizer,
+            target_vocab_size=2,
+            assistant_model=assistant_model,
+            assistant_prune_lm_head=True,
+        )
+
+        with torch.no_grad():
+            logits = assistant_model.get_output_embeddings()(
+                torch.tensor([[[1.0, 0, 0, 0]]], device=torch_device)
+            )
+        mapped_logits = translator.get_target_logits(logits)
+        prompt = torch.tensor([[0]], device=torch_device)
+        candidate = torch.cat((prompt, logits.argmax(-1)), dim=-1)
+        candidate_id = translator.get_target_ids(prompt, prompt, candidate)[0, -1].item()
+        mapped_argmax = mapped_logits.argmax(-1).item()
+
+        self.assertEqual(candidate_id, mapped_argmax)
+        self.assertEqual(candidate_id, 1)
+        self.assertEqual(mapped_logits.tolist(), [[[1.0, 2.0]]])
+
 
 class MockTokenizer:
     """A simple mock tokenizer class that supports weak references."""
