@@ -128,7 +128,7 @@ class PixtralProcessor(ProcessorMixin):
                 )
                 num_height_tokens = resized_height // patch_size
                 num_width_tokens = resized_width // patch_size
-                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+                num_image_tokens.append(num_width_tokens * num_height_tokens)
 
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
