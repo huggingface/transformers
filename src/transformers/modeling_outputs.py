@@ -510,6 +510,229 @@ class Seq2SeqModelOutput(ModelOutput):
 
 
 @dataclass
+class MultimodalModelOutput(ModelOutput):
+    """
+    Base class for multimodal model outputs. This dataclass has to be subclassed to add model output fields including
+    `image/video/audio outputs` fields. The modality-related fields cannot be added by default due to dataclass field
+    ordering in subclasses.
+
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
+    """
+
+    def to_tuple(self) -> tuple:
+        # `keys()` skips None fields, like `ModelOutput.to_tuple`
+        return tuple(
+            self[k] if k not in ("image_outputs", "video_outputs", "audio_outputs") else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
+
+
+@dataclass
+class MultimodalBaseModelOutputWithPast(MultimodalModelOutput):
+    """
+    Base class for multimodal model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the language model backbone.
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language model backbone at the output of each layer plus the optional initial
+            embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
+
+
+@dataclass
+class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
+    """
+    Base class for multimodal causal language model (or autoregressive) outputs. Contains the outputs of the
+    language model backbone and, optionally, the outputs of each modality encoder that was used.
+
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language model backbone at the output of each layer plus the optional initial
+            embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
+
+
+@dataclass
+class MultimodalMoeBaseModelOutputWithPast(MultimodalModelOutput):
+    """
+    Base class for multimodal MoE model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the language model backbone.
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language model backbone at the output of each layer plus the optional initial
+            embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
+        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`):
+            Tuple of `torch.Tensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
+            Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
+            inspect how tokens are dispatched to experts.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
+
+
+@dataclass
+class MultimodalMoeCausalLMOutputWithPast(MultimodalModelOutput):
+    """
+    Base class for multimodal causal language model (or autoregressive) with mixture of experts outputs.
+    Contains the outputs of the language model backbone and, optionally, the outputs of each modality encoder that was used.
+
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        aux_loss (`torch.Tensor`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`, and the model trains its router with a load-balancing loss):
+            Load-balancing auxiliary loss for the sparse modules. Models that balance their experts with a router bias
+            instead (DeepSeek-V3 and the architectures derived from it) return `None` here while still returning
+            `router_logits`.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language model backbone at the output of each layer plus the optional initial
+            embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attention weights of the language model backbone, after the attention softmax.
+        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.output_router_logits=True`):
+            Tuple of `torch.Tensor` (one for each sparse layer) of shape `(batch_size * sequence_length, num_experts)`.
+            Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
+            inspect how tokens are dispatched to experts.
+        image_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no images were processed.
+        video_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the video encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no videos were processed.
+        audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+            Output of the audio encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+            `None` if no audio was processed.
+    """
+
+    loss: torch.Tensor | None = None
+    aux_loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
+    video_outputs: BaseModelOutputWithPooling | None = None
+    audio_outputs: BaseModelOutputWithPooling | None = None
+
+
+@dataclass
 class Seq2SeqMoEModelOutput(ModelOutput):
     """
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential

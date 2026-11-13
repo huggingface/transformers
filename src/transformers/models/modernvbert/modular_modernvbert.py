@@ -24,8 +24,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import (
-    BaseModelOutput,
-    MaskedLMOutput,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -91,28 +92,31 @@ class ModernVBertConfig(PreTrainedConfig):
 
 @auto_docstring
 @dataclass
-class ModernVBertBaseModelOutput(BaseModelOutput):
+class ModernVBertMaskedLMOutput(MultimodalModelOutput):
     r"""
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-       sequence_length, hidden_size)`.
-       image_hidden_states of the model produced by the vision encoder
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Masked language modeling (MLM) loss.
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
+    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
+        encoder. Contains only the modalities that were processed.
     """
 
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
-
-
-@auto_docstring
-@dataclass
-class ModernVBertMaskedLMOutput(MaskedLMOutput):
-    r"""
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
 
 class ModernVBertConnector(nn.Module):
@@ -242,7 +246,7 @@ class ModernVBertModel(SmolVLMModel):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ModernVBertBaseModelOutput:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
@@ -254,10 +258,12 @@ class ModernVBertModel(SmolVLMModel):
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
         # Images processing
+        image_outputs = {}
         if pixel_values is not None:
-            image_hidden_states = self.get_image_features(
+            image_outputs = self.get_image_features(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
-            ).pooler_output
+            )
+            image_hidden_states = image_outputs.pooler_output
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
@@ -276,12 +282,7 @@ class ModernVBertModel(SmolVLMModel):
             **kwargs,
         )
 
-        return ModernVBertBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-        )
+        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs={"image": image_outputs})
 
 
 class ModernVBertPredictionHead(ModernBertPredictionHead):
@@ -370,7 +371,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

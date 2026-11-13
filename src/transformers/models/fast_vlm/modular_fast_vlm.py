@@ -216,13 +216,7 @@ class FastVlmModel(LlavaModel):
             **kwargs,
         )
 
-        return FastVlmModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return FastVlmModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class FastVlmCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -324,7 +318,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

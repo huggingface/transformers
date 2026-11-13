@@ -50,6 +50,7 @@ from ..qwen3_5_moe.configuration_qwen3_5_moe import (
     Qwen3_5MoeVisionConfig,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
+    Qwen3_5MoeBaseModelOutputWithPast,
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
@@ -288,6 +289,10 @@ class Qwen4ExpConfig(Qwen3_5MoeConfig):
 
     model_type = "qwen4_exp"
     base_model_fsdp_plan = None
+
+
+class Qwen4ExpBaseModelOutputWithPast(Qwen3_5MoeBaseModelOutputWithPast):
+    pass
 
 
 class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
@@ -1054,7 +1059,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | Qwen4ExpBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1124,7 +1129,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return outputs
+        return Qwen4ExpBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring

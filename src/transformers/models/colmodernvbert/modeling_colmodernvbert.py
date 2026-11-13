@@ -18,14 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 import torch
 from torch import nn
 
+from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModel
 from .configuration_colmodernvbert import ColModernVBertConfig
@@ -48,27 +51,32 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Base class for ColModernVBert embeddings output.
+    Base class for ColModernVBert embeddings output. Contains the outputs of the language model backbone and the
+    outputs of vision encoder.
     """
 )
 @dataclass
-class ColModernVBertForRetrievalOutput(ModelOutput):
+class ColModernVBertForRetrievalOutput(MultimodalModelOutput):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True` and `pixel_values` are provided):
-        Tuple of `torch.Tensor` (one for the output of the image modality projection + one for the output of each layer) of shape
-        `(batch_size, num_channels, image_size, image_size)`.
-        Hidden-states of the image encoder at the output of each layer plus the initial modality projection outputs.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
+        encoder. Contains only the modalities that were processed.
     """
 
     loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
+    past_key_values: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
+    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
 
 @auto_docstring(
@@ -131,9 +139,10 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
         return ColModernVBertForRetrievalOutput(
             embeddings=embeddings,
+            past_key_values=vlm_output.past_key_values,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_output.image_hidden_states,
+            modality_outputs=vlm_output.modality_outputs,
         )
 
 

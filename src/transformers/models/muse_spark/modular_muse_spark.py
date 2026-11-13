@@ -36,16 +36,15 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilab
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
 from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 from ..muse_glimmer.configuration_muse_glimmer import MuseGlimmerConfig, MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from ..muse_glimmer.modeling_muse_glimmer import (
-    MuseGlimmerCausalLMOutputWithPast,
     MuseGlimmerForConditionalGeneration,
     MuseGlimmerModel,
-    MuseGlimmerModelOutputWithPast,
     MuseGlimmerPreTrainedModel,
     MuseGlimmerRMSNorm,
     MuseGlimmerTextAttention,
@@ -277,12 +276,12 @@ class MuseSparkProcessor(MuseGlimmerProcessor):
         return self.audio_start_token + self.audio_token * num_audio_tokens + self.audio_end_token
 
 
-class MuseSparkModelOutputWithPast(MuseGlimmerModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class MuseSparkModelOutputWithPast(AriaModelOutputWithPast):
+    pass
 
 
-class MuseSparkCausalLMOutputWithPast(MuseGlimmerCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class MuseSparkCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
+    pass
 
 
 class MuseSparkRMSNorm(MuseGlimmerRMSNorm):
@@ -940,13 +939,7 @@ class MuseSparkModel(MuseGlimmerModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MuseSparkModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+        return MuseSparkModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
@@ -1064,7 +1057,7 @@ class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

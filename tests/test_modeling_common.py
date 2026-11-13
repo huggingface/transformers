@@ -5531,10 +5531,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = (
-                    inputs_dict["pixel_values"].shape[0]
-                    if "pixel_values" in inputs_dict
-                    else inputs_dict["pixel_values_images"].shape[0]
+                batch_size = next(
+                    inputs_dict[key].shape[0]
+                    for key in ("pixel_values", "pixel_values_images", "flattened_patches")
+                    if key in inputs_dict
                 )
                 self.assertEqual(
                     last_hidden_state_shape[0],

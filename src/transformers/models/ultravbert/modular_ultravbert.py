@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -41,7 +40,6 @@ from ..idefics3.image_processing_idefics3 import (
 )
 from ..modernvbert.configuration_modernvbert import ModernVBertConfig
 from ..modernvbert.modeling_modernvbert import (
-    ModernVBertBaseModelOutput,
     ModernVBertConnector,
     ModernVBertForMaskedLM,
     ModernVBertForSequenceClassification,
@@ -276,14 +274,6 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
         return num_rows * num_cols + 1, num_rows, num_cols
 
 
-@auto_docstring
-@dataclass
-class UltraVBertBaseModelOutput(ModernVBertBaseModelOutput):
-    pass
-
-
-@auto_docstring
-@dataclass
 class UltraVBertMaskedLMOutput(ModernVBertMaskedLMOutput):
     pass
 

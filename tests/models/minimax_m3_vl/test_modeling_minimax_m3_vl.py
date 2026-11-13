@@ -21,7 +21,7 @@ from transformers import (
     AutoTokenizer,
     MiniMaxM3SparseForConditionalGeneration,
     MiniMaxM3VLConfig,
-    MiniMaxM3VLImageProcessorFast,
+    MiniMaxM3VLImageProcessor,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
     MiniMaxM3VLVideoProcessor,
@@ -404,7 +404,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         from transformers.utils import cached_file
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        image_processor = MiniMaxM3VLImageProcessorFast.from_pretrained(self.model_id)
+        image_processor = MiniMaxM3VLImageProcessor.from_pretrained(self.model_id)
         video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(self.model_id)
         with open(cached_file(self.model_id, "chat_template.jinja"), encoding="utf-8") as f:
             chat_template = f.read()

@@ -42,6 +42,7 @@ from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
@@ -58,10 +59,8 @@ from ..got_ocr2.image_processing_got_ocr2 import (
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..llava_next.modeling_llava_next import (
-    LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
-    LlavaNextModelOutputWithPast,
     LlavaNextPreTrainedModel,
 )
 from ..qwen2.configuration_qwen2 import Qwen2Config
@@ -637,12 +636,10 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
     local_attentions: torch.Tensor | None = None
 
 
-class DeepseekOcr2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class DeepseekOcr2ModelOutputWithPast(AriaModelOutputWithPast): ...
 
 
-class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class DeepseekOcr2CausalLMOutputWithPast(AriaCausalLMOutputWithPast): ...
 
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
@@ -1047,14 +1044,7 @@ class DeepseekOcr2Model(LlavaNextModel):
             **kwargs,
         )
 
-        return DeepseekOcr2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return DeepseekOcr2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -1143,7 +1133,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

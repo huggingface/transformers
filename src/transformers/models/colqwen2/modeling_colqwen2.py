@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 from torch import nn
@@ -25,8 +26,9 @@ from torch import nn
 from transformers import AutoModel
 
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
+from ...utils import auto_docstring, can_return_tuple, is_torch_available
 from .configuration_colqwen2 import ColQwen2Config
 
 
@@ -51,11 +53,12 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Base class for ColQwen2 embeddings output.
+    Base class for ColQwen2 embeddings output. Contains the outputs of the language model backbone and the
+    outputs of vision encoder.
     """
 )
 @dataclass
-class ColQwen2ForRetrievalOutput(ModelOutput):
+class ColQwen2ForRetrievalOutput(MultimodalModelOutput):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -63,9 +66,11 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
         The embeddings of the model.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
+    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
+        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
+        encoder. Contains only the modalities that were processed.
     """
 
     loss: torch.Tensor | None = None
@@ -73,6 +78,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
+    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
 
 
 @auto_docstring(
@@ -174,6 +180,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             past_key_values=vlm_output.past_key_values,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
+            modality_outputs=vlm_output.modality_outputs,
         )
 
 

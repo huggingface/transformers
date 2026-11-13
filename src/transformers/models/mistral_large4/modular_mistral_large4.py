@@ -31,6 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoConfig
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer, eager_attention_forward
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
@@ -43,10 +44,8 @@ from ..glm_moe_dsa.modeling_glm_moe_dsa import (
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral3.configuration_mistral3 import Mistral3Config
 from ..mistral3.modeling_mistral3 import (
-    Mistral3CausalLMOutputWithPast,
     Mistral3ForConditionalGeneration,
     Mistral3Model,
-    Mistral3ModelOutputWithPast,
 )
 from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4TopkRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -698,21 +697,8 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
         )
 
 
-class MistralLarge4ModelOutputWithPast(Mistral3ModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
-    """
-
-    router_logits: tuple[torch.Tensor] | None = None
+class MistralLarge4ModelOutputWithPast(AriaModelOutputWithPast):
+    pass
 
 
 class MistralLarge4Model(Mistral3Model):
@@ -769,18 +755,11 @@ class MistralLarge4Model(Mistral3Model):
             **kwargs,
         )
 
-        return MistralLarge4ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,  # only diff with Mistral3Model: we also return the router logits
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return MistralLarge4ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
-class MistralLarge4CausalLMOutputWithPast(Mistral3CausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class MistralLarge4CausalLMOutputWithPast(AriaCausalLMOutputWithPast):
+    pass
 
 
 class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
@@ -865,7 +844,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

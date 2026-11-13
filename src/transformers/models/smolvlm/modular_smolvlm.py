@@ -260,13 +260,7 @@ class SmolVLMModel(Idefics3Model):
             **kwargs,
         )
 
-        return SmolVLMBaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs.get("image"),
-        )
+        return SmolVLMBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
