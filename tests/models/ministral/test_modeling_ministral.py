@@ -83,7 +83,9 @@ class MinistralIntegrationTest(unittest.TestCase):
     @slow
     def test_model_8b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = AutoModelForCausalLM.from_pretrained("mistralai/Ministral-8B-Instruct-2410", device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            "mistralai/Ministral-8B-Instruct-2410", device_map="auto", dtype=torch.float32
+        )
         assert isinstance(model, MinistralForCausalLM)
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
