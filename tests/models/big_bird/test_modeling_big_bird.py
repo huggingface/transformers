@@ -539,6 +539,31 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             "Decoder model attended to future tokens!",
         )
 
+    def test_generate_block_sparse_with_cache(self):
+        # Block-sparse attention used to run the prompt without writing it to the cache, so decoding ignored the
+        # prompt (and a static cache crashed). Cached generation must match recomputing the sequence without a cache.
+        config, input_ids = self.model_tester.prepare_config_and_inputs_for_decoder()[:2]
+        config.attention_type = "block_sparse"
+        model = BigBirdForCausalLM(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "pad_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+
+        for cache_implementation in ("dynamic", "static"):
+            # The fallback to full attention sticks to the model, so block-sparse is restored before each call
+            model.bert.set_attention_type("block_sparse")
+            output = model.generate(input_ids, cache_implementation=cache_implementation, **generation_kwargs)
+            self.assertEqual(model.bert.attention_type, "original_full")
+            for step, logits in enumerate(output.logits):
+                with torch.no_grad():
+                    sequence = output.sequences[:, : input_ids.shape[1] + step]
+                    expected = model(sequence, use_cache=False).logits[:, -1]
+                torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
+
     def test_retain_grad_hidden_states_attentions(self):
         # bigbird cannot keep gradients in attentions when `attention_type=block_sparse`
 
