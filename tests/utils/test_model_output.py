@@ -14,6 +14,7 @@
 
 import io
 import unittest
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import pytest
@@ -181,75 +182,61 @@ class ModelOutputTester(unittest.TestCase):
         """Test that BC is correctly handled in model outputs classes for the cache name."""
         # We can use any output class with a cache attribute to test all functionalities, and we don't care about the value
         output = BaseModelOutputWithPast(cache=0)
-        logger = logging.get_logger("transformers.utils.generic")
 
         # Test all getattr names, including all ones
         self.assertEqual(output.cache, 0)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertEqual(output.past_key_values, 0)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertEqual(output.cache_params, 0)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
 
         # Test all getitem names, including all ones
         self.assertEqual(output["cache"], 0)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertEqual(output["past_key_values"], 0)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertEqual(output["cache_params"], 0)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
 
         # Test the in operator
         self.assertTrue("cache" in output)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertTrue("past_key_values" in output)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertTrue("cache_params" in output)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
 
         # Test the get method
         self.assertEqual(output.get("cache"), 0)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertEqual(output.get("past_key_values"), 0)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             self.assertEqual(output.get("cache_params"), 0)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
 
         # Test the setattr method
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             output.past_key_values = 1
             self.assertEqual(output.cache, 1)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             output.cache_params = 2
             self.assertEqual(output.cache, 2)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
 
         # Test the setitem method
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             output["past_key_values"] = 3
             self.assertEqual(output.cache, 3)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as cl:
+        with ensure_deprecation_warning():
             output["cache_params"] = 4
             self.assertEqual(output.cache, 4)
-        self.assertTrue("`past_key_values`/`cache_params` are deprecated." in cl.out)
+
+
+@contextmanager
+def ensure_deprecation_warning():
+    logger = logging.get_logger("transformers.utils.generic")
+    logger.warning_once.cache_clear()
+    try:
+        with CaptureLogger(logger) as cl:
+            yield
+    finally:
+        assert "`past_key_values`/`cache_params` are deprecated." in cl.out
 
 
 class ModelOutputTestNoDataclass(ModelOutput):
