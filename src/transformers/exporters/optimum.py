@@ -27,13 +27,14 @@ holding the weights), and optimum-executorch's other programs (no input names to
 
 from __future__ import annotations
 
+import importlib
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Unpack
 
 from ..utils import logging
 from ..utils.hub import DownloadKwargs, cached_file, hf_api
-from ..utils.import_utils import is_onnxscript_available, is_openvino_available, is_torch_available
+from ..utils.import_utils import is_torch_available
 from .metadata import ExportMetadata
 
 
@@ -41,13 +42,10 @@ if is_torch_available():
     import torch
     from torch.utils._pytree import tree_structure, treespec_dumps
 
-if is_openvino_available():
+if TYPE_CHECKING:
+    import onnx_ir
     import openvino
 
-if is_onnxscript_available():
-    import onnx_ir
-
-if TYPE_CHECKING:
     from .base import ExportedComponent, ExportedModel
 
 
@@ -82,6 +80,8 @@ _OPENVINO_DTYPES = {"i64": "int64", "i32": "int32", "f32": "float32", "f16": "fl
 
 
 def _read_openvino(pretrained_model_name_or_path, file: str, **kwargs) -> openvino.Model:
+    import openvino
+
     xml_file = cached_file(pretrained_model_name_or_path, file, **kwargs)
     cached_file(pretrained_model_name_or_path, file.replace(".xml", ".bin"), **kwargs)
     return openvino.Core().read_model(xml_file)
@@ -181,6 +181,8 @@ def _read_onnx(pretrained_model_name_or_path, file: str, **kwargs: Unpack[Downlo
     """The graph, its weights fetched beside it (optimum writes them to `<file>_data`, split over `<file>_data_<n>`
     past 2GB) and read into memory: the graph is renamed, so ONNX Runtime opens it serialized rather than from this
     file."""
+    import onnx_ir
+
     path = Path(cached_file(pretrained_model_name_or_path, file, **kwargs))
     data_prefix = f"{Path(file).name}_data"
     if Path(pretrained_model_name_or_path).is_dir():
@@ -239,6 +241,8 @@ def _rename_onnx_cache(program: onnx_ir.Model) -> dict[int, tuple[int, int, int]
 def _drop_use_cache_branch(program: onnx_ir.Model) -> None:
     """A merged decoder picks its branch from a `use_cache_branch` input: compute it in the graph instead, from whether
     the cache holds anything."""
+    import onnx_ir
+
     graph = program.graph
     flag = next((value for value in graph.inputs if value.name == "use_cache_branch"), None)
     if flag is None:
@@ -330,45 +334,151 @@ def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[st
 # ── optimum-executorch ──────────────────────────────────────────────────────
 
 EXECUTORCH_MODEL_FILE = "model.pte"
-# A causal LM's `forward`, whose program names no inputs; it reports its cache with `use_kv_cache`.
-_EXECUTORCH_CAUSAL_LM_INPUTS = ("input_ids", "cache_position")
+# Its program names no inputs, but each task's methods take them in a fixed order: a causal LM's `forward` (which
+# reports its cache with `use_kv_cache`), an encoder-decoder's `encoder` and `text_decoder`, and a multimodal model's
+# `token_embedding`, `<modality>_encoder` and `text_decoder` on the embeddings.
+_EXECUTORCH_DTYPES = {3: "int32", 4: "int64", 5: "float16", 6: "float32", 15: "bfloat16"}
+# A multimodal program's encoders, by the component and input they serve
+_EXECUTORCH_ENCODERS = {
+    "vision_encoder": ("vision_embeddings_model", "pixel_values"),
+    "audio_encoder": ("audio_embeddings_model", "input_features"),
+}
 
 
-def _load_executorch(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
-    """A causal LM keeping its cache in the program's buffers: `forward(input_ids, cache_position)` returns the logits,
-    a token at a time."""
-    from ..modeling_outputs import CausalLMOutputWithPast
+class _ProgramMethod:
+    """A program whose `forward` is another of its methods: the runner runs `forward`."""
+
+    def __init__(self, program, method: str):
+        self.program = program
+        self.method = method
+
+    def load_method(self, name: str):
+        return self.program.load_method(self.method if name == "forward" else name)
+
+
+def _executorch_traced(method_meta, index: int) -> dict[str, Any]:
+    tensor = method_meta.input_tensor_meta(index)
+    sizes = list(tensor.sizes())
+    return {"rank": len(sizes), "shape": sizes, "dtype": _EXECUTORCH_DTYPES[int(tensor.dtype())]}
+
+
+def _executorch_component(config, program, method: str, names: tuple, inputs: dict, outputs: Any) -> ExportedComponent:
+    """`method` as a component: its inputs, positional, under `names`; `inputs` the structure they take (an encoder's
+    outputs nested); its cache written at `cache_position` and read up to it, so a new sequence needs no reset."""
     from .base import ExportedComponent
-    from .exporter_executorch import ExecutorchExporter
 
-    program = ExecutorchExporter.load_program(
-        cached_file(pretrained_model_name_or_path, EXECUTORCH_MODEL_FILE, **kwargs)
-    )
-    forward = program.metadata("forward")
-    if "use_kv_cache" not in program.method_names or forward.num_inputs() != len(_EXECUTORCH_CAUSAL_LM_INPUTS):
-        raise ValueError(
-            f"{pretrained_model_name_or_path} is an optimum-executorch export other than a causal LM (methods "
-            f"{sorted(program.method_names)}), whose program names no inputs to bind: re-export it with "
-            "`ExecutorchExporter`."
-        )
-    traced = {}
-    for index, name in enumerate(_EXECUTORCH_CAUSAL_LM_INPUTS):
-        sizes = list(forward.input_tensor_meta(index).sizes())
-        traced[name] = {"rank": len(sizes), "shape": sizes, "dtype": "int64"}
-    traced["cache"] = {"container": "DynamicCache"}
+    meta = program.metadata(method)
+    traced = {name: _executorch_traced(meta, index) for index, name in enumerate(names) if name != "encoder_outputs"}
+    if "cache_position" in names:
+        # `generate` makes a cache only for a forward taking one, and slices each step's ids off it
+        traced["cache"] = {"container": "EncoderDecoderCache" if "encoder_outputs" in names else "DynamicCache"}
+    if "encoder_outputs" in names:
+        traced["encoder_outputs"] = {"container": "BaseModelOutput"}
     max_cache_len = program.load_method("get_max_seq_len").execute([])[0]
     metadata = ExportMetadata(
         architecture=_architecture(config),
         export_dtype="float32",
         export_device="cpu",
         kwargs=traced,
-        in_spec=treespec_dumps(tree_structure(((), dict.fromkeys(_EXECUTORCH_CAUSAL_LM_INPUTS, 0)))),
-        out_spec=treespec_dumps(tree_structure(CausalLMOutputWithPast(logits=torch.zeros(1)))),
-        # Its cache is written at `cache_position` and read up to it: a new sequence needs no reset.
+        in_spec=treespec_dumps(tree_structure(((), inputs))),
+        out_spec=treespec_dumps(tree_structure(outputs)),
         export_config={"export_format": "executorch"},
         cache_geometry={"max_cache_len": int(max_cache_len)},
     )
-    return {"model": ExportedComponent(program, metadata)}, True
+    return ExportedComponent(_ProgramMethod(program, method), metadata)
+
+
+def _load_executorch(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
+    """A causal LM keeping its cache in the program's buffers (`forward(input_ids, cache_position)`, the logits), an
+    encoder-decoder (`encoder(input_features)`, then `text_decoder(decoder_input_ids, encoder_hidden_states,
+    cache_position)`), or a multimodal model (`token_embedding(input_ids)`, `vision_encoder(pixel_values)` or
+    `audio_encoder(input_features)`, then `text_decoder(inputs_embeds, cache_position)`)."""
+    from ..modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, Seq2SeqLMOutput
+    from .exporter_executorch import ExecutorchExporter
+
+    # Its programs use quantized and LLM kernels (embeddings, SDPA with a cache), which importing registers.
+    for module in ("executorch.kernels.quantized", "executorch.extension.llm.custom_ops.custom_ops"):
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            pass
+    program = ExecutorchExporter.load_program(
+        cached_file(pretrained_model_name_or_path, EXECUTORCH_MODEL_FILE, **kwargs)
+    )
+    methods = set(program.method_names)
+    logits = CausalLMOutputWithPast(logits=torch.zeros(1))
+
+    def component(method, names, inputs=None, outputs=logits):
+        inputs = inputs if inputs is not None else dict.fromkeys(names, 0)
+        return _executorch_component(config, program, method, names, inputs, outputs)
+
+    if {"token_embedding", "text_decoder"} <= methods:
+        components = {
+            "text_embeddings_model": component("token_embedding", ("input_ids",), outputs=torch.zeros(1)),
+            "language_model": component("text_decoder", ("inputs_embeds", "cache_position")),
+        }
+        for method, (name, input_name) in _EXECUTORCH_ENCODERS.items():
+            if method in methods:
+                components[name] = component(method, (input_name,), outputs=torch.zeros(1))
+        return components, True
+    if {"encoder", "text_decoder"} <= methods:
+        hidden = BaseModelOutput(last_hidden_state=torch.zeros(1))
+        decoder_names = ("decoder_input_ids", "encoder_outputs", "cache_position")
+        decoder_inputs = {"decoder_input_ids": 0, "encoder_outputs": hidden, "cache_position": 0}
+        return {
+            "encoder_model": component("encoder", ("input_features",), outputs=hidden),
+            "decoder_model": component(
+                "text_decoder", decoder_names, decoder_inputs, Seq2SeqLMOutput(logits=torch.zeros(1))
+            ),
+        }, True
+    if "use_kv_cache" in methods and "forward" in methods and program.metadata("forward").num_inputs() == 2:
+        return {"model": component("forward", ("input_ids", "cache_position"))}, True
+    raise ValueError(
+        f"{pretrained_model_name_or_path} is an optimum-executorch export whose task this runtime doesn't read yet "
+        f"(methods {sorted(methods)}): re-export it with `ExecutorchExporter`."
+    )
+
+
+# ── Generation ──────────────────────────────────────────────────────────────
+
+
+class _OptimumGenerationMixin:
+    """What an optimum export's decode graph takes that `generate` doesn't give it: an all-ones padding mask, which
+    `generate` drops (optimum-intel's and optimum-onnx's causal LMs take one), and `cache_position`, which it no longer
+    passes (optimum-executorch's graphs take one)."""
+
+    def _validate_model_kwargs(self, model_kwargs: dict):
+        """Also accept a processor's token types (Gemma 3's), which a graph with its attention built in doesn't take."""
+        traced = self._decode_metadata().kwargs
+        if "token_type_ids" not in traced:
+            model_kwargs = {key: value for key, value in model_kwargs.items() if key != "token_type_ids"}
+        super()._validate_model_kwargs(model_kwargs)
+
+    def prepare_inputs_for_generation(self, *args, attention_mask=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(*args, attention_mask=attention_mask, **kwargs)
+        traced = self._decode_metadata().kwargs
+        # The running sequence, of which the step is the tail
+        sequence = args[0] if args else kwargs["input_ids"]
+        step = model_inputs.get("decoder_input_ids" if self.config.is_encoder_decoder else "input_ids")
+        mask = traced.get("attention_mask", {})
+        if not self.config.is_encoder_decoder and mask.get("rank") == 2 and model_inputs.get("attention_mask") is None:
+            model_inputs["attention_mask"] = torch.ones(
+                sequence.shape, dtype=getattr(torch, mask["dtype"]), device=sequence.device
+            )
+        if "cache_position" in traced and step is not None:
+            model_inputs["cache_position"] = torch.arange(
+                sequence.shape[1] - step.shape[1], sequence.shape[1], device=step.device
+            )
+        return model_inputs
+
+
+def _optimum_model_class(model_class: type) -> type:
+    """`model_class` as an optimum export runs: with `_OptimumGenerationMixin` for one `generate` drives."""
+    from .generation import ExportedModelForCausalLM
+
+    if not issubclass(model_class, ExportedModelForCausalLM):
+        return model_class
+    return type(model_class.__name__, (_OptimumGenerationMixin, model_class), {"__module__": __name__})
 
 
 # ── Loading ─────────────────────────────────────────────────────────────────
@@ -394,24 +504,33 @@ def optimum_library(pretrained_model_name_or_path, **kwargs: Unpack[DownloadKwar
     return None
 
 
-def load_optimum_export(pretrained_model_name_or_path, **kwargs: Unpack[DownloadKwargs]) -> ExportedModel:
-    """An optimum export as an [`ExportedModel`], its metadata rebuilt from its graphs and the model's config.
+def load_optimum_export(
+    pretrained_model_name_or_path, cls: type, device=None, runner_kwargs=None, **kwargs: Unpack[DownloadKwargs]
+) -> ExportedModel:
+    """An optimum export as an [`ExportedModel`] of `cls`, on `device`: its metadata rebuilt from its graphs and the
+    model's config, with a warning that it is.
 
     Raises:
+        `OSError`: if no optimum library wrote it either.
         `ValueError`: for an export whose graphs are laid out differently from this runtime's (see the module's
             docstring).
     """
     from ..generation import GenerationConfig
     from ..models.auto import AutoConfig
-    from .base import _exported_model_class
+    from .base import EXPORT_MANIFEST_FILE, _exported_model_class
 
     library = optimum_library(pretrained_model_name_or_path, **kwargs)
+    if library is None:
+        raise OSError(
+            f"{pretrained_model_name_or_path} has no {EXPORT_MANIFEST_FILE}: it isn't an export saved with "
+            "`ExportedModel.save_pretrained`, nor one an optimum library wrote."
+        )
     _, export_format, load, exporter = _LIBRARIES[library]
     logger.warning(
-        f"{pretrained_model_name_or_path} is an {library} export: its metadata is rebuilt from its graphs, so calls "
-        "take the graphs' inputs, and an encoder's outputs come back as a dict rather than the model's output class. "
-        f"Re-export the model with `{exporter}` (`export`, or `export_for_generation` for a generative model) and "
-        "`save_pretrained` it for the full runtime."
+        f"{pretrained_model_name_or_path} is an {library} export, which writes no export metadata: it is rebuilt from "
+        "its graphs, so calls take the graphs' inputs, an encoder's outputs come back as a dict rather than the model's "
+        f"output class, and it can't be saved again. Re-export the model with `{exporter}` (`export`, or "
+        "`export_for_generation` for a generative model) and `save_pretrained` it for the full runtime."
     )
     config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
     try:
@@ -419,7 +538,13 @@ def load_optimum_export(pretrained_model_name_or_path, **kwargs: Unpack[Download
     except OSError:
         generation_config = None
     components, generation = load(pretrained_model_name_or_path, config, **kwargs)
-    model_class = _exported_model_class(components, generation=generation)
-    return model_class(
+    model_class = _optimum_model_class(_exported_model_class(components, generation=generation))
+    if not issubclass(model_class, cls):
+        raise TypeError(
+            f"{pretrained_model_name_or_path} runs as a {model_class.__name__}, not a {cls.__name__}: load it with "
+            f"`{model_class.__name__}.from_pretrained` or `ExportedModel.from_pretrained`."
+        )
+    model = model_class(
         components, export_format, config=config, generation_config=generation_config, generation=generation
     )
+    return model.to(device, **(runner_kwargs or {}))

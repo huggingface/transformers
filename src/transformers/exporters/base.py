@@ -289,21 +289,10 @@ class ExportedModel(PushToHubMixin):
             **download_kwargs,
         )
         if manifest_file is None:
-            from .optimum import load_optimum_export, optimum_library
+            # An optimum library's export, which writes no manifest, loads off its graphs
+            from .optimum import load_optimum_export
 
-            # optimum writes no manifest: its exports are read off their graphs
-            if optimum_library(pretrained_model_name_or_path, **download_kwargs) is None:
-                raise OSError(
-                    f"{pretrained_model_name_or_path} has no {EXPORT_MANIFEST_FILE}: it isn't an export saved with "
-                    "`ExportedModel.save_pretrained`, nor one optimum wrote."
-                )
-            model = load_optimum_export(pretrained_model_name_or_path, **download_kwargs)
-            if not isinstance(model, cls):
-                raise TypeError(
-                    f"{pretrained_model_name_or_path} runs as a {type(model).__name__}, not a {cls.__name__}: load it "
-                    f"with `{type(model).__name__}.from_pretrained` or `ExportedModel.from_pretrained`."
-                )
-            return model.to(device, **runner_kwargs)
+            return load_optimum_export(pretrained_model_name_or_path, cls, device, runner_kwargs, **download_kwargs)
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
         if manifest.get("schema_version", 1) > EXPORT_SCHEMA_VERSION:
             logger.warning(

@@ -28,7 +28,13 @@ from transformers import (
     GenerationConfig,
     GenerationMixin,
 )
-from transformers.exporters import ExportedModel, ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, optimum
+from transformers.exporters import (
+    ExportedModel,
+    ExportedModelForCausalLM,
+    ExportedModelForSeq2SeqLM,
+    ExportedMultimodalModelForCausalLM,
+    optimum,
+)
 from transformers.testing_utils import (
     CaptureLogger,
     require_executorch,
@@ -161,3 +167,38 @@ class OptimumExecutorchTest(unittest.TestCase):
         for _ in range(2):
             generated = model.generate(**inputs, generation_config=generation_config)
             self.assertEqual(generated.tolist(), expected.tolist())
+
+    def test_encoder_decoder(self):
+        """`encoder` and `text_decoder` methods of one program, through `generate` as eager's."""
+        from transformers import WhisperForConditionalGeneration
+
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
+        time = np.linspace(0, 3, 48000, dtype=np.float32)
+        audio = 0.3 * np.sin(2 * np.pi * 440 * time) * (np.sin(2 * np.pi * 2 * time) > 0)
+        features = processor(audio, sampling_rate=16000, return_tensors="pt")
+        generation_config = GenerationConfig.from_pretrained("openai/whisper-tiny")
+        generation_config.max_new_tokens = 16
+        model = _load(self, "larryliu0820/whisper-tiny-ExecuTorch-XNNPACK", "optimum-executorch")
+        self.assertIsInstance(model, ExportedModelForSeq2SeqLM)
+        eager = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").eval()
+        with torch.no_grad():
+            # `generate` itself, as the runtime drives it, rather than Whisper's own override.
+            expected = GenerationMixin.generate(eager, **features, generation_config=generation_config)
+        self.assertEqual(model.generate(**features, generation_config=generation_config).tolist(), expected.tolist())
+
+    def test_multimodal(self):
+        """`token_embedding`, `vision_encoder` and `text_decoder` methods, run as the multimodal split: an int4
+        program, so it answers rather than matching eager's logits."""
+        from transformers.image_utils import load_image
+
+        repo = "pytorch/gemma-3-4b-it-HQQ-INT8-INT4"
+        processor = AutoProcessor.from_pretrained(repo)
+        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+        content = [{"type": "image"}, {"type": "text", "text": "What animal is in this picture? Answer in one word."}]
+        text = processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
+        inputs = processor(text=text, images=image, return_tensors="pt")
+        model = _load(self, repo, "optimum-executorch")
+        self.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+        generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=6, do_sample=False))
+        answer = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        self.assertIn("cat", answer.lower())

@@ -113,12 +113,8 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         return self.components[decode_graph_name(self.components)].metadata
 
     def _forward_names(self) -> list[str]:
-        """What `forward` declares, so `generate` builds them: the kwargs the decode graph was traced with, and the
-        positions a graph traced on `cache_position` takes it from (`generate` builds them, not it)."""
-        names = list(self._decode_metadata().kwargs)
-        if "cache_position" in names and "position_ids" not in names:
-            names.append("position_ids")
-        return names
+        """What `forward` declares, so `generate` builds them: the kwargs the decode graph was traced with."""
+        return list(self._decode_metadata().kwargs)
 
     def __call__(self, **kwargs) -> Any:
         return self.forward(**kwargs)
@@ -272,12 +268,6 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             spec, mask = traced.get(mask_name, {}), kwargs.get(mask_name)
             if spec.get("rank") == 4 and (mask is None or mask.dim() == 2):
                 kwargs[mask_name] = self._causal_mask(kwargs, mask, spec["dtype"])
-            elif spec.get("rank") == 2 and mask is None:
-                # A padding mask over the cache and the step (an optimum-intel graph takes one): nothing is padded.
-                text = next(kwargs[name] for name in ("input_ids", "inputs_embeds") if kwargs.get(name) is not None)
-                cache = kwargs.get("cache")
-                width = (cache.get_seq_length() if cache is not None else 0) + text.shape[1]
-                kwargs[mask_name] = torch.ones(text.shape[0], width, dtype=getattr(torch, spec["dtype"]))
             elif "leaves" in spec and isinstance(mask, dict):
                 # Per layer type (mixed full / sliding attention): only the slots `generate` left empty.
                 kwargs[mask_name] = {
@@ -286,9 +276,6 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                     else value
                     for layer_type, value in mask.items()
                 }
-        if "cache_position" in traced and kwargs.get("cache_position") is None:
-            # The step's cache slots, as its positions: such a graph (optimum-executorch's) takes a batch of one.
-            kwargs["cache_position"] = kwargs["position_ids"][0]
         stateful = self.runner.stateful
         inputs = {name: value for name, value in kwargs.items() if name in traced}
         outputs = self.runner(share_outputs=stateful and self._generating, **inputs)
