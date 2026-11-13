@@ -71,6 +71,22 @@ def _check_encoder(test, repo, library):
     test.assertGreater(torch.nn.functional.cosine_similarity(embedding, expected, dim=-1).item(), 0.999)
 
 
+def _check_names_the_cats(test, repo, library, processor_repo=None):
+    """A Gemma 3 export, asked what animal a COCO image shows, answers cats."""
+    from transformers.image_utils import load_image
+
+    processor = AutoProcessor.from_pretrained(processor_repo or repo)
+    image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+    content = [{"type": "image"}, {"type": "text", "text": "What animal is in this picture? Answer in one word."}]
+    text = processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
+    inputs = processor(text=text, images=image, return_tensors="pt")
+    model = _load(test, repo, library)
+    test.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+    generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=6, do_sample=False))
+    answer = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    test.assertIn("cat", answer.lower())
+
+
 @slow
 @require_torch
 @require_openvino
@@ -105,9 +121,18 @@ class OptimumIntelTest(unittest.TestCase):
             expected = GenerationMixin.generate(eager, **features, generation_config=generation_config)
         self.assertEqual(generated.tolist(), expected.tolist())
 
-    def test_multimodal_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "multimodal export"):
+    def test_multimodal(self):
+        """Text embeddings, one vision graph and the language model, as this runtime splits Gemma 3: run as the
+        multimodal split (an int4 export, so it answers rather than matching eager's logits)."""
+        _check_names_the_cats(self, "OpenVINO/gemma-3-4b-it-int4-cw-ov", "optimum-intel", "google/gemma-3-4b-it")
+
+    def test_multimodal_split_into_more_graphs_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "more graphs than one per modality"):
             ExportedModel.from_pretrained("OpenVINO/Qwen3-VL-2B-Instruct-fp16-ov", device="cpu")
+
+    def test_multimodal_packing_crops_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "image_newline"):
+            ExportedModel.from_pretrained("OpenVINO/llava-v1.6-mistral-7b-hf-int4-ov", device="cpu")
 
 
 @slow
@@ -198,18 +223,6 @@ class OptimumExecutorchTest(unittest.TestCase):
         self.assertEqual(model.generate(**features, generation_config=generation_config).tolist(), expected.tolist())
 
     def test_multimodal(self):
-        """`token_embedding`, `vision_encoder` and `text_decoder` methods, run as the multimodal split: an int4
-        program, so it answers rather than matching eager's logits."""
-        from transformers.image_utils import load_image
-
-        repo = "pytorch/gemma-3-4b-it-HQQ-INT8-INT4"
-        processor = AutoProcessor.from_pretrained(repo)
-        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
-        content = [{"type": "image"}, {"type": "text", "text": "What animal is in this picture? Answer in one word."}]
-        text = processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
-        inputs = processor(text=text, images=image, return_tensors="pt")
-        model = _load(self, repo, "optimum-executorch")
-        self.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
-        generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=6, do_sample=False))
-        answer = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertIn("cat", answer.lower())
+        """`token_embedding`, `vision_encoder` and `text_decoder` methods, run as the multimodal split (an int4
+        program, so it answers rather than matching eager's logits)."""
+        _check_names_the_cats(self, "pytorch/gemma-3-4b-it-HQQ-INT8-INT4", "optimum-executorch")

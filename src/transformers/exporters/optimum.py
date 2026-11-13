@@ -19,14 +19,22 @@ a warning saying so. What a graph takes that `generate` doesn't give it is suppl
   (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
 - An encoder-decoder runs through `generate` too: optimum-intel's (Whisper's, T5's), optimum-onnx's (an encoder and a
   merged decoder) and optimum-executorch's (`encoder` and `text_decoder` methods).
-- An optimum-executorch multimodal model runs as the multimodal split (`token_embedding`, `vision_encoder` or
-  `audio_encoder`, then `text_decoder`).
+- A multimodal model runs as the multimodal split when it is laid out as one: optimum-intel's with text embeddings, one
+  graph per modality taking only its data, and the language model (Gemma 3's), and optimum-executorch's
+  (`token_embedding`, `vision_encoder` or `audio_encoder`, then `text_decoder`).
 - An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
   returns a dict by its output names.
 
-Refused, as their graphs are laid out differently from this runtime's: optimum-intel's multimodal exports (vision
-graphs split per model), optimum-onnx's decoders split in two graphs (each holding the weights), and optimum-executorch's
-other programs (encoders: no published export to check their inputs against).
+Refused, saying why, as their graphs are laid out differently from this runtime's:
+
+- optimum-intel multimodal exports whose vision tower is split into more graphs than one per modality (Qwen2-VL's and
+  Qwen2.5-VL's merger, Qwen3-VL's position embeddings, Phi's projections): what flows between them (rotary embeddings,
+  attention masks, window indices) is computed in Python by code specific to each model, where this runtime keeps the
+  tower in one graph fed the grid's indices by helpers shared across models; whose vision graph takes more than its
+  data (MiniCPM-V 4.7's position and window indices); or whose crops are packed with a weight no graph returns
+  (LLaVA-NeXT's `image_newline`).
+- optimum-onnx decoders split in two graphs, the prompt's and the steps', each holding the weights.
+- optimum-executorch encoders: no published export to check their inputs against.
 """
 
 from __future__ import annotations
@@ -68,6 +76,16 @@ def _architecture(config) -> str | None:
     return (config.architectures or [None])[0]
 
 
+def _repo_files(pretrained_model_name_or_path, **kwargs: Unpack[DownloadKwargs]) -> list[str]:
+    """Every file the export holds, by its path in it."""
+    if Path(pretrained_model_name_or_path).is_dir():
+        root = Path(pretrained_model_name_or_path)
+        return [str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()]
+    return hf_api().list_repo_files(
+        pretrained_model_name_or_path, revision=kwargs.get("revision"), token=kwargs.get("token")
+    )
+
+
 # ── optimum-intel (OpenVINO) ────────────────────────────────────────────────
 
 OPENVINO_MODEL_FILE = "openvino_model.xml"
@@ -81,6 +99,12 @@ _OPENVINO_SEQ2SEQ_DECODER_INPUTS = {
     "encoder_hidden_states": "encoder_outputs.last_hidden_state",
 }
 _OPENVINO_DTYPES = {"i64": "int64", "i32": "int32", "f32": "float32", "f16": "float16", "bf16": "bfloat16"}
+# A multimodal export's modality graphs, by the inputs the runtime feeds them: one graph per modality, whose features
+# scatter straight into the prompt's placeholder rows
+_OPENVINO_MODALITY_INPUTS = {
+    "vision_embeddings_model": ("pixel_values",),
+    "audio_embeddings_model": ("input_features",),
+}
 
 
 def _read_openvino(pretrained_model_name_or_path, file: str, **kwargs) -> openvino.Model:
@@ -112,6 +136,66 @@ def _openvino_metadata(config, kwargs: dict[str, Any], outputs: Any, stateful: b
     )
 
 
+def _load_openvino_multimodal(
+    pretrained_model_name_or_path, config, **kwargs
+) -> tuple[dict[str, ExportedComponent], bool]:
+    """A multimodal export laid out as this runtime's: its text embeddings, one graph per modality taking only that
+    modality's data, and its stateful language model on `inputs_embeds` (Gemma 3's).
+
+    Raises:
+        `ValueError`: for one laid out otherwise, saying how.
+    """
+    from ..modeling_outputs import CausalLMOutputWithPast
+    from .base import ExportedComponent
+
+    graphs = {
+        file.removeprefix("openvino_").removesuffix(".xml")
+        for file in _repo_files(pretrained_model_name_or_path, **kwargs)
+        if file.startswith("openvino_") and file.endswith("_model.xml")
+    }
+    reason = None
+    if extra := sorted(graphs - {"text_embeddings_model", "language_model", *_OPENVINO_MODALITY_INPUTS}):
+        reason = (
+            f"its vision side is split into more graphs than one per modality ({', '.join(extra)}), with what flows "
+            "between them (rotary embeddings, attention masks, window indices from the image grid) computed in Python "
+            "by code specific to the model, while this runtime takes one graph per modality, whose features scatter "
+            "straight into the prompt"
+        )
+    elif getattr(config, "image_grid_pinpoints", None) is not None:
+        reason = "its image crops are packed with an `image_newline` weight none of its graphs return"
+    elif getattr(config, "image_token_id", None) is None:
+        reason = "its config names no image placeholder token for the features to fill"
+    components = {}
+    for name, input_names in _OPENVINO_MODALITY_INPUTS.items():
+        if reason is not None or name not in graphs:
+            continue
+        program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
+        port_names = [port.get_any_name() for port in program.inputs]
+        if port_names != list(input_names):
+            reason = f"its {name} takes {port_names}, not just {list(input_names)}"
+            break
+        metadata = _openvino_metadata(
+            config, {input_name: program.input(input_name) for input_name in input_names}, torch.zeros(1), False
+        )
+        components[name] = ExportedComponent(program, metadata)
+    if reason is not None:
+        raise ValueError(
+            f"{pretrained_model_name_or_path} is an optimum-intel multimodal export this runtime can't run: {reason}. "
+            "Re-export it with `OpenVINOExporter().export_for_generation`, which splits it into one graph per modality."
+        )
+    text = _read_openvino(pretrained_model_name_or_path, "openvino_text_embeddings_model.xml", **kwargs)
+    text.input(0).get_tensor().set_names({"input_ids"})
+    components["text_embeddings_model"] = ExportedComponent(
+        text, _openvino_metadata(config, {"input_ids": text.input(0)}, torch.zeros(1), False)
+    )
+    language = _read_openvino(pretrained_model_name_or_path, OPENVINO_LANGUAGE_MODEL_FILE, **kwargs)
+    inputs = {port.get_any_name(): port for port in language.inputs if port.get_any_name() != "beam_idx"}
+    inputs["cache"] = {"container": "DynamicCache"}
+    metadata = _openvino_metadata(config, inputs, CausalLMOutputWithPast(logits=torch.zeros(1)), stateful=True)
+    components["language_model"] = ExportedComponent(language, metadata)
+    return components, True
+
+
 def _load_openvino(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
     """A stateful causal LM (inputs `input_ids`, `attention_mask`, `position_ids`, `beam_idx`; output `logits`; the
     cache as state), an encoder-decoder (an encoder graph, and a decoder that writes its own cross cache into state), or
@@ -120,10 +204,7 @@ def _load_openvino(pretrained_model_name_or_path, config, **kwargs) -> tuple[dic
     from .base import ExportedComponent
 
     if _find(pretrained_model_name_or_path, (OPENVINO_LANGUAGE_MODEL_FILE,), **kwargs) is not None:
-        raise ValueError(
-            f"{pretrained_model_name_or_path} is an optimum-intel multimodal export, whose vision graphs are split "
-            "differently from this runtime's: re-export it with `OpenVINOExporter().export_for_generation`."
-        )
+        return _load_openvino_multimodal(pretrained_model_name_or_path, config, **kwargs)
     if _find(pretrained_model_name_or_path, (OPENVINO_SEQ2SEQ_FILES["decoder_model"],), **kwargs) is not None:
         encoder = _read_openvino(pretrained_model_name_or_path, OPENVINO_SEQ2SEQ_FILES["encoder_model"], **kwargs)
         decoder = _read_openvino(pretrained_model_name_or_path, OPENVINO_SEQ2SEQ_FILES["decoder_model"], **kwargs)
@@ -197,17 +278,11 @@ def _read_onnx(pretrained_model_name_or_path, file: str, **kwargs: Unpack[Downlo
 
     path = Path(cached_file(pretrained_model_name_or_path, file, **kwargs))
     data_prefix = f"{Path(file).name}_data"
-    if Path(pretrained_model_name_or_path).is_dir():
-        siblings = [str(Path(file).parent / p.name) for p in path.parent.iterdir() if p.name.startswith(data_prefix)]
-    else:
-        repo_files = hf_api().list_repo_files(
-            pretrained_model_name_or_path, revision=kwargs.get("revision"), token=kwargs.get("token")
-        )
-        siblings = [
-            name
-            for name in repo_files
-            if Path(name).parent == Path(file).parent and Path(name).name.startswith(data_prefix)
-        ]
+    siblings = [
+        name
+        for name in _repo_files(pretrained_model_name_or_path, **kwargs)
+        if Path(name).parent == Path(file).parent and Path(name).name.startswith(data_prefix)
+    ]
     for sibling in siblings:
         cached_file(pretrained_model_name_or_path, sibling, **kwargs)
     program = onnx_ir.load(str(path))
