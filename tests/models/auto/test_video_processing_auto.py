@@ -174,6 +174,53 @@ class AutoVideoProcessorTest(unittest.TestCase):
         ):
             _ = AutoVideoProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
+    def test_unavailable_backend_falls_back_to_supported_backend(self):
+        # Gemma4 only ships a torchvision video processor, so `backend="pil"` used to raise
+        # ImportError from inside the auto class. `AutoProcessor` passes `backend` down to every
+        # sub-processor, which made the whole processor unloadable (issue #50638). AutoImageProcessor
+        # already falls back in this situation, the video side should behave the same way.
+        from transformers.models.auto.video_processing_auto import (
+            VIDEO_PROCESSOR_MAPPING_NAMES,
+            _load_backend_class,
+        )
+
+        mapping_cache_snapshot = dict(VIDEO_PROCESSOR_MAPPING_NAMES)
+        try:
+            VIDEO_PROCESSOR_MAPPING_NAMES["gemma4"] = {"torchvision": "Gemma4VideoProcessor"}
+            # patched in so the test doesn't depend on warning_once state left over by other tests
+            with patch("transformers.models.auto.video_processing_auto.logger") as logger_mock:
+                cls = _load_backend_class("Gemma4VideoProcessor", "pil")
+            self.assertEqual(cls.__name__, "Gemma4VideoProcessor")
+            logger_mock.warning_once.assert_called_once()
+            self.assertIn("Requested pil backend is not available", logger_mock.warning_once.call_args.args[0])
+
+            # and the requested backend still wins when the model has one
+            cls = _load_backend_class("LlavaOnevisionVideoProcessor", "torchvision")
+            self.assertEqual(cls.__name__, "LlavaOnevisionVideoProcessor")
+        finally:
+            VIDEO_PROCESSOR_MAPPING_NAMES.clear()
+            VIDEO_PROCESSOR_MAPPING_NAMES.update(mapping_cache_snapshot)
+
+    def test_local_video_processor_with_unavailable_backend(self):
+        # Same thing end to end: loading a checkpoint whose video processor only exists for one
+        # backend must not fail when the other backend is requested.
+        from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
+
+        mapping_cache_snapshot = dict(VIDEO_PROCESSOR_MAPPING_NAMES)
+        try:
+            VIDEO_PROCESSOR_MAPPING_NAMES["llava_onevision"] = {"torchvision": "LlavaOnevisionVideoProcessor"}
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                with open(Path(tmpdirname) / "video_preprocessor_config.json", "w", encoding="utf-8") as fp:
+                    json.dump({"video_processor_type": "LlavaOnevisionVideoProcessor"}, fp)
+
+                for backend in ("torchvision", "pil"):
+                    with self.subTest(backend=backend):
+                        processor = AutoVideoProcessor.from_pretrained(tmpdirname, backend=backend)
+                        self.assertIsInstance(processor, LlavaOnevisionVideoProcessor)
+        finally:
+            VIDEO_PROCESSOR_MAPPING_NAMES.clear()
+            VIDEO_PROCESSOR_MAPPING_NAMES.update(mapping_cache_snapshot)
+
     def test_unavailable_backend_error_mentions_missing_dependency(self):
         # Without torchvision, `VIDEO_PROCESSOR_MAPPING` resolves to `None` while
         # `type(config) in VIDEO_PROCESSOR_MAPPING` stays True, so the mapping value must not be
