@@ -300,7 +300,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # ViltForImageAndTextRetrieval doesn't support training for now
             if (
                 model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]
-                or not model_class.supports_gradient_checkpointing
+                or not model_class.supports_activation_checkpointing
             ):
                 continue
 

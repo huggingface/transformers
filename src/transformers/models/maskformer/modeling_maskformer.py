@@ -30,7 +30,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -421,7 +421,7 @@ class MaskFormerDetrPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     # Only the decoder is used: the encoder classes listed by DETR do not exist here
     _no_split_modules = [r"MaskFormerDetrDecoderLayer"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -661,7 +661,7 @@ class MaskFormerDetrMLP(nn.Module):
         return hidden_states
 
 
-class MaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
+class MaskFormerDetrDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MaskFormerDetrConfig):
         super().__init__()
         self.hidden_size = config.d_model

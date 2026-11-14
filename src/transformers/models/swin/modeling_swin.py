@@ -29,7 +29,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -505,7 +505,7 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
-class SwinLayer(GradientCheckpointingLayer):
+class SwinLayer(ActivationCheckpointingLayer):
     def __init__(
         self,
         config: SwinConfig,
@@ -626,7 +626,7 @@ class SwinLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SwinStage(GradientCheckpointingLayer):
+class SwinStage(ActivationCheckpointingLayer):
     def __init__(
         self,
         config: SwinConfig,
@@ -712,7 +712,7 @@ class SwinPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["SwinStage"]
     _supports_sdpa = True
     _supports_flash_attn = False

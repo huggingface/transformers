@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput, QuestionAnsweringModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -233,7 +233,7 @@ class SplinterOutput(nn.Module):
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with AlignText->Splinter
-class SplinterLayer(GradientCheckpointingLayer):
+class SplinterLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -296,7 +296,7 @@ class SplinterEncoder(nn.Module):
 class SplinterPreTrainedModel(PreTrainedModel):
     config: SplinterConfig
     base_model_prefix = "splinter"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _can_record_outputs = {
         "hidden_states": SplinterLayer,
         "attentions": SplinterSelfAttention,

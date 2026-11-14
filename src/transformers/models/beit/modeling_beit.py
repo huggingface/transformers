@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithPooling,
@@ -381,7 +381,7 @@ class BeitDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class BeitLayer(GradientCheckpointingLayer):
+class BeitLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: BeitConfig, drop_path_rate: float = 0.0):
@@ -450,7 +450,7 @@ class BeitPreTrainedModel(PreTrainedModel):
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["BeitLayer"]
     _supports_sdpa = True
     _supports_flash_attn = False

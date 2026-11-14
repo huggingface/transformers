@@ -86,7 +86,7 @@ class PI0PreTrainedModel(PreTrainedModel):
     config: PI0Config
     base_model_prefix = "model"
     main_input_name = "state"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True

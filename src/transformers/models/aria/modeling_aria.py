@@ -31,7 +31,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -471,7 +471,7 @@ class AriaTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class AriaTextDecoderLayer(GradientCheckpointingLayer):
+class AriaTextDecoderLayer(ActivationCheckpointingLayer):
     """
     Aria Text Decoder Layer.
 
@@ -531,7 +531,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -557,7 +557,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 class AriaPreTrainedModel(PreTrainedModel):
     config: AriaConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["AriaTextDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True

@@ -36,7 +36,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -145,7 +145,7 @@ class UniSpeechSatPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
-class UniSpeechSatNoLayerNormConvLayer(GradientCheckpointingLayer):
+class UniSpeechSatNoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -166,7 +166,7 @@ class UniSpeechSatNoLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class UniSpeechSatLayerNormConvLayer(GradientCheckpointingLayer):
+class UniSpeechSatLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -193,7 +193,7 @@ class UniSpeechSatLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class UniSpeechSatGroupNormConvLayer(GradientCheckpointingLayer):
+class UniSpeechSatGroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -410,7 +410,7 @@ class UniSpeechSatFeedForward(nn.Module):
         return hidden_states
 
 
-class UniSpeechSatEncoderLayer(GradientCheckpointingLayer):
+class UniSpeechSatEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = UniSpeechSatAttention(
@@ -516,7 +516,7 @@ class UniSpeechSatAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-class UniSpeechSatEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+class UniSpeechSatEncoderLayerStableLayerNorm(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = UniSpeechSatAttention(
@@ -682,7 +682,7 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     base_model_prefix = "unispeech_sat"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

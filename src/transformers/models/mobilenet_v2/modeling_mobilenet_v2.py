@@ -252,7 +252,7 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilenet_v2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = []
 
 

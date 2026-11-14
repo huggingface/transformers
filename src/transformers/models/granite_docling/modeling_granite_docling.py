@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -291,7 +291,7 @@ class GraniteDoclingTextMLP(nn.Module):
         return down_proj
 
 
-class GraniteDoclingTextDecoderLayer(GradientCheckpointingLayer):
+class GraniteDoclingTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GraniteDoclingTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -360,7 +360,7 @@ class GraniteDoclingTextDecoderLayer(GradientCheckpointingLayer):
 class GraniteDoclingTextPreTrainedModel(PreTrainedModel):
     config: GraniteDoclingTextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GraniteDoclingTextDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
@@ -848,7 +848,7 @@ class GraniteDoclingPreTrainedModel(PreTrainedModel):
     config: GraniteDoclingConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GraniteDoclingEncoderLayer", "GraniteDoclingTextDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
@@ -882,7 +882,7 @@ class GraniteDoclingVisionMLP(nn.Module):
         return hidden_states
 
 
-class GraniteDoclingEncoderLayer(GradientCheckpointingLayer):
+class GraniteDoclingEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: GraniteDoclingVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size

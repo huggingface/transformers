@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -421,7 +421,7 @@ class TvpOutputLayer(nn.Module):
         return hidden_states
 
 
-class TvpEncodeLayer(GradientCheckpointingLayer):
+class TvpEncodeLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = TvpAttention(config)
@@ -520,7 +520,7 @@ class TvpPreTrainedModel(PreTrainedModel):
     config: TvpConfig
     base_model_prefix = "model"
     input_modalities = ("video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

@@ -25,7 +25,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -547,7 +547,7 @@ class FlavaOutput(nn.Module):
         return hidden_states
 
 
-class FlavaLayer(GradientCheckpointingLayer):
+class FlavaLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: FlavaPossibleConfigs) -> None:
@@ -650,7 +650,7 @@ class FlavaPreTrainedModel(PreTrainedModel):
     config: FlavaConfig
     base_model_prefix = "flava"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
@@ -1291,7 +1291,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
     config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
 
     def __init__(
         self,

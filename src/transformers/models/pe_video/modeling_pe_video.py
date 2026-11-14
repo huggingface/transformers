@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -372,7 +372,7 @@ class PeVideoEncoderMLP(nn.Module):
         return down_proj
 
 
-class PeVideoEncoderLayer(GradientCheckpointingLayer):
+class PeVideoEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -420,7 +420,7 @@ class PeVideoEncoderLayer(GradientCheckpointingLayer):
 class PeVideoPreTrainedModel(PreTrainedModel):
     config: PeVideoConfig
     base_model_prefix = "video_model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PeVideoEncoderLayer", "TimmWrapperForImageClassification"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True

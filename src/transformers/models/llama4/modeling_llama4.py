@@ -28,7 +28,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -392,7 +392,7 @@ class Llama4TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Llama4TextDecoderLayer(GradientCheckpointingLayer):
+class Llama4TextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -447,7 +447,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
@@ -837,7 +837,7 @@ class Llama4VisionMLP(nn.Module):
         return hidden_states
 
 
-class Llama4VisionEncoderLayer(GradientCheckpointingLayer):
+class Llama4VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
         self.hidden_size = config.hidden_size

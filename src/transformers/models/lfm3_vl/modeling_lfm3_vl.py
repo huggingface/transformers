@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -328,7 +328,7 @@ class Lfm3VlVisionShortConv(nn.Module):
         return self.out_proj(hidden_states)
 
 
-class Lfm3VlVisionLayer(GradientCheckpointingLayer):
+class Lfm3VlVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Lfm3VlVisionConfig, layer_idx: int):
         super().__init__()
         self.is_attention_layer = config.layer_types[layer_idx] != "conv"
@@ -379,7 +379,7 @@ class Lfm3VlPreTrainedModel(PreTrainedModel):
     config: Lfm3VlConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True

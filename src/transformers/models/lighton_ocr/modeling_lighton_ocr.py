@@ -140,7 +140,7 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     config: LightOnOcrConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True

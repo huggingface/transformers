@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
 )
@@ -140,7 +140,7 @@ class PhiMLP(CLIPMLP):
     pass
 
 
-class PhiDecoderLayer(GradientCheckpointingLayer):
+class PhiDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__()
         self.self_attn = PhiAttention(config, layer_idx=layer_idx)
