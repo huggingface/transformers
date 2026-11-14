@@ -180,6 +180,16 @@ class TrainerDDPKwargsTest(TestCasePlus):
         # (above) that the kwarg IS plumbed when set — together these tests pin both directions.
         self.assertFalse(handler.static_graph)
 
+    def test_ddp_gradient_as_bucket_view_reaches_accelerator(self):
+        """ddp_gradient_as_bucket_view=True is forwarded to DistributedDataParallelKwargs."""
+        handler = self._get_ddp_kwargs(ddp_gradient_as_bucket_view=True)
+        self.assertTrue(handler.gradient_as_bucket_view)
+
+    def test_ddp_gradient_as_bucket_view_off_by_default(self):
+        """The DDP default (False) is kept when the argument is not set."""
+        handler = self._get_ddp_kwargs()
+        self.assertFalse(handler.gradient_as_bucket_view)
+
 
 # ---------------------------------------------------------------------------
 # Gradient accumulation tests
