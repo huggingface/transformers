@@ -23,7 +23,9 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import use_kernelized_func
+from ...integrations.linear_attention_paged import causal_conv1d_varlen, sliding_windows_varlen
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
@@ -392,6 +394,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         cache: Cache | None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
@@ -408,6 +411,11 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         q, raw_keys = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
         q = apply_rotary_pos_emb(q, cos=current_cos, sin=current_sin, unsqueeze_dim=2)
+
+        # Under continuous batching, the cache is the paged one: its batch is one row of packed sequences, and each
+        # query selects among the keys of its own sequence
+        if isinstance(cache, PagedAttentionCache):
+            return self._select_tokens_packed(q[0], raw_keys[0], cache, **kwargs)
 
         if cache is not None:
             raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
@@ -470,6 +478,52 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
 
         return selected_token_mask
 
+    def _select_tokens_packed(
+        self, q: torch.Tensor, raw_keys: torch.Tensor, paged_cache, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
+        """The selection mask under continuous batching, of shape `[1, 1, num_queries, num_keys]` over the packed
+        queries and the keys of all the batch's sequences, in the order the engine reads them. The keys of a sequence
+        are its tokens from the first one, so their positions are their indices in the sequence; the pooled keys of its
+        blocks are rotated with `key_position_embeddings`, the rotary embeddings of those positions."""
+        keys = paged_cache.update_rows(self.layer_idx, {"index_key": raw_keys}, kwargs)["index_key"]
+        key_cos, key_sin = kwargs["key_position_embeddings"]
+        cu_seq_lens_q = kwargs["cu_seq_lens_q"].tolist()
+        cu_seq_lens_k = kwargs["cu_seq_lens_k"]["indexed_attention"].tolist()
+        selected_token_mask = torch.zeros(q.shape[0], keys.shape[0], dtype=torch.bool, device=q.device)
+        for q_start, q_end, k_start, k_end in zip(cu_seq_lens_q, cu_seq_lens_q[1:], cu_seq_lens_k, cu_seq_lens_k[1:]):
+            num_queries, num_keys = q_end - q_start, k_end - k_start
+            if num_queries == 0:
+                continue
+            key_positions = torch.arange(num_keys, device=q.device)
+            query_positions = key_positions[num_keys - num_queries :]
+            num_complete_blocks = (query_positions + 1) // self.compress_ratio
+            # The tail of each query: its visible tokens after its last complete block
+            selected_tokens = (key_positions >= (num_complete_blocks * self.compress_ratio)[:, None]) & (
+                key_positions <= query_positions[:, None]
+            )
+            num_blocks = num_keys // self.compress_ratio
+            if num_blocks > 0:
+                key_groups = keys[k_start : k_start + num_blocks * self.compress_ratio]
+                key_groups = key_groups.view(num_blocks, self.compress_ratio, self.index_head_dim)
+                pooled_keys = self.k_layernorm(key_groups.float().mean(dim=1).to(keys.dtype))
+                group_starts = key_positions[: num_blocks * self.compress_ratio : self.compress_ratio]
+                block_key_states = apply_rotary_pos_emb(
+                    pooled_keys.unsqueeze(1), cos=key_cos[0, group_starts], sin=key_sin[0, group_starts]
+                ).squeeze(1)
+                scores = torch.matmul(q[q_start:q_end].float(), block_key_states.float().transpose(-1, -2))
+                scores = torch.relu(scores).sum(dim=1) / math.sqrt(self.index_head_dim)
+                # Only the complete blocks a query sees compete for its budget
+                visible_blocks = torch.arange(num_blocks, device=q.device) < num_complete_blocks[:, None]
+                scores = scores.masked_fill(~visible_blocks, float("-inf"))
+                selected_block_indices = scores.topk(min(self.block_topk, num_blocks), dim=-1).indices
+                selected_blocks = torch.zeros_like(visible_blocks).scatter(-1, selected_block_indices, True)
+                selected_blocks &= visible_blocks
+                # Remap the selected blocks to their tokens
+                block_tokens = selected_blocks.repeat_interleave(self.compress_ratio, dim=-1)
+                selected_tokens[:, : num_blocks * self.compress_ratio] |= block_tokens
+            selected_token_mask[q_start:q_end, k_start:k_end] = selected_tokens
+        return selected_token_mask[None, None]
+
 
 class Qwen4ExpTextAttention(Qwen3_5Attention):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
@@ -477,6 +531,16 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         self.q_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = Qwen4ExpTextQSAIndexer(config, layer_idx)
+
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: its keys and values, and its indexer's keys."""
+        key_shape = (self.config.num_key_value_heads, self.head_dim)
+        return {
+            "key": (key_shape, None),
+            "value": (key_shape, None),
+            "index_key": ((self.indexer.index_head_dim,), None),
+        }
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -487,7 +551,7 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
+        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache, **kwargs)
         # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
         if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
@@ -655,9 +719,27 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
+    def cache_states(self) -> dict[str, tuple[tuple[int, ...], torch.dtype, int]]:
+        """The state continuous batching keeps per request for this layer: the last tokens of the sequence, which are
+        end-of-sequence tokens before its first forward pass."""
+        return {"ngram_context": ((self.context_len,), torch.int64, self.eos_token_id)}
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(self, input_ids: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def forward(
+        self, input_ids: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         input_ids = input_ids.long()
+        # Under continuous batching, the cache is the paged one: its batch is one row of packed sequences, and the
+        # window of each token holds its previous tokens in its sequence, then itself
+        if isinstance(cache, PagedAttentionCache):
+            (context,) = cache.read_cache_states(self.layer_idx, ("ngram_context",), kwargs)
+            windows, context = sliding_windows_varlen(input_ids[0], context, kwargs["cu_seq_lens_q"])
+            cache.write_cache_states(self.layer_idx, {"ngram_context": context}, kwargs)
+            shifted_tokens = [
+                self._shift_right_ignore_eos(windows, shift)[None, :, -1] for shift in range(self.ngram_size)
+            ]
+            return self._embed_ngrams(shifted_tokens, num_tokens=input_ids.shape[1])
+
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
         cached_ctx = cache.get_conv_state(self.layer_idx, state_idx=2) if cache is not None else None
@@ -683,7 +765,11 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         # Get full token history
         token_history = torch.cat([previous_context, input_ids], dim=-1)
         shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
+        return self._embed_ngrams(shifted_tokens, num_tokens=input_ids.shape[1])
 
+    def _embed_ngrams(self, shifted_tokens: list[torch.Tensor], num_tokens: int) -> torch.Tensor:
+        """Hashes the n-grams ending at every token, given the tokens shifted by 0 to `ngram_size - 1`, and embeds them,
+        for the last `num_tokens` tokens."""
         blocks = []
         for ngram in range(2, self.ngram_size + 1):
             start_idx = (ngram - 2) * self.heads_per_ngram
@@ -699,7 +785,7 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             ngram_ids = torch.remainder(mixed_ids.unsqueeze(-1), head_vocab_sizes.view(1, 1, -1))
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
-        ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
+        ngram_ids = torch.cat(blocks, dim=-1)[:, -num_tokens:]
         # We need explicit device placement here, as the embedding may be skipped from device_map completely (we just need to be
         # careful in the case of offloading to disk)
         execution_device = (
@@ -741,7 +827,28 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def cache_states(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the state continuous batching keeps per request for this
+        layer: the last inputs of its dilated convolution."""
+        return {"ple_conv": ((self.conv1d.in_channels, self.short_conv_state_len), None)}
+
+    def _short_conv(
+        self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
+        # Under continuous batching, the cache is the paged one: every packed sequence is convolved from its own state
+        if isinstance(cache, PagedAttentionCache):
+            (conv_state,) = cache.read_cache_states(self.layer_idx, ("ple_conv",), kwargs)
+            hidden_states, conv_state = causal_conv1d_varlen(
+                hidden_states.transpose(1, 2),
+                conv_state,
+                kwargs["cu_seq_lens_q"],
+                self.conv1d.weight.squeeze(1),
+                activation="silu",
+                dilation=self.conv1d.dilation[0],
+            )
+            cache.write_cache_states(self.layer_idx, {"ple_conv": conv_state}, kwargs)
+            return hidden_states.transpose(1, 2)
+
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -767,8 +874,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         input_ids: torch.Tensor,
         cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, cache)
+        embeddings = self.ple_embedding(input_ids, cache, **kwargs)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
         value = self.value_proj(embeddings)
         query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
@@ -780,7 +888,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         if conv_mask is not None:
             gated_value = apply_mask_to_padding_states(gated_value, conv_mask)
             gated_value_normed = apply_mask_to_padding_states(gated_value_normed, conv_mask)
-        output = gated_value + self._short_conv(gated_value_normed, cache)
+        output = gated_value + self._short_conv(gated_value_normed, cache, **kwargs)
         return output
 
 
@@ -811,7 +919,9 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         if self.ple is not None:
-            hidden_states = hidden_states + self.ple(hidden_states, ple_input_ids, cache, conv_mask=conv_mask)
+            hidden_states = hidden_states + self.ple(
+                hidden_states, ple_input_ids, cache, conv_mask=conv_mask, **kwargs
+            )
 
         hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
@@ -974,8 +1084,12 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             text_position_ids = None
 
         # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
-        # such as reset, crop and beam reordering also update the position history.
-        if cache is not None and "indexed_attention" in self.config.layer_types:
+        # such as reset, crop and beam reordering also update the position history. The paged cache keeps no history.
+        if (
+            cache is not None
+            and not isinstance(cache, PagedAttentionCache)
+            and "indexed_attention" in self.config.layer_types
+        ):
             indexer_cache = cache.layers[self.config.layer_types.index("indexed_attention")]
             if indexer_cache.indexer_position_ids is not None:
                 position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
@@ -1006,6 +1120,12 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        # Under continuous batching, the indexers rotate the pooled keys of a sequence at their positions, which are the
+        # indices of the tokens in the sequence, so they get the rotary embeddings of all the positions the batch reads
+        if isinstance(cache, PagedAttentionCache) and "indexed_attention" in self.config.layer_types:
+            num_key_positions = kwargs["max_length_k"]["indexed_attention"]
+            key_positions = torch.arange(num_key_positions, device=hidden_states.device).expand(3, 1, -1)
+            kwargs["key_position_embeddings"] = self.rotary_emb(hidden_states, key_positions)
         hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

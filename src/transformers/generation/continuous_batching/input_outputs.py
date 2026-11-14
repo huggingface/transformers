@@ -22,7 +22,7 @@ from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
-from .cache_allocators import FULL_ATTENTION, LINEAR_ATTENTION, SLIDING_ATTENTION
+from .cache_allocators import LINEAR_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
@@ -162,16 +162,17 @@ class ContinuousBatchingIOs:
         self.position_ids = self._bulk_input_tensor[1, :max_batch_tokens]
         self.cumulative_seqlens_q = self._bulk_input_tensor[2, : max_requests_per_batch + 1]
         self.logits_indices = self._bulk_input_tensor[3, :max_requests_per_batch]
-        full_attention_cumulative_seqlens_k = self._bulk_input_tensor[4, : max_requests_per_batch + 1]
-        sliding_attention_cumulative_seqlens_k = self._bulk_input_tensor[5, : max_requests_per_batch + 1]
         self.carry_over_ids = self._bulk_input_tensor[6, :max_batch_tokens]  # only used for async API
 
-        # For sequence length of KV, the entries in the dict depend on the model
-        self.cumulative_seqlens_k: dict[str, torch.Tensor] = {}
-        if FULL_ATTENTION in self.cache.cache_allocators:
-            self.cumulative_seqlens_k["full_attention"] = full_attention_cumulative_seqlens_k
-        if SLIDING_ATTENTION in self.cache.cache_allocators:
-            self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
+        # For sequence length of KV, the entries in the dict depend on the model: each attention type reading keys
+        # from the cache gets one of the two rows 4 and 5 of the bulk tensor
+        kv_types = [attn_type for attn_type in self.cache.cache_allocators if attn_type != LINEAR_ATTENTION]
+        if len(kv_types) > 2:
+            raise ValueError(f"Continuous batching supports two attention types reading keys at most, got {kv_types}")
+        self.cumulative_seqlens_k: dict[str, torch.Tensor] = {
+            attn_type: self._bulk_input_tensor[4 + i, : max_requests_per_batch + 1]
+            for i, attn_type in enumerate(kv_types)
+        }
 
         # Output tensor and scalars
         num_output_rows = 2 if self.return_logprobs else 1
