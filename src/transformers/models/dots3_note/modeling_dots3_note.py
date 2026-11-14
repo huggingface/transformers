@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -609,7 +609,7 @@ class Dots3NoteTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Dots3NoteTextDecoderLayer(GradientCheckpointingLayer):
+class Dots3NoteTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Dots3NoteTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -658,7 +658,7 @@ class Dots3NoteTextDecoderLayer(GradientCheckpointingLayer):
 class Dots3NotePreTrainedModel(PreTrainedModel):
     config: Dots3NoteConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer", "Dots3NoteTextDecoderLayer", "Dots3NoteVisionBlock"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
@@ -1029,7 +1029,7 @@ class Dots3NoteAudioMLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class Dots3NoteAudioLayer(GradientCheckpointingLayer):
+class Dots3NoteAudioLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Dots3NoteAudioConfig):
         super().__init__()
         hidden_size = config.hidden_size
@@ -1120,7 +1120,7 @@ class Dots3NoteAudioConvStem(nn.Module):
 class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     config: Dots3NoteAudioConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
@@ -1438,7 +1438,7 @@ class Dots3NoteVisionAttention(nn.Module):
         return attn_output
 
 
-class Dots3NoteVisionBlock(GradientCheckpointingLayer):
+class Dots3NoteVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config: Dots3NoteVisionConfig, layer_idx: int) -> None:
         super().__init__()
         self.norm1 = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1489,7 +1489,7 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     config: Dots3NoteVisionConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Dots3NoteVisionBlock"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True

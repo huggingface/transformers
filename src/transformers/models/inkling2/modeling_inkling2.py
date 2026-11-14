@@ -38,7 +38,7 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -750,7 +750,7 @@ class Inkling2BlockAttentionResidual(nn.Module):
         return attn_output.unbind(-2)
 
 
-class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
+class Inkling2SlidingDecoderLayer(ActivationCheckpointingLayer):
     attention_type = "sliding_attention"
 
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
@@ -805,7 +805,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         return (residual + hidden_states).to(dtype)
 
 
-class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
+class Inkling2FullDecoderLayer(ActivationCheckpointingLayer):
     attention_type = "full_attention"
 
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
@@ -1067,7 +1067,7 @@ class Inkling2VisionMLP(nn.Module):
         return hidden_states
 
 
-class Inkling2VisionEncoderLayer(GradientCheckpointingLayer):
+class Inkling2VisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Inkling2VisionConfig):
         super().__init__()
         self.config = config
@@ -1159,7 +1159,7 @@ class Inkling2VisionMerger(nn.Module):
 class Inkling2PreTrainedModel(PreTrainedModel):
     config: Inkling2Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Inkling2SlidingDecoderLayer", "Inkling2FullDecoderLayer", "Inkling2VisionEncoderLayer"]
     _skip_keys_device_placement = ["cache"]
     # The relative position bias flows through the attention interface as a `position_bias` (duh)
