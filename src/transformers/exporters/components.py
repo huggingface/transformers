@@ -58,6 +58,11 @@ class _ModelComponent(torch.nn.Module):
             return getattr(super().__getattr__("model"), name)
 
 
+def _flat(features):
+    """Per-image features (a list) as one tensor."""
+    return torch.cat(features) if isinstance(features, (tuple, list)) else features
+
+
 class ModalityEncoder(_ModelComponent):
     """Runs one modality's `get_<modality>_features` and returns a single `[num_tokens, hidden]` tensor, or, for a
     deepstack tower (Qwen3-VL), `{"features": ..., "deepstack_features": [one per decoder layer]}`."""
@@ -80,21 +85,12 @@ class ModalityEncoder(_ModelComponent):
             kwargs = {name: value for name, value in kwargs.items() if name in parameters}
         outputs = getter(**kwargs)
         # Some outputs declare both fields and fill neither (granite4_vision), so fall through on `None`.
-        features = getattr(outputs, "pooler_output", None)
-        if features is None:
-            features = getattr(outputs, "last_hidden_state", None)
-        if features is None:
-            features = outputs
-        features = torch.cat(features) if isinstance(features, (tuple, list)) else features
+        fields = (getattr(outputs, name, None) for name in ("pooler_output", "last_hidden_state"))
+        features = _flat(next((value for value in fields if value is not None), outputs))
         deepstack_features = getattr(outputs, "deepstack_features", None)
         if deepstack_features is None:
             return features
-        return {
-            "features": features,
-            "deepstack_features": [
-                torch.cat(layer) if isinstance(layer, (tuple, list)) else layer for layer in deepstack_features
-            ],
-        }
+        return {"features": features, "deepstack_features": [_flat(layer) for layer in deepstack_features]}
 
 
 class PatchVisionEncoder(_ModelComponent):

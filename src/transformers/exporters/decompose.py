@@ -253,19 +253,19 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
             f"Expected an image/audio encoder + language model, found neither."
         )
 
-    active_modalities = []
-    for spec in _MODALITY_SPECS:
-        if (owner := _modality_owner(model, spec.getter)) is None:
-            continue
-        if any(inputs.get(key) is not None for key in spec.input_keys):
-            active_modalities.append((spec.component, spec.getter, owner, spec.grid_key))
+    active_modalities = [
+        (spec, owner)
+        for spec in _MODALITY_SPECS
+        if (owner := _modality_owner(model, spec.getter)) is not None
+        and any(inputs.get(key) is not None for key in spec.input_keys)
+    ]
 
     try:
         with contextlib.ExitStack() as stack, torch.no_grad():
             decoder_calls = stack.enter_context(_capture_calls(decoder, "forward"))
             captured_features = {
-                name: stack.enter_context(_capture_calls(owner, getter))
-                for name, getter, owner, _ in active_modalities
+                spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
+                for spec, owner in active_modalities
             }
             model(**copy.deepcopy(inputs))
     except Exception as e:
@@ -291,12 +291,14 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
             TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids}
         )
 
-    for name, getter, owner, grid_key in active_modalities:
-        calls = captured_features.get(name)
+    for spec, owner in active_modalities:
+        name, calls = spec.component, captured_features.get(spec.component)
         if not calls:
             continue
         feature_inputs = {
-            ("grid_thw" if key == grid_key else key): value for key, value in calls[-1].items() if value is not None
+            ("grid_thw" if key == spec.grid_key else key): value
+            for key, value in calls[-1].items()
+            if value is not None
         }
         # Config-derived tensors become graph inputs: a getter reading its grid as data cannot be traced.
         if name == "vision_embeddings_model" and packs_anyres_features(owner, model.config):
@@ -313,7 +315,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = Component(ModalityEncoder(owner, getter, grid_key), feature_inputs)
+        components[name] = Component(ModalityEncoder(owner, spec.getter, spec.grid_key), feature_inputs)
     return components
 
 
@@ -387,10 +389,12 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
-    accepted = inspect.signature(model.forward).parameters
-    if main_inputs.get("position_ids") is None and decoder_call.get("position_ids") is not None:
-        if "position_ids" in accepted:
-            main_inputs["position_ids"] = decoder_call["position_ids"]
+    if (
+        main_inputs.get("position_ids") is None
+        and decoder_call.get("position_ids") is not None
+        and "position_ids" in inspect.signature(model.forward).parameters
+    ):
+        main_inputs["position_ids"] = decoder_call["position_ids"]
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]
