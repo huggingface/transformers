@@ -83,6 +83,24 @@ class OptimumOnnxTest(unittest.TestCase):
 
     @parameterized.expand(
         [
+            # Takes token types, which its XLM-R tokenizer doesn't return
+            ("Xenova/multilingual-e5-small", "intfloat/multilingual-e5-small"),
+            # A decoder exported for embeddings: positions and a cache in, the cache out
+            ("onnx-community/Qwen3-Embedding-0.6B-ONNX", "Qwen/Qwen3-Embedding-0.6B"),
+        ]
+    )
+    def test_encoder_fills_what_eager_does(self, repo, eager_repo):
+        from transformers import AutoModel
+
+        tokenizer = AutoTokenizer.from_pretrained(eager_repo)
+        inputs = dict(tokenizer(["The capital of France is Paris."], return_tensors="pt"))
+        model = _load(self, repo, "optimum-onnx")
+        with torch.no_grad():
+            expected = AutoModel.from_pretrained(eager_repo, dtype=torch.float32).eval()(**inputs).last_hidden_state
+        torch.testing.assert_close(model(**inputs)["last_hidden_state"], expected, atol=1e-3, rtol=1e-3)
+
+    @parameterized.expand(
+        [
             ("Xenova/t5-small", "google-t5/t5-small", "translate English to German: The house is wonderful."),
             ("Xenova/opus-mt-en-de", "Helsinki-NLP/opus-mt-en-de", "The house is wonderful."),
             ("Xenova/blenderbot_small-90M", "facebook/blenderbot_small-90M", "The house is wonderful."),

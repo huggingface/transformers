@@ -31,7 +31,6 @@ from transformers import (
     GenerationMixin,
 )
 from transformers.exporters import (
-    ExportedModel,
     ExportedModelForCausalLM,
     ExportedModelForSeq2SeqLM,
 )
@@ -89,7 +88,7 @@ class OptimumExecutorchTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
         inputs = tokenizer(["The capital of France is [MASK]."], return_tensors="pt")
         model = _load(self, "IlyasMoutawwakil/distilbert-base-uncased-fill-mask-executorch", "optimum-executorch")
-        self.assertIs(type(model), ExportedModel)
+        self.assertEqual(type(model).__name__, "ExportedModel")
         eager = AutoModelForMaskedLM.from_pretrained("distilbert/distilbert-base-uncased").eval()
         with torch.no_grad():
             expected = eager(**inputs).logits

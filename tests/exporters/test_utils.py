@@ -103,7 +103,7 @@ def _check_encoder(test, repo, library):
     tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-base-en-v1.5")
     inputs = dict(tokenizer(["The capital of France is Paris."], return_tensors="pt"))
     model = _load(test, repo, library)
-    test.assertIs(type(model), ExportedModel)
+    test.assertEqual(type(model).__name__, "ExportedModel")
     with torch.no_grad():
         expected = AutoModel.from_pretrained("BAAI/bge-base-en-v1.5").eval()(**inputs).last_hidden_state[:, 0]
     embedding = model(**inputs)["last_hidden_state"][:, 0].float()

@@ -371,6 +371,32 @@ def _load_onnx_seq2seq(
     }, True
 
 
+def _empty_cache_in_graph(program: onnx_ir.Model) -> None:
+    """A decoder exported for embeddings (Qwen3-Embedding's: `last_hidden_state` first, a cache in and out) as an
+    encoder: its cache inputs built empty in the graph (`[batch, heads, 0, head_dim]`), its cache outputs dropped."""
+    import onnx_ir
+
+    graph = program.graph
+    input_ids = next(value for value in graph.inputs if value.name == "input_ids")
+    shape = onnx_ir.node("Shape", [input_ids])
+    first = onnx_ir.node("Constant", [], attributes={"value": onnx_ir.tensor(torch.tensor([0], dtype=torch.int64))})
+    batch = onnx_ir.node("Gather", [shape.outputs[0], first.outputs[0]])
+    nodes = [shape, first, batch]
+    for value in [value for value in graph.inputs if value.name.startswith("input.cache.")]:
+        rest = torch.tensor([value.shape[1], 0, value.shape[3]], dtype=torch.int64)
+        dims = onnx_ir.node("Constant", [], attributes={"value": onnx_ir.tensor(rest)})
+        full = onnx_ir.node("Concat", [batch.outputs[0], dims.outputs[0]], attributes={"axis": 0})
+        zero = onnx_ir.tensor(torch.zeros(1, dtype=getattr(torch, str(value.dtype.numpy()))))
+        empty = onnx_ir.node("ConstantOfShape", [full.outputs[0]], attributes={"value": zero})
+        nodes += [dims, full, empty]
+        onnx_ir.convenience.replace_all_uses_with(value, empty.outputs[0])
+        graph.inputs.remove(value)
+    graph.insert_before(graph.node(0), nodes)
+    outputs = [value for value in graph.outputs if not value.name.startswith("output.cache.")]
+    graph.outputs.clear()
+    graph.outputs.extend(outputs)
+
+
 def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
     """A causal LM taking and returning its cache (inputs `input_ids`, `attention_mask`, maybe `position_ids`,
     `past_key_values.*`; outputs `logits`, `present.*`), an encoder-decoder, a multimodal export, or an
@@ -393,6 +419,9 @@ def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[st
     _drop_use_cache_branch(program)
     graph = program.graph
     if not geometry:
+        return {"model": _onnx_graph_component(program, config, by_name=True)}, False
+    if graph.outputs[0].name == "last_hidden_state":
+        _empty_cache_in_graph(program)
         return {"model": _onnx_graph_component(program, config, by_name=True)}, False
     if graph.outputs[0].name != "logits":
         raise ValueError(

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Unpack
 from ...utils import logging
 from ...utils.hub import DownloadKwargs
 from . import executorch, intel, onnx
-from .common import _find, _OptimumGenerationMixin
+from .common import _find, _OptimumEncoderMixin, _OptimumGenerationMixin
 
 
 if TYPE_CHECKING:
@@ -35,9 +35,12 @@ logger = logging.get_logger(__name__)
 
 def _optimum_model_class(model_class: type, mixin: type | None) -> type:
     """`model_class` as an optimum export runs: for one `generate` drives, with its library's generation mixin (if any)
-    and `_OptimumGenerationMixin`."""
+    and `_OptimumGenerationMixin`; for an encoder, with `_OptimumEncoderMixin`."""
+    from ..base import ExportedModel
     from ..generation import ExportedModelForCausalLM
 
+    if model_class is ExportedModel:
+        return type(model_class.__name__, (_OptimumEncoderMixin, model_class), {"__module__": __name__})
     if not issubclass(model_class, ExportedModelForCausalLM):
         return model_class
     mixins = (mixin, _OptimumGenerationMixin) if mixin is not None else (_OptimumGenerationMixin,)

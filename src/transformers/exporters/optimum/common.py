@@ -17,7 +17,7 @@ runs with, supplying what its decode graph takes that `generate` doesn't give it
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Unpack
+from typing import Any, Unpack
 
 from ...utils.hub import DownloadKwargs, cached_file, hf_api
 from ...utils.import_utils import is_torch_available
@@ -76,3 +76,19 @@ class _OptimumGenerationMixin:
                 sequence.shape[1] - step.shape[1], sequence.shape[1], device=step.device
             )
         return model_inputs
+
+
+class _OptimumEncoderMixin:
+    """What an optimum encoder graph takes that eager fills in itself: zero token types (an XLM-R tokenizer returns
+    none, multilingual-e5's graph takes them) and positions counting from 0 (a decoder exported for embeddings,
+    Qwen3-Embedding's)."""
+
+    def __call__(self, **kwargs) -> Any:
+        traced = self.runners[self._single_component()].metadata.kwargs
+        input_ids = kwargs.get("input_ids")
+        if input_ids is not None:
+            if "token_type_ids" in traced and kwargs.get("token_type_ids") is None:
+                kwargs["token_type_ids"] = torch.zeros_like(input_ids)
+            if "position_ids" in traced and kwargs.get("position_ids") is None:
+                kwargs["position_ids"] = torch.arange(input_ids.shape[1], device=input_ids.device).expand_as(input_ids)
+        return super().__call__(**kwargs)
