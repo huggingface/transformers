@@ -111,7 +111,7 @@ class DecisionMixin:
         `Question.answer` turns into answers.
         """
         decision_config = decision_config or self.decision_config
-        inputs = {"input_ids": input_ids, **kwargs}
+        inputs = {"input_ids": input_ids, **kwargs, "return_dict": True}
         num_options = torch.tensor([[len(question.options) for question in decision_questions]])
         question_types = [Question.questions_types.index(question.type) for question in decision_questions]
         scores = self(
@@ -119,7 +119,7 @@ class DecisionMixin:
             num_options=num_options.to(self.device),
             question_type_ids=torch.tensor([question_types], device=self.device),
             **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
-        )
+        ).logits
         return process_scores(
             decision_config, inputs["input_ids"], marks, decision_questions, scores.split(num_options[0].tolist())
         )

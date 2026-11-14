@@ -81,6 +81,21 @@ and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to t
 pipeline("decision", model="vllm-sr/d3")(request)  # or perplexity-ai/pplx-decider-v1.1-27b
 ```
 
+## Training
+
+`JevForDecision` returns `loss` and `logits` and can train with the standard `Trainer` or TRL.
+The default loss follows [AutoTrust JEV-9B](https://huggingface.co/autotrust/JEV-9B#training-details): KL divergence
+over each question's active options, plus `0.5 × RPS` for ordered Score questions. Set `config.rps_weight` to adjust
+the ordinal term. Training uses raw logits; calibration is applied by `decide`.
+
+Pass integer `labels` of shape `(1, num_questions)`, using `-100` to ignore a question, or soft target distributions
+of shape `(1, total_num_options)`, concatenated in question order. Each distribution must sum to one.
+`outputs.logits` uses the same packed option order.
+
+Optional `loss_weights` weight individual questions. The loss is averaged over valid questions, rather than the sum
+of weights. When accumulating prompts with different question counts, pass their total valid-question count as
+`num_items_in_batch` explicitly.
+
 ## JevConfig
 
 [[autodoc]] JevConfig
