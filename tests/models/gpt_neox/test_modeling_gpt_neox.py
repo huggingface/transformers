@@ -182,7 +182,7 @@ class GPTNeoXModelTester:
 
         # first forward pass
         outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -197,7 +197,7 @@ class GPTNeoXModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -238,12 +238,10 @@ class GPTNeoXModelTester:
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
         # We need to run both on a copy of the cache, otherwise it is modified in-place
         cache_outputs = model(**cache_inputs)
-        cache = cache_outputs.past_key_values
-        full_outputs_with_attention_mask = model(
-            **non_cache_inputs, past_key_values=copy_cache(cache)
-        ).last_hidden_state
+        cache = cache_outputs.cache
+        full_outputs_with_attention_mask = model(**non_cache_inputs, cache=copy_cache(cache)).last_hidden_state
         full_outputs_without_attention_mask = model(
-            non_cache_inputs["input_ids"], past_key_values=copy_cache(cache)
+            non_cache_inputs["input_ids"], cache=copy_cache(cache)
         ).last_hidden_state
 
         self.parent.assertTrue(

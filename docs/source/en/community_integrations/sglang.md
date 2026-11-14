@@ -54,5 +54,5 @@ The model benefits from all SGLang optimizations while using the Transformers mo
 
 ## Resources
 
-- [SGLang docs](https://docs.sglang.ai/supported_models/transformers_fallback.html) has more usage examples and tips for using Transformers as a backend.
+- [SGLang docs](https://docs.sglang.io/docs/supported-models/transformers_fallback) has more usage examples and tips for using Transformers as a backend.
 - [Transformers backend integration in SGLang](https://huggingface.co/blog/transformers-backend-sglang) blog post explains what this integration enables.

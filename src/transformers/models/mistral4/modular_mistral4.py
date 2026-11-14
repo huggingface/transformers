@@ -19,12 +19,14 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations.latent_attention_paged import paged_latent_attention
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
@@ -103,13 +105,14 @@ class Mistral4MoE(DeepseekV3MoE):
 
 
 class Mistral4Attention(DeepseekV3Attention):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -135,13 +138,12 @@ class Mistral4Attention(DeepseekV3Attention):
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while the latent KV is still compressed
-        paged_cache = kwargs.get("cache")
-        if paged_cache is not None and kwargs.get("block_table") is None:  # continuous batching
+        if isinstance(cache, PagedAttentionCache) and kwargs.get("block_table") is None:  # continuous batching
             latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
-            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        elif past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        elif cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
@@ -152,7 +154,7 @@ class Mistral4Attention(DeepseekV3Attention):
         ).to(query_states.dtype)
 
         if kwargs.get("block_table") is not None:  # decode fast path of continuous batching
-            attn_output, attn_weights = paged_latent_attention(self, query_states, k_pass, k_rot, **kwargs)
+            attn_output, attn_weights = paged_latent_attention(self, query_states, k_pass, k_rot, cache, **kwargs)
         else:
             key_states, value_states = self.expand_kv(k_pass, k_rot)
             attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -196,7 +198,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Mistral4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

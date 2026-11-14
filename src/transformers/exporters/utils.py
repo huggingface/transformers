@@ -479,9 +479,7 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     leaves = {path: openvino_input_value(tensor) for path, tensor in get_leaf_tensors(sample).items()}
     # `beam_idx` reorders the cache's batch axis: read it off a cache tensor (not a sliding layer's 0-d counter).
     batched = [path for path, value in leaves.items() if len(value.shape)]
-    batch_path = next(
-        (path for path in batched if path.startswith("past_key_values.")), batched[0] if batched else None
-    )
+    batch_path = next((path for path in batched if path.startswith("cache.")), batched[0] if batched else None)
     batch = leaves[batch_path].shape[0] if batch_path is not None else 1
 
     def port_value(name: str) -> Any:
@@ -851,7 +849,7 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     axis now has hint `N > 1` so it stays dynamic. The exported decode then handles both a single token
     (ordinary decoding) and many (continuation-from-past for multi-turn, or a plain prefill when the cache is empty).
 
-    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
+    The cache (`cache`) is taken from the FIRST step (the state right after prefill, before
     the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
     handled below (its layout depends on the cache).
     """

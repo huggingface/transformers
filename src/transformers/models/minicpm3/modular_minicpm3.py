@@ -20,11 +20,13 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations.latent_attention_paged import paged_latent_attention
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
@@ -161,12 +163,13 @@ class MiniCPM3Attention(DeepseekV2Attention):
     module construction and override only `forward`.
     """
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -191,18 +194,17 @@ class MiniCPM3Attention(DeepseekV2Attention):
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while the latent KV is still compressed
-        paged_cache = kwargs.get("cache")
-        if paged_cache is not None and kwargs.get("block_table") is None:  # continuous batching
+        if isinstance(cache, PagedAttentionCache) and kwargs.get("block_table") is None:  # continuous batching
             latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
-            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        elif past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        elif cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         if kwargs.get("block_table") is not None:  # decode fast path of continuous batching
-            attn_output, attn_weights = paged_latent_attention(self, query_states, k_pass, k_rot, **kwargs)
+            attn_output, attn_weights = paged_latent_attention(self, query_states, k_pass, k_rot, cache, **kwargs)
         else:
             key_states, value_states = self.expand_kv(k_pass, k_rot)
             attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -231,12 +233,13 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
         # (Llama adds the branch directly). Precompute the constant once instead of per forward.
         self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -247,7 +250,7 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -283,12 +286,13 @@ class MiniCPM3Model(LlamaModel):
 class MiniCPM3ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -315,7 +319,7 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -334,7 +338,7 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

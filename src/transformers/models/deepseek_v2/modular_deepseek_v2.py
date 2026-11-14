@@ -22,12 +22,14 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations.latent_attention_paged import paged_latent_attention
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -93,7 +95,7 @@ class DeepseekV2Config(LlamaConfig):
     }
 
     model_type = "deepseek_v2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_experts": "n_routed_experts",
     }
@@ -331,11 +333,12 @@ class DeepseekV2Attention(nn.Module):
         key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -358,18 +361,17 @@ class DeepseekV2Attention(nn.Module):
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         # Cache read / write is performed while the latent KV is still compressed
-        paged_cache = kwargs.get("cache")
-        if paged_cache is not None and kwargs.get("block_table") is None:  # continuous batching
+        if isinstance(cache, PagedAttentionCache) and kwargs.get("block_table") is None:  # continuous batching
             latent = torch.cat((k_nope, k_pe), dim=-1)[0, 0]
-            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_nope, k_pe = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        elif past_key_values is not None:
-            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
+        elif cache is not None:
+            k_nope, k_pe = cache.update(k_nope, k_pe, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)
 
         if kwargs.get("block_table") is not None:  # decode fast path of continuous batching
-            attn_output, attn_weights = paged_latent_attention(self, query_states, k_nope, k_pe, **kwargs)
+            attn_output, attn_weights = paged_latent_attention(self, query_states, k_nope, k_pe, cache, **kwargs)
         else:
             key_states, value_states = self.expand_kv(k_nope, k_pe)
             attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -426,12 +428,13 @@ class DeepseekV2Model(OlmoeModel):
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -442,7 +445,7 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -460,7 +463,7 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
         return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

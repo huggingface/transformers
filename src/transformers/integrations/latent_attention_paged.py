@@ -16,6 +16,7 @@ import torch
 from torch import nn
 from torch.distributed.tensor import DTensor
 
+from ..generation.continuous_batching import PagedAttentionCache
 from .hub_kernels import lazy_load_kernel
 
 
@@ -24,6 +25,7 @@ def paged_latent_attention(
     query: torch.Tensor,  # shape [1, num_heads, num_sequences, qk_nope_head_dim + qk_rope_head_dim]
     latent_nope: torch.Tensor,  # shape [1, 1, num_sequences, kv_lora_rank]
     latent_rot: torch.Tensor,  # shape [1, 1, num_sequences, qk_rope_head_dim]
+    cache: PagedAttentionCache,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:  # shape [1, num_sequences, num_heads, v_head_dim]
     """Multi-head latent attention on the decode fast path of continuous batching, where every sequence brings one new
@@ -34,7 +36,6 @@ def paged_latent_attention(
     `kv_lora_rank + qk_rope_head_dim`, which is the FlashMLA kernel's layout (576 on DeepSeek V3). The attention output
     is then a latent per head, which absorbs the value half of `kv_b_proj`.
     """
-    cache = kwargs["cache"]
     latent = torch.cat((latent_nope, latent_rot), dim=-1)[0, 0]
     pages, block_table, seqlens_k = cache.update_paged_rows(module.layer_idx, {"latent": latent}, kwargs)
 

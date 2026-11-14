@@ -28,12 +28,14 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations.latent_attention_paged import paged_latent_attention
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
@@ -185,12 +187,13 @@ class AXK1Attention(DeepseekV3Attention):
         self.q_a_layernorm = AXK1RMSNorm(self.q_lora_rank)
         self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -215,18 +218,17 @@ class AXK1Attention(DeepseekV3Attention):
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
-        paged_cache = kwargs.get("cache")
-        if paged_cache is not None and kwargs.get("block_table") is None:  # continuous batching
+        if isinstance(cache, PagedAttentionCache) and kwargs.get("block_table") is None:  # continuous batching
             latent = torch.cat((kv_nope, k_rot), dim=-1)[0, 0]
-            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             kv_nope, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        elif past_key_values is not None:
-            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+        elif cache is not None:
+            kv_nope, k_rot = cache.update(kv_nope, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         if kwargs.get("block_table") is not None:  # decode fast path of continuous batching
-            attn_output, attn_weights = paged_latent_attention(self, query_states, kv_nope, k_rot, **kwargs)
+            attn_output, attn_weights = paged_latent_attention(self, query_states, kv_nope, k_rot, cache, **kwargs)
         else:
             key_states, value_states = self.expand_kv(kv_nope, k_rot)
             attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -253,7 +255,10 @@ class AXK1DecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    # The released checkpoints also store `post_mlp_layernorm` for the dense layers, which do not use it
+    _keys_to_ignore_on_load_unexpected = ["inv_freq", r"mlp\.post_mlp_layernorm"]
+    # and route without a score correction bias
+    _keys_to_ignore_on_load_missing = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
