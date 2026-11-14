@@ -46,6 +46,7 @@ if is_torch_available():
         DynamicCache,
         FalconH1Config,
         FalconH1ForCausalLM,
+        GenerationConfig,
         GptOssForCausalLM,
         JambaConfig,
         JambaForCausalLM,
@@ -770,6 +771,25 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         torch.testing.assert_close(actual.sequences, expected.sequences)
         torch.testing.assert_close(actual.logits, expected.logits)
+
+    def test_continuous_batching_matches_generate_with_skipped_attention(self):
+        config = tiny_llama_config(
+            per_layer_config={0: {"intermediate_size": 64}, 1: {"skip": ["attention"]}},
+            pad_token_id=0,
+            eos_token_id=None,
+        )
+        model = build_model(config, LlamaForCausalLM)
+        prompts = [[1, 3, 4, 5], [1, 6, 7]]
+        generation_config = GenerationConfig(max_new_tokens=3, do_sample=False, pad_token_id=0)
+        with torch.no_grad():
+            expected = [
+                model.generate(torch.tensor([prompt]), generation_config=generation_config)[0, len(prompt) :].tolist()
+                for prompt in prompts
+            ]
+
+        results = model.generate_batch(inputs=prompts, generation_config=generation_config, progress_bar=False)
+
+        self.assertEqual([results[f"req_{i}"].generated_tokens for i in range(len(prompts))], expected)
 
     @pytest.mark.torch_compile_test
     def test_static_cache_decoding_compiles_fullgraph(self):

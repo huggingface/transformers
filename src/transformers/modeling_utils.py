@@ -1243,9 +1243,12 @@ class PreTrainedModel(
         elif full_annotation is not None:
             cls.config_class = full_annotation
 
-        # Support generic heterogeneous modeling
-        cls.__init__ = support_generic_heterogeneous_modeling(cls.__init__)
+        # Support generic heterogeneous modeling. A class that inherits a wrapped `__init__` keeps inheriting it.
+        wrapped_init = support_generic_heterogeneous_modeling(cls.__init__)
+        if wrapped_init is not cls.__init__:
+            cls.__init__ = wrapped_init
 
+    @support_generic_heterogeneous_modeling
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PreTrainedConfig):

@@ -90,7 +90,11 @@ def _get_mask_layer_indices(config: PreTrainedConfig, create_mask_fn: Callable) 
 
 
 def _get_cache_geometry(*, cache: Any, query_length: Any, layer_idx: int) -> tuple[Any, ...]:
-    if cache is None:
+    # Lazy import to avoid circular imports
+    from transformers.generation.continuous_batching.cache import PagedAttentionCache
+
+    # A continuous batching cache has no mask sizes, and the mask factories don't read it
+    if cache is None or isinstance(cache, PagedAttentionCache):
         return ()
 
     query_offset = cache.get_query_offset(layer_idx)

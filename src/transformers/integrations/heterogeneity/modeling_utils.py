@@ -37,7 +37,7 @@ from transformers.integrations.heterogeneity.skip_utils import apply_skips, vali
 if TYPE_CHECKING:
     from torch import nn
 
-    from transformers import PreTrainedModel
+    from transformers import PreTrainedConfig, PreTrainedModel
 
 
 @dataclass(frozen=True)
@@ -59,17 +59,30 @@ _initializing_models: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = cont
 _layer_patching_lock = threading.Lock()
 
 
+def _get_layer_attention_mask(
+    attention_masks: AttentionMasksByLayerIdx, *, config: PreTrainedConfig, layer_idx: int
+) -> Any:
+    if layer_idx not in attention_masks:
+        raise ValueError(
+            f"Layer {layer_idx} has no attention mask, because the model doesn't create attention masks for layers "
+            f"of type '{config.layer_types[layer_idx]}'."
+        )
+    return attention_masks[layer_idx]
+
+
 def _select_attention_masks_by_layer_idx(
     module: nn.Module,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     *,
+    config: PreTrainedConfig,
     layer_idx: int,
 ) -> tuple[tuple[Any, ...], dict[str, Any]]:
     # A layer can get several masks, so every argument is checked
-    args = tuple(arg[layer_idx] if isinstance(arg, AttentionMasksByLayerIdx) else arg for arg in args)
+    get_layer_mask = partial(_get_layer_attention_mask, config=config, layer_idx=layer_idx)
+    args = tuple(get_layer_mask(arg) if isinstance(arg, AttentionMasksByLayerIdx) else arg for arg in args)
     kwargs = {
-        name: value[layer_idx] if isinstance(value, AttentionMasksByLayerIdx) else value
+        name: get_layer_mask(value) if isinstance(value, AttentionMasksByLayerIdx) else value
         for name, value in kwargs.items()
     }
     return args, kwargs
@@ -94,10 +107,11 @@ def _validate_layer_cache_entry(
 def _register_layer_attention_mask_selection_hook(
     *,
     layer: nn.Module,
+    config: PreTrainedConfig,
     layer_idx: int,
 ) -> None:
     layer.register_forward_pre_hook(
-        partial(_select_attention_masks_by_layer_idx, layer_idx=layer_idx),
+        partial(_select_attention_masks_by_layer_idx, config=config, layer_idx=layer_idx),
         with_kwargs=True,
     )
 
@@ -184,7 +198,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                 )
 
             # --- Register forward pre-hooks ---
-            _register_layer_attention_mask_selection_hook(layer=self, layer_idx=layer_idx)
+            _register_layer_attention_mask_selection_hook(layer=self, config=config, layer_idx=layer_idx)
             if unwritten_caches := context.generic_modeling_state.per_layer_unwritten_caches.get(layer_idx):
                 _register_layer_cache_validation_hook(
                     layer=self, layer_idx=layer_idx, unwritten_caches=unwritten_caches
@@ -274,10 +288,11 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
     modeling is marked as applied only after the root model's construction succeeds. If generic heterogeneous modeling
     is not applied, the wrapper does not change model initialization.
 
-    The wrapper is installed on every subclass through ``__init_subclass__``, because any subclass, including a user's,
-    can be the root model. No other hook runs when the root model's ``__init__`` returns or raises. ``post_init``
-    doesn't work for this: it also runs at the end of each nested model's ``__init__``, such as ``LlamaModel`` inside
-    ``LlamaForCausalLM``, and it doesn't run at all when ``__init__`` fails.
+    The wrapper is applied to ``PreTrainedModel.__init__``, and ``__init_subclass__`` applies it to the ``__init__`` of
+    each subclass that doesn't inherit a wrapped one, because any subclass, including a user's, can be the root model.
+    No other hook runs when the root model's ``__init__`` returns or raises. ``post_init`` doesn't work for this: it
+    also runs at the end of each nested model's ``__init__``, such as ``LlamaModel`` inside ``LlamaForCausalLM``, and
+    it doesn't run at all when ``__init__`` fails.
     """
     if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
         return orig_init
