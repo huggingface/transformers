@@ -44,7 +44,7 @@ class GPTNeoXConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gpt_neox"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.attention.query_key_value": "colwise",
         "layers.*.attention.dense": "rowwise",

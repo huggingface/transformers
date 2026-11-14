@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) optimizes LLM inference on NVIDIA GPUs. It compiles models into a TensorRT engine with in-flight batching, paged KV caching, and tensor parallelism. [AutoDeploy](https://nvidia.github.io/TensorRT-LLM/torch/auto_deploy/auto-deploy.html) accepts Transformers models without requiring any changes. It automatically converts the model to an optimized runtime.
 
-Pass a model id from the Hub to [build_and_run_ad.py](https://github.com/NVIDIA/TensorRT-LLM/blob/main/examples/auto_deploy/build_and_run_ad.py) to run a Transformers model.
+Pass a model id from the Hub to `build_and_run_ad.py` to run a Transformers model.
 
 ```bash
 cd examples/auto_deploy

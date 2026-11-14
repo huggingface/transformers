@@ -55,11 +55,11 @@ class ColPaliForRetrievalOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
@@ -67,7 +67,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
 
     loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     image_hidden_states: torch.Tensor | None = None
@@ -135,7 +135,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         return ColPaliForRetrievalOutput(
             embeddings=embeddings,
-            past_key_values=vlm_output.past_key_values,
+            cache=vlm_output.cache,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
             image_hidden_states=vlm_image_hidden_states,

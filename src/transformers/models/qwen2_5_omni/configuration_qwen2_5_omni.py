@@ -149,7 +149,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen25OmniText`

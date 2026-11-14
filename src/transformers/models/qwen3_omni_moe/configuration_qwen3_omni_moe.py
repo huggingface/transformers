@@ -129,7 +129,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
@@ -248,7 +248,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_omni_moe_talker_code_predictor"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
     base_model_tp_plan = {
@@ -333,7 +333,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_omni_moe_talker_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_experts": "num_local_experts",

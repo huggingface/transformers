@@ -56,7 +56,7 @@ class Qwen3NextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_next"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
