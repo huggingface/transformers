@@ -94,13 +94,12 @@ class ExportedMultimodalModel(ExportedModel):
             share_outputs=share_outputs,
             **{name: value for name, value in inputs.items() if name in traced},
         )
+        fields = getattr(outputs, "__dataclass_fields__", {})
         # The model returns its image features too, which the language model never sees.
-        if features.get("vision_embeddings_model") is not None and "image_hidden_states" in getattr(
-            outputs, "__dataclass_fields__", {}
-        ):
+        if features.get("vision_embeddings_model") is not None and "image_hidden_states" in fields:
             outputs["image_hidden_states"] = features["vision_embeddings_model"].clone()
         # And Granite4-Vision its per-layer ones.
-        if "deepstack_features" in features and "deepstack_features" in getattr(outputs, "__dataclass_fields__", {}):
+        if "deepstack_features" in features and "deepstack_features" in fields:
             outputs["deepstack_features"] = [
                 (layer, [image.clone() for image in images]) for layer, images in features["deepstack_features"]
             ]
