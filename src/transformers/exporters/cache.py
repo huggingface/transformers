@@ -95,27 +95,20 @@ def _mark_existing_states(cache) -> None:
                         layer.conv_kernel_size[key] = conv.shape[-1]
                     if getattr(layer, "dtype", None) is None:
                         layer.dtype, layer.device = conv.dtype, conv.device
+
+        def present(names, key):
+            states = (getattr(layer, name, None) for name in names)
+            return any(isinstance(state, dict) and isinstance(state.get(key), torch.Tensor) for state in states)
+
         # Only states that exist: a conv-only layer (lfm2) never gets recurrent states.
-        for flag, attr in (
-            ("is_conv_states_initialized", "conv_states"),
-            ("is_recurrent_states_initialized", "recurrent_states"),
-            ("has_previous_state", None),
+        for flag, names in (
+            ("is_conv_states_initialized", ("conv_states",)),
+            ("is_recurrent_states_initialized", ("recurrent_states",)),
+            ("has_previous_state", ("conv_states", "recurrent_states")),
         ):
             marks = getattr(layer, flag, None)
-            if not isinstance(marks, dict):
-                continue
-            for key in marks:
-                if attr is None:
-                    present = any(
-                        isinstance(getattr(layer, name, {}).get(key), torch.Tensor)
-                        for name in ("conv_states", "recurrent_states")
-                        if isinstance(getattr(layer, name, None), dict)
-                    )
-                else:
-                    states = getattr(layer, attr, None)
-                    present = isinstance(states, dict) and isinstance(states.get(key), torch.Tensor)
-                if present:
-                    marks[key] = True
+            if isinstance(marks, dict):
+                marks.update({key: True for key in marks if present(names, key)})
 
 
 # ── Geometry and materialization ──────────────────────────────────────────────

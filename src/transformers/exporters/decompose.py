@@ -186,6 +186,11 @@ def capture_cross_writers(model: PreTrainedModel):
             hook.remove()
 
 
+def _text(call: dict):
+    """A call's token ids, or the embeddings in their place."""
+    return next((call[key] for key in ("input_ids", "inputs_embeds") if call.get(key) is not None), None)
+
+
 def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     """Merge consecutive single-token decode captures into one multi-token decode input.
 
@@ -196,14 +201,7 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     merged = copy.copy(first)
 
     # With `use_cache` off each step re-runs the whole sequence, already multi-token, so take the last.
-    def query_length(call: dict) -> int | None:
-        for key in ("input_ids", "inputs_embeds"):
-            value = call.get(key)
-            if value is not None:
-                return value.shape[1]
-        return None
-
-    if any(query_length(call) != 1 for call in decode_calls):
+    if any(_text(call) is None or _text(call).shape[1] != 1 for call in decode_calls):
         return copy.copy(decode_calls[-1])
 
     def concat_along(key: str, dim: int) -> None:
@@ -272,8 +270,7 @@ def decompose_prefill_decode(
         and capture_config.max_new_tokens is not None
     ):
         # A fixed-size cache sized for the generation the config asks for, not for the few steps captured.
-        text = next(inputs[name] for name in ("input_ids", "inputs_embeds") if inputs.get(name) is not None)
-        prompt_length = 1 if getattr(model.config, "is_encoder_decoder", False) else text.shape[1]
+        prompt_length = 1 if getattr(model.config, "is_encoder_decoder", False) else _text(inputs).shape[1]
         capture_config.max_cache_len = prompt_length + capture_config.max_new_tokens
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
@@ -876,9 +873,8 @@ def decompose_for_generation(
     # tokens are text, so zeros let the one graph build the prefill step's mask too.
     token_types = prompt.inputs.get("token_type_ids")
     if token_types is not None and decode.inputs.get("token_type_ids") is None:
-        text = next(decode.inputs[key] for key in ("input_ids", "inputs_embeds") if decode.inputs.get(key) is not None)
         decode = components["decode"] = replace(
-            decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(text.shape[:2])}
+            decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(_text(decode.inputs).shape[:2])}
         )
     deepstack = {}
     if multimodal:
@@ -948,8 +944,7 @@ def _prefill_mask(prefill_inputs: dict, decode_mask: Any) -> Any:
         return None
     if isinstance(decode_mask, dict):
         return {key: _prefill_mask(prefill_inputs, mask) for key, mask in decode_mask.items()}
-    text = next(prefill_inputs[key] for key in ("input_ids", "inputs_embeds") if prefill_inputs.get(key) is not None)
-    batch_size, query_length = text.shape[:2]
+    batch_size, query_length = _text(prefill_inputs).shape[:2]
     cache_len = mask_width(prefill_inputs.get("cache"), query_length)
     if decode_mask.dim() == 2:
         return torch.ones(batch_size, cache_len, dtype=decode_mask.dtype, device=decode_mask.device)
