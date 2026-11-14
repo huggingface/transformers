@@ -148,14 +148,15 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
     def generate(self, *args, **kwargs):
         """[`~GenerationMixin.generate`]. A stateful decode graph (OpenVINO's) hands out its own output buffers instead
         of copies meanwhile: it only returns the logits (the cache is its state), and `generate` copies the row it
-        reads before the next step overwrites them. On the CPU, torch runs on one thread meanwhile."""
+        reads before the next step overwrites them. On the CPU, torch runs on at most four threads meanwhile."""
         self._generating = True
         # On the CPU the backend's own thread pool runs the graphs, and torch only each step's bookkeeping (logits
-        # processors, the next ids, the masks). Torch's pool, spinning after those small ops, fights the backend's for
-        # the cores: ONNX Runtime's decode runs 1.5x faster with torch on one thread meanwhile.
+        # processors over the vocabulary, the next ids, the masks). A full torch pool, spinning after those small ops,
+        # fights the backend's for the cores; one thread makes the bookkeeping itself slow. Four is the best of both:
+        # Qwen2.5-0.5B on 32 cores decodes 7% faster with OpenVINO, 1.6x with ONNX Runtime.
         threads = torch.get_num_threads()
         if self.export_format != "dynamo" and self.device.type == "cpu":
-            torch.set_num_threads(1)
+            torch.set_num_threads(min(threads, 4))
         try:
             return super().generate(*args, **kwargs)
         finally:
