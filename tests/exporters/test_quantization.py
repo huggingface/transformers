@@ -15,12 +15,14 @@
 
 Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports:
 `PT2EQuantizer` and `NNCFTorchFXQuantizer` on the FX graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch),
-and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`) and OpenVINO
+and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`, `ModelOptOnnxQuantizer`) and OpenVINO
 (`NNCFOpenVINOQuantizer`). Calibration and per-component recipes go through `export_for_generation`, whose components
 take the attention mask as an input (PT2E's retrace trips on in-graph mask construction).
 """
 
 import copy
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -38,6 +40,7 @@ from transformers.exporters.quantizers.utils import capture_calibration_inputs
 from transformers.exporters.utils import decompose_for_generation, get_leaf_tensors
 from transformers.testing_utils import (
     require_executorch,
+    require_modelopt,
     require_nncf,
     require_onnxruntime,
     require_onnxscript,
@@ -482,6 +485,48 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
+    @require_onnxscript
+    @require_onnxruntime
+    def test_onnxruntime_calibration_table(self):
+        """A calibration table for TensorRT's implicit int8 leaves the graph unquantized and goes in its metadata; a
+        TensorRT provider turning int8 on reads it from its engine cache directory."""
+        import json
+
+        from transformers.exporters import (
+            OnnxConfig,
+            OnnxExporter,
+            OnnxRuntimeCalibrationTableConfig,
+            OnnxRuntimeQuantizer,
+        )
+        from transformers.exporters.quantizers.quantizer_onnxruntime import TENSORRT_CALIBRATION_TABLE
+        from transformers.exporters.runners.runner_onnx import _with_calibration_table
+
+        model, inputs = self._quantization_target("dense")
+        quantizer = OnnxRuntimeQuantizer(
+            OnnxRuntimeCalibrationTableConfig(), calibration_dataset=[copy.deepcopy(inputs)]
+        )
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        program = exported.program
+        self.assertFalse(_has_onnx_quantize_ops(program))
+        table = json.loads(program.metadata_props[TENSORRT_CALIBRATION_TABLE])
+        self.assertTrue(table and all(value >= 0 for value in table.values()))
+
+        with tempfile.TemporaryDirectory() as cache:
+            options = {"trt_int8_enable": True, "trt_engine_cache_path": cache}
+            ((name, resolved), cuda) = _with_calibration_table(
+                program, [("TensorrtExecutionProvider", options), "CUDAExecutionProvider"]
+            )
+            self.assertEqual(name, "TensorrtExecutionProvider")
+            self.assertEqual(cuda, "CUDAExecutionProvider")
+            self.assertTrue(os.path.isfile(os.path.join(cache, resolved["trt_int8_calibration_table_name"])))
+            # Without int8, or with a table of its own, the provider is left alone
+            plain = [("TensorrtExecutionProvider", {"trt_engine_cache_path": cache})]
+            self.assertEqual(_with_calibration_table(program, plain), plain)
+            # A graph with neither a table nor Q/DQ nodes gets int8 turned off
+            del program.metadata_props[TENSORRT_CALIBRATION_TABLE]
+            ((_, unquantized),) = _with_calibration_table(program, [("TensorrtExecutionProvider", options)])
+            self.assertFalse(unquantized["trt_int8_enable"])
+
     @parameterized.expand(
         [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
     )
@@ -519,6 +564,30 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             )
         exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
         quantize_op = "DequantizeLinear" if weights_only else "QuantizeLinear"
+        self.assertTrue(any(node.op_type == quantize_op for node in exported.program.graph))
+        outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
+        self.assertTrue(outputs)
+        self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @parameterized.expand([("dense", "int8"), ("moe", "int8"), ("dense", "int4")])
+    @require_onnxscript
+    @require_onnxruntime
+    @require_modelopt
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_modelopt_onnx(self, family, quantize_mode):
+        """ModelOpt quantizes the converted ONNX model for TensorRT (`ModelOptOnnxQuantizer`), int8 QDQ or int4 weights
+        (AWQ clip), calibrated on the model's inputs: it gains quantization nodes and still runs in ONNX Runtime. Kept
+        in fp32 and calibrated on the CPU so ONNX Runtime's CPU kernels run it."""
+        from transformers.exporters import ModelOptOnnxConfig, ModelOptOnnxQuantizer, OnnxConfig, OnnxExporter
+
+        model, inputs = self._quantization_target(family)
+        config = ModelOptOnnxConfig(quantize_mode=quantize_mode, calibration_eps=["cpu"], high_precision_dtype="fp32")
+        if quantize_mode == "int4":
+            config.block_size = 16  # the test model's hidden size is smaller than the default 128-wide blocks
+        quantizer = ModelOptOnnxQuantizer(config, calibration_dataset=[copy.deepcopy(inputs)])
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        quantize_op = "DequantizeLinear" if quantize_mode == "int4" else "QuantizeLinear"
         self.assertTrue(any(node.op_type == quantize_op for node in exported.program.graph))
         outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
@@ -615,6 +684,35 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_modelopt
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_modelopt_onnx_calibration_generator(self):
+        """ModelOpt reads the calibration feeds more than once (the first one, then the calibration pass): a one-shot
+        `calibration_dataset` still hands it every sample."""
+        import shutil
+
+        from transformers.exporters import ModelOptOnnxQuantizer, OnnxConfig, OnnxExporter
+        from transformers.exporters.quantizers import quantizer_modelopt
+
+        model, inputs = self._quantization_target("dense")
+        feeds = []
+
+        def quantize(path, calibration_data_reader, output_path, **kwargs):
+            # ModelOpt's reads, without its calibration: the first feed, then every feed
+            calibration_data_reader.get_first()
+            while (feed := calibration_data_reader.get_next()) is not None:
+                feeds.append(feed)
+            shutil.copy(path, output_path)
+
+        samples = (copy.deepcopy(inputs) for _ in range(3))
+        quantizer = ModelOptOnnxQuantizer(calibration_dataset=samples)
+        with patch.object(quantizer_modelopt, "modelopt_quantize", quantize):
+            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        self.assertEqual(len(feeds), 3)
 
 
 @slow

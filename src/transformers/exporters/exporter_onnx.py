@@ -45,7 +45,7 @@ import copy
 import functools
 import operator
 from collections.abc import MutableMapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -60,6 +60,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_patches,
     disambiguate_io_names,
+    patch_attribute,
     patch_model_outputs,
     quantize_converted_model,
     register_fx_node_fix,
@@ -149,6 +150,9 @@ class OnnxExporter(DynamoExporter):
             patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
             apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
+            patch_attribute(torch.nn.functional, "scaled_dot_product_attention", _additive_sdpa_mask)
+            if ort_fusions != "tensorrt"
+            else nullcontext(),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -166,7 +170,7 @@ class OnnxExporter(DynamoExporter):
         _name_graph_outputs(onnx_program.model.graph, outputs_names)
         apply_onnx_ir_fixes(onnx_program)
 
-        if ort_fusions:
+        if ort_fusions not in (None, "tensorrt"):
             fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
@@ -293,8 +297,7 @@ def _patch_sdpa(original):
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
 
-    A boolean mask goes in as an additive one (torchlib's boolean softmax adds a redundant `IsNaN`/`Where`), and
-    unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
+    Unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
     microsoft/onnxruntime#33876). The key, value and mask lengths are checked equal, so a dynamic export gives them
     one symbol, which onnxscript's attention fusion needs.
     """
@@ -309,13 +312,31 @@ def _patch_sdpa(original):
         # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
             attended = attn_mask.to(query.dtype)
-            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
             attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
         unattended = attended.sum(dim=-1, keepdim=True) < 1
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
+
+    return patch
+
+
+def _additive_sdpa_mask(original):
+    """Turn a boolean attention mask into an additive one, unless the export is for TensorRT
+    (`OnnxConfig(ort_fusions="tensorrt")`).
+
+    torchlib's boolean softmax guards every attention with an `IsNaN`/`Where` over the scores, which `_patch_sdpa`
+    makes redundant and which ONNX Runtime pays for (2x on a 2520-patch vision attention on its CPU provider).
+    TensorRT, on the other hand, builds a faster engine from the boolean form (2.53 ms against 3.00 ms on EmbeddingGemma2
+    in bf16 on a B200).
+    """
+
+    def patch(query, key, value, attn_mask=None, *args, **kwargs):
+        if attn_mask is not None and attn_mask.dtype == torch.bool:
+            # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
+            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
+        return original(query, key, value, attn_mask, *args, **kwargs)
 
     return patch
 

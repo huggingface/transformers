@@ -15,11 +15,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 from ...utils.import_utils import is_onnx_available, is_onnxruntime_available, is_onnxscript_available
 from ..configs import ExportFormat
@@ -34,7 +37,10 @@ if is_onnxscript_available():
     import onnx_ir
 
 if is_onnxruntime_available():
-    from onnxruntime.quantization import quantize_dynamic, quantize_static
+    from onnxruntime.quantization import CalibrationMethod, create_calibrator, quantize_dynamic, quantize_static
+
+# The metadata key holding a graph's calibration table for TensorRT's implicit int8
+TENSORRT_CALIBRATION_TABLE = "tensorrt_int8_calibration_table"
 
 
 @dataclass
@@ -75,10 +81,24 @@ class OnnxRuntimeDynamicConfig(QuantizationConfigMixin):
     extra_options: dict[str, Any] | None = None
 
 
+@dataclass
+class OnnxRuntimeCalibrationTableConfig(QuantizationConfigMixin):
+    """
+    A calibration table for TensorRT's implicit int8 (its `trt_int8_enable` on a graph without Q/DQ nodes): each
+    tensor's largest absolute value over the quantizer's `calibration_dataset`, collected by ONNX Runtime's calibrator.
+    The graph itself stays unquantized; the table goes in its metadata, which [`OnnxModelRunner`] writes where
+    TensorRT reads it when a TensorRT provider turns int8 on.
+    """
+
+    calibrate_method: Any = None
+    calibration_providers: list[str] | None = None
+
+
 class OnnxRuntimeQuantizer(ExportQuantizer):
     """
     Quantize the converted ONNX model with ONNX Runtime's own tools (`onnxruntime.quantization`): `quantize_static`
-    with an [`OnnxRuntimeStaticConfig`] (the default), or `quantize_dynamic` with an [`OnnxRuntimeDynamicConfig`].
+    with an [`OnnxRuntimeStaticConfig`] (the default), `quantize_dynamic` with an [`OnnxRuntimeDynamicConfig`], or
+    calibrate it for TensorRT's implicit int8 with an [`OnnxRuntimeCalibrationTableConfig`].
 
     Example:
 
@@ -104,7 +124,7 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
 
     def __init__(
         self,
-        config: OnnxRuntimeStaticConfig | OnnxRuntimeDynamicConfig | None = None,
+        config: OnnxRuntimeStaticConfig | OnnxRuntimeDynamicConfig | OnnxRuntimeCalibrationTableConfig | None = None,
         calibration_dataset: Iterable[dict[str, Any]] | None = None,
     ):
         super().__init__(calibration_dataset)
@@ -133,6 +153,8 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
                 calibration = CalibrationSet(
                     self.calibration_dataset, sample_inputs, lambda sample: onnx_feed(names, sample)
                 )
+                if isinstance(self.config, OnnxRuntimeCalibrationTableConfig):
+                    return self._with_calibration_table(model, path, tmp, calibration)
                 quantize_static(
                     path,
                     quantized_path,
@@ -145,6 +167,24 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
             onnx_ir.external_data.load_to_model(quantized)
             _load_external_tensor_attributes(quantized)
             return quantized
+
+    def _with_calibration_table(self, model, path: str, tmp: str, calibration: CalibrationSet) -> onnx_ir.Model:
+        """`model`, unchanged but for its calibration table in the metadata."""
+        calibrator = create_calibrator(
+            path,
+            [],
+            augmented_model_path=os.path.join(tmp, "augmented.onnx"),
+            calibrate_method=self.config.calibrate_method or CalibrationMethod.MinMax,
+            use_external_data_format=True,
+            providers=self.config.calibration_providers or ["CPUExecutionProvider"],
+        )
+        calibrator.collect_data(_FeedReader(calibration))
+        table = {
+            name: float(np.abs(np.asarray(data.range_value, dtype=np.float64)).max())
+            for name, data in calibrator.compute_data().data.items()
+        }
+        model.metadata_props[TENSORRT_CALIBRATION_TABLE] = json.dumps(table)
+        return model
 
 
 def _load_external_tensor_attributes(model: onnx_ir.Model) -> None:
@@ -161,10 +201,21 @@ def _load_external_tensor_attributes(model: onnx_ir.Model) -> None:
 
 
 class _FeedReader:
-    """The `get_next` interface `quantize_static` reads its calibration feeds through."""
+    """The `CalibrationDataReader` interface `quantize_static` (and ModelOpt, which also reads the first feed, rewinds,
+    and iterates it for int4) reads its calibration feeds through."""
 
     def __init__(self, calibration: CalibrationSet):
-        self.feeds = iter(calibration)
+        self.calibration = calibration
+        self.rewind()
 
     def get_next(self):
         return next(self.feeds, None)
+
+    def get_first(self):
+        return next(iter(self.calibration))
+
+    def rewind(self):
+        self.feeds = iter(self.calibration)
+
+    def __iter__(self):
+        return iter(self.calibration)
