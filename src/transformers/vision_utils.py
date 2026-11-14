@@ -28,6 +28,8 @@ removed from the caller's kwargs as a side-effect of the pop.
 
 from __future__ import annotations
 
+import itertools
+
 import torch
 import torch.nn.functional as F
 
@@ -37,6 +39,66 @@ from .utils.generic import get_max_seqlen
 
 
 logger = logging.get_logger(__name__)
+
+
+def prepare_vision_inputs(grid_thw: torch.Tensor, config: PreTrainedConfig, kwargs: dict | None = None) -> dict:
+    """Prepare packed Qwen-VL vision metadata on CPU, before device transfer and graph capture.
+
+    Returns tensor indices plus Python tuples for non-Flash attention splits. Each distinct split
+    layout can specialize a compiled graph; changing index values with the same layout does not.
+    Caller-provided values are preserved. Window permutation and boundaries must be supplied together.
+    """
+    prepared = dict(kwargs) if kwargs is not None else {}
+    if grid_thw.device.type != "cpu" or any(
+        isinstance(value, torch.Tensor) and value.device.type != "cpu" for value in prepared.values()
+    ):
+        raise ValueError("Prepare vision metadata on CPU before moving the batch to the accelerator.")
+    merge_size = config.spatial_merge_size
+    if grid_thw.ndim != 2 or grid_thw.shape[1] != 3 or grid_thw.shape[0] == 0:
+        raise ValueError("grid_thw must be a nonempty (num_images_or_videos, 3) tensor.")
+    if grid_thw.dtype not in (torch.int32, torch.int64):
+        raise ValueError("grid_thw must contain integer dimensions.")
+    if (grid_thw <= 0).any() or (grid_thw[:, 1:] % merge_size != 0).any():
+        raise ValueError("Grid dimensions must be positive and spatial dimensions divisible by spatial_merge_size.")
+
+    def fill(key, compute):
+        if prepared.get(key) is None:
+            prepared[key] = compute()
+        return prepared[key]
+
+    def lengths(boundaries):
+        if boundaries.ndim != 1 or boundaries.numel() < 2 or boundaries[0] != 0:
+            raise ValueError("Cumulative sequence lengths must be one-dimensional and start at zero.")
+        result = tuple((boundaries[1:] - boundaries[:-1]).tolist())
+        if any(not isinstance(length, int) or length <= 0 for length in result):
+            raise ValueError("Attention segments must have positive integer lengths.")
+        if boundaries[-1] != grid_thw.prod(-1).sum():
+            raise ValueError("Cumulative sequence lengths must cover all vision patches.")
+        return result
+
+    cu_seqlens = fill("cu_seqlens", lambda: get_vision_cu_seqlens(grid_thw))
+    sequence_lengths = lengths(cu_seqlens)
+    position_ids = fill("position_ids", lambda: get_vision_position_ids(grid_thw, merge_size))
+    if position_ids.shape != (grid_thw.prod(-1).sum().item(), 2):
+        raise ValueError("Vision position_ids must contain a height/width pair for each patch.")
+    if fill("max_seqlen", lambda: max(sequence_lengths)) < max(sequence_lengths):
+        raise ValueError("max_seqlen must cover the longest attention segment.")
+    if fill("sequence_lengths", lambda: sequence_lengths) != sequence_lengths:
+        raise ValueError("sequence_lengths must match cu_seqlens.")
+
+    if getattr(config, "window_size", None) is not None:
+        if (prepared.get("window_index") is None) != (prepared.get("cu_window_seqlens") is None):
+            raise ValueError("Supply both window_index and cu_window_seqlens, or neither.")
+        if prepared.get("window_index") is None:
+            prepared["window_index"], prepared["cu_window_seqlens"] = get_vision_window_index(
+                grid_thw, merge_size, config.window_size, config.patch_size
+            )
+        window_lengths = lengths(prepared["cu_window_seqlens"])
+        if fill("max_window_seqlen", lambda: max(window_lengths)) < max(window_lengths):
+            raise ValueError("max_window_seqlen must cover the longest window.")
+        if fill("window_sequence_lengths", lambda: window_lengths) != window_lengths:
+            raise ValueError("window_sequence_lengths must match cu_window_seqlens.")
+    return prepared
 
 
 def get_vision_cu_seqlens(
@@ -377,3 +439,199 @@ def get_vision_merged_shape(
         return merged
     window_h, window_w = window_kernel_size
     return int(target_sizes[0, 0].item()) // window_h, int(target_sizes[0, 1].item()) // window_w
+
+
+def get_multimodal_vision_position_ids(
+    start_position: int,
+    grid_thw: list[int, int, int] | torch.Tensor,
+    temp_merge_size: int = 1,
+    spatial_merge_size: int = 1,
+    time_interval: float | torch.Tensor = 1.0,
+    device: str | torch.device | None = None,
+):
+    """
+    Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+    The positions are generated from the input grid defined by temporal (T), height (H), and
+    width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+    merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+    Args:
+        start_position (`int`):
+            Offset added to all computed positional indices.
+        grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+            The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+        temp_merge_size (`int`, *optional*):
+            Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+            by this value. Defaults to 1.
+        spatial_merge_size (`int`, *optional*):
+            Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+            by this value. Defaults to 1.
+        time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+            Spacing factor applied before quantizing temporal position indices.
+        device (`str` or `torch.device`, *optional*):
+            Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+    Returns:
+        torch.LongTensor of shape (3, sequence_length):
+            Positional indices for temporal, height, and width dimensions,
+            flattened into sequence form and offset by `start_position`.
+    """
+    llm_grid_t, llm_grid_h, llm_grid_w = (
+        grid_thw[0].item() // temp_merge_size,
+        grid_thw[1].item() // spatial_merge_size,
+        grid_thw[2].item() // spatial_merge_size,
+    )
+
+    position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
+    position_height = torch.arange(llm_grid_h, device=device) + start_position
+    position_width = torch.arange(llm_grid_w, device=device) + start_position
+
+    T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+    vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+    vision_position_ids[0] += start_position  # must be after time_interval multiply
+    return vision_position_ids
+
+
+def get_multimodal_rope_index(
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+    second_per_grid_ts: torch.Tensor | None = None,
+    attention_mask: torch.Tensor | None = None,
+    spatial_merge_size: int = 1,
+    tokens_per_second: float | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Build Qwen-style multimodal RoPE positions from token layout and grid metadata.
+
+    This data-dependent bookkeeping can run on CPU before compiling the model.
+    `tokens_per_second=None` uses unscaled temporal positions (Qwen2-VL).
+    """
+
+    mrope_position_deltas = []
+    position_ids = torch.zeros(
+        3,
+        input_ids.shape[0],
+        input_ids.shape[1],
+        dtype=input_ids.dtype,
+        device=input_ids.device,
+    )
+    grid_iters = {
+        1: iter(image_grid_thw) if image_grid_thw is not None else None,
+        2: iter(video_grid_thw) if video_grid_thw is not None else None,
+    }
+    second_per_grid_ts = iter(second_per_grid_ts) if second_per_grid_ts is not None else iter([1] * input_ids.shape[1])
+    for batch_idx, current_input_ids in enumerate(input_ids):
+        input_token_type = mm_token_type_ids[batch_idx]
+        if attention_mask is not None:
+            current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
+            input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+
+        input_type_group = []
+        for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+            group = list(group)
+            start_index = group[0][0]
+            end_index = group[-1][0] + 1
+            input_type_group.append((key, start_index, end_index))
+
+        current_pos = 0
+        llm_pos_ids_list = []
+        for modality_type, start_idx, end_idx in input_type_group:
+            # text == 0
+            if modality_type == 0:
+                text_len = end_idx - start_idx
+                llm_pos_ids_list.append(
+                    torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
+                )
+                current_pos += text_len
+            # image == 1, video == 2
+            else:
+                grid_thw = next(grid_iters[modality_type])
+                # Only apply temporal scaling for videos; still images have no
+                # temporal dimension to space out (fixes #45325).
+                if modality_type == 2 and tokens_per_second is not None:
+                    time_interval = tokens_per_second * next(second_per_grid_ts)
+                else:
+                    time_interval = 1
+                vision_position_ids = get_multimodal_vision_position_ids(
+                    current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
+                )
+                llm_pos_ids_list.append(vision_position_ids)
+                current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
+        llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
+        if attention_mask is not None:
+            position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
+        else:
+            position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
+        mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
+    mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+    return position_ids, mrope_position_deltas
+
+
+def prepare_qwen_vl_inputs(config: PreTrainedConfig, inputs: dict) -> dict:
+    """Prepare a CPU prefill batch before device transfer, without constructing a model.
+
+    Returns a new mapping with modality-prefixed vision metadata and multimodal positions.
+    Tensor values can then be moved to the accelerator (for example with `BatchFeature.to`).
+    Attention and feature split lengths stay as Python tuples: each distinct split layout
+    may compile separately. This method is outside the compiled region and is not a decode
+    input preparer. Existing eager calls do not require it.
+    """
+    prepared = dict(inputs)
+    if prepared.get("past_key_values") is not None:
+        raise ValueError("Prepare the prefill batch before creating or populating a KV cache.")
+    vision_config = config.vision_config
+    keys = (
+        "cu_seqlens",
+        "max_seqlen",
+        "position_ids",
+        "sequence_lengths",
+        "window_index",
+        "cu_window_seqlens",
+        "max_window_seqlen",
+        "window_sequence_lengths",
+    )
+    for modality, pixel_key in (("image", "pixel_values"), ("video", "pixel_values_videos")):
+        grid = prepared.get(f"{modality}_grid_thw")
+        if grid is None or prepared.get(pixel_key) is None:
+            continue
+        overrides = {}
+        for key in keys:
+            value = prepared.get(f"{modality}_{key}")
+            if value is None and key != "position_ids":
+                value = prepared.get(key)
+            if value is not None:
+                overrides[key] = value
+        metadata = prepare_vision_inputs(grid, vision_config, overrides)
+        prepared.update({f"{modality}_{key}": value for key, value in metadata.items()})
+        split_key = f"{modality}_split_sizes"
+        split_sizes = tuple((grid.prod(-1) // vision_config.spatial_merge_size**2).tolist())
+        if prepared.get(split_key) is not None and tuple(prepared[split_key]) != split_sizes:
+            raise ValueError(f"{split_key} must match the grid's merged feature lengths.")
+        prepared[split_key] = split_sizes
+
+    has_vision = prepared.get("image_grid_thw") is not None or prepared.get("video_grid_thw") is not None
+    if has_vision and prepared.get("position_ids") is None and prepared.get("input_ids") is not None:
+        if prepared.get("mm_token_type_ids") is None:
+            raise ValueError("Preparing multimodal positions requires mm_token_type_ids when input_ids is provided.")
+        rope_keys = (
+            "input_ids",
+            "mm_token_type_ids",
+            "image_grid_thw",
+            "video_grid_thw",
+            "attention_mask",
+            "second_per_grid_ts",
+        )
+        rope_inputs = {key: prepared[key] for key in rope_keys if prepared.get(key) is not None}
+        if any(isinstance(value, torch.Tensor) and value.device.type != "cpu" for value in rope_inputs.values()):
+            raise ValueError("Prepare multimodal positions on CPU before moving the batch to the accelerator.")
+        positions, deltas = get_multimodal_rope_index(
+            spatial_merge_size=vision_config.spatial_merge_size,
+            tokens_per_second=getattr(vision_config, "tokens_per_second", None),
+            **rope_inputs,
+        )
+        prepared["position_ids"] = positions
+        if prepared.get("rope_deltas") is None:
+            prepared["rope_deltas"] = deltas
+    return prepared

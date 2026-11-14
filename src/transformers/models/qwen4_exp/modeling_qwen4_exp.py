@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
 import math
 from collections.abc import Callable
 
@@ -64,6 +63,8 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
+    get_multimodal_rope_index,
+    get_multimodal_vision_position_ids,
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
@@ -1819,6 +1820,7 @@ class Qwen4ExpVisionAttention(nn.Module):
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         max_seqlen: int | None = None,
+        sequence_lengths: tuple[int, ...] | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -1856,10 +1858,10 @@ class Qwen4ExpVisionAttention(nn.Module):
             )
         else:
             # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
+            lengths = sequence_lengths
+            if lengths is None:
+                lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
 
             attn_outputs = [
                 attention_interface(
@@ -2054,20 +2056,9 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
                 Positional indices for temporal, height, and width dimensions,
                 flattened into sequence form and offset by `start_position`.
         """
-        llm_grid_t, llm_grid_h, llm_grid_w = (
-            grid_thw[0].item() // temp_merge_size,
-            grid_thw[1].item() // spatial_merge_size,
-            grid_thw[2].item() // spatial_merge_size,
+        return get_multimodal_vision_position_ids(
+            start_position, grid_thw, temp_merge_size, spatial_merge_size, time_interval, device
         )
-
-        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
-        position_height = torch.arange(llm_grid_h, device=device) + start_position
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
-
-        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
-        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
-        vision_position_ids[0] += start_position  # must be after time_interval multiply
-        return vision_position_ids
 
     def get_rope_index(
         self,
@@ -2107,60 +2098,14 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-
-        mrope_position_deltas = []
-        position_ids = torch.zeros(
-            3,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
+        return get_multimodal_rope_index(
+            input_ids=input_ids,
+            mm_token_type_ids=mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            spatial_merge_size=self.config.vision_config.spatial_merge_size,
         )
-        grid_iters = {
-            1: iter(image_grid_thw) if image_grid_thw is not None else None,
-            2: iter(video_grid_thw) if video_grid_thw is not None else None,
-        }
-
-        for batch_idx, current_input_ids in enumerate(input_ids):
-            input_token_type = mm_token_type_ids[batch_idx]
-            if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
-
-            input_type_group = []
-            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
-                group = list(group)
-                start_index = group[0][0]
-                end_index = group[-1][0] + 1
-                input_type_group.append((key, start_index, end_index))
-
-            current_pos = 0
-            llm_pos_ids_list = []
-            for modality_type, start_idx, end_idx in input_type_group:
-                # text == 0
-                if modality_type == 0:
-                    text_len = end_idx - start_idx
-                    llm_pos_ids_list.append(
-                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
-                    )
-                    current_pos += text_len
-                # image == 1, video == 2
-                else:
-                    grid_thw = next(grid_iters[modality_type])
-                    vision_position_ids = self.get_vision_position_ids(
-                        current_pos, grid_thw, 1, spatial_merge_size, device=input_ids.device
-                    )
-                    llm_pos_ids_list.append(vision_position_ids)
-                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
-            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            if attention_mask is not None:
-                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
-            else:
-                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
-        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-        return position_ids, mrope_position_deltas
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -2184,8 +2129,10 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
+        split_sizes = kwargs.pop("split_sizes", None)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        if split_sizes is None:
+            split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
@@ -2299,6 +2246,10 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
+        r"""
+        rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
+            Precomputed multimodal RoPE offsets, prepared on CPU alongside `position_ids`.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

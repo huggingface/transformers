@@ -619,6 +619,10 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm3VlModelOutputWithPast:
+        r"""
+        rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
+            Precomputed multimodal RoPE offsets, prepared on CPU alongside `position_ids`.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

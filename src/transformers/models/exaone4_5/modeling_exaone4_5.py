@@ -591,6 +591,8 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 
+        sequence_lengths = kwargs.pop("sequence_lengths", None)
+        window_sequence_lengths = kwargs.pop("window_sequence_lengths", None)
         hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
@@ -605,14 +607,17 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
                 max_seqlen_now = max_seqlen
+                sequence_lengths_now = sequence_lengths
             else:
                 cu_seqlens_now = cu_window_seqlens
                 max_seqlen_now = max_window_seqlen
+                sequence_lengths_now = window_sequence_lengths
 
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
+                sequence_lengths=sequence_lengths_now,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -653,8 +658,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        split_sizes = kwargs.pop("split_sizes", None)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        if split_sizes is None:
+            split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
@@ -669,8 +676,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
+        split_sizes = kwargs.pop("split_sizes", None)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        if split_sizes is None:
+            split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
@@ -734,6 +743,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
+            Precomputed multimodal RoPE offsets, prepared on CPU alongside `position_ids`.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

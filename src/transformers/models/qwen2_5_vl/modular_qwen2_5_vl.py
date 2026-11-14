@@ -18,8 +18,6 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-import itertools
-
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -37,6 +35,7 @@ from ...utils.generic import get_max_seqlen, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ...vision_utils import (
+    get_multimodal_rope_index,
     get_vision_attention_seqlens,
     get_vision_position_ids,
     get_vision_window_index,
@@ -264,6 +263,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
 
+        sequence_lengths = kwargs.pop("sequence_lengths", None)
+        window_sequence_lengths = kwargs.pop("window_sequence_lengths", None)
         hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
@@ -278,14 +279,17 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
                 max_seqlen_now = max_seqlen
+                sequence_lengths_now = sequence_lengths
             else:
                 cu_seqlens_now = cu_window_seqlens
                 max_seqlen_now = max_window_seqlen
+                sequence_lengths_now = window_sequence_lengths
 
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
+                sequence_lengths=sequence_lengths_now,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -363,69 +367,16 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-        tokens_per_second = self.config.vision_config.tokens_per_second
-
-        mrope_position_deltas = []
-        position_ids = torch.zeros(
-            3,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
+        return get_multimodal_rope_index(
+            input_ids=input_ids,
+            mm_token_type_ids=mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            second_per_grid_ts=second_per_grid_ts,
+            spatial_merge_size=self.config.vision_config.spatial_merge_size,
+            tokens_per_second=self.config.vision_config.tokens_per_second,
         )
-        grid_iters = {
-            1: iter(image_grid_thw) if image_grid_thw is not None else None,
-            2: iter(video_grid_thw) if video_grid_thw is not None else None,
-        }
-        second_per_grid_ts = (
-            iter(second_per_grid_ts) if second_per_grid_ts is not None else iter([1] * input_ids.shape[1])
-        )
-        for batch_idx, current_input_ids in enumerate(input_ids):
-            input_token_type = mm_token_type_ids[batch_idx]
-            if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
-
-            input_type_group = []
-            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
-                group = list(group)
-                start_index = group[0][0]
-                end_index = group[-1][0] + 1
-                input_type_group.append((key, start_index, end_index))
-
-            current_pos = 0
-            llm_pos_ids_list = []
-            for modality_type, start_idx, end_idx in input_type_group:
-                # text == 0
-                if modality_type == 0:
-                    text_len = end_idx - start_idx
-                    llm_pos_ids_list.append(
-                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
-                    )
-                    current_pos += text_len
-                # image == 1, video == 2
-                else:
-                    grid_thw = next(grid_iters[modality_type])
-                    # Only apply temporal scaling for videos; still images have no
-                    # temporal dimension to space out (fixes #45325).
-                    if modality_type == 2:
-                        time_interval = tokens_per_second * next(second_per_grid_ts)
-                    else:
-                        time_interval = 1
-                    vision_position_ids = self.get_vision_position_ids(
-                        current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
-                    )
-                    llm_pos_ids_list.append(vision_position_ids)
-                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
-            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            if attention_mask is not None:
-                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
-            else:
-                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
-        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-        return position_ids, mrope_position_deltas
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
@@ -492,11 +443,14 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        rope_deltas: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
+            Precomputed multimodal RoPE offsets, prepared on CPU alongside `position_ids`.
         """
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
@@ -535,6 +489,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+        if rope_deltas is not None:
+            self.rope_deltas = rope_deltas
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
                 input_ids=input_ids,
@@ -582,9 +538,12 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         second_per_grid_ts: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        rope_deltas: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        rope_deltas (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
+            Precomputed multimodal RoPE offsets, prepared on CPU alongside `position_ids`.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
@@ -639,6 +598,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
+            rope_deltas=rope_deltas,
             **kwargs,
         )
 

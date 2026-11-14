@@ -45,7 +45,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ...vision_utils import get_multimodal_vision_position_ids, get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig, GlmImageVQVAEConfig
 
 
@@ -921,20 +921,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 Positional indices for temporal, height, and width dimensions,
                 flattened into sequence form and offset by `start_position`.
         """
-        llm_grid_t, llm_grid_h, llm_grid_w = (
-            grid_thw[0].item() // temp_merge_size,
-            grid_thw[1].item() // spatial_merge_size,
-            grid_thw[2].item() // spatial_merge_size,
+        return get_multimodal_vision_position_ids(
+            start_position, grid_thw, temp_merge_size, spatial_merge_size, time_interval, device
         )
-
-        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
-        position_height = torch.arange(llm_grid_h, device=device) + start_position
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
-
-        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
-        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
-        vision_position_ids[0] += start_position  # must be after time_interval multiply
-        return vision_position_ids
 
     def get_rope_index(
         self,
