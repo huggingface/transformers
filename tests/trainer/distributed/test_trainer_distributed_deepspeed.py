@@ -894,7 +894,8 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
             model = T5ForConditionalGeneration.from_pretrained(T5_TINY)
 
             data_file = str(self.tests_dir / "fixtures/tests_samples/SQUAD/sample.json")
-            raw_datasets = datasets.load_dataset("json", data_files=data_file, field="data")
+            # Keep the tiny fixture in memory to avoid memory-mapped reads from the shared CI cache.
+            raw_datasets = datasets.load_dataset("json", data_files=data_file, field="data", keep_in_memory=True)
             train_dataset = (
                 raw_datasets["train"]
                 .map(
