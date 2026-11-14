@@ -48,7 +48,13 @@ from transformers.exporters.base import ExportedComponent, ExportedModel, HfExpo
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
 from transformers.exporters.decompose import decompose_multimodal, embedded_inputs
 from transformers.exporters.metadata import ExportMetadata
-from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
+from transformers.testing_utils import (
+    CaptureLogger,
+    require_executorch,
+    require_onnx,
+    require_onnxscript,
+    require_torch,
+)
 from transformers.utils.import_utils import is_torch_available
 
 
@@ -75,6 +81,52 @@ CONCRETE_CONFIGS = [
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto factory + config serialisation
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+# Shared by the optimum loading tests (`test_optimum_*.py`)
+
+
+def _load(test, repo, library, trust_remote_code=False):
+    from transformers.exporters import optimum
+
+    with CaptureLogger(optimum.logger) as captured:
+        model = ExportedModel.from_pretrained(repo, device="cpu", trust_remote_code=trust_remote_code)
+    test.assertIn(f"is an {library} export", captured.out)
+    return model
+
+
+def _check_encoder(test, repo, library):
+    """A BGE export's [CLS] embedding is the eager model's; the graph records no output class, so outputs come back by
+    its names."""
+    from transformers import AutoModel, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-base-en-v1.5")
+    inputs = dict(tokenizer(["The capital of France is Paris."], return_tensors="pt"))
+    model = _load(test, repo, library)
+    test.assertEqual(type(model).__name__, "ExportedModel")
+    with torch.no_grad():
+        expected = AutoModel.from_pretrained("BAAI/bge-base-en-v1.5").eval()(**inputs).last_hidden_state[:, 0]
+    embedding = model(**inputs)["last_hidden_state"][:, 0].float()
+    test.assertGreater(torch.nn.functional.cosine_similarity(embedding, expected, dim=-1).item(), 0.999)
+
+
+def _check_names_the_cats(test, repo, library, processor_repo=None, max_new_tokens=6, trust_remote_code=False):
+    """A multimodal export, asked what animal a COCO image shows, answers cats."""
+    from transformers import AutoProcessor
+    from transformers.exporters import ExportedMultimodalModelForCausalLM
+    from transformers.image_utils import load_image
+
+    processor = AutoProcessor.from_pretrained(processor_repo or repo, trust_remote_code=trust_remote_code)
+    image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+    content = [{"type": "image"}, {"type": "text", "text": "What animal is in this picture? Answer in one word."}]
+    text = processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
+    inputs = processor(text=text, images=image, return_tensors="pt")
+    model = _load(test, repo, library)
+    test.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+    generation_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False)
+    generated = model.generate(**inputs, generation_config=generation_config)
+    answer = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    test.assertIn("cat", answer.lower())
 
 
 class ExportConfigMixinTest(unittest.TestCase):

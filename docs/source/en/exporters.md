@@ -258,7 +258,27 @@ logits = model(**inputs).logits
 
 `device` picks where it runs: an ONNX Runtime provider (`"cpu"`, `"cuda"`), an OpenVINO device (`"cpu"`, `"xpu"` for an
 Intel GPU, or `AUTO` by default), or where a `torch.export` module is moved. An ExecuTorch program runs where it was
-lowered for. Exports with several components (generation) don't run yet.
+lowered for. [`ExportedModel.from_pretrained`] returns the class an export runs as: an [`ExportedMultimodalModel`] for a
+multimodal split, an [`ExportedModelForCausalLM`] (or its multimodal and seq2seq variants) for a generation export,
+driven by `generate`.
+
+### optimum exports
+
+[`ExportedModel.from_pretrained`] also loads models exported by optimum-intel (OpenVINO), optimum-onnx (ONNX) and
+optimum-executorch (ExecuTorch), such as the OpenVINO, onnx-community, Xenova and executorch-community organizations'
+on the Hub. None writes export metadata, so it is rebuilt from the graphs and the model's config.
+
+- A causal LM or an encoder-decoder runs through `generate`.
+- A multimodal model runs as the multimodal split; optimum-intel towers split into several graphs are fused into one.
+- An encoder is called with the graph's inputs and returns a dict by its output names.
+
+Loading warns that the metadata was rebuilt, and an unsupported layout raises with the reason. Re-export the model with
+[`OpenVINOExporter`], [`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
+
+```python
+model = ExportedModel.from_pretrained("OpenVINO/Qwen3-0.6B-int4-ov", device="cpu")  # an ExportedModelForCausalLM
+generated = model.generate(**tokenizer("The capital of France is", return_tensors="pt"), max_new_tokens=8)
+```
 
 ## Dynamic shapes
 

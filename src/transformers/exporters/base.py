@@ -282,7 +282,19 @@ class ExportedModel(PushToHubMixin):
             "revision": revision,
             "subfolder": subfolder,
         }
-        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **download_kwargs)
+        manifest_file = cached_file(
+            pretrained_model_name_or_path,
+            EXPORT_MANIFEST_FILE,
+            _raise_exceptions_for_missing_entries=False,
+            **download_kwargs,
+        )
+        if manifest_file is None:
+            # An optimum library's export, which writes no manifest, loads off its graphs
+            from .optimum import load_optimum_export
+
+            return load_optimum_export(
+                pretrained_model_name_or_path, cls, device, runner_kwargs, trust_remote_code, **download_kwargs
+            )
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
         if manifest.get("schema_version", 1) > EXPORT_SCHEMA_VERSION:
             logger.warning(
