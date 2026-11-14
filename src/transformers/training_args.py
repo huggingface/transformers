@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from typing import Any, Literal
+from typing import Any, Literal, get_args, get_type_hints
 
 from .debug_utils import DebugOption
 from .distributed.utils import _is_torch_distributed_initialized
@@ -174,6 +174,20 @@ def _convert_str_dict(passed_value: dict):
                 passed_value[key] = float(value)
 
     return passed_value
+
+
+def _parallelism_config_from_dict(config_dict: dict[str, Any]) -> "ParallelismConfig":
+    """
+    Rebuilds a `ParallelismConfig` saved with `asdict`, turning its handler dicts (e.g. `tp_handler`) back into
+    dataclasses first, since `ParallelismConfig` rejects (or silently keeps) handlers passed as plain dicts.
+    """
+    type_hints = get_type_hints(ParallelismConfig)
+    kwargs = dict(config_dict)
+    for k, v in config_dict.items():
+        if k.endswith("_handler") and isinstance(v, dict):
+            handler_cls = next(t for t in get_args(type_hints[k]) if t is not type(None))
+            kwargs[k] = handler_cls(**v)
+    return ParallelismConfig(**kwargs)
 
 
 @dataclass
@@ -2161,7 +2175,10 @@ class TrainingArguments:
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
             if k == "parallelism_config" and v is not None:
-                d[k] = v.to_json()
+                # Not `v.to_json()`: it returns `None` in Accelerate < 1.16
+                # see https://github.com/huggingface/transformers/pull/49878#discussion_r4453412988
+                # for more details.
+                d[k] = asdict(v)
 
         self._dict_dtype_to_str(d)
 
@@ -2210,7 +2227,7 @@ class TrainingArguments:
             logger.warning(f"The following keys are not used by `{cls.__name__}` and will be ignored: {unused_keys}")
 
         if isinstance(kwargs.get("parallelism_config"), dict):
-            kwargs["parallelism_config"] = ParallelismConfig(**kwargs["parallelism_config"])
+            kwargs["parallelism_config"] = _parallelism_config_from_dict(kwargs["parallelism_config"])
 
         return cls(**kwargs)
 

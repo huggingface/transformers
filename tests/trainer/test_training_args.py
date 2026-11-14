@@ -10,6 +10,7 @@ from transformers import TrainingArguments
 from transformers.debug_utils import DebugOption
 from transformers.trainer_utils import HubStrategy, IntervalStrategy, SaveStrategy, SchedulerType
 from transformers.training_args import OptimizerNames
+from transformers.utils import is_accelerate_available
 
 
 class TestTrainingArguments(unittest.TestCase):
@@ -427,6 +428,30 @@ class TestTrainingArguments(unittest.TestCase):
             self.assertIsNone(loaded.hub_token)
             self.assertEqual(loaded.eval_strategy, IntervalStrategy.STEPS)
             self.assertEqual(loaded.debug, [DebugOption.UNDERFLOW_OVERFLOW])
+
+    @unittest.skipUnless(is_accelerate_available("1.10.1"), "`ParallelismConfig` requires accelerate >= 1.10.1")
+    def test_json_file_round_trip_parallelism_config(self):
+        """Test that a non-default `ParallelismConfig`, including its handlers, survives a JSON round-trip."""
+        from accelerate.parallelism_config import ParallelismConfig
+        from accelerate.utils import TorchContextParallelConfig, TorchTensorParallelConfig
+
+        parallelism_config = ParallelismConfig(
+            dp_shard_size=2,
+            tp_size=2,
+            cp_size=2,
+            cp_handler=TorchContextParallelConfig(cp_comm_strategy="alltoall"),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, parallelism_config=parallelism_config, report_to=None)
+            json_file = os.path.join(tmp_dir, "training_args.json")
+            args.to_json_file(json_file)
+
+            loaded = TrainingArguments.from_json_file(json_file).parallelism_config
+            self.assertIsInstance(loaded, ParallelismConfig)
+            self.assertEqual((loaded.dp_shard_size, loaded.tp_size, loaded.cp_size), (2, 2, 2))
+            self.assertIsInstance(loaded.tp_handler, TorchTensorParallelConfig)
+            self.assertIsInstance(loaded.cp_handler, TorchContextParallelConfig)
+            self.assertEqual(loaded.cp_handler.cp_comm_strategy, "alltoall")
 
     def test_from_dict_ignores_unknown_keys(self):
         """Test that keys unknown to the current version are ignored when loading."""
