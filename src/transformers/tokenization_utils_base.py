@@ -96,6 +96,15 @@ def flatten(arr: list):
     return res
 
 
+def _is_empty(arr: list) -> bool:
+    """True if arr contains no leaf elements (nested empty lists/tuples)."""
+    if len(arr) == 0:
+        return True
+    if not isinstance(arr[0], (list, tuple)):
+        return False
+    return all(_is_empty(sub_arr) for sub_arr in arr)
+
+
 if is_tokenizers_available() or TYPE_CHECKING:
     from tokenizers import Encoding as EncodingFast
 
@@ -693,7 +702,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             def as_tensor(value, dtype=None):
                 if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = torch.int64
                 return torch.tensor(value, dtype=dtype)
 
@@ -705,7 +714,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             import mlx.core as mx
 
             def as_tensor(value, dtype=None):
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = mx.int32
                 return mx.array(value, dtype=dtype)
 
@@ -723,7 +732,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = np.int64
                 return np.asarray(value, dtype=dtype)
 
