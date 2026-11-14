@@ -75,10 +75,7 @@ from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_mod
 from .loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
-from .models.auto.modeling_auto import (
-    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
-    MODEL_MAPPING_NAMES,
-)
+from .models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
 from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
@@ -2177,16 +2174,11 @@ class Trainer:
             )
         # Default HF loss handling (label smoothing) if no custom loss function
         elif labels is not None:
-            unwrapped_model = self.accelerator.unwrap_model(model)
-            model_name = (
-                unwrapped_model.base_model.model._get_name()
-                if _is_peft_model(unwrapped_model)
-                else unwrapped_model._get_name()
+            # Shift exactly when the model's own loss does, which also covers decoder-only VLMs
+            # (`*ForConditionalGeneration`) that aren't registered as causal LMs
+            loss = self.label_smoother(
+                outputs, labels, shift_labels=self._loss_shifts_labels, num_items_in_batch=num_items_in_batch
             )
-            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True, num_items_in_batch=num_items_in_batch)
-            else:
-                loss = self.label_smoother(outputs, labels, num_items_in_batch=num_items_in_batch)
         else:
             if isinstance(outputs, dict) and "loss" not in outputs:
                 raise ValueError(
