@@ -83,8 +83,7 @@ they should appear in the prompt.
 ## Video inference
 
 The official example uniformly samples eight frames. Pass the video path directly in the conversation and let the
-processor load and sample it. The processor returns `pixel_values_videos` and `video_grid_thw` along with the tokenized
-prompt.
+processor load and sample it. The processor prepares the inputs needed for generation.
 Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
 
 ```python
