@@ -42,6 +42,7 @@ from transformers.testing_utils import (
     require_onnxruntime,
     require_onnxscript,
     require_openvino,
+    require_soundfile,
     require_torch,
     slow,
 )
@@ -170,6 +171,44 @@ class OptimumIntelTest(unittest.TestCase):
         generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=16, do_sample=False))
         answer = processor.tokenizer.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         self.assertIn("cat", answer.lower())
+
+    def test_multimodal_with_projected_crops_and_audio(self):
+        """Phi-4-multimodal's vision graph fused with its projection, its crops cut to what their mask keeps (its config
+        and processor are remote code, its prompt its own)."""
+        from transformers.image_utils import load_image
+
+        repo = "OpenVINO/Phi-4-multimodal-instruct-int4-cw-ov"
+        processor = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
+        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+        prompt = "<|image_1|>What animal is in this picture? Answer in one word."
+        text = processor.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True
+        )
+        inputs = processor(text=text, images=[image], return_tensors="pt")
+        model = _load(self, repo, "optimum-intel", trust_remote_code=True)
+        self.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+        generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=16, do_sample=False))
+        answer = processor.tokenizer.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        self.assertIn("cat", answer.lower())
+
+    @require_soundfile
+    def test_audio_tower_fused(self):
+        """Phi-4-multimodal's audio tower fused into one graph, the encoder run on 500-frame chunks, transcribing a
+        LibriSpeech clip."""
+        from transformers.audio_utils import load_audio
+
+        repo = "OpenVINO/Phi-4-multimodal-instruct-int4-cw-ov"
+        processor = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
+        audio = load_audio("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac", sampling_rate=16000)
+        prompt = "<|audio_1|>Transcribe the audio clip into text."
+        text = processor.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True
+        )
+        inputs = processor(text=text, audios=[(audio, 16000)], return_tensors="pt")
+        model = _load(self, repo, "optimum-intel", trust_remote_code=True)
+        generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=16, do_sample=False))
+        answer = processor.tokenizer.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        self.assertIn("stew for dinner", answer.lower())
 
     def test_multimodal_with_resampler(self):
         """MiniCPM-V 4.5's vision graph fused with its resampler, run per crop (its config and processor are remote

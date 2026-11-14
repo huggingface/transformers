@@ -122,14 +122,32 @@ OPENVINO_VISION_POSITIONS = "vision_embeddings_pos_model"
 # each crop's position ids, the resampler its 2D sin-cos position embeddings, both their padding masks
 OPENVINO_VISION_RESAMPLER = "resampler_model"
 _OPENVINO_RESAMPLER_GLUE = {"patch_attention_mask", "position_ids", "pos_embed", "key_padding_mask"}
-# Its image placeholder token, which its config doesn't name, and what its processor returns besides the crops: their
-# patch grids, read by the glue, and the placeholders' spans and video frame ids, which the placeholders already give
-_OPENVINO_RESAMPLER_PLACEHOLDER = "<unk>"
+# What its processor returns besides the crops: their patch grids, read by the glue, and the placeholders' spans and
+# video frame ids, which the placeholders already give
 _OPENVINO_RESAMPLER_INPUTS = {"tgt_sizes", "image_bound", "temporal_ids"}
-# Phi-3.5-vision's second vision graph: a projection of each 2x2 block of patch features, fused after the merge; its
-# processor marks image placeholders with negative ids, read as this token
+# Phi-3.5-vision's and Phi-4-multimodal's second vision graph: a projection of the patch features (Phi-3.5's merged
+# 2x2 first), fused after them; Phi-4's vision graph also takes each crop's patch mask and position ids
 OPENVINO_VISION_PROJECTION = "vision_projection_model"
-_OPENVINO_PROJECTION_PLACEHOLDER = "<|image|>"
+_OPENVINO_PROJECTION_GLUE = {"patch_attention_mask", "patch_position_ids"}
+# Phi-4-multimodal's audio tower, fused into one graph: embeddings, forward embeddings, the encoder on 500-frame chunks
+# (fed their mask) and both projections, the vision one used beside an image
+OPENVINO_AUDIO_GRAPHS = (
+    "audio_embeddings_model",
+    "audio_forward_embeddings_model",
+    "audio_encoder_model",
+    "audio_speech_projection_model",
+    "audio_vision_projection_model",
+)
+_OPENVINO_AUDIO_CHUNK = 500
+# What Phi-4-multimodal's processor returns besides its data, which the placeholders and glue already use
+_OPENVINO_PHI4_INPUTS = {"image_attention_mask", "audio_embed_sizes", "audio_attention_mask", "input_mode"}
+# The placeholder tokens of models whose config doesn't name them, as their processor writes them (Phi-3.5-vision's
+# processor writes negative ids, read as its token)
+_OPENVINO_PLACEHOLDERS = {
+    "minicpmv": {"image_token_id": "<unk>"},
+    "phi3_v": {"image_token_id": "<|image|>"},
+    "phi4mm": {"image_token_id": "<|endoftext10|>", "audio_token_id": "<|endoftext11|>"},
+}
 _OPENVINO_MERGER_GLUE = {
     "attention_mask",
     "rotary_pos_emb",
@@ -318,20 +336,24 @@ def _crop_features(config, runner, pixel_values: torch.Tensor, target_sizes: tor
 
 
 def _fuse_openvino_projection(embeddings: openvino.Model, projection: openvino.Model, config) -> openvino.Model:
-    """Phi-3.5-vision's vision graph: each crop's patch features merged 2x2 into the projection's input, then
-    projected, with the `sub_GN` row separator and `glb_GN` crop separator projected after them as the last two rows."""
+    """Phi-3.5-vision's and Phi-4-multimodal's vision graph: each crop's patch features (Phi-3.5's merged 2x2 into the
+    projection's input) projected, with the `sub_GN` row separator and `glb_GN` crop separator projected after them as
+    the last two rows."""
     import numpy as np
     import openvino
     import openvino.opset13 as ops
 
     features = embeddings.get_results()[0].input_value(0)
     patches, width = (dim.get_length() for dim in features.get_partial_shape()[1:])
-    side = int(patches**0.5) // 2
-    merged = ops.reshape(features, ops.constant(np.array([-1, side, 2, side, 2, width])), False)
-    merged = ops.transpose(merged, ops.constant(np.array([0, 1, 3, 2, 4, 5])))
-    merged = ops.reshape(merged, ops.constant(np.array([1, -1, 4 * width])), False)
+    projected_width = projection.inputs[0].get_partial_shape()[-1].get_length()
+    merged = features
+    if projected_width == 4 * width:
+        side = int(patches**0.5) // 2
+        merged = ops.reshape(merged, ops.constant(np.array([-1, side, 2, side, 2, width])), False)
+        merged = ops.transpose(merged, ops.constant(np.array([0, 1, 3, 2, 4, 5])))
+    merged = ops.reshape(merged, ops.constant(np.array([1, -1, projected_width])), False)
     separators = np.concatenate([np.array(config.sub_GN), np.array(config.glb_GN)[None]], axis=-2)
-    merged = ops.concat([merged, ops.constant(separators.reshape(1, 2, 4 * width).astype(np.float32))], 1)
+    merged = ops.concat([merged, ops.constant(separators.reshape(1, 2, projected_width).astype(np.float32))], 1)
     projection_input = projection.inputs[0].get_node()
     for target in projection_input.output(0).get_target_inputs():
         target.replace_source_output(merged.output(0))
@@ -339,26 +361,112 @@ def _fuse_openvino_projection(embeddings: openvino.Model, projection: openvino.M
     return openvino.Model(projection.get_results(), list(embeddings.get_parameters()), "vision_embeddings_model")
 
 
-def _hd_features(runner, pixel_values: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
-    """Features from Phi-3.5-vision's fused vision graph, run per image on its global view and crops: the crops' tokens
-    laid out as the image's grid and the global view's as its own, each row closed by the `sub_GN` separator, the
-    `glb_GN` separator between them."""
+def _masked_position_ids(mask: torch.Tensor) -> torch.Tensor:
+    """Phi-4-multimodal's position ids of a crop's patches: those its patch mask keeps, on its patch grid."""
+    position_ids = torch.zeros(mask.numel(), dtype=torch.long)
+    position_ids[mask.flatten()] = _navit_position_ids(int(mask[:, 0].sum()), int(mask[0].sum()), mask.shape[-1])
+    return position_ids
+
+
+def _hd_features(
+    runner, pixel_values: torch.Tensor, image_sizes: torch.Tensor, image_attention_mask: torch.Tensor | None = None
+) -> torch.Tensor:
+    """Features from Phi-3.5-vision's or Phi-4-multimodal's fused vision graph, run per image on its global view and
+    crops: the crops' tokens laid out as the image's grid (cut to the extent `image_attention_mask` keeps) and the
+    global view's as its own, each row closed by the `sub_GN` separator, the `glb_GN` separator between them."""
     crop_size = pixel_values.shape[-1]
     features = []
-    for crops, (height, width) in zip(pixel_values, image_sizes.tolist()):
+    for index, (crops, (height, width)) in enumerate(zip(pixel_values, image_sizes.tolist())):
         rows, columns = height // crop_size, width // crop_size
-        output = runner(pixel_values=crops[: 1 + rows * columns].float(), share_outputs=True)
+        count = 1 + rows * columns
+        feed = {"pixel_values": crops[:count].float()}
+        if image_attention_mask is not None:
+            masks = image_attention_mask[index, :count].bool()
+            feed["patch_attention_mask"] = masks
+            feed["patch_position_ids"] = torch.stack([_masked_position_ids(mask) for mask in masks])
+        output = runner(**feed, share_outputs=True)
         output = output.reshape(-1, output.shape[-1])
         newline, separator, tokens = output[-2], output[-1], output[:-2]
-        side = int((tokens.shape[0] // (1 + rows * columns)) ** 0.5)
-        grids = tokens.view(1 + rows * columns, side, side, -1)
+        side = int((tokens.shape[0] // count) ** 0.5)
+        grids = tokens.view(count, side, side, -1)
         crops_grid = grids[1:].view(rows, columns, side, side, -1).permute(0, 2, 1, 3, 4).flatten(2, 3).flatten(0, 1)
+        if image_attention_mask is not None:
+            kept = image_attention_mask[index, 1:count, 0::2, 0::2].reshape(rows, columns, side, side)
+            kept = kept.transpose(1, 2).reshape(rows * side, columns * side)
+            crops_grid = crops_grid[: int(kept[:, 0].sum()), : int(kept[0].sum())]
 
         def with_newlines(grid):
             return torch.cat([grid, newline.expand(grid.shape[0], 1, -1)], dim=1).flatten(0, 1)
 
         features += [with_newlines(crops_grid), separator[None], with_newlines(grids[0])]
     return torch.cat(features)
+
+
+def _fuse_openvino_audio(graphs: dict[str, openvino.Model]) -> openvino.Model:
+    """Phi-4-multimodal's audio tower as one graph: its embeddings fed into its forward embeddings, the result padded
+    to whole chunks and folded into them for the encoder (fed their `audio_mask`), and both projections, `speech` and
+    `vision`, unfolded back to `[batch, chunks * chunk, hidden]`."""
+    import numpy as np
+    import openvino
+    import openvino.opset13 as ops
+
+    def feed(model, source, name=None):
+        node = (model.input(name) if name else model.inputs[0]).get_node()
+        for target in node.output(0).get_target_inputs():
+            target.replace_source_output(source)
+
+    def output(model):
+        return model.get_results()[0].input_value(0)
+
+    embeddings, forward, encoder = (graphs[name] for name in OPENVINO_AUDIO_GRAPHS[:3])
+    feed(forward, output(embeddings))
+    hidden = output(forward)
+    shape = ops.shape_of(hidden, "i64")
+    chunk = ops.constant(np.array([_OPENVINO_AUDIO_CHUNK]))
+    batch = ops.gather(shape, ops.constant(np.array([0])), ops.constant(0))
+    length = ops.gather(shape, ops.constant(np.array([1])), ops.constant(0))
+    pad = ops.mod(ops.subtract(chunk, ops.mod(length, chunk)), chunk)
+    zero = ops.constant(np.array([0]))
+    padded = ops.pad(hidden, ops.constant(np.array([0, 0, 0])), ops.concat([zero, pad, zero], 0), "constant")
+    width = hidden.get_partial_shape()[-1].get_length()
+    # Folded by the chunk count, the chunk axis left dynamic: a static one breaks the CPU plugin's kernel fusion
+    chunks = ops.multiply(batch, ops.divide(ops.add(length, pad), chunk))
+    target = ops.concat([chunks, ops.constant(np.array([-1, width]))], 0)
+    folded = ops.reshape(padded, target, False)
+    feed(encoder, folded.output(0), "audio_feature")
+    results = []
+    for name, projection in (
+        ("speech", graphs[OPENVINO_AUDIO_GRAPHS[3]]),
+        ("vision", graphs[OPENVINO_AUDIO_GRAPHS[4]]),
+    ):
+        feed(projection, output(encoder))
+        projected = output(projection)
+        hidden_size = projected.get_partial_shape()[-1].get_length()
+        unfolded = ops.reshape(projected, ops.concat([batch, ops.constant(np.array([-1, hidden_size]))], 0), False)
+        unfolded.output(0).get_tensor().set_names({name})
+        results.append(ops.result(unfolded))
+    embeddings.input(0).get_tensor().set_names({"input_features"})
+    parameters = [*embeddings.get_parameters(), encoder.input("audio_mask").get_node()]
+    return openvino.Model(results, parameters, "audio_embeddings_model")
+
+
+def _phi4_audio_features(config, runner, input_features: torch.Tensor, sizes: torch.Tensor, vision: bool):
+    """Features from Phi-4-multimodal's fused audio graph: each 500-frame chunk masked to its own frames and to the
+    streaming window its config sets, the vision projection's beside an image, each clip cut to its `sizes`."""
+    import numpy as np
+
+    from ..models.phi4_multimodal.modeling_phi4_multimodal import adaptive_enc_mask
+
+    audio = config.audio_processor["config"]
+    length = -(-input_features.shape[1] // audio["time_reduction"])
+    chunks = -(-length // _OPENVINO_AUDIO_CHUNK)
+    starts = np.arange(0, _OPENVINO_AUDIO_CHUNK, audio["chunk_size"])
+    streaming = adaptive_enc_mask(_OPENVINO_AUDIO_CHUNK, starts, left_window=audio["left_chunk"])
+    kept = (torch.arange(chunks * _OPENVINO_AUDIO_CHUNK) < length).view(chunks, 1, _OPENVINO_AUDIO_CHUNK)
+    mask = (streaming[None] & kept).repeat(input_features.shape[0], 1, 1)
+    outputs = runner(input_features=input_features.float(), audio_mask=mask, share_outputs=True)
+    features = outputs["vision" if vision else "speech"][:, :length]
+    return torch.cat([clip[: int(size)] for clip, size in zip(features, sizes)])
 
 
 def _sincos(dim: int, positions: torch.Tensor) -> torch.Tensor:
@@ -426,21 +534,11 @@ def _load_openvino_multimodal(
         merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_RESAMPLER}.xml", **kwargs)
         hidden, merger_glue = "image_feature", _OPENVINO_RESAMPLER_GLUE
         graphs = graphs - {OPENVINO_VISION_RESAMPLER}
-        if getattr(config, "image_token_id", None) is None:
-            from tokenizers import Tokenizer
-
-            tokenizer = Tokenizer.from_file(cached_file(pretrained_model_name_or_path, "tokenizer.json", **kwargs))
-            config.image_token_id = tokenizer.token_to_id(_OPENVINO_RESAMPLER_PLACEHOLDER)
     elif OPENVINO_VISION_PROJECTION in graphs and getattr(config, "sub_GN", None) is not None:
         projection = _read_openvino(
             pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_PROJECTION}.xml", **kwargs
         )
         graphs = graphs - {OPENVINO_VISION_PROJECTION}
-        if getattr(config, "image_token_id", None) is None:
-            from tokenizers import Tokenizer
-
-            tokenizer = Tokenizer.from_file(cached_file(pretrained_model_name_or_path, "tokenizer.json", **kwargs))
-            config.image_token_id = tokenizer.token_to_id(_OPENVINO_PROJECTION_PLACEHOLDER)
     elif OPENVINO_VISION_MERGER in graphs:
         merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_MERGER}.xml", **kwargs)
         glue = {port.get_any_name() for port in merger.inputs} - {"hidden_states"}
@@ -453,6 +551,26 @@ def _load_openvino_multimodal(
                 graphs = graphs - {OPENVINO_VISION_POSITIONS}
         else:
             merger = None
+    audio = None
+    if set(OPENVINO_AUDIO_GRAPHS) <= graphs:
+        audio = _fuse_openvino_audio(
+            {
+                name: _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
+                for name in OPENVINO_AUDIO_GRAPHS
+            }
+        )
+        graphs = graphs - set(OPENVINO_AUDIO_GRAPHS[1:])
+    placeholders = {
+        field: token
+        for field, token in _OPENVINO_PLACEHOLDERS.get(getattr(config, "model_type", None), {}).items()
+        if getattr(config, field, None) is None
+    }
+    if placeholders:
+        from tokenizers import Tokenizer
+
+        tokenizer = Tokenizer.from_file(cached_file(pretrained_model_name_or_path, "tokenizer.json", **kwargs))
+        for field, token in placeholders.items():
+            setattr(config, field, tokenizer.token_to_id(token))
     if extra := sorted(graphs - {"text_embeddings_model", "language_model", *_OPENVINO_MODALITY_INPUTS}):
         reason = (
             f"its vision side is split into more graphs than one per modality ({', '.join(extra)}), with what flows "
@@ -468,7 +586,10 @@ def _load_openvino_multimodal(
     for name, input_names in _OPENVINO_MODALITY_INPUTS.items():
         if reason is not None or name not in graphs:
             continue
-        program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
+        if name == "audio_embeddings_model" and audio is not None:
+            program = audio
+        else:
+            program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
         if name == "vision_embeddings_model" and merger is not None:
             program = _fuse_openvino_vision(program, merger, positions, hidden)
         if name == "vision_embeddings_model" and projection is not None:
@@ -478,7 +599,9 @@ def _load_openvino_multimodal(
             if port.get_any_name() == "image_grid_thw":
                 port.get_tensor().set_names({"grid_thw"})
         port_names = [port.get_any_name() for port in program.inputs]
-        glue_ports = {"grid_thw"} | (merger_glue if merger is not None else set())
+        glue_ports = {"grid_thw", "audio_mask"} | (merger_glue if merger is not None else set())
+        if projection is not None:
+            glue_ports |= _OPENVINO_PROJECTION_GLUE
         if set(port_names) >= _OPENVINO_CROP_GLUE:
             glue_ports |= _OPENVINO_CROP_GLUE
         data_ports = [port for port in port_names if port not in glue_ports]
@@ -487,9 +610,13 @@ def _load_openvino_multimodal(
             break
         # A merger returning deepstack features too (Qwen3-VL's) returns them as the runtime reads them
         outputs = [port.get_any_name() for port in program.outputs]
-        returns = (
-            torch.zeros(1) if len(outputs) == 1 else {"features": torch.zeros(1), "deepstack_features": torch.zeros(1)}
-        )
+        if len(outputs) == 1:
+            returns = torch.zeros(1)
+        elif name == "audio_embeddings_model":
+            # Phi-4-multimodal's fused audio graph, returning each projection
+            returns = dict.fromkeys(outputs, torch.zeros(1))
+        else:
+            returns = {"features": torch.zeros(1), "deepstack_features": torch.zeros(1)}
         metadata = _openvino_metadata(config, {port: program.input(port) for port in port_names}, returns, False)
         components[name] = ExportedComponent(program, metadata)
     if reason is not None:
@@ -937,8 +1064,15 @@ class _OptimumGenerationMixin:
         if "rotary_pos_emb" in traced and grid is not None:
             kwargs = {**kwargs, **_vision_glue(self.config, grid, traced)}
         pixel_values = kwargs.get("pixel_values")
+        if "audio_mask" in traced:
+            vision = kwargs.get("pixel_values") is not None
+            features = _phi4_audio_features(
+                self.config, runner, kwargs["input_features"], kwargs["audio_embed_sizes"], vision
+            )
+            return features, None
         if getattr(self.config, "sub_GN", None) is not None and kwargs.get("image_sizes") is not None:
-            return _hd_features(runner, pixel_values, kwargs["image_sizes"]), None
+            image_attention_mask = kwargs.get("image_attention_mask") if "patch_attention_mask" in traced else None
+            return _hd_features(runner, pixel_values, kwargs["image_sizes"], image_attention_mask), None
         if "pos_embed" in traced and kwargs.get("tgt_sizes") is not None:
             return _resampled_features(self.config, runner, pixel_values, kwargs["tgt_sizes"]), None
         if "merge_index" in traced and kwargs.get("target_sizes") is not None:
@@ -954,7 +1088,13 @@ class _OptimumGenerationMixin:
         return features, layers
 
     def embed(self, **kwargs) -> tuple[dict, dict]:
-        """Also read negative ids (Phi-3.5-vision's processor's image placeholders) as the image placeholder token."""
+        """Also read negative ids (Phi-3.5-vision's processor's image placeholders) as the image placeholder token, and
+        Phi-4-multimodal's processor's data under the names the modality graphs take (dropping the empty ones)."""
+        for given, name in (("input_image_embeds", "pixel_values"), ("input_audio_embeds", "input_features")):
+            if given in kwargs:
+                value = kwargs.pop(given)
+                if value is not None and value.numel() > 0:
+                    kwargs[name] = value
         input_ids = kwargs.get("input_ids")
         if (
             input_ids is not None
@@ -985,6 +1125,8 @@ class _OptimumGenerationMixin:
         vision = self.components.get("vision_embeddings_model")
         if vision is not None and "pos_embed" in vision.metadata.kwargs:
             accepted |= _OPENVINO_RESAMPLER_INPUTS
+        if getattr(self.config, "model_type", None) == "phi4mm":
+            accepted |= _OPENVINO_PHI4_INPUTS | {"input_image_embeds", "input_audio_embeds"}
         super()._validate_model_kwargs({key: value for key, value in model_kwargs.items() if key not in accepted})
 
     def prepare_inputs_for_generation(self, *args, attention_mask=None, **kwargs):
