@@ -13,7 +13,8 @@
 # limitations under the License.
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
@@ -23,6 +24,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from torch.nn import ModuleList
 
+    from ..core_model_loading import WeightConverter, WeightRenaming
     from ..modeling_utils import PreTrainedModel
 
 if is_torch_available():
@@ -167,6 +169,8 @@ class HfQuantizer(ABC):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
+        if plan is None:
+            return
         from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
@@ -338,17 +342,78 @@ class HfQuantizer(ABC):
             return []
         return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
 
-    def update_weight_conversions(self, weight_conversions, model):
+    def is_quantized_converter(
+        self,
+        converter: "WeightConverter",
+        model: Optional["PreTrainedModel"] = None,
+        checkpoint_keys: Iterable[str] | None = None,
+        renamings: list["WeightRenaming"] | None = None,
+    ) -> bool:
+        """
+        Determine whether a WeightConverter should be converted to serialized/dequantized format
+        or kept dense.
+        Returns:
+            - True: the converter handles quantized/companion tensors present in the checkpoint.
+            - False: the converter handles only dense tensors in the checkpoint.
+        """
+        if checkpoint_keys is not None:
+            sources = converter._original_source_patterns
+            param = sources[0].rpartition(".")[2]
+            serialized = self.serialized_names.get(param, [])
+            companion_names = [name for name in serialized if name != param]
+            if not companion_names:
+                return False
+
+            companion_sources = [re.sub(rf"{param}$", name, s) for s in sources for name in companion_names]
+            companion_converter = converter.copy(
+                companion_sources, converter.target_patterns, operations=list(converter.operations)
+            )
+
+            keys_list = list(checkpoint_keys)
+            if renamings:
+                from ..core_model_loading import apply_renamings
+
+                renamed_keys = {apply_renamings(k, renamings) for k in keys_list}
+                all_keys_to_check = set(keys_list) | renamed_keys
+            else:
+                all_keys_to_check = set(keys_list)
+
+            companion_matched_keys = {k for k in all_keys_to_check if companion_converter._scoped_match(k) is not None}
+            dense_matched_keys = {k for k in all_keys_to_check if converter._scoped_match(k) is not None}
+
+            if not dense_matched_keys and not companion_matched_keys:
+                return False
+
+            if companion_matched_keys and not dense_matched_keys:
+                return True
+
+            # If both exist or dense exists, check if any dense weight has companion tensors in the checkpoint
+            has_packed = any("packed" in k for k in companion_matched_keys)
+            if has_packed:
+                return True
+
+            for k in dense_matched_keys:
+                for comp_name in companion_names:
+                    cand = re.sub(rf"{param}$", comp_name, k)
+                    if cand in all_keys_to_check:
+                        return True
+
+            return False
+
+        return True
+
+    def update_weight_conversions(self, weight_conversions, model, checkpoint_keys=None):
         """
         Makes the model's converters (from the conversion mapping) load the serialized names. The model's params
         decide, e.g. for a merge of `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
         - `experts.gate_up_proj_scale_inv` is a param: a copy merges `experts.*.gate_proj.weight_scale_inv` into it
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
         """
-        from ..core_model_loading import WeightConverter
+        from ..core_model_loading import WeightConverter, WeightRenaming
 
         param_names = "\n".join(name for name, _ in model.named_parameters())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
+        renamings = [entry for entry in weight_conversions if isinstance(entry, WeightRenaming)]
         updated = []
         for converter in weight_conversions:
             updated.append(converter)
@@ -370,11 +435,12 @@ class HfQuantizer(ABC):
                         converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
                     )
             elif dequantize is not None:
-                # The module only has `param`: the converter also collects the companions and dequantizes first
-                all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
-                updated[-1] = converter.copy(
-                    all_sources, targets, operations=[dequantize(self)] + converter.operations
-                )
+                if self.is_quantized_converter(converter, model, checkpoint_keys=checkpoint_keys, renamings=renamings):
+                    all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
+                    idx = updated.index(converter)
+                    updated[idx] = converter.copy(
+                        all_sources, targets, operations=[dequantize(self)] + list(converter.operations)
+                    )
         return updated + self.get_weight_conversions()
 
 
