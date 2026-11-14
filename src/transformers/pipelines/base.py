@@ -711,8 +711,9 @@ def build_pipeline_init_args(
             Device on which the pipeline is allocated. When left unset, the pipeline is placed on the first available
             accelerator (CUDA, MPS, XPU, ...) and falls back to CPU only when none is available; the model is moved
             there automatically. Pass `device="cpu"` (or `-1`) to force CPU, a positive ordinal or `"cuda:1"` to select
-            a specific accelerator, or a native `torch.device`/`str`. This argument cannot be combined with a model
-            already loaded via `accelerate` (i.e. one with an `hf_device_map`).
+            a specific accelerator, or a native `torch.device`/`str`. If `device` is left unset and the model was
+            loaded on a single device with `device_map`, it stays on that device. This argument cannot be combined
+            with a model already loaded via `accelerate` (i.e. one with an `hf_device_map`).
         dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
             Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
             model in the dtype it was saved in (read from the checkpoint's `config.dtype`, otherwise inferred from the
@@ -835,6 +836,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
+            elif getattr(self.model, "_device_map_placed", False):
+                # Loaded with a single-device `device_map`: keep the model where it was placed
+                device = self.model.device
             else:
                 device = 0
 
