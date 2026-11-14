@@ -358,11 +358,78 @@ def _rotate_with_token_cache(op, x, cos, sin, rotated):
     return _rotate(op, x, layout, op.Reshape(tokens, op.Concat(batch, length, axis=0)), caches, rotated)
 
 
+def _section_frequencies(cos_or_sin: ir.Value) -> tuple[ir.Value, int | None] | None:
+    """`(freqs, cast)` if `cos_or_sin` is one section of a multidimensional rotary table (Gemma 4's vision tower: a
+    row half and a column half of each head): `Unsqueeze(Split(Concat(..., freqs, freqs, ...))[k])` over the heads,
+    an optional `Cast` before the `Split`, where section `k` of the `Concat` is `cat(freqs, freqs)`. `freqs`,
+    `[batch, length, head_dim / 2]`, is that section's per-token table."""
+    unsqueeze = _producer(cos_or_sin, "Unsqueeze")
+    split = _producer(unsqueeze.inputs[0], "Split") if unsqueeze is not None else None
+    if split is None or len(split.inputs) < 2:
+        return None
+    node, cast = split.inputs[0].producer(), None
+    if node is not None and node.op_type == "Cast":
+        cast = node.attributes.get_int("to")
+        node = node.inputs[0].producer()
+    sizes = _constant(split.inputs[1])
+    if node is None or node.op_type != "Concat" or sizes is None or split.inputs[0].shape is None:
+        return None
+    rank = len(split.inputs[0].shape)
+    if split.attributes.get_int("axis", 0) % rank != rank - 1 or node.attributes.get_int("axis", 0) % rank != rank - 1:
+        return None
+    index = list(split.outputs).index(unsqueeze.inputs[0])
+    start, end = int(sizes[:index].sum()), int(sizes[: index + 1].sum())
+    members, offset = [], 0
+    for value in node.inputs:
+        if value.shape is None or not isinstance(value.shape[-1], int):
+            return None
+        if start <= offset and offset + value.shape[-1] <= end:
+            members.append(value)
+        offset += value.shape[-1]
+    if len(members) != 2 or members[0] is not members[1] or 2 * members[0].shape[-1] != end - start:
+        return None
+    return members[0], cast
+
+
+def _has_section_cache(context, x, cos, sin, rotated, **_) -> bool:
+    # `cos` / `sin` one section of a multidimensional table, read per token.
+    cos_frequencies, sin_frequencies = _section_frequencies(cos), _section_frequencies(sin)
+    if cos_frequencies is None or sin_frequencies is None:
+        return False
+    if cos.shape is None or (layout := _rotary_layout(x, cos.shape)) is None:
+        return False
+    for freqs, _ in (cos_frequencies, sin_frequencies):
+        if freqs.shape is None or len(freqs.shape) != 3 or freqs.shape[-1] * 2 != x.shape[-1]:
+            return False
+        # One row of the table per token of `x`
+        if freqs.shape[0] != x.shape[0] or freqs.shape[1] != x.shape[layout]:
+            return False
+    return True
+
+
+def _rotate_with_section_cache(op, x, cos, sin, rotated):
+    # Each token's own frequencies in its section form the cache, `[batch * length, head_dim / 2]`, read at position
+    # `b * length + s`.
+    layout = _rotary_layout(x, cos.shape)
+    caches = []
+    for value in (cos, sin):
+        freqs, cast = _section_frequencies(value)
+        cache = op.Reshape(freqs, op.Constant(value_ints=[-1, freqs.shape[-1]]))
+        caches.append(op.Cast(cache, to=cast) if cast is not None else cache)
+    batch, length = op.Shape(x, start=0, end=1), op.Shape(x, start=layout, end=layout + 1)
+    tokens = op.Range(op.Constant(value_int=0), op.Squeeze(op.Mul(batch, length)), op.Constant(value_int=1))
+    return _rotate(op, x, layout, op.Reshape(tokens, op.Concat(batch, length, axis=0)), caches, rotated)
+
+
 _ROTARY_ANY_LAYOUT = pattern.RewriteRuleSet([_RotaryEmbeddingAnyLayoutFusion.rule()])
 _ROTARY_CONSTANT_CACHE = pattern.RewriteRule(_rotary_match, _rotate_with_constant_cache, _has_constant_cache)
 # `cos` / `sin` are every layer's: kept for the other rotary embeddings.
 _ROTARY_TOKEN_CACHE = pattern.RewriteRule(
     _rotary_match, _rotate_with_token_cache, _has_computed_cache, remove_nodes=False
+)
+# The table is every head's and every layer's: kept for the other rotary embeddings.
+_ROTARY_SECTION_CACHE = pattern.RewriteRule(
+    _rotary_match, _rotate_with_section_cache, _has_section_cache, remove_nodes=False
 )
 
 
@@ -371,6 +438,7 @@ def _fuse_rotary_embeddings(model: ir.Model) -> None:
     _ROTARY_ANY_LAYOUT.apply_to_model(model)
     _ROTARY_CONSTANT_CACHE.apply_to_model(model)
     _ROTARY_TOKEN_CACHE.apply_to_model(model)
+    _ROTARY_SECTION_CACHE.apply_to_model(model)
 
 
 def _fuse_shared_key_attentions(model: ir.Model) -> None:

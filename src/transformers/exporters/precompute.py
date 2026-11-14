@@ -70,8 +70,7 @@ def _meta_vision_tower(config_class: type, config_json: str):
     """The tower `config_class` configures, built on the meta device from its JSON (configs aren't hashable)."""
     from ..modeling_utils import PreTrainedModel
 
-    modeling = importlib.import_module(config_class.__module__.replace(".configuration_", ".modeling_"))
-    for candidate in vars(modeling).values():
+    for candidate in vars(_resolve_modeling_module(config_class)).values():
         if (
             isinstance(candidate, type)
             and issubclass(candidate, PreTrainedModel)
@@ -96,8 +95,10 @@ def _vision_tower_attr(config: Any, name: str) -> Any | None:
 
 
 def _resolve_modeling_module(config: Any):
-    """The model's `modeling_*` module, from its config's module (`configuration_x` → `modeling_x`)."""
-    return importlib.import_module(type(config).__module__.replace(".configuration_", ".modeling_"))
+    """The model's `modeling_*` module, from its config's (or config class's) module (`configuration_x` →
+    `modeling_x`)."""
+    config_class = config if isinstance(config, type) else type(config)
+    return importlib.import_module(config_class.__module__.replace(".configuration_", ".modeling_"))
 
 
 def _lays_out_modality_spans(config: Any) -> bool:
@@ -325,19 +326,14 @@ def _prepare_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> None:
     n_window = _find_config_attr(config, "n_window")
     n_window_infer = _find_config_attr(config, "n_window_infer")
 
-    chunk_and_pad_features = module.chunk_and_pad_features
-    get_audio_cu_seqlens = module.get_audio_cu_seqlens
-    get_valid_indices = module.get_valid_indices
-
-    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, n_window)
-    inputs["padded_feature"] = padded_feature
-    inputs["chunk_lengths"] = chunk_lengths
+    padded_feature, chunk_lengths = module.chunk_and_pad_features(input_features, feature_lens, n_window)
+    inputs["padded_feature"], inputs["chunk_lengths"] = padded_feature, chunk_lengths
     if n_window_infer is not None:
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths, n_window)
+        inputs["cu_seqlens"] = module.get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
+        inputs["valid_indices"] = module.get_valid_indices(chunk_lengths, n_window)
     else:
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths)
+        inputs["cu_seqlens"] = module.get_audio_cu_seqlens(chunk_lengths)
+        inputs["valid_indices"] = module.get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = module.get_pool_indices(feature_lens)
     inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], config, kwargs=inputs)
 
@@ -354,9 +350,8 @@ def _prepare_masked_omni_audio_inputs(config: Any, inputs: dict[str, Any]) -> No
     derived["input_features"] = inputs["input_features"].permute(0, 2, 1)[mask.bool()].permute(1, 0)
     derived["feature_lens"] = mask.sum(-1)
     _prepare_omni_audio_inputs(config, derived)
-    for key in ("padded_feature", "chunk_lengths", "cu_seqlens", "valid_indices", "pool_indices", "max_seqlen"):
-        if key in derived:
-            inputs[key] = derived[key]
+    keys = ("padded_feature", "chunk_lengths", "cu_seqlens", "valid_indices", "pool_indices", "max_seqlen")
+    inputs.update({key: derived[key] for key in keys if key in derived})
 
 
 @register_export_input_preparer("input_features", "input_features_mask")

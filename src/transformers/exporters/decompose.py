@@ -538,19 +538,19 @@ def decompose_multimodal(
 
     # An encoder-decoder consumed its modality inputs before prefill; the caller passes the recorded calls.
     recorded_features = recorded_features or {}
-    active_modalities = []
-    for spec in _MODALITY_SPECS:
-        if (owner := _modality_owner(model, spec.getter)) is None:
-            continue
-        if any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component):
-            active_modalities.append((spec.component, spec.getter, owner, spec.grid_key))
+    active_modalities = [
+        (spec, owner)
+        for spec in _MODALITY_SPECS
+        if (owner := _modality_owner(model, spec.getter)) is not None
+        and (any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component))
+    ]
 
     try:
         with contextlib.ExitStack() as stack, torch.no_grad():
             decoder_calls = stack.enter_context(_capture_calls(decoder, "forward"))
             captured_features = {
-                name: stack.enter_context(_capture_calls(owner, getter))
-                for name, getter, owner, _ in active_modalities
+                spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
+                for spec, owner in active_modalities
             }
             model(**copy.deepcopy(inputs))
     except Exception as e:
@@ -577,12 +577,15 @@ def decompose_multimodal(
             TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids}
         )
 
-    for name, getter, owner, grid_key in active_modalities:
+    for spec, owner in active_modalities:
+        name = spec.component
         calls = captured_features.get(name) or recorded_features.get(name) or []
         if not calls:
             continue
         feature_inputs = {
-            ("grid_thw" if key == grid_key else key): value for key, value in calls[-1].items() if value is not None
+            ("grid_thw" if key == spec.grid_key else key): value
+            for key, value in calls[-1].items()
+            if value is not None
         }
         # Config-derived tensors become graph inputs: a getter reading its grid as data cannot be traced.
         if name == "vision_embeddings_model" and packs_anyres_features(owner, model.config):
@@ -599,7 +602,7 @@ def decompose_multimodal(
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = Component(ModalityEncoder(owner, getter, grid_key), feature_inputs)
+        components[name] = Component(ModalityEncoder(owner, spec.getter, spec.grid_key), feature_inputs)
     return components
 
 
@@ -792,9 +795,8 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
-    accepted = inspect.signature(model.forward).parameters
     # The rope index alone: the precompute's modality preparers reuse the name (MiniCPM-V's vision `position_ids`).
-    if main_inputs.get("position_ids") is None and "position_ids" in accepted:
+    if main_inputs.get("position_ids") is None and "position_ids" in inspect.signature(model.forward).parameters:
         if (rope_index := get_rope_index_from_config(model.config, inputs)) is not None:
             main_inputs["position_ids"] = rope_index[0]
     main_inputs = embedded_inputs(main_inputs, {})
