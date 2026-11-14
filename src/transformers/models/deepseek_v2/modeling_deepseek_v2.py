@@ -403,7 +403,8 @@ class DeepseekV2Attention(nn.Module):
             latent = torch.cat((k_nope, k_pe), dim=-1)[0, 0]
             latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_nope, k_pe = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        elif cache is not None:
+        # On the paged cache, which already holds the latents, this only selects the arguments of this layer
+        if cache is not None:
             k_nope, k_pe = cache.update(k_nope, k_pe, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)
