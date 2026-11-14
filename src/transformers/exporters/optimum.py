@@ -126,6 +126,10 @@ _OPENVINO_RESAMPLER_GLUE = {"patch_attention_mask", "position_ids", "pos_embed",
 # patch grids, read by the glue, and the placeholders' spans and video frame ids, which the placeholders already give
 _OPENVINO_RESAMPLER_PLACEHOLDER = "<unk>"
 _OPENVINO_RESAMPLER_INPUTS = {"tgt_sizes", "image_bound", "temporal_ids"}
+# Phi-3.5-vision's second vision graph: a projection of each 2x2 block of patch features, fused after the merge; its
+# processor marks image placeholders with negative ids, read as this token
+OPENVINO_VISION_PROJECTION = "vision_projection_model"
+_OPENVINO_PROJECTION_PLACEHOLDER = "<|image|>"
 _OPENVINO_MERGER_GLUE = {
     "attention_mask",
     "rotary_pos_emb",
@@ -313,6 +317,50 @@ def _crop_features(config, runner, pixel_values: torch.Tensor, target_sizes: tor
     return torch.cat(features)
 
 
+def _fuse_openvino_projection(embeddings: openvino.Model, projection: openvino.Model, config) -> openvino.Model:
+    """Phi-3.5-vision's vision graph: each crop's patch features merged 2x2 into the projection's input, then
+    projected, with the `sub_GN` row separator and `glb_GN` crop separator projected after them as the last two rows."""
+    import numpy as np
+    import openvino
+    import openvino.opset13 as ops
+
+    features = embeddings.get_results()[0].input_value(0)
+    patches, width = (dim.get_length() for dim in features.get_partial_shape()[1:])
+    side = int(patches**0.5) // 2
+    merged = ops.reshape(features, ops.constant(np.array([-1, side, 2, side, 2, width])), False)
+    merged = ops.transpose(merged, ops.constant(np.array([0, 1, 3, 2, 4, 5])))
+    merged = ops.reshape(merged, ops.constant(np.array([1, -1, 4 * width])), False)
+    separators = np.concatenate([np.array(config.sub_GN), np.array(config.glb_GN)[None]], axis=-2)
+    merged = ops.concat([merged, ops.constant(separators.reshape(1, 2, 4 * width).astype(np.float32))], 1)
+    projection_input = projection.inputs[0].get_node()
+    for target in projection_input.output(0).get_target_inputs():
+        target.replace_source_output(merged.output(0))
+    embeddings.input(0).get_tensor().set_names({"pixel_values"})
+    return openvino.Model(projection.get_results(), list(embeddings.get_parameters()), "vision_embeddings_model")
+
+
+def _hd_features(runner, pixel_values: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
+    """Features from Phi-3.5-vision's fused vision graph, run per image on its global view and crops: the crops' tokens
+    laid out as the image's grid and the global view's as its own, each row closed by the `sub_GN` separator, the
+    `glb_GN` separator between them."""
+    crop_size = pixel_values.shape[-1]
+    features = []
+    for crops, (height, width) in zip(pixel_values, image_sizes.tolist()):
+        rows, columns = height // crop_size, width // crop_size
+        output = runner(pixel_values=crops[: 1 + rows * columns].float(), share_outputs=True)
+        output = output.reshape(-1, output.shape[-1])
+        newline, separator, tokens = output[-2], output[-1], output[:-2]
+        side = int((tokens.shape[0] // (1 + rows * columns)) ** 0.5)
+        grids = tokens.view(1 + rows * columns, side, side, -1)
+        crops_grid = grids[1:].view(rows, columns, side, side, -1).permute(0, 2, 1, 3, 4).flatten(2, 3).flatten(0, 1)
+
+        def with_newlines(grid):
+            return torch.cat([grid, newline.expand(grid.shape[0], 1, -1)], dim=1).flatten(0, 1)
+
+        features += [with_newlines(crops_grid), separator[None], with_newlines(grids[0])]
+    return torch.cat(features)
+
+
 def _sincos(dim: int, positions: torch.Tensor) -> torch.Tensor:
     omega = 1.0 / 10000 ** (torch.arange(dim // 2, dtype=torch.float64) / (dim / 2))
     angles = positions[..., None].double() * omega
@@ -372,7 +420,7 @@ def _load_openvino_multimodal(
         if file.startswith("openvino_") and file.endswith("_model.xml")
     }
     reason = None
-    merger = positions = None
+    merger = positions = projection = None
     hidden, merger_glue = "hidden_states", _OPENVINO_MERGER_GLUE
     if OPENVINO_VISION_RESAMPLER in graphs:
         merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_RESAMPLER}.xml", **kwargs)
@@ -383,6 +431,16 @@ def _load_openvino_multimodal(
 
             tokenizer = Tokenizer.from_file(cached_file(pretrained_model_name_or_path, "tokenizer.json", **kwargs))
             config.image_token_id = tokenizer.token_to_id(_OPENVINO_RESAMPLER_PLACEHOLDER)
+    elif OPENVINO_VISION_PROJECTION in graphs and getattr(config, "sub_GN", None) is not None:
+        projection = _read_openvino(
+            pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_PROJECTION}.xml", **kwargs
+        )
+        graphs = graphs - {OPENVINO_VISION_PROJECTION}
+        if getattr(config, "image_token_id", None) is None:
+            from tokenizers import Tokenizer
+
+            tokenizer = Tokenizer.from_file(cached_file(pretrained_model_name_or_path, "tokenizer.json", **kwargs))
+            config.image_token_id = tokenizer.token_to_id(_OPENVINO_PROJECTION_PLACEHOLDER)
     elif OPENVINO_VISION_MERGER in graphs:
         merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_MERGER}.xml", **kwargs)
         glue = {port.get_any_name() for port in merger.inputs} - {"hidden_states"}
@@ -413,6 +471,8 @@ def _load_openvino_multimodal(
         program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
         if name == "vision_embeddings_model" and merger is not None:
             program = _fuse_openvino_vision(program, merger, positions, hidden)
+        if name == "vision_embeddings_model" and projection is not None:
+            program = _fuse_openvino_projection(program, projection, config)
         for port in program.inputs:
             # The image grid, which the runtime feeds a modality graph as `grid_thw`
             if port.get_any_name() == "image_grid_thw":
@@ -877,6 +937,8 @@ class _OptimumGenerationMixin:
         if "rotary_pos_emb" in traced and grid is not None:
             kwargs = {**kwargs, **_vision_glue(self.config, grid, traced)}
         pixel_values = kwargs.get("pixel_values")
+        if getattr(self.config, "sub_GN", None) is not None and kwargs.get("image_sizes") is not None:
+            return _hd_features(runner, pixel_values, kwargs["image_sizes"]), None
         if "pos_embed" in traced and kwargs.get("tgt_sizes") is not None:
             return _resampled_features(self.config, runner, pixel_values, kwargs["tgt_sizes"]), None
         if "merge_index" in traced and kwargs.get("target_sizes") is not None:
@@ -890,6 +952,17 @@ class _OptimumGenerationMixin:
 
             features = pack_anyres_features(self.config, features, kwargs["image_sizes"], torch.tensor(newline))
         return features, layers
+
+    def embed(self, **kwargs) -> tuple[dict, dict]:
+        """Also read negative ids (Phi-3.5-vision's processor's image placeholders) as the image placeholder token."""
+        input_ids = kwargs.get("input_ids")
+        if (
+            input_ids is not None
+            and getattr(self.config, "image_token_id", None) is not None
+            and (input_ids < 0).any()
+        ):
+            kwargs["input_ids"] = input_ids.masked_fill(input_ids < 0, self.config.image_token_id)
+        return super().embed(**kwargs)
 
     def _call(self, **kwargs) -> Any:
         deepstack = kwargs.get("deepstack_visual_embeds")

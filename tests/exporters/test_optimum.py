@@ -152,6 +152,25 @@ class OptimumIntelTest(unittest.TestCase):
         """MiniCPM-V 4.7's vision graph, taking the position, window and merge indices of each image's crops."""
         _check_names_the_cats(self, "OpenVINO/MiniCPM-V-4.7-1B-int4-ov", "optimum-intel", max_new_tokens=60)
 
+    def test_multimodal_with_projected_crops(self):
+        """Phi-3.5-vision's vision graph fused with its projection, its crops laid out per image in Python, its
+        placeholders negative ids (its config and processor are remote code, its prompt its own)."""
+        from transformers.image_utils import load_image
+
+        repo = "OpenVINO/Phi-3.5-vision-instruct-int4-ov"
+        processor = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
+        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+        prompt = "<|image_1|>\nWhat animal is in this picture? Answer in one word."
+        text = processor.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True
+        )
+        inputs = processor(text=text, images=[image], return_tensors="pt")
+        model = _load(self, repo, "optimum-intel", trust_remote_code=True)
+        self.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+        generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=16, do_sample=False))
+        answer = processor.tokenizer.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        self.assertIn("cat", answer.lower())
+
     def test_multimodal_with_resampler(self):
         """MiniCPM-V 4.5's vision graph fused with its resampler, run per crop (its config and processor are remote
         code, its prompt its own)."""
