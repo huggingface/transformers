@@ -15,14 +15,16 @@
 import copy
 import dataclasses
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from threading import Event
 from typing import Literal
 
 import numpy as np
 
 from transformers.testing_utils import require_jinja
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
-from transformers.utils.chat_template_utils import render_jinja_template
+from transformers.utils.chat_template_utils import _compile_jinja_template, render_jinja_template
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -990,6 +992,43 @@ class ReasoningFieldAliasTest(unittest.TestCase):
 
 
 @require_jinja
+class AssistantTrackerConcurrencyTest(unittest.TestCase):
+    @require_jinja
+    def test_concurrent_rendering_keeps_assistant_spans(self):
+        template = "{% generation %}{{ pause() }}{{ messages[0].content }}{% endgeneration %}"
+        compiled = _compile_jinja_template(template)
+        started, release = Event(), Event()
+
+        def pause():
+            if not started.is_set():
+                started.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("First render was not released")
+            return ""
+
+        compiled.environment.globals["pause"] = pause
+
+        def render(content):
+            return render_jinja_template(
+                [[{"role": "assistant", "content": content}]],
+                chat_template=template,
+                return_assistant_tokens_mask=True,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(render, "FIRST")
+            try:
+                self.assertTrue(started.wait(timeout=10))
+                second = pool.submit(render, "SECOND")
+                second_result = second.result(timeout=10)
+            finally:
+                release.set()
+            first_result = first.result(timeout=10)
+
+        self.assertEqual(first_result, (["FIRST"], [[(0, 5)]]))
+        self.assertEqual(second_result, (["SECOND"], [[(0, 6)]]))
+
+
 class TemplateSandboxTest(unittest.TestCase):
     def render(self, template, chat=None):
         chat = chat if chat is not None else [{"role": "user", "content": "Hi"}]
