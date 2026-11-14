@@ -26,7 +26,9 @@ from datasets import load_dataset
 from transformers import PerceiverConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
+    require_kernels,
     require_torch,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -836,6 +838,34 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model_name = "deepmind/language-perceiver"
         model = PerceiverModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_kernels_can_run_without_crashing(self):
+        """Overriden to accomodate unique input preparation"""
+
+        def move_to_device(value, device):
+            if isinstance(value, torch.Tensor):
+                return value.to(device)
+            if isinstance(value, dict):
+                return {k: move_to_device(v, device) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return type(value)(move_to_device(v, device) for v in value)
+            return value
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class=model_class.__name__):
+                config, inputs = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+
+                model = model_class(config).to(torch_device)
+                model.eval()
+                model.use_kernels = True
+
+                prepared_inputs = self._prepare_for_class(inputs, model_class)
+                prepared_inputs = move_to_device(prepared_inputs, torch_device)
+
+                with torch.no_grad():
+                    model(**prepared_inputs)
 
 
 # We will verify our results on an image of cute cats

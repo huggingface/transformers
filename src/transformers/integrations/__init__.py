@@ -77,7 +77,6 @@ _import_structure = {
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
-        "use_kernel_func_from_hub",
         "use_kernel_func_from_hub_with_fallback",
         "use_kernelized_func",
     ],
@@ -229,7 +228,6 @@ if TYPE_CHECKING:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
-        use_kernel_func_from_hub,
         use_kernel_func_from_hub_with_fallback,
         use_kernelized_func,
     )

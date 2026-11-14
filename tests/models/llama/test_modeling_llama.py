@@ -330,6 +330,50 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(output_text_sdpa, output_text_fa)
         self.assertEqual(output_text_fa, EXPECTED_TEXT)
 
+    @require_torch_accelerator
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    @pytest.mark.torch_compile_test
+    def test_kernels_do_not_recompile_per_wrapper(self):
+        """Kernels test to check whether unnecessary recompiles are triggered on each kernel private wrapper id."""
+        from torch._logging import _internal as torch_logging
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-3.2-3B-Instruct",
+            device_map=torch_device,
+            dtype=torch.bfloat16,
+            use_kernels=False,
+        )
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "What's the meaning of life?"}],
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+            date_string="26 Jun 2026",
+        ).to(model.device)
+
+        with torch.no_grad():
+            model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
+
+        # FA2 introduces a graph break => dynamo recompilations are triggered => specializaton on each func kernel triggered
+        model.set_attn_implementation("flash_attention_2")
+        torch._dynamo.reset()
+
+        previous_log_state = torch_logging._get_log_state()
+        try:
+            torch._logging.set_logs(recompiles_verbose=True)
+
+            with self.assertLogs("torch._dynamo.convert_frame", level="WARNING") as logs:
+                with torch.no_grad():
+                    model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
+        finally:
+            torch_logging._set_log_state(previous_log_state)
+            torch_logging._init_logs()
+
+        self.assertNotIn("_ACTIVE_KERNEL_FUNCS.global_var[", "\n".join(logs.output))
+
 
 @slow
 @require_torch_accelerator

@@ -92,7 +92,6 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
-    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -3239,18 +3238,18 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(copy.deepcopy(config)).eval()
-            model = model.to(torch_device)
-            set_seed(42)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(copy.deepcopy(config))
                 # Since we don't support saving with bins files anymore, but still support loading we use this context
                 # to easily create the bins files and try to load them
                 with force_serialization_as_bin_files():
-                    model.cpu().save_pretrained(tmp_dir)
+                    model.save_pretrained(tmp_dir)
 
+                model = model.from_pretrained(tmp_dir, device_map=torch_device)
+                set_seed(42)
+                base_output = model(**inputs_dict_class)
+
+                model_size = compute_module_sizes(model)[0][""]
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)
                     max_memory = {0: max_size, "cpu": max_size}
@@ -3288,15 +3287,15 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(copy.deepcopy(config)).eval()
-            model = model.to(torch_device)
-            set_seed(42)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
+                model = model_class(copy.deepcopy(config))
+                model.save_pretrained(tmp_dir)
 
+                model = model.from_pretrained(tmp_dir, device_map=torch_device)
+                set_seed(42)
+                base_output = model(**inputs_dict_class)
+
+                model_size = compute_module_sizes(model)[0][""]
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
 
@@ -3328,17 +3327,17 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(copy.deepcopy(config)).eval()
-            model = model.to(torch_device)
-
-            set_seed(42)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[0][""]
-            # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
+                model = model_class(copy.deepcopy(config))
+                model.save_pretrained(tmp_dir)
+
+                model = model.from_pretrained(tmp_dir, device_map=torch_device)
+                set_seed(42)
+                base_output = model(**inputs_dict_class)
+
+                model_size = compute_module_sizes(model)[0][""]
+                # We test several splits of sizes to make sure it works.
+                max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
 
                 for max_size in max_gpu_sizes:
                     max_memory = {0: max_size, "cpu": model_size * 2}
@@ -6296,19 +6295,41 @@ class ModelTesterMixin(ExportTesterMixin):
                     else:
                         self.assertIsNone(captured[i])
 
-    @require_kernels
     @require_torch_accelerator
+    @require_kernels
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            # Most kernels are inference mode so ensure to enable as much as we can
+            model.eval()
 
-            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
-            with preserve_module_forwards(model):
-                # Using kernels should not raise a `ValueError`
-                model.use_kernels = True
+            # Using kernels should not raise a `ValueError`
+            model.use_kernels = True
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_kernels_can_run_without_crashing(self):
+        """
+        Check whether activating kernels and then running through some input leads to an (value) error
+
+        NOTE: This is run in inference mode for now. When we enable training a fwd + bwd test will be added separately.
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            model.use_kernels = True
+
+            prepared_inputs = self._prepare_for_class(inputs, model_class)
+            prepared_inputs = {
+                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+            }
+
+            model(**prepared_inputs)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
