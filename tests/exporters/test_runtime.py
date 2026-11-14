@@ -744,7 +744,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
-    def test_torch_runs_on_one_thread_while_generating_on_cpu(self):
+    def test_torch_threads_are_capped_while_generating_on_cpu(self):
         """The backend's thread pool runs the graphs; torch's, spinning after each step's bookkeeping, would fight it
         for the cores."""
         from transformers import LogitsProcessor, LogitsProcessorList
@@ -766,7 +766,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         exported.to("cpu").generate(
             **inputs, generation_config=generation_config, logits_processor=LogitsProcessorList([record])
         )
-        self.assertEqual(record.threads, {1})
+        self.assertEqual(record.threads, {min(threads, 4)})
         self.assertEqual(torch.get_num_threads(), threads)
 
     @require_openvino
