@@ -741,6 +741,34 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
     def test_onnx(self):
         self._check_backend(OnnxExporter(), OnnxConfig)
 
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_torch_runs_on_one_thread_while_generating_on_cpu(self):
+        """The backend's thread pool runs the graphs; torch's, spinning after each step's bookkeeping, would fight it
+        for the cores."""
+        from transformers import LogitsProcessor, LogitsProcessorList
+
+        class RecordThreads(LogitsProcessor):
+            def __init__(self):
+                self.threads = set()
+
+            def __call__(self, input_ids, scores):
+                self.threads.add(torch.get_num_threads())
+                return scores
+
+        model, inputs = self._llama()
+        generation_config = GenerationConfig(max_new_tokens=3, do_sample=False, eos_token_id=None)
+        exported = OnnxExporter().export_for_generation(
+            model, copy.deepcopy(inputs), OnnxConfig(dynamic=True), generation_config=generation_config
+        )
+        threads, record = torch.get_num_threads(), RecordThreads()
+        exported.to("cpu").generate(
+            **inputs, generation_config=generation_config, logits_processor=LogitsProcessorList([record])
+        )
+        self.assertEqual(record.threads, {1})
+        self.assertEqual(torch.get_num_threads(), threads)
+
     @require_openvino
     @pytest.mark.openvino_export_test
     def test_openvino_refuses_to_continue_from_a_cache(self):
