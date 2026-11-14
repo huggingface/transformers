@@ -195,6 +195,8 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         set_seed(0)
         tester = Gemma4Vision2TextModelTester(self)
         config, inputs = tester.prepare_config_and_inputs_for_common()
+        # The tester builds its inputs on the test device; the CPU fusions run on the CPU.
+        inputs = {name: value.cpu() if isinstance(value, torch.Tensor) else value for name, value in inputs.items()}
         model = Gemma4ForConditionalGeneration(config).eval()
         exporter = OnnxExporter()
         fused = exporter.export_multimodal(model, dict(inputs), OnnxConfig(dynamic=False, ort_fusions="cpu"))
