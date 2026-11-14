@@ -375,7 +375,7 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
         return num_temporal_patches * (resized_height // patch_size) * (resized_width // patch_size)
 
 
-@auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
+@auto_docstring(checkpoint="ovis-community/Ovis2.5-2B")
 @strict
 class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     r"""
@@ -422,7 +422,7 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
+@auto_docstring(checkpoint="ovis-community/Ovis2.5-2B")
 @strict
 class Ovis2_5Config(PreTrainedConfig):
     r"""

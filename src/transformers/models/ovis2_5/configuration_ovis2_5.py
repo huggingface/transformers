@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
+@auto_docstring(checkpoint="ovis-community/Ovis2.5-2B")
 @strict
 class Ovis2_5VisionConfig(PreTrainedConfig):
     r"""
@@ -80,7 +80,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
+@auto_docstring(checkpoint="ovis-community/Ovis2.5-2B")
 @strict
 class Ovis2_5Config(PreTrainedConfig):
     r"""
