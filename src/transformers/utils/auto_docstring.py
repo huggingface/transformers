@@ -76,6 +76,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
     "inkling": "InklingConfig",
+    "inkling2": "Inkling2Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
@@ -2137,18 +2138,18 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
-    past_key_values = {
+    cache = {
         "description": """
     Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-    blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+    blocks) that can be used to speed up sequential decoding. This typically consists in the `cache`
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
     Only [`~cache_utils.Cache`] instance is allowed as input, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-    If no `past_key_values` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
+    If no `cache` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
 
     The model will output the same cache format that is fed as input.
 
-    If `past_key_values` are used, the user is expected to input only unprocessed `input_ids` (those that don't
+    If `cache` are used, the user is expected to input only unprocessed `input_ids` (those that don't
     have their past key value states given to this model) of shape `(batch_size, unprocessed_length)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
     """,
@@ -2179,8 +2180,8 @@ class ModelArgs:
     decoder_inputs_embeds = {
         "description": """
     Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-    representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-    input (see `past_key_values`). This is useful if you want more control over how to convert
+    representation. If `cache` is used, optionally only the last `decoder_inputs_embeds` have to be
+    input (see `cache`). This is useful if you want more control over how to convert
     `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
     If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
@@ -2191,8 +2192,8 @@ class ModelArgs:
 
     use_cache = {
         "description": """
-    If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-    `past_key_values`).
+    If set to `True`, `cache` key value states are returned and can be used to speed up decoding (see
+    `cache`).
     """,
         "shape": None,
     }
@@ -2435,6 +2436,24 @@ class ModelForArgs:
             "type": "torch.LongTensor",
         }
 
+    class ForCausalLM:
+        labels = {
+            "description": """
+    Labels for computing the causal language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+    The labels are **shifted internally** so that `labels[..., 1:]` are used to predict `logits[..., :-1, :]`.
+    Pass unshifted labels matching `input_ids` (i.e. `labels = input_ids`). Do **not** shift the labels
+    yourself before passing them.
+
+    If the labels are already shifted (for example with sequence parallelism), pass them as the `shift_labels`
+    keyword argument and they are used as is. `labels` must still be passed for the loss to be computed.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
     class ForImageClassification:
         labels = {
             "description": """
@@ -2507,12 +2526,12 @@ class ModelOutputArgs:
         "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
     }
 
-    past_key_values = {
+    cache = {
         "description": """
     It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
     Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
     input) to speed up sequential decoding.
     """,
         "shape": None,

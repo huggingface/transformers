@@ -391,6 +391,12 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
         return inputs_dict
 
+    def _logits_scored_by_loss(self, model, logits):
+        # The logits also cover the image patches placed before the text, `(batch, num_patches + text_length, vocab)`,
+        # but the loss is only computed on the text positions.
+        num_image_tokens = model.git.encoder.layer[0].attention.self.image_patch_tokens
+        return logits[:, num_image_tokens:]
+
     def setUp(self):
         self.model_tester = GitModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GitConfig, hidden_size=32)
@@ -411,7 +417,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester._test_batched_generate_captioning(*config_and_inputs)
 
     @pytest.mark.generate
-    def test_past_key_values_format(self):
+    def test_cache_format(self):
         """
         Test that the KV cache is formatted correctly.
         Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
@@ -430,22 +436,22 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 inputs["use_cache"] = True
             outputs = model(**inputs)
 
-            cache = outputs["past_key_values"]
+            cache = outputs["cache"]
             batch_size, seq_length = inputs["input_ids"].shape[:2]
             image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
 
             # Check the format
-            self._check_past_key_values_for_generate(batch_size, cache, seq_length + image_length, decoder_config)
+            self._check_cache_for_generate(batch_size, cache, seq_length + image_length, decoder_config)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # GIT attention shape depends on image inputs, overwrite
         image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
         prompt_length += image_length
         output_length += image_length
         super()._check_attentions_for_generate(
-            batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+            batch_size, attentions, prompt_length, output_length, config, decoder_cache
         )
 
     def _check_hidden_states_for_generate(
@@ -480,7 +486,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @unittest.skip(
         reason="GIT cannot continue from past-kv due to image tokens merged into cache. Not worth fixing, rarely used model"
     )
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
 

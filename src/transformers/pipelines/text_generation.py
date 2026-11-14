@@ -397,7 +397,7 @@ class TextGenerationPipeline(Pipeline):
 
         if isinstance(output, ModelOutput):
             generated_sequence = output.sequences
-            other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "past_key_values"}}
+            other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "cache"}}
             out_b = generated_sequence.shape[0]
 
             for key, value in other_outputs.items():
