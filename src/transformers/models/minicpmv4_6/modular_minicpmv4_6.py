@@ -713,6 +713,9 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         )
         return output
 
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
+
 
 @auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):

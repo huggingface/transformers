@@ -536,13 +536,13 @@ class DecomposeMultimodalTest(unittest.TestCase):
         torch.testing.assert_close(actual, expected)
 
     def test_vision_graph_runs_on_another_image_count(self):
-        """The vision graph takes any number of images: the getter returns its features as one tensor, which a
-        per-image list would have fixed to the traced count."""
+        """The vision graph takes any number of images: `get_image_embeddings` returns its features as one tensor,
+        which `get_image_features`' per-image list would have fixed to the traced count."""
         from transformers.exporters import DynamoExporter
         from transformers.exporters.components import ModalityEncoder
 
         model, _ = _tiny_llava()
-        vision = ModalityEncoder(model.model, "get_image_features")
+        vision = ModalityEncoder(model.model, "get_image_embeddings")
         pixel_values = torch.randn(2, 3, 30, 30)
         exported = DynamoExporter().export(vision, {"pixel_values": pixel_values}, DynamoConfig(dynamic=True))
         with torch.no_grad():

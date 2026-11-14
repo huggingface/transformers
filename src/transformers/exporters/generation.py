@@ -23,7 +23,7 @@ from ..modeling_outputs import BaseModelOutput
 from ..utils import is_torch_available
 from .base import ExportedModel
 from .cache import advance_cache_length, causal_mask, mask_width, materialize_cache_layers
-from .decompose import _MODALITY_SPECS, DEEPSTACK_INPUTS, decode_graph_name
+from .decompose import _MODALITY_SPECS, DEEPSTACK_INPUTS, PREFILL_GRAPH, decode_graph_name
 from .metadata import load_treespec
 from .multimodal import ExportedMultimodalModel
 from .precompute import get_rope_index_from_config
@@ -218,17 +218,30 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                 },
             )
 
+    def _prefill_runner(self, text_name: str, query_length: int) -> ModelRunner | None:
+        """The prompt graph's runner, when the export has one (its decode graph takes one token) that takes a
+        `query_length`-token step: a dynamic one, or a static one traced on that length."""
+        runner = self.runners.get(PREFILL_GRAPH)
+        if runner is None or query_length == 1:
+            return None
+        config = runner.metadata.export_config
+        dynamic = config.get("dynamic") or config.get("dynamic_shapes")
+        traced_length = runner.metadata.kwargs.get(text_name, {}).get("shape", [0, 0])[1]
+        return runner if dynamic or traced_length == query_length else None
+
     def _step(self, **kwargs) -> Any:
         traced = self.runner.metadata.kwargs
         text_name = _text_name(kwargs, traced)
         query_length = kwargs[text_name].shape[1]
+        if (prefill := self._prefill_runner(text_name, query_length)) is not None:
+            return self._call(prefill, **kwargs)
         # A multi-token decode graph is traced on two tokens; one traced on a single token (any static export, or a
         # dynamic one whose model can't decode several at once) takes the prompt a token at a time.
         if query_length == 1 or traced[text_name].get("shape", [0, 0])[1] != 1:
-            return self._call(**kwargs)
+            return self._call(self.runner, **kwargs)
         outputs = None
         for index in range(query_length):
-            outputs = self._call(**self._token(kwargs, index, query_length))
+            outputs = self._call(self.runner, **self._token(kwargs, index, query_length))
             if getattr(outputs, "cache", None) is not None:
                 kwargs["cache"] = outputs.cache
         return outputs
@@ -275,8 +288,9 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                 token[name] = value[:, index : index + 1]
         return token
 
-    def _call(self, **kwargs) -> Any:
-        traced = self.runner.metadata.kwargs
+    def _call(self, runner: ModelRunner, **kwargs) -> Any:
+        """One call of `runner`'s graph (the decode graph's, or the prompt graph's) on the step's kwargs."""
+        traced = runner.metadata.kwargs
         # `generate` drops a full causal mask as redundant (SDPA's `is_causal`); a graph traced on one still takes it.
         for mask_name in ("attention_mask", "decoder_attention_mask"):
             spec, mask = traced.get(mask_name, {}), kwargs.get(mask_name)
@@ -290,9 +304,13 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                     else value
                     for layer_type, value in mask.items()
                 }
-        stateful = self.runner.stateful
+        stateful = runner.stateful
         inputs = {name: value for name, value in kwargs.items() if name in traced}
-        outputs = self.runner(share_outputs=stateful and self._generating, **inputs)
+        # While generating, a graph replayed from its capture (a CUDA graph) hands out its own output buffers too: the
+        # logits are read before the next step, and the cache it returns is copied into the capture's inputs before the
+        # next step overwrites them.
+        replayed = getattr(runner, "replays_cuda_graph", False)
+        outputs = runner(share_outputs=(stateful or replayed) and self._generating, **inputs)
         # A backend keeping the cache as state (OpenVINO's stateful model) never hands the loop's cache back advanced.
         if stateful and kwargs.get("cache") is not None:
             advance_cache_length(kwargs["cache"], kwargs[_text_name(kwargs)].shape[1])

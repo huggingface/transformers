@@ -496,6 +496,14 @@ def packs_anyres_features(owner: Any, config: Any) -> bool:
     )
 
 
+def _modality_getter(owner, getter: str) -> str:
+    """The getter `owner`'s forward calls for a modality: `get_<modality>_embeddings`, every item's features as one
+    tensor, where it has one, else `getter` (`get_<modality>_features`). The per-item split reads its sizes on the
+    host, which would fix the item count in the graph."""
+    flat_getter = getter.replace("_features", "_embeddings")
+    return flat_getter if hasattr(owner, flat_getter) else getter
+
+
 def _modality_owner(model, getter):
     """Whichever of the model or its base actually defines a modality getter."""
     base = model.base_model
@@ -538,7 +546,7 @@ def decompose_multimodal(
     # An encoder-decoder consumed its modality inputs before prefill; the caller passes the recorded calls.
     recorded_features = recorded_features or {}
     active_modalities = [
-        (spec, owner)
+        (spec, owner, _modality_getter(owner, spec.getter))
         for spec in _MODALITY_SPECS
         if (owner := _modality_owner(model, spec.getter)) is not None
         and (any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component))
@@ -548,8 +556,8 @@ def decompose_multimodal(
         with contextlib.ExitStack() as stack, torch.no_grad():
             decoder_calls = stack.enter_context(_capture_calls(decoder, "forward"))
             captured_features = {
-                spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
-                for spec, owner in active_modalities
+                spec.component: stack.enter_context(_capture_calls(owner, getter))
+                for spec, owner, getter in active_modalities
             }
             model(**copy.deepcopy(inputs))
     except Exception as e:
@@ -576,7 +584,7 @@ def decompose_multimodal(
             TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids}
         )
 
-    for spec, owner in active_modalities:
+    for spec, owner, getter in active_modalities:
         name = spec.component
         calls = captured_features.get(name) or recorded_features.get(name) or []
         if not calls:
@@ -601,7 +609,7 @@ def decompose_multimodal(
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = Component(ModalityEncoder(owner, spec.getter, spec.grid_key), feature_inputs)
+        components[name] = Component(ModalityEncoder(owner, getter, spec.grid_key), feature_inputs)
     return components
 
 
@@ -712,7 +720,7 @@ def _capture_generation(
         encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
         cross_writers = stack.enter_context(capture_cross_writers(model))
         live = {
-            spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
+            spec.component: stack.enter_context(_capture_calls(owner, _modality_getter(owner, spec.getter)))
             for spec, owner in modality_owners.items()
         }
         components = capture()
@@ -900,6 +908,11 @@ def decompose_for_generation(
 # The decode graph's names, after optimum-intel's: a causal LM's `model`, an encoder-decoder's `decoder_model` (beside
 # its `encoder_model`), and a multi-modal model's `language_model`.
 DECODE_GRAPHS = ("model", "decoder_model", "language_model")
+
+
+# The prompt graph `export_for_generation` exports beside a decode graph taking one token: the decode graph's module,
+# traced on the whole prompt.
+PREFILL_GRAPH = "prefill_model"
 
 
 def decode_graph_name(components) -> str:

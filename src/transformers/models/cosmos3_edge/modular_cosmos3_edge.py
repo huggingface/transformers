@@ -574,23 +574,43 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
         self.projector = Cosmos3EdgePatchMerger(config)
 
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
+        them per image.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = self.projector(vision_outputs.last_hidden_state)
+        vision_outputs.pooler_output = image_embeds
+        return vision_outputs
+
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return_flat = kwargs.pop("return_flat", False)
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = self.projector(vision_outputs.last_hidden_state)
-        if return_flat:
-            vision_outputs.pooler_output = image_embeds
-            return vision_outputs
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = vision_outputs.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 
         return vision_outputs
+
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        # Video frames use the same vision tower and projector path as images.
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
 
     def get_video_features(
         self,

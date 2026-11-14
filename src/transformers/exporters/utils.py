@@ -267,20 +267,26 @@ def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
 
 def _iter_leaf_tensors(obj: Any, prefix: str = ""):
     """Yield `(dotted_path, tensor)` for every tensor in a nested structure."""
-    if isinstance(obj, _LEAF_SKIP_TYPES):
+    leaves = {}
+    _collect_leaf_tensors(obj, prefix, leaves)
+    yield from leaves.items()
+
+
+def _collect_leaf_tensors(obj: Any, prefix: str, leaves: dict) -> None:
+    """`_iter_leaf_tensors`'s walk, into `leaves`: a function call per node rather than a generator per level, as a
+    runner flattens a whole cache on every call."""
+    if obj is None or type(obj) in (bool, int, float, str) or isinstance(obj, _LEAF_SKIP_TYPES):
         return
     if isinstance(obj, torch.Tensor):
-        yield prefix or "output", obj
+        leaves[prefix or "output"] = obj
     elif isinstance(obj, (list, tuple, set)):
         for index, item in enumerate(obj):
-            path = f"{prefix}.{index}" if prefix else str(index)
-            yield from _iter_leaf_tensors(item, path)
+            _collect_leaf_tensors(item, f"{prefix}.{index}" if prefix else str(index), leaves)
     elif isinstance(obj, Mapping):
         for key, value in obj.items():
-            path = f"{prefix}.{key}" if prefix else key
-            yield from _iter_leaf_tensors(value, path)
+            _collect_leaf_tensors(value, f"{prefix}.{key}" if prefix else key, leaves)
     elif hasattr(obj, "__dict__"):
-        yield from _iter_leaf_tensors(vars(obj), prefix)
+        _collect_leaf_tensors(vars(obj), prefix, leaves)
 
 
 def check_packages(
