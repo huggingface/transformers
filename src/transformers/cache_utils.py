@@ -5,6 +5,7 @@ from collections.abc import Iterable
 import torch
 
 from .configuration_utils import PreTrainedConfig
+from .integrations.heterogeneity.cache_utils import get_generic_heterogeneous_modeling_cache_layer_types
 from .utils import (
     is_hqq_available,
     is_optimum_quanto_available,
@@ -1938,6 +1939,10 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     # Some models may have "moe" or "mlp" as layer_type, for layer that do not need any attention - replace them with "dummy"
     layer_types = ["dummy" if layer_type in ("moe", "mlp") else layer_type for layer_type in layer_types]
 
+    # Support generic heterogeneous modeling, in which skips can leave some of a layer's caches without writers
+    if config.generic_heterogeneous_modeling_applied:
+        layer_types = get_generic_heterogeneous_modeling_cache_layer_types(config, layer_types)
+
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
@@ -2186,13 +2191,13 @@ class QuantizedCache(Cache):
 
         config = config.get_text_config(decoder=True)
         layer_types, _ = get_layer_types_and_kwargs(config)
-        invalid_layer_types = set(layer_types) - {"full_attention"}
+        invalid_layer_types = set(layer_types) - {"full_attention", "dummy"}
         if len(invalid_layer_types) > 0:
             raise ValueError(
                 "`QuantizedCache` is only supported for models with only full attention layers. We found the following invalid layer "
                 f"types: {invalid_layer_types}"
             )
-        layers = [layer_class(**layer_kwargs) for _ in range(config.num_hidden_layers)]
+        layers = [DummyLayer() if layer_type == "dummy" else layer_class(**layer_kwargs) for layer_type in layer_types]
         super().__init__(layers=layers)
 
 

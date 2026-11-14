@@ -381,6 +381,15 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 
+def _make_attention_mask_contiguous(attention_mask):
+    """Make an attention mask contiguous, including masks nested in dicts, whose types are preserved."""
+    if isinstance(attention_mask, dict):
+        return type(attention_mask)(
+            {key: _make_attention_mask_contiguous(value) for key, value in attention_mask.items()}
+        )
+    return attention_mask.contiguous() if attention_mask is not None else None
+
+
 class StopCheck:
     """
     Decides when the decoding loop should stop, and hands each new token to a streamer.
@@ -741,10 +750,7 @@ class GenerationMixin(ContinuousMixin):
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
-            if isinstance(attention_mask, dict):
-                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
-            else:
-                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
+            attention_mask = _make_attention_mask_contiguous(attention_mask)
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask

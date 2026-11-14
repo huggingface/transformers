@@ -21,6 +21,7 @@ from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .generation.continuous_batching.cache import PagedAttentionCache
+from .integrations.heterogeneity.masking_utils import support_per_layer_mask_creation
 from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
@@ -907,6 +908,7 @@ def find_first_full_attention_index(cache: Cache | None) -> int:
 
 
 @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+@support_per_layer_mask_creation()
 def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -966,6 +968,7 @@ def create_causal_mask(
             cache=cache,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            layer_idx=layer_idx,
             allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
@@ -1035,6 +1038,7 @@ def create_causal_mask(
 
 
 @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+@support_per_layer_mask_creation()
 def create_bidirectional_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1044,6 +1048,7 @@ def create_bidirectional_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_bidirectional_skip: bool = True,
+    layer_idx: int | None = None,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1074,9 +1079,14 @@ def create_bidirectional_mask(
             Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
-    layer_idx = find_first_full_attention_index(cache)
+    if layer_idx is None:
+        layer_idx = find_first_full_attention_index(cache)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1132,6 +1142,7 @@ def create_bidirectional_mask(
 
 
 @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+@support_per_layer_mask_creation("sliding_window")
 def create_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1174,7 +1185,7 @@ def create_sliding_window_causal_mask(
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
         layer_idx (`int`, *optional*):
-            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            The cache layer to size the mask against. By default, the first "sliding_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
         allow_is_causal_skip (`bool`, optional):
@@ -1192,6 +1203,7 @@ def create_sliding_window_causal_mask(
             cache=cache,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            layer_idx=layer_idx,
             allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
@@ -1268,6 +1280,7 @@ def create_sliding_window_causal_mask(
 
 
 @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+@support_per_layer_mask_creation("sliding_window")
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1277,6 +1290,7 @@ def create_bidirectional_sliding_window_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_bidirectional_skip: bool = True,
+    layer_idx: int | None = None,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1307,12 +1321,17 @@ def create_bidirectional_sliding_window_mask(
             Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "sliding_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # If we have a hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(cache, "is_sliding") and True in cache.is_sliding:
-        layer_idx = cache.is_sliding.index(True)
-    else:
-        layer_idx = 0
+    if layer_idx is None:
+        if hasattr(cache, "is_sliding") and True in cache.is_sliding:
+            layer_idx = cache.is_sliding.index(True)
+        else:
+            layer_idx = 0
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1365,6 +1384,7 @@ def create_bidirectional_sliding_window_mask(
 
 
 @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+@support_per_layer_mask_creation("attention_chunk_size")
 def create_chunked_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -1407,7 +1427,7 @@ def create_chunked_causal_mask(
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
         layer_idx (`int`, *optional*):
-            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            The cache layer to size the mask against. By default, the first "chunked_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
         allow_is_causal_skip (`bool`, optional):
