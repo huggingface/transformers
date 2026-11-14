@@ -186,6 +186,26 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         for component, program in _export_for_ort(model, ort_fusions).items():
             self.assert_fused(model, program, _ort_fusions(model_type, ort_fusions, component), component)
 
+    def test_multidimensional_rotary_fuses(self):
+        """Gemma 4's vision tower rotates a row half and a column half of each head, from a per-patch table: each
+        half becomes ONNX Runtime's `RotaryEmbedding`, and the fused vision graph returns the plain one's features."""
+        from tests.models.gemma4.test_modeling_gemma4 import Gemma4Vision2TextModelTester
+        from transformers import Gemma4ForConditionalGeneration
+
+        set_seed(0)
+        tester = Gemma4Vision2TextModelTester(self)
+        config, inputs = tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForConditionalGeneration(config).eval()
+        exporter = OnnxExporter()
+        fused = exporter.export_multimodal(model, dict(inputs), OnnxConfig(dynamic=False, ort_fusions="cpu"))
+        plain = exporter.export_multimodal(model, dict(inputs), OnnxConfig(dynamic=False))
+        vision, plain_vision = (export.components["vision_embeddings_model"].program for export in (fused, plain))
+        ops = collections.Counter(node.op_type for node in vision.graph.all_nodes())
+        self.assertEqual(ops["RotaryEmbedding"], 4 * config.vision_config.num_hidden_layers)
+        self.assertEqual(ops["Neg"], 0)
+        feeds = {value.name: inputs[value.name].numpy() for value in plain_vision.graph.inputs if value.name in inputs}
+        np.testing.assert_allclose(_run(vision, feeds)[0], _run(plain_vision, feeds)[0], atol=1e-4, rtol=1e-4)
+
     def test_forward_matches_plain_export(self):
         model = _ort_model()
         inputs = _padded_inputs(model)

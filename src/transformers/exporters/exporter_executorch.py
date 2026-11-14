@@ -329,6 +329,15 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
+def _narrow_split(input, sizes, dim):
+    """`torch.split` by sections as a chain of `narrow`s."""
+    pieces, start = [], 0
+    for size in sizes:
+        pieces.append(input.narrow(dim, start, size))
+        start = start + size
+    return tuple(pieces)
+
+
 def _has_unbacked_sizes(split_size_or_sections) -> bool:
     """Whether a `split` sections argument carries a data-dependent size."""
     from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
@@ -350,11 +359,7 @@ def _patch_unbacked_split(original):
 
     def patch(input, split_size_or_sections, dim=0):
         if _has_unbacked_sizes(split_size_or_sections):
-            pieces, start = [], 0
-            for size in split_size_or_sections:
-                pieces.append(input.narrow(dim, start, size))
-                start = start + size
-            return tuple(pieces)
+            return _narrow_split(input, split_size_or_sections, dim)
         return original(input, split_size_or_sections, dim)
 
     return patch
@@ -369,23 +374,15 @@ def _patch_split(original):
     """
 
     def patch(input, split_size_or_sections, dim=0):
-        if isinstance(split_size_or_sections, int):
-            splits = []
-            total = input.size(dim)
-            for i in range(0, total, split_size_or_sections):
-                splits.append(input.narrow(dim, i, min(split_size_or_sections, total - i)))
-            return tuple(splits)
-        elif isinstance(split_size_or_sections, torch.SymInt):
-            # Dynamic split size: `range(0, total, sym_int)` needs a concrete step, so
-            # the narrow-based loop above doesn't apply. Defer to the original torch.split.
+        if isinstance(split_size_or_sections, torch.SymInt):
+            # `range(0, total, sym_int)` needs a concrete step: the original handles a dynamic split size.
             return original(input, split_size_or_sections, dim)
-        else:
-            splits = []
-            start = 0
-            for size in split_size_or_sections:
-                splits.append(input.narrow(dim, start, size))
-                start += size
-            return tuple(splits)
+        if isinstance(split_size_or_sections, int):
+            total = input.size(dim)
+            split_size_or_sections = [
+                min(split_size_or_sections, total - start) for start in range(0, total, split_size_or_sections)
+            ]
+        return _narrow_split(input, split_size_or_sections, dim)
 
     return patch
 

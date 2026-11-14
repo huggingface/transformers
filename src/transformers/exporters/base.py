@@ -22,7 +22,7 @@ import json
 import os
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -427,9 +427,21 @@ class HfExporter(ABC):
         return ExportedComponent(program, metadata)
 
     def _export_components(
-        self, components: dict[str, Component], config: ExportConfigMixin | dict[str, ExportConfigMixin]
+        self,
+        components: dict[str, Component],
+        config: ExportConfigMixin | dict[str, ExportConfigMixin],
+        calibration: Callable[[list], dict[str, list]] | None = None,
     ) -> dict[str, ExportedComponent]:
-        """Export each component with `config`, or with its entry in a per-component `config` dict."""
+        """Export each component with `config`, or with its entry in a per-component `config` dict. A single config
+        whose quantizer has a `calibration_dataset` is spread over the components: `calibration(dataset)` gives each
+        component's own inputs to those samples, which it calibrates on."""
+        quantizer = None if isinstance(config, dict) else config.quantizer
+        if calibration is not None and quantizer is not None and quantizer.calibration_dataset:
+            samples = calibration(quantizer.calibration_dataset)
+            config = {
+                name: dataclasses.replace(config, quantizer=quantizer.with_calibration(samples[name]))
+                for name in components
+            }
         if isinstance(config, dict):
             missing = set(components) - set(config)
             if missing:
@@ -498,20 +510,18 @@ class HfExporter(ABC):
             [`ExportedMultimodalModel`]: One [`ExportedComponent`] per component, called like the model.
         """
         components = decompose_multimodal(model, sample_inputs)
-        quantizer = getattr(config, "quantizer", None)
-        if not isinstance(config, dict) and quantizer is not None and quantizer.calibration_dataset:
-            calibration: dict[str, list] = {}
-            for sample in quantizer.calibration_dataset:
+
+        def calibration(dataset):
+            samples: dict[str, list] = {}
+            for sample in dataset:
                 for name, component in decompose_multimodal(model, sample).items():
-                    calibration.setdefault(name, []).append(component.inputs)
-            config = {
-                name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
-                for name in components
-            }
+                    samples.setdefault(name, []).append(component.inputs)
+            return samples
+
         from .multimodal import ExportedMultimodalModel
 
         return ExportedMultimodalModel(
-            self._export_components(components, config),
+            self._export_components(components, config, calibration),
             self.export_format,
             config=getattr(model, "config", None),
         )
@@ -566,24 +576,15 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
         )
 
-        if not isinstance(config, dict):
-            quantizer = config.quantizer
-            if quantizer is not None and quantizer.calibration_dataset:
-                # Generate-level samples: capture each component's own forward inputs from them.
-                calibration = capture_calibration_inputs(
-                    model,
-                    quantizer.calibration_dataset,
-                    generation_config=generation_config,
-                    multi_token_decode=multi_token_decode,
-                )
-                config = {
-                    name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
-                    for name in components
-                }
+        def calibration(dataset):
+            # Generate-level samples: each component's own forward inputs, captured from them
+            return capture_calibration_inputs(
+                model, dataset, generation_config=generation_config, multi_token_decode=multi_token_decode
+            )
 
         components = {name: Component(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
         return ExportedModel(
-            self._export_components(components, config),
+            self._export_components(components, config, calibration),
             self.export_format,
             config=getattr(model, "config", None),
             generation_config=generation_config,
