@@ -15,6 +15,7 @@
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -650,3 +651,102 @@ class FP8ModulesToNotConvertTest(unittest.TestCase):
         forget_gate = model.model.layers[0].self_attn.forget_gate
         self.assertNotIsInstance(forget_gate.f_a_proj, FP8Linear)
         self.assertIsInstance(forget_gate.f_b_proj, FP8Linear)
+
+
+@unittest.skipUnless(hasattr(torch, "float8_e4m3fn"), "needs torch.float8_e4m3fn")
+class FP8DequantizePartialBlockTest(unittest.TestCase):
+    """``Fp8Dequantize`` is the CPU forced-dequantize path: its scale grid is a ceil
+    grid, so a weight whose shape is not a multiple of the block size has partial
+    edge blocks. Deriving the block size by equal division (``rows // scale_rows``)
+    silently dequantizes those weights with the wrong per-block scales (#50603).
+    """
+
+    def _dequantizer(self, block_size=(128, 128)):
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        quantizer = SimpleNamespace(
+            quantization_config=SimpleNamespace(weight_block_size=block_size, scale_fmt="float")
+        )
+        return Fp8Dequantize(quantizer)
+
+    @staticmethod
+    def _quantize_ceil(weight, block_size=(128, 128)):
+        """Quantize per the format's reference semantics (ceil grids, partial edges)."""
+        rows, cols = weight.shape
+        grid_r = (rows + block_size[0] - 1) // block_size[0]
+        grid_c = (cols + block_size[1] - 1) // block_size[1]
+        codes = torch.zeros_like(weight)
+        scales = torch.zeros(grid_r, grid_c)
+        dequantized = torch.zeros_like(weight)
+        for i in range(grid_r):
+            for j in range(grid_c):
+                block = (
+                    slice(i * block_size[0], (i + 1) * block_size[0]),
+                    slice(j * block_size[1], (j + 1) * block_size[1]),
+                )
+                mult = weight[block].abs().max().clamp(min=1e-12) / 448.0
+                codes[block] = torch.clamp(weight[block] / mult, -448.0, 448.0)
+                scales[i, j] = mult
+                dequantized[block] = codes[block].to(torch.float8_e4m3fn).float() * mult
+        return codes.to(torch.float8_e4m3fn), scales, dequantized
+
+    def test_partial_blocks_match_reference_helper(self):
+        from transformers.integrations.finegrained_fp8 import _dequantize_fp8_weight
+
+        torch.manual_seed(0)
+        codes, scales, expected = self._quantize_ceil(torch.randn(200, 200))
+        out = self._dequantizer()._dequantize_one(codes, scales, output_dtype=torch.float32)
+        torch.testing.assert_close(out, expected, rtol=0, atol=0)
+        torch.testing.assert_close(
+            out, _dequantize_fp8_weight(codes, scales, [128, 128], torch.float32), rtol=0, atol=0
+        )
+
+    def test_partial_block_rows_get_their_own_scale(self):
+        weight = torch.ones(130, 128).to(torch.float8_e4m3fn)
+        scales = torch.tensor([[1.0], [2.0]])  # rows [0:128] -> 1.0, rows [128:130] -> 2.0
+        out = self._dequantizer()._dequantize_one(weight, scales, output_dtype=torch.float32)
+        torch.testing.assert_close(out[:128], torch.ones(128, 128), rtol=0, atol=0)
+        torch.testing.assert_close(out[128:], torch.full((2, 128), 2.0), rtol=0, atol=0)
+
+    def test_non_divisible_shape_dequantizes_instead_of_raising(self):
+        from transformers.integrations.finegrained_fp8 import _dequantize_fp8_weight
+
+        weight = torch.ones(256, 131).to(torch.float8_e4m3fn)
+        scales = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        out = self._dequantizer()._dequantize_one(weight, scales, output_dtype=torch.float32)
+        torch.testing.assert_close(
+            out, _dequantize_fp8_weight(weight, scales, [128, 128], torch.float32), rtol=0, atol=0
+        )
+
+    def test_divisible_shape_unchanged(self):
+        torch.manual_seed(0)
+        codes, scales, expected = self._quantize_ceil(torch.randn(256, 256))
+        for dequantizer in (self._dequantizer(), self._dequantizer(block_size=None)):
+            out = dequantizer._dequantize_one(codes, scales, output_dtype=torch.float32)
+            torch.testing.assert_close(out, expected, rtol=0, atol=0)
+
+    def test_grid_inconsistent_with_block_size_and_shape_still_raises(self):
+        weight = torch.ones(200, 200).to(torch.float8_e4m3fn)
+        scales = torch.ones(3, 3)  # neither the (128, 128) ceil grid (2, 2) nor a divisor of the shape
+        with self.assertRaises(ValueError):
+            self._dequantizer()._dequantize_one(weight, scales, output_dtype=torch.float32)
+
+    def test_grid_the_config_does_not_describe_falls_back_to_grid_derivation(self):
+        # MXFP8-style tensor ([1, 32] scales) under a (128, 128) FP8 config: the grid
+        # divides the shape evenly, so equal division stays exact and must keep working.
+        weight = torch.ones(64, 64).to(torch.float8_e4m3fn)
+        scales = torch.tensor([[2.0, 3.0]]).repeat(64, 1)
+        out = self._dequantizer()._dequantize_one(weight, scales, output_dtype=torch.float32)
+        expected = torch.cat([torch.full((64, 32), 2.0), torch.full((64, 32), 3.0)], dim=1)
+        torch.testing.assert_close(out, expected, rtol=0, atol=0)
+
+    def test_fp4_partial_block_uses_mx_block(self):
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        # Two e2m1 values of 1.0 (LUT index 2) per byte; unpacked shape is (128, 100),
+        # whose column grid (4) is the ceil grid of the MX block (1, 32), not a divisor pair.
+        packed = torch.full((128, 50), 0x22, dtype=torch.uint8).view(torch.int8)
+        scales = torch.arange(1, 5, dtype=torch.float32).repeat(128, 1)
+        out = Fp8Dequantize(None)._dequantize_one(packed, scales, output_dtype=torch.float32)
+        expected = scales.repeat_interleave(32, dim=1)[:, :100]
+        torch.testing.assert_close(out, expected, rtol=0, atol=0)

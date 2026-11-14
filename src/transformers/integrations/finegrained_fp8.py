@@ -1113,6 +1113,28 @@ class Fp8Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
+    def _resolve_block_size(self, is_fp4: bool) -> tuple[int, int] | None:
+        """The block size the scale grid was built with, when it is known a priori.
+
+        FP4-packed tensors are MX-quantized with a ``[1, 32]`` block by definition.
+        FP8 tensors use the checkpoint's configured ``weight_block_size`` (read the
+        same way :meth:`Fp8Quantize._resolve_block_size` reads it). Anything else
+        returns ``None`` and the caller falls back to deriving the block size from
+        the scale grid, as before.
+        """
+        if is_fp4:
+            return (1, 32)
+        config = getattr(getattr(self, "hf_quantizer", None), "quantization_config", None)
+        if config is None:
+            return None
+        if isinstance(config, dict):
+            block_size = config.get("weight_block_size")
+        else:
+            block_size = getattr(config, "weight_block_size", None)
+        if block_size is None:
+            return None
+        return tuple(block_size)
+
     # E2M1 (FP4) value table — checkpoints sometimes ship MoE experts as packed FP4
     # (two e2m1 nibbles per int8 byte), so the "weight" dtype lands as ``int8`` /
     # ``float4_e2m1fn_x2`` and we have to unpack before applying the scale grid.
@@ -1133,25 +1155,43 @@ class Fp8Dequantize(ConversionOps):
         # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
         # first so the rest of the routine sees a normal (rows, cols) float matrix.
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
-        if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
+        is_fp4 = quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype)
+        if is_fp4:
             quantized_fp32 = self._unpack_fp4(quantized)
         else:
             quantized_fp32 = quantized.to(torch.float32)
         rows, cols = quantized_fp32.shape[-2:]
-        # Derive block size from the scale grid rather than the global config: MoE experts
-        # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
-        # and the same dequant has to handle both within one checkpoint.
         try:
             scale_rows, scale_cols = scales.shape[-2:]
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
+        # The scale grid is a ceil grid: cell ``i`` covers rows
+        # ``[i * block_m, min((i + 1) * block_m, rows)]``, so the last block along an
+        # axis can be partial. Deriving the block size by equal division
+        # (``rows // scale_rows``) silently assigns the wrong scale to every element
+        # past the first partial block whenever the shape happens to divide by the
+        # grid count, and rejects legal checkpoints when it does not. When the block
+        # size is known (the configured ``weight_block_size`` for FP8, ``[1, 32]``
+        # for MXFP4) and the grid is exactly the ceil grid it implies, use it.
+        # Otherwise keep deriving the block size from the grid: a single checkpoint
+        # can mix tensors the global config does not describe (e.g. MXFP8 tensors
+        # with ``[1, 32]`` scales under an FP8 config), and those grids divide the
+        # shape evenly, so equal division stays exact for them.
+        block_size = self._resolve_block_size(is_fp4) if scales.ndim >= 2 else None
+        if (
+            block_size is not None
+            and scale_rows == (rows + block_size[0] - 1) // block_size[0]
+            and scale_cols == (cols + block_size[1] - 1) // block_size[1]
+        ):
+            block_m, block_n = block_size
+        elif rows % scale_rows or cols % scale_cols:
             raise ValueError(
                 f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
             )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
+        else:
+            block_m = rows // scale_rows
+            block_n = cols // scale_cols
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
         # the math; prefer the destination parameter's dtype when known so eager modules
@@ -1168,9 +1208,21 @@ class Fp8Dequantize(ConversionOps):
         else:
             s_fp32 = scales.to(torch.float32)
         original_shape = quantized_fp32.shape
-        q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
-        s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (q * s).to(output_dtype).reshape(original_shape)
+        if rows % block_m == 0 and cols % block_n == 0:
+            q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
+            s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
+            return (q * s).to(output_dtype).reshape(original_shape)
+        # Partial edge blocks: expand the scales over the rows and broadcast them
+        # over the column blocks, truncating the overshoot — the same semantics
+        # ``_dequantize_fp8_weight`` implements for the quantized path.
+        dequantized = quantized_fp32.clone()
+        s_rows = s_fp32.repeat_interleave(block_m, dim=-2)[..., :rows, :]
+        full, rem = divmod(cols, block_n)
+        if full:
+            dequantized[..., : full * block_n].unflatten(-1, (full, block_n)).mul_(s_rows[..., :full, None])
+        if rem:
+            dequantized[..., full * block_n :] = dequantized[..., full * block_n :] * s_rows[..., full:]
+        return dequantized.to(output_dtype)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:
