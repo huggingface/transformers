@@ -172,7 +172,7 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                             for name in ALL_CACHE_NAMES
                             if getattr(out1, name, None) is not None
                         ),
-                        ("past_key_values", None),
+                        ("cache", None),
                     )
                     out2 = model(
                         input_ids=turn2,

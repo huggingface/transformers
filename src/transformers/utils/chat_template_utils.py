@@ -60,14 +60,14 @@ BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 # Extracts the Args: block from the docstring
-args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+args_re = re.compile(r"\n\s*Args:\n(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
 # Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
 (?:^|\n)  # Match the start of the args block, or a newline
-\s*(\w+):\s*  # Capture the argument name and strip spacing
+([ \t]*)(\w+):\s*  # Capture the indentation and the argument name
 (.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
-(?=\n\s*\w+:|\Z)  # Stop when you hit the next argument or the end of the block
+(?=\n(?!\1[ \t])[ \t]*\w+:|\Z)  # Stop at the next "name:" that is not indented deeper, or the end of the block
 """,
     re.DOTALL | re.VERBOSE,
 )
@@ -272,14 +272,14 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
 
     # Clean and store the sections
     description = description_match.group(1).strip() if description_match else None
-    docstring_args = args_match.group(1).strip() if args_match else None
+    docstring_args = args_match.group(1) if args_match else None
     returns = returns_match.group(1).strip() if returns_match else None
 
     # Parsing the arguments into a dictionary
     if docstring_args is not None:
         docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
         matches = args_split_re.findall(docstring_args)
-        args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
+        args_dict = {match[1]: re.sub(r"\s*\n+\s*", " ", match[2].strip()) for match in matches}
     else:
         args_dict = {}
 
