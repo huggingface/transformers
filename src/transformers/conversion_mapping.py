@@ -193,10 +193,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 r"^visual_tokenizer\.vit\.vision_model\.post_layernorm\.", "model.vision_tower.post_layernorm."
             ),
-            WeightRenaming(
-                r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.head_linear."
-            ),
-            WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.multi_modal_projector.visual_tokenizer.head_norm."),
+            WeightRenaming(r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.linear."),
+            WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.multi_modal_projector.visual_tokenizer.norm."),
             WeightRenaming(r"^vte\.", "model.multi_modal_projector.visual_embeddings_table."),
         ],
         "inkling_mm_model": [
