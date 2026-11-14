@@ -16,7 +16,10 @@ and parses it into a single key in the output message dictionary. Functions are 
 
 from __future__ import annotations
 
+import ast
 import json
+import math
+import warnings
 from typing import Any
 
 import regex as re
@@ -137,6 +140,61 @@ def _kv_lines(text: str, args: dict) -> dict:
     return out
 
 
+_PYTHON_LITERAL_NAMES = {"True": True, "true": True, "False": False, "false": False, "None": None, "null": None}
+
+
+def _python_literal(node: ast.expr) -> Any:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, bool, type(None))):
+        return node.value
+    # Overflowing literals like `1e999` parse to `inf`, which is not valid JSON.
+    if isinstance(node, ast.Constant) and isinstance(node.value, float) and math.isfinite(node.value):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        operand = _python_literal(node.operand)
+        if isinstance(operand, (int, float)) and not isinstance(operand, bool):
+            return -operand if isinstance(node.op, ast.USub) else operand
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return [_python_literal(element) for element in node.elts]
+    if isinstance(node, ast.Dict) and None not in node.keys:
+        out = {}
+        for key, value in zip(node.keys, node.values):
+            # Bare identifiers are accepted as keys, as in `{city: "Paris"}`.
+            key = key.id if isinstance(key, ast.Name) else _python_literal(key)
+            if not isinstance(key, str):
+                raise ValueError("dict keys must be strings")
+            out[key] = _python_literal(value)
+        return out
+    if isinstance(node, ast.Name) and node.id in _PYTHON_LITERAL_NAMES:
+        return _PYTHON_LITERAL_NAMES[node.id]
+    raise ValueError(f"unsupported value {ast.unparse(node)!r}")
+
+
+def _python_call_list(text: str, args: dict) -> list[dict]:
+    """Parse a Python-style list of keyword-argument calls, e.g. `[get_weather(city="Paris")]`,
+    into `[{"name": ..., "arguments": {...}}]`. Model output is parsed with `ast`, never evaluated."""
+    try:
+        # Invalid escapes like `\q` are kept verbatim, as in Python, without warning about model output.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(text.strip(), mode="eval").body
+        if not isinstance(tree, ast.List):
+            raise ValueError("expected a list of calls")
+        calls = []
+        for call in tree.elts:
+            if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+                raise ValueError("expected a call to a named function")
+            if call.args or any(keyword.arg is None for keyword in call.keywords):
+                raise ValueError("only keyword arguments are supported")
+            if len({keyword.arg for keyword in call.keywords}) != len(call.keywords):
+                raise ValueError("keyword argument repeated")
+            arguments = {keyword.arg: _python_literal(keyword.value) for keyword in call.keywords}
+            calls.append({"name": call.func.id, "arguments": arguments})
+        return calls
+    # Deeply nested input overflows the Python parser with a `MemoryError` or `RecursionError`.
+    except (SyntaxError, ValueError, MemoryError, RecursionError) as e:
+        raise ValueError(f"python-call-list: could not parse region.\nContent: {text!r}\nError: {e}") from e
+
+
 CONTENT_PARSERS = {
     "text": _text,
     "int": _int,
@@ -145,11 +203,12 @@ CONTENT_PARSERS = {
     "json": _json,
     "xml-inline": _xml_inline,
     "kv-lines": _kv_lines,
+    "python-call-list": _python_call_list,
 }
 
 # Parsers whose output is the verbatim body text (modulo whitespace) — chunks
 # from these fields stream with `dirty=False` because each chunk is part of
-# the final value. Structured parsers (`json`, `xml-inline`, `kv-lines`) only
+# the final value. Structured parsers (`json`, `xml-inline`, `kv-lines`, `python-call-list`) only
 # produce a meaningful value on close, so their chunks stream raw bytes
 # flagged `dirty=True` while the parsed value is delivered in `region_close`.
 STREAMABLE_PARSERS = frozenset({"text", "int", "float", "bool"})
