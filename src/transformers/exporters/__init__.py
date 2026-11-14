@@ -33,6 +33,7 @@ _import_structure = {
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
     "metadata": ["ExportMetadata"],
+    "multimodal": ["ExportedMultimodalModel"],
     "quantizers": [
         "ExportQuantizer",
         "NNCFOnnxQuantizer",
@@ -45,7 +46,6 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
-    "multimodal": ["ExportedMultimodalModel"],
     "runners": ["ModelRunner"],
 }
 
