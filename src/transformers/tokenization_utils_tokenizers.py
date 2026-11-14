@@ -307,17 +307,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @classmethod
     def _convert_from_sentencepiece(cls, vocab_file: str, local_kwargs: dict[str, Any]) -> dict[str, Any]:
-        from .convert_slow_tokenizer import SentencePieceExtractor
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, SentencePieceExtractor
+
+        converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
+        has_converter = (converter_class is not None and hasattr(converter_class, "convert_from_spm")) or hasattr(
+            cls, "convert_from_spm_model"
+        )
+        # Non-model specific tokenizers rebuild merges from the piece scores in step 3, so skip them in step 1
+        builds_from_proto = (cls is TokenizersBackend or "__init__" not in cls.__dict__) and not has_converter
 
         # 1. Extract vocab, merges, and spm_precompiled from the .model proto
         extractor = SentencePieceExtractor(vocab_file)
-        local_kwargs = extractor.extract(cls.model, **local_kwargs)
+        local_kwargs = extractor.extract(cls.model, generate_merges=not builds_from_proto, **local_kwargs)
 
         # 2. If a model-specific converter exists, use it.
         try:
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-
-            converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
             if converter_class is not None and hasattr(converter_class, "convert_from_spm"):
                 local_kwargs = converter_class.convert_from_spm(**local_kwargs)
         except Exception as e:
@@ -332,25 +336,85 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         #    from the proto so normalizer/decoder are configured correctly.
         if "tokenizer_object" not in local_kwargs and (cls is TokenizersBackend or "__init__" not in cls.__dict__):
             vocab = local_kwargs.pop("vocab", None)
-            merges = local_kwargs.pop("merges", None)
+            # Regenerated from the piece scores by `build_tokenizer_from_spm_proto`
+            local_kwargs.pop("merges", None)
 
             # Replace placeholder tokens as specified in added_tokens_decoder
             added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
-            if vocab is not None and added_tokens_decoder:
+            if isinstance(vocab, dict) and added_tokens_decoder:
                 id_to_token = {token_id: token for token, token_id in vocab.items()}
-                for token_id, new_token in added_tokens_decoder.items():
-                    token_id = int(token_id)
-                    new_token = str(new_token)
-                    current_token = id_to_token.get(token_id)
-                    if current_token and current_token != new_token and new_token not in vocab:
-                        vocab[new_token] = vocab.pop(current_token)
-                        id_to_token[token_id] = new_token
+                renames = {
+                    int(token_id): str(new_token)
+                    for token_id, new_token in added_tokens_decoder.items()
+                    if id_to_token.get(int(token_id)) not in (None, str(new_token))
+                }
+                # A new token may already be in the vocab only if its id is renamed too (e.g. two pieces swapped)
+                renames = {
+                    token_id: new_token
+                    for token_id, new_token in renames.items()
+                    if new_token not in vocab or vocab[new_token] in renames
+                }
+                for token_id in renames:
+                    del vocab[id_to_token[token_id]]
+                for token_id, new_token in renames.items():
+                    vocab[new_token] = token_id
 
-            tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
-                proto=extractor.proto,
-                vocab=vocab,
-                merges=merges,
-            )
+            # User-defined pieces are handled by the backend tokenizer, not as special tokens
+            user_defined = {piece.piece for piece in extractor.proto.pieces if piece.type == 4}
+            if user_defined and local_kwargs.get("additional_special_tokens"):
+                local_kwargs["additional_special_tokens"] = [
+                    token for token in local_kwargs["additional_special_tokens"] if str(token) not in user_defined
+                ]
+
+            # The dummy prefix is added by the normalizer, which would also prefix a normalized added token's
+            # content so that it only matches at the start of the text. Match added tokens on the raw text instead,
+            # as SentencePiece-based tokenizers do.
+            if extractor.proto.normalizer_spec.add_dummy_prefix:
+
+                def _unnormalized(token):
+                    if not isinstance(token, AddedToken) or not token.normalized:
+                        return token
+                    return AddedToken(
+                        token.content,
+                        single_word=token.single_word,
+                        lstrip=token.lstrip,
+                        rstrip=token.rstrip,
+                        normalized=False,
+                        special=token.special,
+                    )
+
+                if added_tokens_decoder:
+                    local_kwargs["added_tokens_decoder"] = {
+                        token_id: _unnormalized(token) for token_id, token in added_tokens_decoder.items()
+                    }
+                for key in ("bos_token", "eos_token", "unk_token", "pad_token"):
+                    if key in local_kwargs:
+                        local_kwargs[key] = _unnormalized(local_kwargs[key])
+                if local_kwargs.get("additional_special_tokens"):
+                    local_kwargs["additional_special_tokens"] = [
+                        _unnormalized(token) for token in local_kwargs["additional_special_tokens"]
+                    ]
+            elif user_defined and added_tokens_decoder:
+                # Without a dummy prefix, user-defined pieces are matched on the normalized text, as SentencePiece
+                # does. A config may mark them `normalized=False` (Gemma's "▁▁", "▁▁▁", ...), which would match them
+                # against raw spaces instead of "▁", and merges can't build them because they aren't normal pieces.
+                # Special tokens stay matched on the raw text, so that they take priority over overlapping pieces
+                # (InternLM3's "'<" would otherwise split "'<|im_start|>").
+                local_kwargs["added_tokens_decoder"] = {
+                    token_id: AddedToken(
+                        token.content,
+                        single_word=token.single_word,
+                        lstrip=token.lstrip,
+                        rstrip=token.rstrip,
+                        normalized=True,
+                        special=token.special,
+                    )
+                    if isinstance(token, AddedToken) and not token.special and token.content in user_defined
+                    else token
+                    for token_id, token in added_tokens_decoder.items()
+                }
+
+            tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(proto=extractor.proto, vocab=vocab)
             if tokenizer_object is not None:
                 local_kwargs["tokenizer_object"] = tokenizer_object
                 # Set bos/eos tokens from proto spec if available. This is needed when
