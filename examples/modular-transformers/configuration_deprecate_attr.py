@@ -32,7 +32,7 @@ class DeprecateAttrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deprecate_attr"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `DeprecateAttrModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

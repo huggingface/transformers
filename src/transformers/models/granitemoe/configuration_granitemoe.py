@@ -44,7 +44,7 @@ class GraniteMoeConfig(PreTrainedConfig):
     """
 
     model_type = "granitemoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
         "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
