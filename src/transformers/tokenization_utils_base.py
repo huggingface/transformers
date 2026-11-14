@@ -65,9 +65,8 @@ from .utils import (
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
-    _get_control_token_patterns,
     _get_template_literal_text,
-    mark_control_tokens,
+    encode_escaped_chat,
     render_jinja_template,
 )
 
@@ -3071,14 +3070,21 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             sanitize_control_tokens (`bool`, defaults to `False`):
-                If set, control tokens that appear in messages, tools, documents or the template variables passed as
-                `**kwargs` are encoded as ordinary text, so only the control tokens written by the chat template itself
-                are encoded as tokens. Control tokens are
-                the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
-                variable is not set, control tokens are inferred from the added tokens that appear in the chat
-                template's text and string literals. Only whole control tokens are sanitized, so if the template joins
-                strings from the input into control tokens (like `'<|' + message['role'] + '|>'`), those strings must
-                be validated separately. Dict keys aren't sanitized either.
+                If set, only the control tokens that the chat template writes itself are encoded as tokens. Control
+                tokens that come from messages, tools, documents or the template variables passed as `**kwargs` are
+                encoded as ordinary text, wherever in those inputs they are and however the template prints them.
+                Control tokens are the tokenizer's special tokens, plus the added tokens in
+                `tokenizer.chat_control_tokens`. If that variable is not set, control tokens are inferred from the
+                added tokens that appear in the chat template's text and string literals.
+
+                The text that the template renders is the same with or without this option. In particular, templates
+                still read messages to decide what to write, so a template that finds reasoning in a message's
+                `content` and wraps it in its own reasoning tokens keeps doing that. Reasoning tokens that a template
+                copies straight from `content` are encoded as text, though, so pass reasoning as `reasoning_content`
+                instead. Message roles count as the template's own text when they are a single word, because some
+                templates build control tokens out of them (like `'<|' + message['role'] + '|>'`).
+
+                Requires `tokenize=True` and a fast tokenizer.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3153,11 +3159,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         if sanitize_control_tokens:
-            conversations, tools, documents, kwargs = self._mark_chat_inputs(
-                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
-            )
+            if not tokenize or return_assistant_tokens_mask:
+                raise ValueError(
+                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                    "`return_assistant_tokens_mask=True`."
+                )
+            if not self.is_fast:
+                raise ValueError(
+                    f"`sanitize_control_tokens=True` requires a fast tokenizer, but got a {type(self).__name__}."
+                )
 
-        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
@@ -3166,21 +3177,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             return_assistant_tokens_mask=return_assistant_tokens_mask,
             continue_final_message=continue_final_message,
             add_generation_prompt=add_generation_prompt,
-            **template_kwargs,
+            control_tokens=self._get_control_tokens(chat_template) if sanitize_control_tokens else None,
+            special_tokens_map=self.special_tokens_map,
+            **kwargs,  # kwargs overwrite special tokens if both are present
         )
 
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
         if tokenize:
-            out = self(
+            # With `sanitize_control_tokens`, the control tokens from the inputs are escaped in the rendered chat
+            out = encode_escaped_chat(
+                self,
                 rendered_chat,
                 padding=padding,
                 truncation=truncation,
                 max_length=max_length,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
-                sanitize_control_tokens=sanitize_control_tokens,
                 **tokenizer_kwargs,
             )
 
@@ -3218,23 +3232,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             return rendered_chat
 
-    def _mark_chat_inputs(
-        self, chat_template: str, conversations, tools, documents, template_kwargs: dict, tokenize, assistant_mask
-    ):
-        """Wrap the control tokens that appear in the user's strings with private markers, see `mark_control_tokens`."""
-        if not tokenize or assistant_mask:
-            raise ValueError(
-                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
-                "`return_assistant_tokens_mask=True`."
-            )
-        control_tokens_re, _ = _get_control_token_patterns(self._get_control_tokens(chat_template))
-        conversations = [
-            mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
-        ]
-        tools = mark_control_tokens(tools, control_tokens_re)
-        documents = mark_control_tokens(documents, control_tokens_re)
-        return conversations, tools, documents, mark_control_tokens(template_kwargs, control_tokens_re)
-
     def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
         """The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input."""
         added_tokens = self.added_tokens_decoder.values()
@@ -3251,10 +3248,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             for token in added_tokens
             if token.special or (token.content in template_text and not token.content.isspace())
         )
-
-    def _encode_without_added_tokens(self, text: str) -> list[int]:
-        """Encode `text` as plain text, without matching any added tokens, special or not."""
-        return self.encode(text, add_special_tokens=False, split_special_tokens=True)
 
     def encode_message_with_chat_template(
         self,

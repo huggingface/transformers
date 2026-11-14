@@ -40,6 +40,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "vidore/colqwen2-v1.0-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-colqwen2"
 
+    @unittest.skip("ColQwen2 can't process text+image inputs at the same time")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     @parameterized.expand([(1, "pt"), (2, "pt")])
     @unittest.skip("Not tested before, to investigate")
     def test_apply_chat_template_image(self, batch_size, return_tensors):

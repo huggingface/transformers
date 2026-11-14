@@ -1082,3 +1082,107 @@ class TemplateSandboxTest(unittest.TestCase):
         )
         self.assertEqual(rendered[0], "Hi|Hello")
         self.assertEqual(chat, original_chat)
+
+
+@require_jinja
+class TemplateTextTest(unittest.TestCase):
+    """`sanitize_control_tokens` renders chats into `_TemplateText`, which tracks the text that came from inputs."""
+
+    def render(self, template, **inputs):
+        from transformers.utils.chat_template_utils import _compile_traced_jinja_template
+
+        return _compile_traced_jinja_template(template).render(**inputs)
+
+    def mark_inputs(self, text):
+        # Put brackets around the input spans, which is easier to read than character offsets
+        marked, position = "", 0
+        for start, end in text.input_spans:
+            marked += (
+                str.__getitem__(text, slice(position, start)) + "[" + str.__getitem__(text, slice(start, end)) + "]"
+            )
+            position = end
+        return marked + str.__getitem__(text, slice(position, None))
+
+    def test_only_template_text_is_trusted(self):
+        from transformers.utils.chat_template_utils import _TemplateText
+
+        template_text, mixed = _TemplateText("<a>", ()), _TemplateText("<a>") + _TemplateText("<b>", ())
+        self.assertEqual(self.mark_inputs(template_text), "<a>")
+        # A string built without spans could have come from anywhere, so it counts as input
+        self.assertEqual(self.mark_inputs(_TemplateText("<a>")), "[<a>]")
+        self.assertEqual(self.mark_inputs(mixed), "[<a>]<b>")
+        # It behaves like the plain string everywhere else
+        self.assertEqual(template_text, "<a>")
+        self.assertEqual({"<a>": 1}[template_text], 1)
+        self.assertEqual("x<a>y".split(template_text), ["x", "y"])
+
+        # Joining keeps track of inputs on both sides, and neighbouring inputs become one span
+        self.assertEqual(self.mark_inputs("x" + template_text + "y" + "z"), "[x]<a>[yz]")
+        self.assertEqual(self.mark_inputs(mixed[1:5]), "[a>]<b")
+        self.assertEqual(self.mark_inputs(("  " + template_text + " ").strip()), "<a>")
+        self.assertEqual(self.mark_inputs(_TemplateText(", ", ()).join(["x", template_text])), "[x], <a>")
+        self.assertEqual(self.mark_inputs(mixed.replace("a", template_text)), "[<]<a>[>]<b>")
+        self.assertEqual(self.mark_inputs(template_text * 2), "<a><a>")
+        # An empty input leaves an empty span, so that a control token can't match across it
+        self.assertEqual((template_text + "" + template_text).input_spans, ((3, 3),))
+
+        # Any other string method gives a plain string, which counts as input wherever it ends up
+        for untracked in [template_text.upper(), template_text.center(5), template_text[::-1], f"{template_text}!"]:
+            self.assertIs(type(untracked), str)
+
+    def test_templates_render_template_text(self):
+        messages = [{"role": "user", "content": " Hi <a> "}]
+        templates = {
+            "<a>{{ messages[0].content }}<b>": "<a>[ Hi <a> ]<b>",
+            "{{ '<a>' + messages[0].content + '<b>' }}": "<a>[ Hi <a> ]<b>",
+            "{{ '<a>' ~ messages[0].content | trim ~ 1 ~ '<b>' }}": "<a>[Hi <a>1]<b>",
+            # Macros, set blocks and namespaces carry the spans along
+            "{% macro m(x) %}<a>{{ x }}{% endmacro %}{{ m(messages[0].content) | trim }}<b>": "<a>[ Hi <a>]<b>",
+            "{% set block %}<a>{{ messages[0].content }}{% endset %}{{ block }}": "<a>[ Hi <a> ]",
+            "{% set ns = namespace(x='<a>') %}{% set ns.x = ns.x + messages[0].content %}{{ ns.x }}": "<a>[ Hi <a> ]",
+            # The template's strings work as usual when it searches and compares with them
+            "{{ '<a>' if '<a>' in messages[0].content else '<b>' }}": "<a>",
+            "{{ messages[0].content.split('<a>')[0] | trim }}{{ {'user': '<b>'}[messages[0].role] }}": "[Hi]<b>",
+            # `format` is tracked when the template wrote the format string and all the arguments
+            "{{ '<{}>'.format('a') }}{{ '<{}>'.format(messages[0].role) }}": "<a>[<user>]",
+            # What a filter does to the template's text isn't tracked, unless the filter is here
+            "{{ '<a>' | upper }}{{ ['<a>', '<b>'] | join('|') }}{{ '<a>' | replace('a', 'b') }}": "[<A>]<a>|<b><b>",
+            "{% filter upper %}<a>{% endfilter %}": "[<A>]",
+            # Undefined variables render as empty inputs, like they do normally
+            "{{ missing ~ '<a>' ~ missing }}{{ missing | safe }}{{ '<{}>'.format(missing) }}": "[]<a>[<>]",
+        }
+        for template, expected in templates.items():
+            with self.subTest(template):
+                rendered = self.render(template, messages=messages)
+                self.assertEqual(self.mark_inputs(rendered), expected)
+                # The text is the same as the normal render
+                self.assertEqual(rendered, render_jinja_template([messages], chat_template=template)[0][0])
+
+    def test_safe_filter_escapes_like_markup(self):
+        # Adding a string to the output of `safe` HTML-escapes the string, and we still know who wrote what
+        template = "{{ name + '[ARGS]' + (arguments | tojson | safe) }}|{{ ('<a>' | safe) + '<b>' + name }}"
+        rendered = self.render(template, name="a&b", arguments={"x": "<y>"})
+        self.assertEqual(self.mark_inputs(rendered), '[a&amp;b][ARGS][{"x": "<y>"}]|<a>&lt;b&gt;[a&amp;b]')
+        normal, _ = render_jinja_template(
+            [[{"role": "user", "content": ""}]], chat_template=template, name="a&b", arguments={"x": "<y>"}
+        )
+        self.assertEqual(rendered, normal[0])
+
+    def test_render_escapes_control_tokens_from_inputs(self):
+        from transformers.utils.chat_template_utils import _ESCAPE_START, _parse_escaped_control_tokens
+
+        chat = [{"role": "user", "content": "Hi <a> there"}]
+        template = "{{ bos_token }}<a>{{ messages[0].content }}{{ suffix }}"
+        (rendered,), _ = render_jinja_template(
+            [chat], chat_template=template, control_tokens=("<a>", "<s>"), special_tokens_map={"bos_token": "<s>"}
+        )
+        # The template's own `<a>` and the tokenizer's BOS are left alone, and the message's `<a>` is escaped
+        self.assertIs(type(rendered), str)
+        self.assertTrue(rendered.startswith("<s><a>Hi "))
+        self.assertEqual(rendered.count("<a>"), 1)
+        self.assertEqual(rendered.count(_ESCAPE_START), 1)
+        self.assertEqual(_parse_escaped_control_tokens(rendered), ("<s><a>Hi <a> there", [(9, 12)]))
+
+        # Without `control_tokens`, the render is a plain string with nothing escaped
+        (rendered,), _ = render_jinja_template([chat], chat_template=template, special_tokens_map={"bos_token": "<s>"})
+        self.assertEqual(rendered, "<s><a>Hi <a> there")
