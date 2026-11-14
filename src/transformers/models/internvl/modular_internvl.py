@@ -594,9 +594,6 @@ class InternVLModel(LlavaModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
-
 
 class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
@@ -640,9 +637,6 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         The images depict the Statue of Liberty and the Golden Gate Bridge.
         ```"""
         super().forward(**super_kwargs)
-
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
 
 
 __all__ = [

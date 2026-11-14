@@ -237,8 +237,11 @@ def apply_fx_node_fixes(backend: str, graph_module) -> None:
 # carry PyTorch shape_env internals that cause infinite recursion; Enums are scalars
 # with no tensor fields.
 _LEAF_SKIP_TYPES: tuple[type, ...] = (type,)
+# Leaves holding no tensor, matched by exact type: most of a cache layer's attributes.
+_SCALAR_TYPES: tuple[type, ...] = (type(None), bool, int, float, str)
 if is_torch_available():
     _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
+    _SCALAR_TYPES += (torch.device, torch.dtype)
 
 
 def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
@@ -273,20 +276,27 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
 
 
 def _collect_leaf_tensors(obj: Any, prefix: str, leaves: dict) -> None:
-    """`_iter_leaf_tensors`'s walk, into `leaves`: a function call per node rather than a generator per level, as a
-    runner flattens a whole cache on every call."""
-    if obj is None or type(obj) in (bool, int, float, str) or isinstance(obj, _LEAF_SKIP_TYPES):
-        return
+    """`_iter_leaf_tensors`'s walk, into `leaves`: a function call per container rather than a generator per level,
+    and none for a scalar child, as a runner flattens a whole cache on every call."""
     if isinstance(obj, torch.Tensor):
         leaves[prefix or "output"] = obj
-    elif isinstance(obj, (list, tuple, set)):
-        for index, item in enumerate(obj):
-            _collect_leaf_tensors(item, f"{prefix}.{index}" if prefix else str(index), leaves)
+        return
+    if type(obj) in _SCALAR_TYPES or isinstance(obj, _LEAF_SKIP_TYPES):
+        return
+    is_mapping = False
+    if isinstance(obj, (list, tuple, set)):
+        children = enumerate(obj)
     elif isinstance(obj, Mapping):
-        for key, value in obj.items():
-            _collect_leaf_tensors(value, f"{prefix}.{key}" if prefix else key, leaves)
+        children, is_mapping = obj.items(), True
     elif hasattr(obj, "__dict__"):
-        _collect_leaf_tensors(vars(obj), prefix, leaves)
+        children, is_mapping = vars(obj).items(), True
+    else:
+        return
+    for key, value in children:
+        if type(value) in _SCALAR_TYPES:
+            continue
+        path = f"{prefix}.{key}" if prefix else (key if is_mapping else str(key))
+        _collect_leaf_tensors(value, path, leaves)
 
 
 def check_packages(
@@ -462,10 +472,30 @@ def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> 
 
 
 def onnx_inputs(input_names: list[str], sample) -> dict[str, torch.Tensor]:
-    """`sample`'s tensor leaves by ONNX input name (mutated inputs carry an `input.` prefix)."""
-    leaves = get_leaf_tensors(sample)
+    """`sample`'s tensor leaves by ONNX input name (mutated inputs carry an `input.` prefix). Each name's path is
+    followed down `sample`, as a cache holds far more than its tensors; one that doesn't lead to a tensor (a name the
+    sample lacks) falls back to collecting every leaf."""
     paths = {name: name.removeprefix("input.") for name in input_names}
+    inputs = {name: _follow_path(sample, path) for name, path in paths.items()}
+    if all(leaf is not None for leaf in inputs.values()):
+        return inputs
+    leaves = get_leaf_tensors(sample)
     return {name: leaves[path] for name, path in paths.items() if path in leaves}
+
+
+def _follow_path(obj: Any, path: str) -> torch.Tensor | None:
+    """The tensor at `path` in `obj`, dotted as [`get_leaf_tensors`] writes it, or `None`."""
+    for part in path.split("."):
+        if isinstance(obj, Mapping):
+            # The path writes an integer key (a linear-attention layer's states by index) as its digits.
+            obj = obj[part] if part in obj else obj.get(int(part)) if part.isdigit() else None
+        elif isinstance(obj, (list, tuple)):
+            obj = obj[int(part)] if part.isdigit() and int(part) < len(obj) else None
+        else:
+            obj = getattr(obj, "__dict__", {}).get(part)
+        if obj is None:
+            return None
+    return obj if isinstance(obj, torch.Tensor) else None
 
 
 def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:

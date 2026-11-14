@@ -2401,7 +2401,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
             if not isinstance(image_features, torch.Tensor):
                 image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -2426,7 +2425,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output
-            # Pre-encoded by `get_video_features` (`mm_encoder_outputs`), they come one tensor per video
             if not isinstance(video_features, torch.Tensor):
                 video_features = torch.cat(video_features, dim=0)
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -2558,8 +2556,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
 
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -2584,8 +2581,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        The features of all videos as one tensor, in the order the model embeds them: `get_video_features` splits
-        them per video.
+        All videos' features as one tensor; `get_video_features` splits them per video.
 
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked

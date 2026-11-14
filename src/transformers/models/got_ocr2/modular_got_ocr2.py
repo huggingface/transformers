@@ -307,9 +307,6 @@ class GotOcr2Model(LlavaModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
-
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
     @can_return_tuple
@@ -398,9 +395,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
 
 
 __all__ = [
