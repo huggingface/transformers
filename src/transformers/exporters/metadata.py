@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
@@ -76,6 +77,9 @@ class ExportMetadata:
     in_constants: dict[str, Any] = field(default_factory=dict)
     # Non-tensor output leaves, as `[leaf index, value]`.
     out_constants: list = field(default_factory=list)
+    # The traced cache's per-layer key/value shapes, sparse-indexer slots and linear-attention state shapes, which
+    # a runtime materializes the cache it feeds with.
+    cache_geometry: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, values: Mapping[str, Any]) -> ExportMetadata:
@@ -87,8 +91,8 @@ class ExportMetadata:
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
 ) -> ExportMetadata:
-    """Record a graph's precision, traced kwargs, constants and pytree specs."""
-    return ExportMetadata(
+    """Record a graph's precision, traced kwargs, constants, pytree specs and cache geometry."""
+    metadata = ExportMetadata(
         architecture=type(model).__name__,
         packages=_package_versions(packages),
         export_dtype=str(module_dtype(model) or torch.get_default_dtype()).removeprefix("torch."),
@@ -102,6 +106,27 @@ def build_export_metadata(
         in_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec),
         out_spec=torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec),
     )
+    if (cache := inputs.get("cache")) is not None:
+        metadata.cache_geometry = _cache_geometry(cache)
+    return metadata
+
+
+def _cache_geometry(cache) -> dict[str, Any]:
+    """The traced cache's layout, as it saves: JSON keys are strings and its sequences lists."""
+    from ..cache_utils import StaticCache
+    from .cache import indexer_layers_of, kv_geometry_of, linear_states_of
+
+    cache = getattr(cache, "self_attention_cache", cache)
+    geometry = {
+        "kv": kv_geometry_of(cache),
+        "indexers": indexer_layers_of(cache),
+        "linear_states": linear_states_of(cache),
+    }
+    if isinstance(cache, StaticCache):
+        # The decode graph only takes a cache of the length it was traced on.
+        lengths = [getattr(layer, "max_cache_len", None) for layer in cache.layers]
+        geometry["max_cache_len"] = max(length for length in lengths if length is not None)
+    return json.loads(json.dumps(geometry))
 
 
 def record_output_structure(metadata: ExportMetadata, outputs: Any) -> None:

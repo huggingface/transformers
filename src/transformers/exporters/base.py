@@ -36,7 +36,7 @@ from ..utils.hub import cached_file, cached_files, hf_api
 from ..utils.import_utils import is_torch_available
 from .components import Component
 from .configs import ExportConfigMixin, ExportFormat
-from .decompose import decode_graph_name, decompose_for_generation, decompose_multimodal
+from .decompose import PREFILL_GRAPH, decode_graph_name, decompose_for_generation, decompose_multimodal
 from .metadata import ExportMetadata, register_treespec_types
 from .precompute import precompute_export_inputs
 from .quantizers.utils import capture_calibration_inputs
@@ -97,7 +97,7 @@ class ExportedModel(PushToHubMixin):
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
-        # Graphs a generation loop drives (`HfExporter.export_for_generation`), not called directly
+        # Graphs `generate` drives (`HfExporter.export_for_generation`)
         self.generation = generation
         self._runners: dict[str, ModelRunner] | None = None
 
@@ -153,12 +153,6 @@ class ExportedModel(PushToHubMixin):
         """Run a single-graph export, returning what the source model returns. Kwargs the export was not traced with
         are dropped, so a processor's whole output can be passed; the runner's `share_inputs` and `share_outputs` go to
         it (see [`ModelRunner.__call__`])."""
-        if self.generation:
-            raise ValueError(
-                f"This is a generation export ({list(self.components)}), run by a generation loop; that runtime isn't "
-                "available yet. Calling an export runs a single graph (`HfExporter.export`) or a multimodal split "
-                "(`HfExporter.export_multimodal`)."
-            )
         name = self._single_component()
         runner = self.runners[name]
         runner_options = {key: kwargs.pop(key) for key in ("share_inputs", "share_outputs") if key in kwargs}
@@ -331,7 +325,7 @@ class ExportedModel(PushToHubMixin):
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
-        model_class = _exported_model_class(components)
+        model_class = _exported_model_class(components, generation=manifest.get("generation", False))
         if not issubclass(model_class, cls):
             raise TypeError(
                 f"{pretrained_model_name_or_path} runs as a {model_class.__name__}, not a {cls.__name__}: load it with "
@@ -349,13 +343,19 @@ class ExportedModel(PushToHubMixin):
         return model
 
 
-def _exported_model_class(component_names) -> type[ExportedModel]:
-    """The class an export runs as, from its components: a multimodal split as an `ExportedMultimodalModel`."""
+def _exported_model_class(component_names, generation: bool = False) -> type[ExportedModel]:
+    """The class an export runs as, from its components: a multimodal split as an `ExportedMultimodalModel`, and a
+    generation export as the model `generate` drives."""
+    from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM
     from .multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
-    if {"language_model", "text_embeddings_model"} <= set(component_names) <= MULTIMODAL_COMPONENTS:
-        return ExportedMultimodalModel
-    return ExportedModel
+    names = set(component_names) - {PREFILL_GRAPH}
+    multimodal = {"language_model", "text_embeddings_model"} <= names <= MULTIMODAL_COMPONENTS
+    if generation:
+        if "encoder_model" in component_names:
+            return ExportedModelForSeq2SeqLM
+        return ExportedMultimodalModelForCausalLM if multimodal else ExportedModelForCausalLM
+    return ExportedMultimodalModel if multimodal else ExportedModel
 
 
 def _switches_kernels_on_query_length(model) -> bool:
@@ -571,8 +571,13 @@ class HfExporter(ABC):
         Decompose a generative model into the components a generation loop drives, and export each.
 
         The model is run on **generate** kwargs to capture what each component is called with
-        ([`~exporters.decompose.decompose_for_generation`]). The decode graph also serves the prompt, so no prompt
-        graph duplicates the model's weights.
+        ([`~exporters.decompose.decompose_for_generation`]). A decode graph taking several tokens
+        (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or Qwen3.5's)
+        leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole prompt: prefill and decode are
+        disaggregated, at the cost of a second copy of the weights, and a static prompt graph takes prompts of the
+        captured length only (another goes through the decode graph a token at a time). A stateful export (OpenVINO's)
+        keeps its cache as the decode graph's own state, which a prompt graph can't write: its decode graph takes the
+        prompt a token at a time.
 
         Args:
             model ([`PreTrainedModel`]):
@@ -587,8 +592,8 @@ class HfExporter(ABC):
             multi_token_decode (`bool`, *optional*):
                 Whether the decode graph takes several query tokens at once, so it takes the whole prompt in one call.
                 Defaults to whether the decode config is dynamic, except for a model whose linear attention switches
-                kernels on the query length (Qwen3.5's); refused on a static one, whose decode graph takes the prompt
-                a token at a time.
+                kernels on the query length (Qwen3.5's); refused on a static one. Without it the prompt gets a graph
+                of its own (see above).
             decoder_writes_cross_cache (`bool`, *optional*):
                 For an encoder-decoder, whether the decode graph computes its own cross-attention cache instead of
                 the encoder graph. Defaults to the exporter's `decoder_writes_cross_cache`.
@@ -604,6 +609,9 @@ class HfExporter(ABC):
         generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
         )
+        # A decode graph taking one token leaves the prompt to a graph of its own, unless the cache is its state.
+        configs = config.values() if isinstance(config, dict) else [config]
+        disaggregated = not multi_token_decode and not any(getattr(c, "stateful", False) for c in configs)
         components = decompose_for_generation(
             model,
             sample_inputs,
@@ -611,8 +619,9 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
             decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
-        # The decode graph serves the prefill step: it isn't a graph of its own.
-        components.pop("prefill")
+        prefill = components.pop("prefill")
+        if disaggregated:
+            components[PREFILL_GRAPH] = prefill
         if keep_all_logits:
             # Without the captured `logits_to_keep` the forward defaults to 0, i.e. every position.
             for component in components.values():
@@ -626,9 +635,10 @@ class HfExporter(ABC):
                 generation_config=generation_config,
                 multi_token_decode=multi_token_decode,
                 decoder_writes_cross_cache=decoder_writes_cross_cache,
+                disaggregated=disaggregated,
             )
 
-        return ExportedModel(
+        return _exported_model_class(components, generation=True)(
             self._export_components(components, config, calibration),
             self.export_format,
             config=getattr(model, "config", None),

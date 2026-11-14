@@ -73,15 +73,20 @@ class OnnxModelRunner(ModelRunner):
         # ORT hands a bool output over DLPack as uint8.
         self.bool_outputs = [spec.type == "tensor(bool)" for spec in session.get_outputs()]
 
-        # The CUDA graph's binding and input buffers, made on the first call.
-        self.cuda_graph: tuple[ort.IOBinding, dict[str, torch.Tensor]] | None = None
+        # The CUDA graph's binding, its input buffers grouped by dtype, and its outputs, made on the first call.
+        self.cuda_graph: tuple[ort.IOBinding, dict[torch.dtype, dict[str, torch.Tensor]], list[torch.Tensor]] | None = None
+        # Read once: the session builds its specs and provider options anew on every ask.
+        self.input_names = [spec.name for spec in session.get_inputs()]
+        provider = session.get_providers()[0]
+        self._device = (
+            torch.device("cuda", int(options[provider]["device_id"]))
+            if provider in ("CUDAExecutionProvider", "TensorrtExecutionProvider")
+            else torch.device("cpu")
+        )
 
     @property
     def device(self) -> torch.device:
-        provider, options = self.session.get_providers()[0], self.session.get_provider_options()
-        if provider in ("CUDAExecutionProvider", "TensorrtExecutionProvider"):
-            return torch.device("cuda", int(options[provider]["device_id"]))
-        return torch.device("cpu")
+        return self._device
 
     @classmethod
     def from_program(
@@ -127,7 +132,7 @@ class OnnxModelRunner(ModelRunner):
         graph doesn't read (a linear-attention layer's mask)."""
         device = self.device
         on_gpu = device.type == "cuda"
-        names = [spec.name for spec in self.session.get_inputs()]
+        names = self.input_names
         inputs = onnx_inputs(names, kwargs)
         missing = [name for name in names if name not in inputs]
         if missing:
@@ -163,21 +168,26 @@ class OnnxModelRunner(ModelRunner):
         first_run = self.cuda_graph is None
         if first_run:
             binding = self.session.io_binding()
-            buffers = {name: leaf.to(device).contiguous().clone() for name, leaf in inputs.items()}
-            for name, buffer in buffers.items():
+            buffers = {}
+            for name, leaf in inputs.items():
+                buffer = leaf.to(device).contiguous().clone()
+                buffers.setdefault(buffer.dtype, {})[name] = buffer
                 _bind_input(binding, name, buffer, buffer.data_ptr())
             for spec in self.session.get_outputs():
                 binding.bind_output(spec.name, "cuda", device.index)
-            self.cuda_graph = (binding, buffers)
-        binding, buffers = self.cuda_graph
-        for name, buffer in buffers.items():
-            leaf = inputs[name]
-            # `copy_` would broadcast a smaller input into the captured buffer.
-            if leaf.shape != buffer.shape:
-                raise ValueError(
-                    f"The CUDA graph was captured with `{name}` of shape {tuple(buffer.shape)}, got {tuple(leaf.shape)}."
-                )
-            buffer.copy_(leaf)
+            self.cuda_graph = (binding, buffers, [])
+        binding, buffers, outputs = self.cuda_graph
+        for group in buffers.values():
+            for name, buffer in group.items():
+                leaf = inputs[name]
+                # `copy_` would broadcast a smaller input into the captured buffer.
+                if leaf.shape != buffer.shape:
+                    raise ValueError(
+                        f"The CUDA graph was captured with `{name}` of shape {tuple(buffer.shape)}, got "
+                        f"{tuple(leaf.shape)}."
+                    )
+            # One launch per dtype for every input (a cache has two per layer): a list mixing dtypes copies one by one.
+            torch._foreach_copy_(list(group.values()), [inputs[name] for name in group])
         # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
         torch.cuda.current_stream(device).synchronize()
         self.session.run_with_iobinding(binding)
@@ -186,7 +196,8 @@ class OnnxModelRunner(ModelRunner):
             # The graph writes where this run's outputs were allocated: they stay bound for every replay.
             for spec, value in zip(self.session.get_outputs(), binding.get_outputs()):
                 binding.bind_ortvalue_output(spec.name, value)
-        outputs = self._read_outputs(binding)
+            # Torch views of them, read once.
+            outputs.extend(self._read_outputs(binding))
         return self.unflatten(outputs if share_outputs else [output.clone() for output in outputs])
 
     def _read_outputs(self, binding: ort.IOBinding) -> list[torch.Tensor]:

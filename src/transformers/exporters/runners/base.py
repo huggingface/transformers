@@ -40,6 +40,11 @@ class ModelRunner(ABC):
         """Where the program runs."""
 
     @property
+    def stateful(self) -> bool:
+        """Whether the graph keeps the cache as its own state, which `reset_state` starts over for a new sequence."""
+        return False
+
+    @property
     def dtype(self) -> torch.dtype:
         """The precision the program was exported at."""
         return getattr(torch, self.metadata.export_dtype)

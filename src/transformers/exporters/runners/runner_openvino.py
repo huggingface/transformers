@@ -107,6 +107,15 @@ class OpenVINOModelRunner(ModelRunner):
                 defaults["ENABLE_CPU_PINNING"] = True
         return cls(openvino.Core().compile_model(program, device, {**defaults, **(config or {})}), metadata)
 
+    @property
+    def stateful(self) -> bool:
+        # The stateful transformation folds the cache in and adds the `beam_idx` input that reorders it.
+        return any("beam_idx" in port.get_names() for port in self.compiled_model.inputs)
+
+    def reset_state(self) -> None:
+        """Start the state a stateful model keeps (its cache) over, for a new sequence."""
+        self.request.reset_state()
+
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
         outputs = self.request.infer(feed, share_inputs=share_inputs, share_outputs=share_outputs)

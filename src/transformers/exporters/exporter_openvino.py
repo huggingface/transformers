@@ -159,7 +159,10 @@ class OpenVINOExporter(DynamoExporter):
             compress_model_transformation(ov_model)
 
         _record_runtime_precision(ov_model, model)
-        record_output_structure(metadata, traced_outputs[-1])
+        outputs = traced_outputs[-1]
+        if config.stateful:
+            outputs = _without_folded_outputs(outputs, ov_model)
+        record_output_structure(metadata, outputs)
         return ov_model, metadata
 
     @classmethod
@@ -181,6 +184,16 @@ class OpenVINOExporter(DynamoExporter):
 # ── Conversion helpers ──────────────────────────────────────────────────────
 # Small helpers for ``OpenVINOExporter.export`` — extracted for readability and so each stage
 # of the conversion has a single responsibility.
+
+
+def _without_folded_outputs(outputs: Any, ov_model: openvino.Model) -> Any:
+    """`outputs` without the fields a stateful graph no longer returns: those whose every tensor was folded into
+    state (the cache)."""
+    kept = {port.get_any_name().removeprefix("output.") for port in ov_model.outputs}
+    if not isinstance(outputs, Mapping) or set(get_leaf_tensors(outputs)) <= kept:
+        return outputs
+    fields = {key: value for key, value in outputs.items() if set(get_leaf_tensors({key: value})) & kept}
+    return fields if type(outputs) is dict else type(outputs)(**fields)
 
 
 def _record_runtime_precision(ov_model: openvino.Model, model: PreTrainedModel) -> None:

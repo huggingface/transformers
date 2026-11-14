@@ -32,6 +32,7 @@ _import_structure = {
     "exporter_executorch": ["ExecutorchExporter"],
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
+    "generation": ["ExportedModelForCausalLM", "ExportedModelForSeq2SeqLM", "ExportedMultimodalModelForCausalLM"],
     "metadata": ["ExportMetadata"],
     "multimodal": ["ExportedMultimodalModel"],
     "quantizers": [
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
     from .exporter_executorch import ExecutorchExporter
     from .exporter_onnx import OnnxExporter
     from .exporter_openvino import OpenVINOExporter
+    from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM
     from .metadata import ExportMetadata
     from .multimodal import ExportedMultimodalModel
     from .quantizers import (

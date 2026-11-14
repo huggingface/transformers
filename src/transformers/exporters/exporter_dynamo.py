@@ -40,6 +40,7 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
+import functools
 import inspect
 import sys
 import types
@@ -493,7 +494,9 @@ def _class_to_path(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
+@functools.cache
 def _path_to_class(path: str) -> type:
+    # Cached: a runner rebuilds its outputs (a cache's classes among them) on every call.
     return import_dotted_path(path.replace(":", "."))
 
 
@@ -590,15 +593,19 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
 
 
+_JSON_SCALARS = (type(None), bool, int, float, str)
+
+
 def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
-    """Reconstruct an object from its JSON-native context, substituting tensor index markers."""
+    """Reconstruct an object from its JSON-native context, substituting tensor index markers. A scalar child is
+    taken as is, without a call: a runner rebuilds a whole cache on every call."""
     # --- Pure Python / JSON-native ---
-    if ctx is None or type(ctx) in (bool, int, float, str):
+    if type(ctx) in _JSON_SCALARS:
         return ctx
     if type(ctx) is list:
-        return [_unflatten_from_context(i, tensors) for i in ctx]
+        return [i if type(i) in _JSON_SCALARS else _unflatten_from_context(i, tensors) for i in ctx]
     if type(ctx) is dict and "_t" not in ctx:
-        return {k: _unflatten_from_context(v, tensors) for k, v in ctx.items()}
+        return {k: v if type(v) in _JSON_SCALARS else _unflatten_from_context(v, tensors) for k, v in ctx.items()}
 
     # --- Torch objects ---
     t = ctx["_t"]
@@ -637,7 +644,7 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
         cls = _path_to_class(ctx["p"])
         instance = cls.__new__(cls)
         for k, v in ctx["s"].items():
-            instance.__dict__[k] = _unflatten_from_context(v, tensors)
+            instance.__dict__[k] = v if type(v) in _JSON_SCALARS else _unflatten_from_context(v, tensors)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")

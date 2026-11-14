@@ -19,7 +19,7 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from ..decompose import decode_graph_name, decompose_for_generation
+from ..decompose import PREFILL_GRAPH, decode_graph_name, decompose_for_generation
 
 
 if TYPE_CHECKING:
@@ -33,9 +33,11 @@ def capture_calibration_inputs(
     multi_token_decode: bool,
     generation_config: Any = None,
     decoder_writes_cross_cache: bool = False,
+    disaggregated: bool = False,
 ) -> dict[str, list[dict]]:
     """Run each generate-style sample through `decompose_for_generation` and collect every exported component's
-    forward kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
+    forward kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component, a
+    disaggregated export's prompt graph (`disaggregated`) included."""
     calibration: dict[str, list[dict]] = {}
     for sample in calibration_dataset:
         components = decompose_for_generation(
@@ -52,6 +54,8 @@ def capture_calibration_inputs(
         # one only ever takes one token.
         if multi_token_decode:
             calibration[decode_graph_name(components)].append(prefill.inputs)
+        if disaggregated:
+            calibration.setdefault(PREFILL_GRAPH, []).append(prefill.inputs)
     return calibration
 
 
