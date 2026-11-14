@@ -91,6 +91,15 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(all(isinstance(image, torch.Tensor) for image in image_inputs))
         self._check_input_type(image_inputs)
 
+    def test_resize_requires_both_size_bounds(self):
+        image = self.image_processor_tester.prepare_image_inputs()[0]
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class(**self.image_processor_dict)
+            for bound in ("shortest_edge", "longest_edge"):
+                with self.subTest(image_processor=image_processing_class.__name__, bound=bound):
+                    with self.assertRaisesRegex(ValueError, "must contain 'shortest_edge' and 'longest_edge'"):
+                        processor(image, size={bound: self.image_processor_dict["size"][bound]})
+
     @unittest.skip("Ovis2.5 checkpoints require three-channel RGB patch vectors")
     def test_call_numpy_4_channels(self):
         pass

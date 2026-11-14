@@ -121,6 +121,9 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> torch.Tensor:
         """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
         # Ovis2.5 uses its custom smart_resize policy instead of GLM4V's default resize.
         height, width = images.shape[-2:]
         resized_height, resized_width = smart_resize(
