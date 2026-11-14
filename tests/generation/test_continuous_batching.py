@@ -885,6 +885,36 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             for check in cached_availability_checks:
                 check.cache_clear()
 
+    def test_generate_batch_under_inference_mode(self) -> None:
+        """`generate_batch` called under `torch.inference_mode()` must work, and keep working on a second call. The
+        batch processor is created in the caller's thread but updated in place by the background generation thread,
+        which does not inherit inference mode: its tensors must not be inference tensors."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", dtype=torch.float32)
+        input_ids = get_generation_inputs(["Where is Paris?"], tokenizer, for_continuous_batching=True)
+        model.generation_config.max_new_tokens = 5
+        model.generation_config.do_sample = False
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False,
+            use_async_batching=False,
+            auto_switch_to_flash=False,
+            num_blocks=16,
+            max_batch_tokens=256,
+        )
+
+        all_generated_tokens = []
+        with torch.inference_mode():
+            for _ in range(2):
+                outputs = model.generate_batch(
+                    inputs=input_ids,
+                    generation_config=model.generation_config,
+                    continuous_batching_config=continuous_batching_config,
+                )
+                all_generated_tokens.append(outputs["req_0"].generated_tokens)
+
+        self.assertEqual(len(all_generated_tokens[0]), 5)
+        self.assertEqual(all_generated_tokens[0], all_generated_tokens[1])
+
     def test_output_router_deliver_to_queue(self):
         """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
         router = OutputRouter()

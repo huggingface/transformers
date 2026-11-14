@@ -742,9 +742,14 @@ class GenerationMixin(ContinuousMixin):
                 is_first_iteration=is_first_iteration,
             )
             if isinstance(attention_mask, dict):
-                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+                # Only tensors have a memory layout: flex attention returns a `BlockMask`, which is passed through
+                attention_mask = {
+                    k: v.contiguous() if isinstance(v, torch.Tensor) else v for k, v in attention_mask.items()
+                }
             else:
-                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
+                attention_mask = (
+                    attention_mask.contiguous() if isinstance(attention_mask, torch.Tensor) else attention_mask
+                )
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask

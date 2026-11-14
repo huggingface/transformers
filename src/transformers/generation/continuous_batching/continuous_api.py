@@ -788,6 +788,10 @@ class ContinuousBatchingManager:
             model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
+    # The batch processor's static tensors are created here, in the caller's thread, then updated in place by the
+    # background generation thread, which never runs in inference mode. If the caller is in `torch.inference_mode()`,
+    # they would be inference tensors and these in-place updates would fail: always create them as normal tensors.
+    @torch.inference_mode(False)
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
@@ -1153,6 +1157,7 @@ class ContinuousBatchingManager:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model)
 
+    @torch.inference_mode(False)
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
         """Create a new batch processor. If an already initialized batch processor exists, it is reset and returned."""
         # Early return if a batch processor exists already
