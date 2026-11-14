@@ -125,6 +125,16 @@ class Emu3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
+    def test_channels_last_input(self):
+        image_processor = Emu3ImageProcessor(**self.image_processor_dict)
+        images = [np.full((32, 48, 3), 100, dtype=np.uint8), np.full((48, 32, 3), 120, dtype=np.uint8)]
+        reference = image_processor(images)
+        output = image_processor(images, input_data_format="channels_last")
+
+        self.assertEqual(output.image_sizes, [(32, 48), (48, 32)])
+        self.assertEqual(output.pixel_values.shape, (2, 3, 48, 48))
+        np.testing.assert_array_equal(output.pixel_values, reference.pixel_values)
+
     @unittest.skip(reason="Emu3ImageProcessor converts every input to RGB, so it does not accept 4 channel images")
     def test_call_numpy_4_channels(self):
         pass
