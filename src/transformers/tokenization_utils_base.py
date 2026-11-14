@@ -25,7 +25,7 @@ import json
 import os
 import re
 import warnings
-from collections import OrderedDict, UserDict
+from collections import UserDict
 from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
@@ -992,6 +992,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         "mask_token",
     ]
 
+    _backend_name: str | None = None  # set by each backend class, reported by `tokenizer.backend`
+
     def __init__(self, **kwargs):
         self.init_inputs = ()
         for key in kwargs:
@@ -1101,7 +1103,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self.deprecation_warnings = {}
 
         # Backend information (V5: tracking which backend and files were used)
-        self.backend = kwargs.pop("backend", None)
+        backend = kwargs.pop("backend", None)
+        self.backend = self._backend_name or backend
         self.files_loaded = kwargs.pop("files_loaded", [])
 
     def _set_processor_class(self, processor_class: str):
@@ -2123,6 +2126,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if getattr(self, "_processor_class", None) is not None:
             tokenizer_config["processor_class"] = self._processor_class
         tokenizer_config.pop("files_loaded", None)
+        tokenizer_config.pop("backend", None)
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
@@ -3578,165 +3582,6 @@ def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:
             break
 
     return tokenizer_file
-
-
-# Shared helper to locate a SentencePiece model file for a repo/path
-def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
-    """
-    Find any .model file (SentencePiece model) in the model directory or Hub repo.
-
-    Tries known filenames first ("tokenizer.model", "spm.model"), then scans local dir,
-    and as a last resort lists files on the Hub to find any .model.
-
-    Returns the filename (str) relative to the repo root or directory if found, else None.
-    """
-    from .utils.hub import has_file
-
-    # Try common names first
-    for candidate in ("tokenizer.model", "spm.model"):
-        try:
-            if has_file(
-                pretrained_model_name_or_path,
-                candidate,
-                revision=kwargs.get("revision"),
-                token=kwargs.get("token"),
-                cache_dir=kwargs.get("cache_dir"),
-                local_files_only=kwargs.get("local_files_only", False),
-            ):
-                return candidate
-        except Exception:
-            # TODO: tighten to OSError / ProxyError
-            continue
-
-    subfolder = kwargs.get("subfolder", "")
-    local_files_only = kwargs.get("local_files_only", False)
-
-    # Local directory scan
-    if os.path.isdir(pretrained_model_name_or_path):
-        dir_path = (
-            os.path.join(pretrained_model_name_or_path, subfolder) if subfolder else pretrained_model_name_or_path
-        )
-        if os.path.isdir(dir_path):
-            for filename in os.listdir(dir_path):
-                if filename.endswith(".model"):
-                    return filename if not subfolder else os.path.join(subfolder, filename)
-
-    # Hub listing if allowed
-    if not local_files_only:
-        try:
-            entries = hf_api().list_repo_tree(
-                repo_id=pretrained_model_name_or_path,
-                revision=kwargs.get("revision"),
-                path_in_repo=subfolder if subfolder else None,
-                recursive=False,
-                token=kwargs.get("token"),
-            )
-            for entry in entries:
-                if entry.path.endswith(".model"):
-                    return entry.path if not subfolder else entry.path.removeprefix(f"{subfolder}/")
-        except Exception as e:
-            # TODO: tighten exception class
-            logger.debug(f"Could not list Hub repository files: {e}")
-
-    return None
-
-
-def load_vocab_and_merges(pretrained_model_name_or_path, **kwargs):
-    """
-    Resolve and load tokenizer vocabulary files from a repo/path.
-
-    Priority order:
-    1. Load ``vocab.json`` (WordLevel/WordPiece/BPE fast tokenizers)
-    2. Load ``vocab.txt`` when only a WordPiece vocab is available
-    3. Optionally load ``merges.txt`` (BPE tokenizers)
-
-    Returns:
-        tuple (vocab: dict|None, merges: list[tuple[str,str]]|None, files_loaded: list[str])
-    """
-    files_loaded = []
-    vocab = None
-    merges = None
-    try:
-        resolved_vocab_file = cached_file(
-            pretrained_model_name_or_path,
-            "vocab.json",
-            cache_dir=kwargs.get("cache_dir"),
-            force_download=kwargs.get("force_download", False),
-            proxies=kwargs.get("proxies"),
-            token=kwargs.get("token"),
-            revision=kwargs.get("revision"),
-            local_files_only=kwargs.get("local_files_only", False),
-            subfolder=kwargs.get("subfolder", ""),
-        )
-    except Exception:
-        resolved_vocab_file = None
-
-    if resolved_vocab_file is not None:
-        try:
-            with open(resolved_vocab_file, "r", encoding="utf-8") as vf:
-                vocab = json.load(vf)
-            files_loaded.append("vocab.json")
-        except Exception:
-            vocab = None
-
-    # Fallback to vocab.txt (WordPiece-style vocabularies)
-    if vocab is None:
-        try:
-            resolved_vocab_txt = cached_file(
-                pretrained_model_name_or_path,
-                "vocab.txt",
-                cache_dir=kwargs.get("cache_dir"),
-                force_download=kwargs.get("force_download", False),
-                proxies=kwargs.get("proxies"),
-                token=kwargs.get("token"),
-                revision=kwargs.get("revision"),
-                local_files_only=kwargs.get("local_files_only", False),
-                subfolder=kwargs.get("subfolder", ""),
-            )
-        except Exception:
-            resolved_vocab_txt = None
-
-        if resolved_vocab_txt is not None:
-            try:
-                vocab = OrderedDict()
-                with open(resolved_vocab_txt, "r", encoding="utf-8") as vf:
-                    for index, token in enumerate(vf):
-                        token = token.rstrip("\n")
-                        vocab[token] = index
-                files_loaded.append("vocab.txt")
-            except Exception:
-                vocab = None
-
-    try:
-        resolved_merges_file = cached_file(
-            pretrained_model_name_or_path,
-            "merges.txt",
-            cache_dir=kwargs.get("cache_dir"),
-            force_download=kwargs.get("force_download", False),
-            proxies=kwargs.get("proxies"),
-            token=kwargs.get("token"),
-            revision=kwargs.get("revision"),
-            local_files_only=kwargs.get("local_files_only", False),
-            subfolder=kwargs.get("subfolder", ""),
-        )
-    except Exception:
-        resolved_merges_file = None
-
-    if resolved_merges_file is not None:
-        try:
-            merges = []
-            with open(resolved_merges_file, "r", encoding="utf-8") as mf:
-                for line in mf:
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        parts = line.split()
-                        if len(parts) == 2:
-                            merges.append((parts[0], parts[1]))
-            files_loaded.append("merges.txt")
-        except Exception:
-            merges = None
-
-    return vocab, merges, files_loaded
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.

@@ -503,6 +503,49 @@ def _use_mistral_format(
     return resolve_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **probe_kwargs)[0]
 
 
+# Tokenizer class loaded for each value of `AutoTokenizer.from_pretrained(..., backend=...)`
+TOKENIZER_BACKEND_CLASSES = {
+    "tokenizers": "TokenizersBackend",
+    "sentencepiece": "SentencePieceBackend",
+    "mistral_common": "MistralCommonBackend",
+}
+
+
+def _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs):
+    """Load the tokenizer with the `backend` requested by the user, or with `tokenizer_class`.
+
+    Args:
+        tokenizer_class: The tokenizer class `AutoTokenizer` resolved for the checkpoint.
+        backend: The backend requested with `AutoTokenizer.from_pretrained(..., backend=...)`, if any. When it differs
+            from the backend of `tokenizer_class`, the class of that backend is loaded instead. If that fails, a
+            warning is logged and `tokenizer_class` is loaded.
+    """
+    default_backend = getattr(tokenizer_class, "_backend_name", None)
+    if backend is None or backend == default_backend:
+        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+    try:
+        if backend not in TOKENIZER_BACKEND_CLASSES:
+            raise ValueError(f"not a tokenizer backend ({', '.join(TOKENIZER_BACKEND_CLASSES)})")
+
+        backend_kwargs = dict(kwargs)
+        if backend == "sentencepiece" and kwargs.get("vocab_file") is None:
+            from ...tokenization_utils_sentencepiece import find_sentencepiece_model_file
+
+            backend_kwargs["vocab_file"] = find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
+            if backend_kwargs["vocab_file"] is None:
+                raise OSError(f"{pretrained_model_name_or_path} has no SentencePiece model file")
+
+        backend_class = tokenizer_class_from_name(TOKENIZER_BACKEND_CLASSES[backend])
+        return backend_class.from_pretrained(pretrained_model_name_or_path, *inputs, **backend_kwargs)
+    except Exception as e:
+        logger.warning(
+            f"Could not load the tokenizer with `backend={backend!r}`: {e}. "
+            f"Loading `{tokenizer_class.__name__}` with the `{default_backend}` backend instead."
+        )
+        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     # Bloom tokenizer classes were removed but should map to the fast backend for BC
     if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
@@ -716,6 +759,9 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
+            backend (`str`, *optional*):
+                Tokenization backend to load (`"tokenizers"`, `"sentencepiece"` or `"mistral_common"`). Falls back to
+                the default tokenizer with a warning if the checkpoint can't be loaded with it.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
@@ -752,6 +798,7 @@ class AutoTokenizer:
         code_revision = kwargs.pop("code_revision", None)
         gguf_file = kwargs.get("gguf_file")
         mistral_format = kwargs.pop("mistral_format", None)
+        backend = kwargs.pop("backend", None)
 
         if mistral_format is True:
             _use_mistral_format(pretrained_model_name_or_path, mistral_format=True, **kwargs)
@@ -783,7 +830,7 @@ class AutoTokenizer:
             if tokenizer_class is None:
                 raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
 
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
         if gguf_file:
             # Same split as `PreTrainedConfig.from_pretrained`: fast reader where covered, else legacy.
@@ -836,7 +883,7 @@ class AutoTokenizer:
             and TokenizersBackend is not None
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
-            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _load_tokenizer(TokenizersBackend, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
         # because LlamaTokenizer hardcodes Metaspace. Skip Mistral checkpoints (also ByteLevel) so
@@ -857,7 +904,7 @@ class AutoTokenizer:
                 "loading `TokenizersBackend`. Set `tokenizer_class` to `TokenizersBackend` in "
                 "`tokenizer_config.json`."
             )
-            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _load_tokenizer(TokenizersBackend, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
         # if there is a config, we can check that the tokenizer class != than model class.
         # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
@@ -894,7 +941,7 @@ class AutoTokenizer:
                     "PythonBackend",
                     "PreTrainedTokenizerFast",
                 ):
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
             if (
                 registered_class_name == "MistralCommonBackend"
@@ -903,10 +950,10 @@ class AutoTokenizer:
             ):
                 tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
                 if tokenizer_class is not None:
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                    return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
             if TokenizersBackend is not None:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return _load_tokenizer(TokenizersBackend, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
             raise ValueError(
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
@@ -967,8 +1014,13 @@ class AutoTokenizer:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
             tokenizer_class.register_for_auto_class()
-            return tokenizer_class.from_pretrained(
-                pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
+            return _load_tokenizer(
+                tokenizer_class,
+                backend,
+                pretrained_model_name_or_path,
+                *inputs,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
             )
         elif tokenizer_config_class is not None:
             tokenizer_class_candidate = tokenizer_config_class
@@ -981,13 +1033,13 @@ class AutoTokenizer:
             if tokenizer_class is None:
                 tokenizer_class = TokenizersBackend
 
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
         elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
             if "PreTrainedTokenizerFast" not in _class and _class.endswith("Fast"):
                 _class = _class[:-4]
             tokenizer_class = tokenizer_class_from_name(_class)
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Otherwise we have to be creative.
         # if model is an encoder decoder, the encoder tokenizer class is used by default
@@ -1010,7 +1062,7 @@ class AutoTokenizer:
                     or not _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
                 ):
                     tokenizer_class = TokenizersBackend
-                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Fallback: try tokenizer_class from tokenizer_config.json
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
@@ -1024,7 +1076,7 @@ class AutoTokenizer:
                 tokenizer_class = TokenizersBackend
             if tokenizer_class is None:
                 tokenizer_class = TokenizersBackend
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
