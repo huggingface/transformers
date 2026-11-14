@@ -81,19 +81,48 @@ class OptimumOnnxTest(unittest.TestCase):
     def test_encoder(self):
         _check_encoder(self, "Xenova/bge-base-en-v1.5", "optimum-onnx")
 
-    def test_encoder_decoder(self):
+    @parameterized.expand(
+        [
+            ("Xenova/t5-small", "google-t5/t5-small", "translate English to German: The house is wonderful."),
+            ("Xenova/opus-mt-en-de", "Helsinki-NLP/opus-mt-en-de", "The house is wonderful."),
+            ("Xenova/blenderbot_small-90M", "facebook/blenderbot_small-90M", "The house is wonderful."),
+        ]
+    )
+    def test_encoder_decoder(self, repo, eager_repo, text):
         """An encoder and a merged decoder, which fills the cross-attention cache on the first step, through
         `generate` as eager's."""
-        from transformers import T5ForConditionalGeneration
+        from transformers import AutoModelForSeq2SeqLM
 
-        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
-        inputs = tokenizer(["translate English to German: The house is wonderful."], return_tensors="pt")
-        generation_config = GenerationConfig(max_new_tokens=16, do_sample=False, decoder_start_token_id=0)
-        model = _load(self, "Xenova/t5-small", "optimum-onnx")
+        tokenizer = AutoTokenizer.from_pretrained(eager_repo)
+        inputs = tokenizer([text], return_tensors="pt")
+        generation_config = GenerationConfig.from_pretrained(eager_repo)
+        generation_config.update(max_new_tokens=16, do_sample=False, num_beams=1)
+        model = _load(self, repo, "optimum-onnx")
         self.assertIsInstance(model, ExportedModelForSeq2SeqLM)
-        eager = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").eval()
+        eager = AutoModelForSeq2SeqLM.from_pretrained(eager_repo).eval()
         with torch.no_grad():
             expected = GenerationMixin.generate(eager, **inputs, generation_config=generation_config)
+        self.assertEqual(model.generate(**inputs, generation_config=generation_config).tolist(), expected.tolist())
+
+    def test_multimodal(self):
+        """transformers.js' split (text embeddings, a vision encoder, a merged decoder on the embeddings), run as the
+        multimodal split: the eager model's answer, token for token."""
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+        from transformers.exporters import ExportedMultimodalModelForCausalLM
+        from transformers.image_utils import load_image
+
+        repo = "HuggingFaceTB/SmolVLM-256M-Instruct"
+        processor = AutoProcessor.from_pretrained(repo)
+        content = [{"type": "image"}, {"type": "text", "text": "What animals are in the picture?"}]
+        text = processor.apply_chat_template([{"role": "user", "content": content}], add_generation_prompt=True)
+        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+        inputs = processor(text=text, images=image, return_tensors="pt")
+        generation_config = GenerationConfig(max_new_tokens=12, do_sample=False)
+        model = _load(self, repo, "optimum-onnx")
+        self.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+        eager = AutoModelForImageTextToText.from_pretrained(repo, dtype=torch.float32).eval()
+        with torch.no_grad():
+            expected = eager.generate(**inputs, generation_config=generation_config)
         self.assertEqual(model.generate(**inputs, generation_config=generation_config).tolist(), expected.tolist())
 
     def test_split_decoder_is_refused(self):

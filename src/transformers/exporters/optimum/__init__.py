@@ -118,6 +118,9 @@ def load_optimum_export(
     except OSError:
         generation_config = None
     components, generation = load(pretrained_model_name_or_path, config, **kwargs)
+    if generation and generation_config is not None:
+        # Its decode graph always takes a cache, whatever the config says (TrOCR's turns it off)
+        generation_config.use_cache = True
     model_class = _optimum_model_class(_exported_model_class(components, generation=generation), mixin)
     if not issubclass(model_class, cls):
         raise TypeError(

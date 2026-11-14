@@ -21,16 +21,21 @@ import torch
 
 from tests.exporters.test_utils import _check_names_the_cats, _load
 from transformers import (
+    AutoImageProcessor,
     AutoModelForCausalLM,
+    AutoModelForImageClassification,
+    AutoModelForMaskedLM,
     AutoProcessor,
     AutoTokenizer,
     GenerationConfig,
     GenerationMixin,
 )
 from transformers.exporters import (
+    ExportedModel,
     ExportedModelForCausalLM,
     ExportedModelForSeq2SeqLM,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_executorch,
     require_torch,
@@ -78,3 +83,26 @@ class OptimumExecutorchTest(unittest.TestCase):
         """`token_embedding`, `vision_encoder` and `text_decoder` methods, run as the multimodal split (an int4
         program, so it answers rather than matching eager's logits)."""
         _check_names_the_cats(self, "pytorch/gemma-3-4b-it-HQQ-INT8-INT4", "optimum-executorch")
+
+    def test_fill_mask(self):
+        """A text encoder's `forward(input_ids, attention_mask)`, its logits by name."""
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
+        inputs = tokenizer(["The capital of France is [MASK]."], return_tensors="pt")
+        model = _load(self, "IlyasMoutawwakil/distilbert-base-uncased-fill-mask-executorch", "optimum-executorch")
+        self.assertIs(type(model), ExportedModel)
+        eager = AutoModelForMaskedLM.from_pretrained("distilbert/distilbert-base-uncased").eval()
+        with torch.no_grad():
+            expected = eager(**inputs).logits
+        torch.testing.assert_close(model(**inputs)["logits"], expected, atol=1e-4, rtol=1e-4)
+
+    def test_image_classification(self):
+        """An image encoder's `forward(pixel_values)`, its logits by name."""
+        processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+        inputs = processor(load_image("http://images.cocodataset.org/val2017/000000039769.jpg"), return_tensors="pt")
+        model = _load(
+            self, "IlyasMoutawwakil/vit-base-patch16-224-image-classification-executorch", "optimum-executorch"
+        )
+        eager = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224").eval()
+        with torch.no_grad():
+            expected = eager(**inputs).logits
+        torch.testing.assert_close(model(**inputs)["logits"], expected, atol=1e-4, rtol=1e-4)

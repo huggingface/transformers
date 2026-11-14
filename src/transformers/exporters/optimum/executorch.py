@@ -63,6 +63,13 @@ def _executorch_traced(method_meta, index: int) -> dict[str, Any]:
     return {"rank": len(sizes), "shape": sizes, "dtype": _EXECUTORCH_DTYPES[int(tensor.dtype())]}
 
 
+def _executorch_encoder_inputs(method_meta) -> tuple[str, ...] | None:
+    """An encoder's inputs by their dtypes: a text encoder's `(input_ids, attention_mask)` (fill-mask), an image
+    encoder's `(pixel_values,)` (image classification)."""
+    dtypes = tuple(_executorch_traced(method_meta, index)["dtype"] for index in range(method_meta.num_inputs()))
+    return {("int64", "int64"): ("input_ids", "attention_mask"), ("float32",): ("pixel_values",)}.get(dtypes)
+
+
 def _executorch_component(config, program, method: str, names: tuple, inputs: dict, outputs: Any) -> ExportedComponent:
     """`method` as a component: its inputs, positional, under `names`; `inputs` the structure they take (an encoder's
     outputs nested); its cache written at `cache_position` and read up to it, so a new sequence needs no reset."""
@@ -75,7 +82,9 @@ def _executorch_component(config, program, method: str, names: tuple, inputs: di
         traced["cache"] = {"container": "EncoderDecoderCache" if "encoder_outputs" in names else "DynamicCache"}
     if "encoder_outputs" in names:
         traced["encoder_outputs"] = {"container": "BaseModelOutput"}
-    max_cache_len = program.load_method("get_max_seq_len").execute([])[0]
+    cache_geometry = {}
+    if "cache" in traced:
+        cache_geometry = {"max_cache_len": int(program.load_method("get_max_seq_len").execute([])[0])}
     metadata = ExportMetadata(
         architecture=_architecture(config),
         export_dtype="float32",
@@ -84,7 +93,7 @@ def _executorch_component(config, program, method: str, names: tuple, inputs: di
         in_spec=treespec_dumps(tree_structure(((), inputs))),
         out_spec=treespec_dumps(tree_structure(outputs)),
         export_config={"export_format": "executorch"},
-        cache_geometry={"max_cache_len": int(max_cache_len)},
+        cache_geometry=cache_geometry,
     )
     return ExportedComponent(_ProgramMethod(program, method), metadata)
 
@@ -93,7 +102,8 @@ def _load_executorch(pretrained_model_name_or_path, config, **kwargs) -> tuple[d
     """A causal LM keeping its cache in the program's buffers (`forward(input_ids, cache_position)`, the logits), an
     encoder-decoder (`encoder(input_features)`, then `text_decoder(decoder_input_ids, encoder_hidden_states,
     cache_position)`), or a multimodal model (`token_embedding(input_ids)`, `vision_encoder(pixel_values)` or
-    `audio_encoder(input_features)`, then `text_decoder(inputs_embeds, cache_position)`)."""
+    `audio_encoder(input_features)`, then `text_decoder(inputs_embeds, cache_position)`), or an encoder (`forward` on
+    `input_ids` and `attention_mask`, or on `pixel_values`, returning the logits)."""
     from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, Seq2SeqLMOutput
     from ..exporter_executorch import ExecutorchExporter
 
@@ -134,6 +144,8 @@ def _load_executorch(pretrained_model_name_or_path, config, **kwargs) -> tuple[d
         }, True
     if "use_kv_cache" in methods and "forward" in methods and program.metadata("forward").num_inputs() == 2:
         return {"model": component("forward", ("input_ids", "cache_position"))}, True
+    if "forward" in methods and (names := _executorch_encoder_inputs(program.metadata("forward"))) is not None:
+        return {"model": component("forward", names, outputs={"logits": torch.zeros(1)})}, False
     raise ValueError(
         f"{pretrained_model_name_or_path} is an optimum-executorch export whose task this runtime doesn't read yet "
         f"(methods {sorted(methods)}): re-export it with `ExecutorchExporter`."

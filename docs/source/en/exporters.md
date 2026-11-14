@@ -262,23 +262,19 @@ lowered for. [`ExportedModel.from_pretrained`] returns the class an export runs 
 multimodal split, an [`ExportedModelForCausalLM`] (or its multimodal and seq2seq variants) for a generation export,
 driven by `generate`.
 
-### optimum exports
+### optimum and transformers.js exports
 
-[`ExportedModel.from_pretrained`] also loads models exported by optimum-intel (OpenVINO), optimum-onnx (ONNX) and
-optimum-executorch (ExecuTorch), such as the OpenVINO, onnx-community and executorch-community organizations' on the
-Hub. None writes export metadata, so it is rebuilt from the graphs and the model's config.
+[`ExportedModel.from_pretrained`] also loads models exported by optimum-intel (OpenVINO), optimum-onnx and
+transformers.js (ONNX), and optimum-executorch (ExecuTorch), such as the OpenVINO, onnx-community, Xenova and
+executorch-community organizations' on the Hub. None writes export metadata, so it is rebuilt from the graphs and the
+model's config.
 
-- A causal LM runs through `generate`: optimum-intel's stateful one, optimum-onnx's taking and returning its cache
-  (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
-- An encoder-decoder (Whisper, T5) runs through `generate` too, from all three.
-- A multimodal model runs as the multimodal split: Gemma 3, Pixtral, LLaVA-NeXT, LFM3-VL and MiniCPM-V 4.7 from
-  optimum-intel, and its Qwen2-VL, Qwen2.5-VL, Qwen3-VL, MiniCPM-V 4.5, Phi-3.5-vision and Phi-4-multimodal (audio
-  too), whose towers are split into more graphs, fused into one at load; Gemma 3 from optimum-executorch.
-- An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
-  returns a dict by its output names.
+- A causal LM or an encoder-decoder runs through `generate`.
+- A multimodal model runs as the multimodal split; optimum-intel towers split into several graphs are fused into one.
+- An encoder is called with the graph's inputs and returns a dict by its output names.
 
-The others are refused with the reason: optimum-onnx decoders split in two graphs, and optimum-executorch encoders. Loading warns that the metadata was rebuilt: re-export
-the model with [`OpenVINOExporter`], [`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
+Loading warns that the metadata was rebuilt, and an unsupported layout raises with the reason. Re-export the model with
+[`OpenVINOExporter`], [`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
 
 ```python
 model = ExportedModel.from_pretrained("OpenVINO/Qwen3-0.6B-int4-ov", device="cpu")  # an ExportedModelForCausalLM

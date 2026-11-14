@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Loading optimum-onnx's ONNX graphs: a causal LM taking and returning its cache (`model.onnx`, or a merged decoder), an
-encoder-decoder (an encoder and a merged decoder) and an encoder, the cache renamed as the runtime names it. A decoder
-split in two graphs, the prompt's and the steps', each holding the weights, is refused."""
+encoder-decoder (an encoder and a merged decoder) and an encoder, the cache renamed as the runtime names it; and the
+multimodal exports transformers.js publishes (onnx-community's): text embeddings, an encoder per modality and a merged
+decoder on the embeddings. A decoder split in two graphs, the prompt's and the steps', each holding the weights, is
+refused."""
 
 from __future__ import annotations
 
@@ -44,6 +46,13 @@ ONNX_FILES = tuple(
 )
 # An encoder-decoder's encoder, beside its merged decoder
 ONNX_ENCODER_FILES = ("encoder_model.onnx", "onnx/encoder_model.onnx")
+# A multimodal export's graphs beside its merged decoder (transformers.js'): its text embeddings, and one encoder per
+# modality, by the component it serves
+ONNX_TEXT_EMBEDDINGS = "embed_tokens.onnx"
+_ONNX_MODALITY_ENCODERS = {
+    "vision_encoder.onnx": "vision_embeddings_model",
+    "audio_encoder.onnx": "audio_embeddings_model",
+}
 # A decoder split in two graphs, the prompt's and the steps', each holding the weights: refused.
 ONNX_SPLIT_FILES = ("decoder_with_past_model.onnx", "onnx/decoder_with_past_model.onnx")
 
@@ -118,6 +127,10 @@ def _rename_onnx_cache(program: onnx_ir.Model) -> dict[int, tuple[int, int, int]
                 heads, dim = value.shape[1], value.shape[3]
                 geometry.setdefault(index, [heads, dim, dim])[1 if kind == "key" else 2] = dim
     outputs = list(graph.outputs)
+    # A decoder exported with its attentions too (transformers.js' Whisper, for timestamps) returns only its logits and
+    # cache here
+    if order and any(value.name == "logits" for value in outputs):
+        outputs = [value for value in outputs if value.name == "logits" or value.name in order]
     graph.outputs.clear()
     graph.outputs.extend(sorted(outputs, key=lambda value: (value.name in order, order.get(value.name, ()))))
     return {index: tuple(shape) for index, shape in sorted(geometry.items())}
@@ -148,6 +161,143 @@ def _cache_geometry(geometry: dict[int, tuple[int, int, int]]) -> dict[str, dict
     return {"kv": {str(index): list(shape) for index, shape in geometry.items()}, "indexers": {}, "linear_states": {}}
 
 
+def _full_attention_cache(config) -> None:
+    """Make the cache `generate` builds from `config` match the graph's, which keeps every layer's keys and values in
+    full (its sliding-window layers mask the window in the graph): sliding and chunked layers become full ones. The
+    runtime runs no modeling code, so the config shapes nothing else."""
+    text_config = config.get_text_config(decoder=True)
+    layer_types = getattr(text_config, "layer_types", None)
+    if layer_types is not None:
+        text_config.layer_types = [
+            "full_attention" if layer_type in ("sliding_attention", "chunked_attention") else layer_type
+            for layer_type in layer_types
+        ]
+    for attribute in ("sliding_window", "attention_chunk_size"):
+        if getattr(text_config, attribute, None) is not None:
+            setattr(text_config, attribute, None)
+
+
+def _onnx_decoder_component(program: onnx_ir.Model, config, geometry: dict) -> ExportedComponent:
+    """A decoder taking and returning its cache (renamed by `_rename_onnx_cache`), as a component: its other inputs as
+    the graph names them (`input_ids` or `inputs_embeds`, `attention_mask`, maybe `position_ids`)."""
+    from ...cache_utils import DynamicCache
+    from ...modeling_outputs import CausalLMOutputWithPast
+    from ..base import ExportedComponent
+    from ..cache import materialize_cache_layers
+    from ..exporter_dynamo import register_pytree_node
+
+    graph = program.graph
+    inputs = {value.name: value for value in graph.inputs if not value.name.startswith("input.cache.")}
+    past = next(value for value in graph.inputs if value.name == "input.cache.layers.0.keys")
+    dtype = getattr(torch, str(past.dtype.numpy()))
+    _full_attention_cache(config)
+    # The cache the runtime feeds, as it materializes it: its pytree spec is the graph's.
+    cache = DynamicCache(config=config)
+    materialize_cache_layers(cache, 1, config, dtype, torch.device("cpu"), kv_geometry=geometry)
+    register_pytree_node(type(cache))
+    traced = {name: _onnx_traced(value) for name, value in inputs.items()}
+    traced["cache"] = {"container": type(cache).__name__}
+    metadata = ExportMetadata(
+        architecture=_architecture(config),
+        export_dtype=str(dtype).removeprefix("torch."),
+        export_device="cpu",
+        kwargs=traced,
+        in_spec=treespec_dumps(tree_structure(((), {**dict.fromkeys(inputs, 0), "cache": cache}))),
+        out_spec=treespec_dumps(tree_structure(CausalLMOutputWithPast(logits=torch.zeros(1), cache=cache))),
+        export_config={"export_format": "onnx", "dynamic": True},
+        cache_geometry=_cache_geometry(geometry),
+    )
+    return ExportedComponent(program, metadata)
+
+
+def _onnx_graph_component(program: onnx_ir.Model, config, by_name: bool = False) -> ExportedComponent:
+    """A graph without a cache (an embedder, a modality encoder, an encoder) as a component: its inputs as the graph
+    names them, its one output as a tensor, or several (or any, with `by_name`) as a dict by their names."""
+    from ..base import ExportedComponent
+
+    graph = program.graph
+    inputs = {value.name: value for value in graph.inputs}
+    outputs = [value.name for value in graph.outputs]
+    returns = torch.zeros(1) if len(outputs) == 1 and not by_name else dict.fromkeys(outputs, torch.zeros(1))
+    metadata = ExportMetadata(
+        architecture=_architecture(config),
+        export_dtype=str(graph.outputs[0].dtype.numpy()),
+        export_device="cpu",
+        kwargs={name: _onnx_traced(value) for name, value in inputs.items()},
+        in_spec=treespec_dumps(tree_structure(((), dict.fromkeys(inputs, 0)))),
+        out_spec=treespec_dumps(tree_structure(returns)),
+        export_config={"export_format": "onnx", "dynamic": True},
+    )
+    return ExportedComponent(program, metadata)
+
+
+def _fold_logits_to_keep(program: onnx_ir.Model) -> None:
+    """A decoder taking how many trailing positions to return logits for (`num_logits_to_keep`, Gemma 3's): 0, every
+    position, as the runtime reads them."""
+    import onnx_ir
+
+    graph = program.graph
+    keep = next((value for value in graph.inputs if value.name == "num_logits_to_keep"), None)
+    if keep is None:
+        return
+    zero = onnx_ir.node("Constant", [], attributes={"value": onnx_ir.tensor(torch.tensor(0, dtype=torch.int64))})
+    graph.insert_before(graph.node(0), [zero])
+    onnx_ir.convenience.replace_all_uses_with(keep, zero.outputs[0])
+    graph.inputs.remove(keep)
+
+
+def _bool_inputs_as_int64(program: onnx_ir.Model) -> None:
+    """A bool input (SmolVLM's `pixel_attention_mask`) taken as the int64 mask a processor returns, cast in the graph."""
+    import onnx_ir
+
+    graph = program.graph
+    for value in list(graph.inputs):
+        if value.dtype != onnx_ir.DataType.BOOL:
+            continue
+        cast = onnx_ir.node("Cast", [value], attributes={"to": onnx_ir.DataType.BOOL})
+        onnx_ir.convenience.replace_all_uses_with(value, cast.outputs[0])
+        # `replace_all_uses_with` also rewired the cast's own input
+        cast.replace_input_with(0, value)
+        value.dtype = onnx_ir.DataType.INT64
+        graph.insert_before(graph.node(0), [cast])
+
+
+def _load_onnx_multimodal(
+    pretrained_model_name_or_path, config, decoder_file: str, **kwargs
+) -> tuple[dict[str, ExportedComponent], bool]:
+    """A transformers.js multimodal export: `embed_tokens` (`input_ids` to `inputs_embeds`, and Gemma 3n's
+    `per_layer_inputs`), `vision_encoder` / `audio_encoder` on their modality's data (the image grid fed as
+    `grid_thw`), and a merged decoder on the embeddings.
+
+    Raises:
+        `ValueError`: for a decoder carrying a state besides its attention cache (LFM2-VL's convolutions).
+    """
+    folder = decoder_file.removesuffix("decoder_model_merged.onnx")
+    decoder = _read_onnx(pretrained_model_name_or_path, decoder_file, **kwargs)
+    geometry = _rename_onnx_cache(decoder)
+    _drop_use_cache_branch(decoder)
+    _fold_logits_to_keep(decoder)
+    if states := [value.name for value in decoder.graph.inputs if value.name.startswith("past_")]:
+        raise ValueError(
+            f"{pretrained_model_name_or_path}'s decoder carries a state besides its attention cache ({states[0]}, ...), "
+            "which this runtime doesn't feed an ONNX graph: re-export it with `OnnxExporter().export_for_generation`."
+        )
+    components = {"language_model": _onnx_decoder_component(decoder, config, geometry)}
+    embedder = _read_onnx(pretrained_model_name_or_path, f"{folder}{ONNX_TEXT_EMBEDDINGS}", **kwargs)
+    components["text_embeddings_model"] = _onnx_graph_component(embedder, config)
+    for file, name in _ONNX_MODALITY_ENCODERS.items():
+        if _find(pretrained_model_name_or_path, (f"{folder}{file}",), **kwargs) is None:
+            continue
+        encoder = _read_onnx(pretrained_model_name_or_path, f"{folder}{file}", **kwargs)
+        for value in encoder.graph.inputs:
+            # The image grid, which the runtime feeds a modality graph as `grid_thw`
+            if value.name == "image_grid_thw":
+                value.name = "grid_thw"
+        _bool_inputs_as_int64(encoder)
+        components[name] = _onnx_graph_component(encoder, config)
+    return components, True
+
+
 def _load_onnx_seq2seq(
     pretrained_model_name_or_path, config, encoder_file: str, **kwargs
 ) -> tuple[dict[str, ExportedComponent], bool]:
@@ -168,6 +318,11 @@ def _load_onnx_seq2seq(
         )
     hidden = BaseModelOutput(last_hidden_state=torch.zeros(1))
     encoder = _read_onnx(pretrained_model_name_or_path, encoder_file, **kwargs)
+    # Only the hidden states: an encoder exported with its attentions too (transformers.js' Whisper) returns them after
+    encoder_outputs = [value for value in encoder.graph.outputs if value.name == "last_hidden_state"]
+    if encoder_outputs:
+        encoder.graph.outputs.clear()
+        encoder.graph.outputs.extend(encoder_outputs)
     encoder_inputs = [value.name for value in encoder.graph.inputs]
     encoder_metadata = ExportMetadata(
         architecture=_architecture(config),
@@ -218,13 +373,8 @@ def _load_onnx_seq2seq(
 
 def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
     """A causal LM taking and returning its cache (inputs `input_ids`, `attention_mask`, maybe `position_ids`,
-    `past_key_values.*`; outputs `logits`, `present.*`), an encoder-decoder, or an encoder."""
-    from ...cache_utils import DynamicCache
-    from ...modeling_outputs import CausalLMOutputWithPast
-    from ..base import ExportedComponent
-    from ..cache import materialize_cache_layers
-    from ..exporter_dynamo import register_pytree_node
-
+    `past_key_values.*`; outputs `logits`, `present.*`), an encoder-decoder, a transformers.js multimodal export, or an
+    encoder."""
     if (encoder_file := _find(pretrained_model_name_or_path, ONNX_ENCODER_FILES, **kwargs)) is not None:
         return _load_onnx_seq2seq(pretrained_model_name_or_path, config, encoder_file, **kwargs)
     file = _find(pretrained_model_name_or_path, ONNX_FILES, **kwargs)
@@ -234,51 +384,23 @@ def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[st
             "steps', each holding the weights, without the merged one: re-export it with "
             "`OnnxExporter().export_for_generation`, whose one graph serves both."
         )
+    if file.endswith("decoder_model_merged.onnx"):
+        folder = file.removesuffix("decoder_model_merged.onnx")
+        if _find(pretrained_model_name_or_path, (f"{folder}{ONNX_TEXT_EMBEDDINGS}",), **kwargs) is not None:
+            return _load_onnx_multimodal(pretrained_model_name_or_path, config, file, **kwargs)
     program = _read_onnx(pretrained_model_name_or_path, file, **kwargs)
     geometry = _rename_onnx_cache(program)
     _drop_use_cache_branch(program)
     graph = program.graph
-    inputs = {value.name: value for value in graph.inputs if not value.name.startswith("input.cache.")}
-    export_config = {"export_format": "onnx", "dynamic": True}
-
     if not geometry:
-        outputs = dict.fromkeys((value.name for value in graph.outputs), torch.zeros(1))
-        metadata = ExportMetadata(
-            architecture=_architecture(config),
-            export_dtype="float32",
-            export_device="cpu",
-            kwargs={name: _onnx_traced(value) for name, value in inputs.items()},
-            in_spec=treespec_dumps(tree_structure(((), dict.fromkeys(inputs, 0)))),
-            out_spec=treespec_dumps(tree_structure(outputs)),
-            export_config=export_config,
-        )
-        return {"model": ExportedComponent(program, metadata)}, False
-
+        return {"model": _onnx_graph_component(program, config, by_name=True)}, False
     if graph.outputs[0].name != "logits":
         raise ValueError(
             f"{pretrained_model_name_or_path} takes a cache but doesn't return logits first (outputs "
             f"{[value.name for value in graph.outputs]}): only a causal LM loads from optimum-onnx. Re-export it with "
             "`OnnxExporter`."
         )
-    past = next(value for value in graph.inputs if value.name == "input.cache.layers.0.keys")
-    dtype = getattr(torch, str(past.dtype.numpy()))
-    # The cache the runtime feeds, as it materializes it: its pytree spec is the graph's.
-    cache = DynamicCache(config=config)
-    materialize_cache_layers(cache, 1, config, dtype, torch.device("cpu"), kv_geometry=geometry)
-    register_pytree_node(type(cache))
-    traced = {name: _onnx_traced(value) for name, value in inputs.items()}
-    traced["cache"] = {"container": type(cache).__name__}
-    metadata = ExportMetadata(
-        architecture=_architecture(config),
-        export_dtype=str(dtype).removeprefix("torch."),
-        export_device="cpu",
-        kwargs=traced,
-        in_spec=treespec_dumps(tree_structure(((), {**dict.fromkeys(inputs, 0), "cache": cache}))),
-        out_spec=treespec_dumps(tree_structure(CausalLMOutputWithPast(logits=torch.zeros(1), cache=cache))),
-        export_config=export_config,
-        cache_geometry=_cache_geometry(geometry),
-    )
-    return {"model": ExportedComponent(program, metadata)}, True
+    return {"model": _onnx_decoder_component(program, config, geometry)}, True
 
 
 class _OnnxGenerationMixin:
