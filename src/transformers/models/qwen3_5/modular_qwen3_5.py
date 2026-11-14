@@ -359,8 +359,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 **kwargs,
             )
 
-        # Update cache
-        if cache is not None:
+        # Update cache. The paged cache already holds the new states, written above
+        if cache is not None and paged_cache is None:
             cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
