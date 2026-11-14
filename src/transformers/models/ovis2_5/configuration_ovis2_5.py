@@ -112,24 +112,12 @@ class Ovis2_5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        # BC: Released Hub checkpoints still use the remote-code names; map them to the native config fields.
-        legacy_text_config = kwargs.get("llm_config")
-        legacy_vision_config = kwargs.get("vit_config")
-        legacy_visual_vocab_size = kwargs.get("visual_vocab_size")
-        if self.text_config is None and legacy_text_config is not None:
-            self.text_config = legacy_text_config
-        if self.vision_config is None and legacy_vision_config is not None:
-            self.vision_config = legacy_vision_config
-
         if isinstance(self.vision_config, dict):
             # Released configs label this remote-code tower as `siglip2_navit`; the native tower type is fixed here.
             self.vision_config.pop("model_type", None)
             self.vision_config.pop("preserve_original_pe", None)
             self.vision_config.pop("use_rope", None)
             self.vision_config.pop("num_patches", None)
-            if legacy_visual_vocab_size is not None:
-                self.vision_config.setdefault("vocab_size", legacy_visual_vocab_size)
-
         super().__post_init__(**kwargs)
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
