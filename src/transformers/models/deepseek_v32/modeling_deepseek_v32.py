@@ -444,7 +444,7 @@ class DeepseekV32Attention(nn.Module):
             latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
             latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        # On the paged cache, which already holds the latents, this only selects the arguments of this layer
+        # On the paged cache, the layer writes and reads its latents itself: the update only selects its arguments
         if cache is not None:
             k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
