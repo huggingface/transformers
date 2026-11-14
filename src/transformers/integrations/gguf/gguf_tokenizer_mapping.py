@@ -31,6 +31,7 @@ from functools import partial
 from tokenizers import AddedToken, Regex, Tokenizer, normalizers, pre_tokenizers
 
 from ...convert_slow_tokenizer import bytes_to_unicode
+from ...models.bert.tokenization_bert import BertTokenizer
 from ...models.gemma.tokenization_gemma import GemmaTokenizer
 from ...models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ...models.llama.tokenization_llama import LlamaTokenizer
@@ -58,11 +59,14 @@ GGUF_TOKENIZER_MAPPING = {
         "ggml.unknown_token_id": "unk_token_id",
         "ggml.padding_token_id": "pad_token_id",
         "ggml.add_space_prefix": "add_prefix_space",
+        "ggml.normalizer.lowercase": "do_lower_case",
+        "ggml.normalizer.strip_accents": "strip_accents",
     },
     "tokenizer_config": {
         "chat_template": "chat_template",
         "ggml.add_bos_token": "add_bos_token",
         "ggml.add_eos_token": "add_eos_token",
+        "ggml.clean_spaces": "clean_up_tokenization_spaces",
     },
 }
 
@@ -72,6 +76,14 @@ _SPECIAL_TOKENS = {
     "eos_token": "eos_token_id",
     "unk_token": "unknown_token_id",
     "pad_token": "padding_token_id",
+}
+
+# The markers only encoders name. One the file leaves out keeps the tokenizer class's default rather than being
+# unset, as llama.cpp does too: many BERT files name `[SEP]` but not `[CLS]`, for one.
+_ENCODER_SPECIAL_TOKENS = {
+    "cls_token": "cls_token_id",
+    "sep_token": "seperator_token_id",  # sic: llama.cpp's spelling
+    "mask_token": "mask_token_id",
 }
 
 
@@ -88,6 +100,13 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
     }
     tokenizer, tokenizer_config = grouped["tokenizer"], grouped["tokenizer_config"]
 
+    for name, key in _SPECIAL_TOKENS.items():
+        token_id = metadata.get(f"tokenizer.ggml.{key}")
+        tokenizer_config[name] = tokenizer["tokens"][token_id] if token_id is not None else None
+    for name, key in _ENCODER_SPECIAL_TOKENS.items():
+        if (token_id := metadata.get(f"tokenizer.ggml.{key}")) is not None:
+            tokenizer_config[name] = tokenizer["tokens"][token_id]
+
     tokenizer_type = tokenizer.get("tokenizer_type")
     if tokenizer_type == "llama":
         # Older files have no flag, and llama.cpp adds BOS to a sentencepiece vocabulary that does not say otherwise.
@@ -96,10 +115,9 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
         # The flag is set, but the reference tokenizer adds no BOS because the chat template writes `<bos>` itself.
         # llama.cpp forces BOS on here (ggml-org/llama.cpp#21500); we follow the reference.
         tokenizer_config["add_bos_token"] = False
-
-    for name, key in _SPECIAL_TOKENS.items():
-        token_id = metadata.get(f"tokenizer.ggml.{key}")
-        tokenizer_config[name] = tokenizer["tokens"][token_id] if token_id is not None else None
+    elif tokenizer_type == "bert":
+        # WordPiece has no BOS / EOS: llama.cpp restates `[CLS]` / `[SEP]` as those (gguf-py's `SpecialVocab`).
+        tokenizer_config["bos_token"] = tokenizer_config["eos_token"] = None
     return architecture, tokenizer, tokenizer_config
 
 
@@ -175,6 +193,28 @@ def unigram_tokenizer(tokenizer_dict):
     for offset, index in enumerate(blanks[:count]):
         tokens[index] = f"<extra_id_{count - 1 - offset}>"
     return T5Tokenizer(vocab=list(zip(tokens, tokenizer_dict["scores"])))
+
+
+def wordpiece_tokenizer(tokenizer_dict):
+    """WordPiece, spelled back the way `BertTokenizer` reads it.
+
+    llama.cpp marks where a word starts instead of where it goes on: `\u2581play` `ing` for `play` `##ing`. Control
+    tokens like `[CLS]` keep their spelling. Lowercasing (and with it accent stripping) follows the file, and
+    defaults to on in both llama.cpp and `BertTokenizer` for older files that do not say.
+    """
+    tokens = tokenizer_dict["tokens"]
+    vocab = {}
+    for index, (token, token_type) in enumerate(zip(tokens, tokenizer_dict["token_type"])):
+        if token_type != 3:  # 3 is CONTROL
+            token = token[1:] if token.startswith("\u2581") else f"##{token}"
+        vocab[token] = index
+    unk_id = tokenizer_dict.get("unk_token_id")
+    return BertTokenizer(
+        vocab=vocab,
+        do_lower_case=tokenizer_dict.get("do_lower_case", True),
+        strip_accents=tokenizer_dict.get("strip_accents"),
+        unk_token=tokens[unk_id] if unk_id is not None else "[UNK]",
+    )
 
 
 def get_merges(tokenizer_dict, vocab_scores=None):
@@ -302,5 +342,6 @@ GGUF_TOKENIZER_TYPES = {
     "gpt2": byte_level_tokenizer,
     "llama": sentencepiece_tokenizer,
     "t5": unigram_tokenizer,
+    "bert": wordpiece_tokenizer,
     "gemma4": partial(sentencepiece_tokenizer, tokenizer_class=GemmaTokenizer),
 }
