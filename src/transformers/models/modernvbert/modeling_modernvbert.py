@@ -308,13 +308,14 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # Images processing
         if pixel_values is not None:
-            image_hidden_states = self.get_image_features(
+            image_hidden_states = self.get_image_embeddings(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
             ).pooler_output
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
-            image_hidden_states = torch.cat(image_hidden_states, dim=0)
+            if not isinstance(image_hidden_states, torch.Tensor):
+                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
