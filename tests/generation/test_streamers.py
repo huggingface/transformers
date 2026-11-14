@@ -18,12 +18,14 @@ from threading import Event, Thread
 from unittest.mock import patch
 
 import pytest
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 
 from transformers import (
     AsyncTextIteratorStreamer,
     AutoTokenizer,
     TextIteratorStreamer,
     TextStreamer,
+    TokenizersBackend,
     is_torch_available,
 )
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
@@ -50,6 +52,25 @@ if is_torch_available():
 
 @require_torch
 class StreamerTester(unittest.TestCase):
+    def test_iterator_streamer_preserves_spaces_after_newline(self):
+        backend = Tokenizer(models.BPE(vocab={"[UNK]": 0, "▁": 1, "\n": 2, "a": 3, "b": 4}, merges=[]))
+        backend.pre_tokenizer = pre_tokenizers.Metaspace(prepend_scheme="always", split=False)
+        backend.decoder = decoders.Metaspace(prepend_scheme="always")
+        tokenizer = TokenizersBackend(tokenizer_object=backend, eos_token="[EOS]")
+        text = "a\n    b\n\n a\n"
+        input_ids = tokenizer.encode(text, add_special_tokens=False)
+        self.assertEqual(tokenizer.decode(input_ids), text)
+
+        for skip_special_tokens in (False, True):
+            streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=skip_special_tokens)
+            for token_id in input_ids:
+                streamer.put(torch.tensor([token_id]))
+                if skip_special_tokens and token_id == tokenizer.convert_tokens_to_ids("\n"):
+                    streamer.put(torch.tensor([tokenizer.eos_token_id]))
+            streamer.end()
+
+            self.assertEqual("".join(streamer), text)
+
     def test_text_streamer_matches_non_streaming(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

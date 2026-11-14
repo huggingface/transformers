@@ -93,11 +93,15 @@ class TextStreamer(BaseStreamer):
         self.token_cache.extend(value.tolist())
         text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
 
-        # After the symbol for a new line, we flush the cache.
+        # After a newline, keep the last token as decoding context to preserve leading spaces on the next line.
         if text.endswith("\n"):
             printable_text = text[self.print_len :]
-            self.token_cache = []
-            self.print_len = 0
+            last_token_text = cast(str, self.tokenizer.decode(self.token_cache[-1:], **self.decode_kwargs))
+            if last_token_text.endswith("\n"):
+                self.token_cache = self.token_cache[-1:]
+                self.print_len = len(last_token_text)
+            else:
+                self.print_len = len(text)
         # If the last token is a CJK character, we print the characters.
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
             printable_text = text[self.print_len :]
