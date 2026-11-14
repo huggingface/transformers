@@ -1468,16 +1468,18 @@ def create_chunked_causal_mask(
         use_vmap = True
 
     # If we detected packing format or blockwise overlay
+    if packed_sequence_mask is not None:
+        # The position ids are sometimes just unsqueezed, without being expanded
+        mask_factory_function = remap_positions_for_packed_sequence(
+            mask_factory_function, position_ids.expand(batch_size, -1)
+        )
+        allow_is_causal_skip = False
     if block_sequence_ids is not None:
         block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_causal_skip = False
     if packed_sequence_mask is not None:
-        # The position ids are sometimes just unsqueezed, without being expanded
-        mask_factory_function = packed_sequence_compatibility_function(
-            mask_factory_function, position_ids.expand(batch_size, -1), packed_sequence_mask
-        )
-        allow_is_causal_skip = False
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
 
     # We now create the mask
     causal_mask = mask_interface(
