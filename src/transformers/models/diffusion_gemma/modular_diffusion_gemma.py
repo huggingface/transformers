@@ -1007,6 +1007,12 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
 
         return create_masks_for_generate(**mask_kwargs)
 
+    def get_video_embeddings(self):
+        raise AttributeError("Not needed")
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
+
 
 class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
     """

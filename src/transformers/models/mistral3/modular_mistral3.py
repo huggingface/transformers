@@ -220,6 +220,9 @@ class Mistral3Model(LlavaModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
+
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
     @merge_with_config_defaults
@@ -313,6 +316,9 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
 
 
 __all__ = [
