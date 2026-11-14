@@ -3195,13 +3195,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
-                                # start_token is out of bounds maybe due to truncation.
-                                break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
-                                current_mask[token_id] = 1
+                            # Mask every token overlapping the span, so a span cut by left or right truncation
+                            # keeps its remaining tokens (same approach as `ProcessorMixin`)
+                            for token_id, (token_start, token_end) in enumerate(out.encodings[i].offsets):
+                                if token_start < assistant_end_char and token_end > assistant_start_char:
+                                    current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
 
                     if not is_batched and not return_tensors:
