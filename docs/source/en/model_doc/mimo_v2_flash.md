@@ -39,6 +39,11 @@ This model was contributed by [casinca](https://huggingface.co/casinca).
 
 ## Usage examples
 
+The same implementation supports compatible MiMo V2 text checkpoints such as `XiaomiMiMo/MiMo-V2.5-Pro`, whose
+sliding-window layers use their own head counts and dimensions (`swa_*` configuration attributes). These checkpoints
+store fused, TP-interleaved QKV projections and MXFP4 experts: convert them with
+`src/transformers/models/mimo_v2_vl/convert_mimo_v2_vl_weights_to_hf.py` first.
+
 ### Text generation
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
@@ -108,6 +113,8 @@ response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
 
+
+For MiMo V2.6 image, video, and audio understanding, see [MiMo V2 VL](mimo_v2_vl).
 
 ## MiMoV2FlashConfig
 
