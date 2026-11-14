@@ -261,6 +261,36 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
+    @require_torch_non_multi_accelerator
+    def test_warns_when_resuming_from_older_checkpoint(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(
+            output_dir=tmp_dir,
+            train_len=16,
+            max_steps=4,
+            save_steps=2,
+            per_device_train_batch_size=4,
+            disable_tqdm=True,
+            report_to="none",
+        )
+        trainer.train()
+
+        checkpoint = os.path.join(tmp_dir, "checkpoint-2")
+        resumed_trainer = get_regression_trainer(
+            output_dir=tmp_dir,
+            train_len=16,
+            max_steps=4,
+            save_steps=2,
+            per_device_train_batch_size=4,
+            disable_tqdm=True,
+            report_to="none",
+        )
+        with CaptureLogger(logging.get_logger()) as cl:
+            resumed_trainer.train(resume_from_checkpoint=checkpoint)
+
+        self.assertIn("Resuming from an older checkpoint", cl.out)
+        self.assertIn("checkpoint-4", cl.out)
+
     # require_torch_non_multi_accelerator is necessary because this worker blocks runs when using multiple GPUs, making
     # the test slower.
     @require_torch_non_multi_accelerator
