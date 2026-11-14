@@ -321,7 +321,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertListEqual([vocab_size - score.shape[-1] for score in logits], [vocab_diff] * len(logits))
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -329,8 +329,8 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         )
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+        use_cache = decoder_cache is not None
+        has_static_cache = isinstance(decoder_cache, StaticCache)
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
@@ -340,9 +340,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = (
-                prompt_length + generated_length if not has_static_cache else decoder_past_key_values.get_max_length()
-            )
+            query_length = prompt_length + generated_length if not has_static_cache else decoder_cache.get_max_length()
 
             expected_shape = (
                 batch_size,
@@ -446,7 +444,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @pytest.mark.generate
     @unittest.skip(reason="Custom processor `DiaEOSDelayPatternLogitsProcessor` forces eos token.")
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         """Only a small change due to the expected shapes"""
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
@@ -490,7 +488,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[1]  # the only real modification in this test
             inputs["decoder_input_ids"] = outputs_cached.sequences
             if "decoder_attention_mask" in inputs:
@@ -508,7 +506,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             # The two sets of generated text and past kv should be equal to each other
             assert_similar_generate_outputs(outputs, outputs_cached)
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     @pytest.mark.generate
     def test_prepare_inputs_for_generation_kwargs_forwards(self):

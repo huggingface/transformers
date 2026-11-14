@@ -38,6 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -393,6 +394,7 @@ class PeAudioEncoderAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -457,12 +459,13 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = PeAudioEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PeAudioEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -474,7 +477,7 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -495,7 +498,7 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     base_model_prefix = "audio_model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

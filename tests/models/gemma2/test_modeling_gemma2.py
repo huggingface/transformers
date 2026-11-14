@@ -419,7 +419,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
         # Let's check that the dynamic cache has hybrid layers!
-        dynamic_cache = out.past_key_values
+        dynamic_cache = out.cache
         self.assertTrue(isinstance(dynamic_cache, DynamicCache))
         for layer, layer_type in zip(dynamic_cache.layers, model.config.layer_types):
             if layer_type == "sliding_attention":

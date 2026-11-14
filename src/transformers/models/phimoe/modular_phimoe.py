@@ -23,6 +23,7 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
@@ -349,11 +350,11 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         inputs_embeds=None,
         position_ids=None,
@@ -367,18 +368,18 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
-            past_key_values
+            cache
             and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
-            past_length = past_key_values.get_seq_length()
+            past_length = cache.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
-                past_key_values = None
+                cache = None
                 kwargs["next_sequence_length"] = None
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,

@@ -30,7 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -170,7 +170,7 @@ class GlmImageConfig(PreTrainedConfig):
         "vision_config": GlmImageVisionConfig,
         "vq_config": GlmImageVQVAEConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -747,6 +747,7 @@ class GlmImageModel(Glm4vModel):
 
         return special_image_mask
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -754,12 +755,12 @@ class GlmImageModel(Glm4vModel):
         images_per_sample: torch.Tensor | None,
         inputs_embeds: torch.Tensor | None,
         attention_mask: torch.Tensor | None,
-        past_key_values: torch.Tensor | None,
+        cache: torch.Tensor | None,
     ) -> torch.Tensor | None:
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        cache_length = 0 if cache is None else cache.get_seq_length()
         can_compute_mrope = input_ids is not None and image_grid_thw is not None
 
-        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+        if can_compute_mrope and (self.rope_deltas is None or cache_length == 0):
             position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 image_grid_thw=image_grid_thw,
@@ -768,30 +769,29 @@ class GlmImageModel(Glm4vModel):
             )
             self.rope_deltas = rope_deltas
         # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
-        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
-        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # generation (cache_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without cache to avoid shape
         # mismatches from stale rope_deltas (e.g., training forward pass after generation).
-        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+        elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
-                step = past_key_values_length - self._prefill_len
+                step = cache_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = (
-                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
-                )
+                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + cache_length
                 position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
             # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -832,14 +832,14 @@ class GlmImageModel(Glm4vModel):
                 images_per_sample=images_per_sample,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
 
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
@@ -880,12 +880,13 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     def get_image_tokens(self, hidden_states: torch.Tensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -938,7 +939,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             images_per_sample=images_per_sample,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
@@ -958,7 +959,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
