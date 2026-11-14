@@ -522,6 +522,10 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             # Without int8, or with a table of its own, the provider is left alone
             plain = [("TensorrtExecutionProvider", {"trt_engine_cache_path": cache})]
             self.assertEqual(_with_calibration_table(program, plain), plain)
+            # A graph with neither a table nor Q/DQ nodes gets int8 turned off
+            del program.metadata_props[TENSORRT_CALIBRATION_TABLE]
+            ((_, unquantized),) = _with_calibration_table(program, [("TensorrtExecutionProvider", options)])
+            self.assertFalse(unquantized["trt_int8_enable"])
 
     @parameterized.expand(
         [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]

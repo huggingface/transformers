@@ -46,17 +46,22 @@ _SERIALIZED_WEIGHTS_LIMIT = int(1.5 * 2**30)
 def _with_calibration_table(program: onnx_ir.Model, providers: list) -> list:
     """`providers`, a TensorRT one turning int8 on without a table of its own reading the graph's
     (`OnnxRuntimeCalibrationTableConfig`): written into its engine cache directory, named by its content, as the
-    flatbuffer TensorRT reads (each tensor's largest absolute value)."""
+    flatbuffer TensorRT reads (each tensor's largest absolute value). On a graph with neither a table nor Q/DQ nodes,
+    int8 is turned off."""
     from ..quantizers.quantizer_onnxruntime import TENSORRT_CALIBRATION_TABLE
 
     table = program.metadata_props.get(TENSORRT_CALIBRATION_TABLE)
-    if table is None:
-        return providers
+    quantized = any(node.op_type == "QuantizeLinear" for node in program.graph)
     resolved = []
     for provider in providers:
         name, options = provider if isinstance(provider, tuple) else (provider, {})
         int8 = str(options.get("trt_int8_enable", False)).lower() in ("1", "true")
-        if name == "TensorrtExecutionProvider" and int8 and "trt_int8_calibration_table_name" not in options:
+        own_table = "trt_int8_calibration_table_name" in options
+        if name == "TensorrtExecutionProvider" and int8 and not own_table and table is None and not quantized:
+            # Nothing to take int8 scales from (an export's embedding graph, left out by its quantizer): TensorRT
+            # would refuse to build it
+            provider = (name, {**options, "trt_int8_enable": False})
+        elif name == "TensorrtExecutionProvider" and int8 and not own_table and table is not None:
             cache = options.get("trt_engine_cache_path") or tempfile.mkdtemp()
             os.makedirs(cache, exist_ok=True)
             file = f"calibration-{hashlib.sha256(table.encode()).hexdigest()[:16]}.flatbuffers"
