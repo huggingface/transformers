@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from typing import Any, Literal
+from typing import Any, Literal, get_args, get_type_hints
 
 from .debug_utils import DebugOption
 from .distributed.utils import _is_torch_distributed_initialized
@@ -174,6 +174,20 @@ def _convert_str_dict(passed_value: dict):
                 passed_value[key] = float(value)
 
     return passed_value
+
+
+def _parallelism_config_from_dict(config_dict: dict[str, Any]) -> "ParallelismConfig":
+    """
+    Rebuilds a `ParallelismConfig` saved with `asdict`, turning its handler dicts (e.g. `tp_handler`) back into
+    dataclasses first, since `ParallelismConfig` rejects (or silently keeps) handlers passed as plain dicts.
+    """
+    type_hints = get_type_hints(ParallelismConfig)
+    kwargs = dict(config_dict)
+    for k, v in config_dict.items():
+        if k.endswith("_handler") and isinstance(v, dict):
+            handler_cls = next(t for t in get_args(type_hints[k]) if t is not type(None))
+            kwargs[k] = handler_cls(**v)
+    return ParallelismConfig(**kwargs)
 
 
 @dataclass
@@ -1563,9 +1577,10 @@ class TrainingArguments:
         self.optim = OptimizerNames(self.optim)
 
         if isinstance(self.debug, str):
-            self.debug = [DebugOption(s) for s in self.debug.split()]
+            self.debug = self.debug.split()
         elif self.debug is None:
             self.debug = []
+        self.debug = [DebugOption(s) for s in self.debug]
 
         # ── 3. Auto-derived Values ──
         if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:
@@ -2196,7 +2211,10 @@ class TrainingArguments:
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
             if k == "parallelism_config" and v is not None:
-                d[k] = v.to_json()
+                # Not `v.to_json()`: it returns `None` in Accelerate < 1.16
+                # see https://github.com/huggingface/transformers/pull/49878#discussion_r4453412988
+                # for more details.
+                d[k] = asdict(v)
 
         self._dict_dtype_to_str(d)
 
@@ -2207,6 +2225,61 @@ class TrainingArguments:
         Serializes this instance to a JSON string.
         """
         return json.dumps(self.to_dict(), indent=2)
+
+    def to_json_file(self, json_file_path: str | os.PathLike):
+        """
+        Saves this instance to a JSON file. Token values are obfuscated and are not saved.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this instance will be saved.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            writer.write(self.to_json_string())
+
+    @classmethod
+    def from_dict(cls, args_dict: dict[str, Any]):
+        """
+        Instantiates a [`TrainingArguments`] (or subclass) from a dictionary produced by [`~TrainingArguments.to_dict`].
+
+        Obfuscated token values (e.g. `"<HUB_TOKEN>"`) are dropped, and keys that are not init fields of `cls` are
+        ignored with a warning, so files written by a different version of the library can still be loaded.
+
+        Args:
+            args_dict (`dict[str, Any]`):
+                Dictionary of arguments.
+        """
+        init_fields = {f.name for f in fields(cls) if f.init}
+        kwargs = {}
+        unused_keys = []
+        for k, v in args_dict.items():
+            if k not in init_fields:
+                unused_keys.append(k)
+            elif k.endswith("_token") and v == f"<{k.upper()}>":
+                continue
+            else:
+                kwargs[k] = v
+        if unused_keys:
+            logger.warning(f"The following keys are not used by `{cls.__name__}` and will be ignored: {unused_keys}")
+
+        if isinstance(kwargs.get("parallelism_config"), dict):
+            kwargs["parallelism_config"] = _parallelism_config_from_dict(kwargs["parallelism_config"])
+
+        return cls(**kwargs)
+
+    @classmethod
+    def from_json_file(cls, json_file_path: str | os.PathLike):
+        """
+        Instantiates a [`TrainingArguments`] (or subclass) from a JSON file saved with
+        [`~TrainingArguments.to_json_file`] (e.g. the `training_args.json` saved by [`Trainer`]).
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file.
+        """
+        with open(json_file_path, encoding="utf-8") as reader:
+            args_dict = json.load(reader)
+        return cls.from_dict(args_dict)
 
     def to_sanitized_dict(self) -> dict[str, Any]:
         """
