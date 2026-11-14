@@ -48,19 +48,11 @@ class Ovis2_5Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def prepare_inputs_layout(self, images=None, text=None, videos=None, **kwargs):
-        images, text, videos, _ = super().prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
-        if images is not None:
-            images = make_flat_list_of_images(images)
-        if videos is not None:
-            videos = make_batched_videos(videos)
-        return images, text, videos, None
-
     def validate_inputs(self, images=None, text=None, videos=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
 
-        image_count = len(images) if images is not None else 0
-        video_count = len(videos) if videos is not None else 0
+        image_count = len(make_flat_list_of_images(images)) if images is not None else 0
+        video_count = len(make_batched_videos(videos)) if videos is not None else 0
 
         if image_count and video_count:
             raise ValueError(
