@@ -112,9 +112,11 @@ class PixtralProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
 
-            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = images_kwargs["size"]
             patch_size = self.patch_size * self.spatial_merge_size
 
             num_image_tokens = []
@@ -126,7 +128,7 @@ class PixtralProcessor(ProcessorMixin):
                 )
                 num_height_tokens = resized_height // patch_size
                 num_width_tokens = resized_width // patch_size
-                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+                num_image_tokens.append(num_width_tokens * num_height_tokens)
 
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})

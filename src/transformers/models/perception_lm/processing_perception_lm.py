@@ -83,9 +83,11 @@ class PerceptionLMProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            tile_size = images_kwargs.get("tile_size", None) or self.image_processor.tile_size
-            vision_input_type = images_kwargs.get("vision_input_type", None) or self.image_processor.vision_input_type
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            tile_size = images_kwargs["tile_size"]
+            vision_input_type = images_kwargs["vision_input_type"]
 
             num_image_tokens = []
             num_image_patches = []

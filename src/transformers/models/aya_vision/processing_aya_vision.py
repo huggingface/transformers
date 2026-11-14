@@ -146,10 +146,7 @@ class AyaVisionProcessor(ProcessorMixin):
             ]
 
             token_per_patch = (self.img_size // self.patch_size) ** 2
-            num_image_tokens = [
-                token_per_patch + 3 + sum(token_per_patch + 1 for _ in range(1, num_patches))
-                for num_patches in num_image_patches
-            ]  # Add +3 and +1 for BOI/EOI and image tile tokens
+            num_image_tokens = [token_per_patch * num_patches for num_patches in num_image_patches]
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)

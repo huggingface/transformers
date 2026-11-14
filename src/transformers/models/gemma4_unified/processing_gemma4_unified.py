@@ -255,13 +255,11 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
         merged_kwargs = self._merge_kwargs(**kwargs)
-        images_kwargs = merged_kwargs["images_kwargs"]
+        images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
 
-        patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
-        pooling_kernel_size = (
-            images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
-        )
-        max_soft_tokens = images_kwargs.get("max_soft_tokens", None) or self.image_processor.max_soft_tokens
+        patch_size = images_kwargs["patch_size"]
+        pooling_kernel_size = images_kwargs["pooling_kernel_size"]
+        max_soft_tokens = images_kwargs["max_soft_tokens"]
 
         max_patches = max_soft_tokens * pooling_kernel_size**2
 
@@ -284,12 +282,10 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = merged_kwargs["videos_kwargs"]
-            patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
-            pooling_kernel_size = (
-                videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
-            )
-            max_soft_tokens = videos_kwargs.get("max_soft_tokens", None) or self.video_processor.max_soft_tokens
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            patch_size = videos_kwargs["patch_size"]
+            pooling_kernel_size = videos_kwargs["pooling_kernel_size"]
+            max_soft_tokens = videos_kwargs["max_soft_tokens"]
 
             max_patches = max_soft_tokens * pooling_kernel_size**2
 

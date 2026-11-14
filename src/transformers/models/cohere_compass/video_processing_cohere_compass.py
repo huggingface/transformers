@@ -349,14 +349,15 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
         videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        size = videos_kwargs.get("size", None) or self.size
+        size = videos_kwargs["size"]
         min_pixels = size["shortest_edge"]
         max_pixels = size["longest_edge"]
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
-        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
+        cap_pixels_per_frame = videos_kwargs["cap_pixels_per_frame"]
 
         factor = patch_size * merge_size
         if cap_pixels_per_frame:

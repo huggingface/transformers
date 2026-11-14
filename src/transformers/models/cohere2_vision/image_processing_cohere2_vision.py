@@ -268,11 +268,11 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        min_patches = images_kwargs["min_patches"]
+        max_patches = images_kwargs["max_patches"]
         patch_size = images_kwargs.get("patch_size", self.size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        crop_to_patches = images_kwargs["crop_to_patches"]
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:

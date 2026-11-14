@@ -414,8 +414,8 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         vision_data = {}
         merged_kwargs = self._merge_kwargs(**kwargs)
         if image_sizes is not None:
-            images_kwargs = merged_kwargs["images_kwargs"]
-            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            merge_size = images_kwargs["merge_size"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -425,8 +425,8 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = merged_kwargs["videos_kwargs"]
-            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]

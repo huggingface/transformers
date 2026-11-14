@@ -153,8 +153,10 @@ class ColQwen2Processor(ColPaliProcessor):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            merge_size = images_kwargs["merge_size"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
