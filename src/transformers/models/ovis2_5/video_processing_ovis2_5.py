@@ -92,7 +92,6 @@ def smart_resize(
 
 @auto_docstring
 class Ovis2_5VideoProcessor(BaseVideoProcessor):
-    # Use the Ovis2.5 image resize and normalization defaults for video frames.
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     image_mean = IMAGENET_STANDARD_MEAN
@@ -101,9 +100,7 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    # Keep the supplied frames by default; GLM4V samples frames by FPS.
     do_sample_frames = False
-    # Match Ovis2.5's vision patch layout instead of GLM4V's 14-pixel, two-frame patches.
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2

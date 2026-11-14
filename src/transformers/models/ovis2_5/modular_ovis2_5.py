@@ -260,18 +260,14 @@ class Ovis2_5VideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
-    # Use the Ovis2.5 image resize and normalization defaults for video frames.
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
-    # Keep the supplied frames by default; GLM4V samples frames by FPS.
     do_sample_frames = False
-    # Match Ovis2.5's vision patch layout instead of GLM4V's 14-pixel, two-frame patches.
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
-    # Remove GLM4V-only resize and sampling options from the generated processor.
     max_image_size = AttributeError()
     max_duration = AttributeError()
     num_frames = AttributeError()
