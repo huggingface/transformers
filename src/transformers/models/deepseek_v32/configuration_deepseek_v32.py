@@ -54,7 +54,7 @@ class DeepseekV32Config(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_v32"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",

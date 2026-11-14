@@ -292,7 +292,7 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_COMPLETIONS[:batch_size])
 
         # Let's check that the dynamic cache has hybrid layers!
-        dynamic_cache = out.past_key_values
+        dynamic_cache = out.cache
         self.assertTrue(isinstance(dynamic_cache, DynamicCache))
         for layer in dynamic_cache.layers:
             self.assertTrue(isinstance(layer, DynamicSlidingWindowLayer))
@@ -420,15 +420,13 @@ class Mask4DTestHard(unittest.TestCase):
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
         outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
+        cache_a = outs_1a["cache"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
         input_1b = input_ids_shared_prefix[:, part_a:]
         position_ids_1b = position_ids_shared_prefix[:, part_a:]
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
-        outs_1b = self.model.forward(
-            input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, past_key_values=past_key_values_a
-        )
+        outs_1b = self.model.forward(input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, cache=cache_a)
         decoded_1b = [
             self.tokenizer.decode(t)
             for t in outs_1b.logits.argmax(-1)[

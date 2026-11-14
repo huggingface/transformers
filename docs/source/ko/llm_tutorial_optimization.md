@@ -447,17 +447,17 @@ shape of input_ids torch.Size([1, 25])
 Transformers에서는 `forward` 호출에 `use_cache` 플래그를 전달하여 키-값 캐시를 검색한 다음 현재 토큰과 함께 전달할 수 있습니다.
 
 ```python
-past_key_values = None # past_key_values 는 키-값 캐시를 의미
+cache = None # cache 는 키-값 캐시를 의미
 generated_tokens = []
 next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
 
 for _ in range(5):
-  next_logits, past_key_values = model(next_token_id, past_key_values=past_key_values, use_cache=True).to_tuple()
+  next_logits, cache = model(next_token_id, cache=cache, use_cache=True).to_tuple()
   next_logits = next_logits[:, -1:]
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values 형태: [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", cache.get_seq_length())  # cache 형태: [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)
@@ -514,7 +514,7 @@ Assistant: Germany has ca. 81 million inhabitants
   1. 대규모 언어 모델이 대화의 모든 이전 문맥을 이해할 수 있도록 모든 문맥을 유지하는 것이 채팅에 배포된 대규모 언어 모델에서는 매우 중요합니다. 예를 들어, 위의 예에서 대규모 언어 모델은 사용자가 `"And how many are in Germany"`라고 물을 때 인구를 언급하고 있음을 이해해야 합니다.
   2. 키-값 캐시는 채팅에서 매우 유용합니다. 이는 인코딩된 채팅 기록을 처음부터 다시 인코딩할 필요 없이 계속해서 확장할 수 있게 해주기 때문입니다(예: 인코더-디코더 아키텍처를 사용할 때와 같은 경우).
 
-`transformers`에서 `generate` 호출은 기본적으로 `use_cache=True`와 함께 `return_dict_in_generate=True`를 전달하면 `past_key_values`를 반환합니다. 이는 아직 `pipeline` 인터페이스를 통해서는 사용할 수 없습니다.
+`transformers`에서 `generate` 호출은 기본적으로 `use_cache=True`와 함께 `return_dict_in_generate=True`를 전달하면 `cache`를 반환합니다. 이는 아직 `pipeline` 인터페이스를 통해서는 사용할 수 없습니다.
 
 ```python
 # 일반적인 생성
@@ -523,12 +523,12 @@ model_inputs = tokenizer(prompt, return_tensors='pt')
 generation_output = model.generate(**model_inputs, max_new_tokens=60, return_dict_in_generate=True)
 decoded_output = tokenizer.batch_decode(generation_output.sequences)[0]
 
-# 리턴된 `past_key_values`를 파이프라인화하여 다음 대화 라운드를 가속화
+# 리턴된 `cache`를 파이프라인화하여 다음 대화 라운드를 가속화
 prompt = decoded_output + "\nQuestion: How can I modify the function above to return Mega bytes instead?\n\nAnswer: Here"
 model_inputs = tokenizer(prompt, return_tensors='pt')
 generation_output = model.generate(
   **model_inputs,
-  past_key_values=generation_output.past_key_values,
+  cache=generation_output.cache,
   max_new_tokens=60,
   return_dict_in_generate=True
 )

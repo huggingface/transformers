@@ -713,14 +713,6 @@ def fp8_grouped_mm_experts_forward(
 class FP8Experts(nn.Module):
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
-    # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer.
-    _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
-        "deepgemm_megamoe": {
-            "ep_dispatch_experts": "megamoe_experts",
-            "moe_tp_experts": "megamoe_experts",
-            "ep_router": "megamoe_router",
-        },
-    }
 
     def __init__(
         self,
@@ -750,6 +742,8 @@ class FP8Experts(nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
+        self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
+        self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
         # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
         # `expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
@@ -795,6 +789,13 @@ class FP8Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
+        if self.gate_softcap is not None:
+            # Softcapped SwiGLU (e.g. Inkling2, same math as the model's non-quantized experts)
+            input_dtype = gate.dtype
+            gate, up = gate.float(), up.float()
+            gate_factor = torch.tanh(gate / self.gate_softcap) * self.gate_softcap
+            up = torch.tanh(up / self.up_softcap) * self.up_softcap
+            return (gate_factor * torch.sigmoid(gate) * up).to(input_dtype)
         if self.swiglu_alpha is not None:
             # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
             gate = gate.clamp(max=self.swiglu_limit)

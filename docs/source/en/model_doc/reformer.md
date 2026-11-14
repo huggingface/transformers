@@ -102,7 +102,7 @@ each of length `config.lsh_chunk_length`. For each chunk, the query embedding ve
 (which are tied to themselves) and to the key embedding vectors of `config.lsh_num_chunks_before` previous
 neighboring chunks and `config.lsh_num_chunks_after` following neighboring chunks.
 
-For more information, see the [original Paper](https://huggingface.co/papers/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
+For more information, see the [original Paper](https://huggingface.co/papers/2001.04451).
 
 Note that `config.num_buckets` can also be factorized into a list $(n_{\text{buckets}}^1,
 n_{\text{buckets}}^2)$. This way instead of assigning the query key embedding vectors to one of $(1,\ldots,

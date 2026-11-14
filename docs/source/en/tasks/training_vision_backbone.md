@@ -251,4 +251,4 @@ image = Image.open(requests.get("https://huggingface.co/datasets/merve/vlm_test_
 plot_results(image, results, threshold=0.05)
 ```
 
-![Results](https://huggingface.co/datasets/huggingface/documentation-images/results/main/transformers/tasks/backbone_training_results.png)
+![Results](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/backbone_training_results.png)
