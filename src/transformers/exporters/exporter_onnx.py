@@ -387,7 +387,7 @@ def _patch_opset13_constant(original):
 
 @register_patch("onnx", "onnxscript.optimizer.optimize_ir")
 def _patch_optimize_ir(original):
-    """Skip constant-folding `Resize` nodes during onnxscript optimization.
+    """Skip constant-folding `Resize` nodes, and the `SlicesSplit` rewrite, during onnxscript optimization.
 
     The optimizer's constant folder evaluates foldable nodes with onnx's pure-Python
     reference implementation. For `Resize` — e.g. the bicubic position-embedding
@@ -396,11 +396,21 @@ def _patch_optimize_ir(original):
     on tiny graphs (~4.5 min per Resize node on the YOLOS test model, vs <1 s for the
     whole rest of the optimization). Keeping the Resize node in the graph costs one
     native ORT kernel launch at inference instead.
+
+    `SlicesSplit` (two `Slice`s into one `Split`) matches every pair of `Slice`s, rescanning the graph for each: a
+    static Qwen3.5 prompt graph, its chunked delta rule unrolled into thousands of `Slice`s, spent 45 of its 47 minutes
+    of export there.
     """
+    import onnxscript.rewriter as rewriter
 
     def patch(model, *args, **kwargs):
         kwargs.setdefault("should_fold", lambda node: False if node.op_type == "Resize" else None)
-        return original(model, *args, **kwargs)
+        rules = rewriter._DEFAULT_REWRITE_RULES
+        rewriter._DEFAULT_REWRITE_RULES = tuple(rule for rule in rules if rule.name != "SlicesSplit")
+        try:
+            return original(model, *args, **kwargs)
+        finally:
+            rewriter._DEFAULT_REWRITE_RULES = rules
 
     return patch
 
