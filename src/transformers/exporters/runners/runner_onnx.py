@@ -50,7 +50,10 @@ def _execution_providers(device=None) -> list:
     if device.type == "cpu":
         return ["CPUExecutionProvider"]
     if device.type == "cuda" and "CUDAExecutionProvider" in available:
-        return [("CUDAExecutionProvider", {"device_id": device.index or 0}), "CPUExecutionProvider"]
+        # ONNX Runtime runs float32 matmuls in TF32 by default, torch only when asked to
+        use_tf32 = torch.get_float32_matmul_precision() != "highest"
+        options = {"device_id": device.index or 0, "use_tf32": str(int(use_tf32))}
+        return [("CUDAExecutionProvider", options), "CPUExecutionProvider"]
     raise ValueError(f"This ONNX Runtime build cannot run on {device} (providers: {available}).")
 
 

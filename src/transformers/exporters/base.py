@@ -22,7 +22,7 @@ import json
 import os
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,8 +32,11 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import cached_file, cached_files, hf_api
 from ..utils.import_utils import is_torch_available
+from .components import Component
 from .configs import ExportConfigMixin, ExportFormat
+from .decompose import decompose_multimodal
 from .metadata import ExportMetadata, register_treespec_types
+from .precompute import precompute_export_inputs
 from .quantizers.utils import capture_calibration_inputs
 from .utils import check_packages, decompose_for_generation
 
@@ -69,7 +72,8 @@ class ExportedModel(PushToHubMixin):
     against, called the way you'd call the model it came from.
 
     [`~HfExporter.export`] produces a single `"model"` component, whose program is `.program`;
-    [`~HfExporter.export_for_generation`] produces one component per generation stage.
+    [`~HfExporter.export_multimodal`] one component per modality, plus the text embeddings and the model on
+    `inputs_embeds`; [`~HfExporter.export_for_generation`] one component per generation stage.
 
     ```python
     >>> exported = OnnxExporter().export(model, inputs, OnnxConfig(dynamic=True))
@@ -140,18 +144,21 @@ class ExportedModel(PushToHubMixin):
         }
         return self
 
-    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
+    def __call__(self, **kwargs) -> Any:
         """Run a single-graph export, returning what the source model returns. Kwargs the export was not traced with
-        are dropped, so a processor's whole output can be passed. `share_inputs` and `share_outputs` go to the runner
-        (see [`ModelRunner.__call__`]): with `share_outputs`, the outputs are valid until the next call."""
+        are dropped, so a processor's whole output can be passed; the runner's `share_inputs` and `share_outputs` go to
+        it (see [`ModelRunner.__call__`])."""
         name = self._single_component()
         runner = self.runners[name]
+        runner_options = {key: kwargs.pop(key) for key in ("share_inputs", "share_outputs") if key in kwargs}
         traced_kwargs = runner.metadata.kwargs
+        if self.config is not None and any(key not in kwargs for key in traced_kwargs):
+            kwargs = precompute_export_inputs(self.config, kwargs)
         unused = [key for key in kwargs if key not in traced_kwargs]
         if unused:
             logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
         inputs = {key: value for key, value in kwargs.items() if key in traced_kwargs}
-        return runner(share_inputs=share_inputs, share_outputs=share_outputs, **inputs)
+        return runner(**runner_options, **inputs)
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
@@ -404,6 +411,41 @@ class HfExporter(ABC):
         metadata.export_config = json.loads(config.to_json_string())
         return ExportedComponent(program, metadata)
 
+    def _export_components(
+        self,
+        components: dict[str, Component],
+        config: ExportConfigMixin | dict[str, ExportConfigMixin],
+        calibration: Callable[[list], dict[str, list]] | None = None,
+    ) -> dict[str, ExportedComponent]:
+        """Export each component with `config`, or with its entry in a per-component `config` dict. A single config
+        whose quantizer has a `calibration_dataset` is spread over the components: `calibration(dataset)` gives each
+        component's own inputs to those samples, which it calibrates on."""
+        quantizer = None if isinstance(config, dict) else config.quantizer
+        if calibration is not None and quantizer is not None and quantizer.calibration_dataset:
+            samples = calibration(quantizer.calibration_dataset)
+            config = {
+                name: dataclasses.replace(config, quantizer=quantizer.with_calibration(samples[name]))
+                for name in components
+            }
+        if isinstance(config, dict):
+            missing = set(components) - set(config)
+            if missing:
+                raise ValueError(
+                    f"Per-component `config` dict is missing entries for: {sorted(missing)}. "
+                    f"Expected one entry per component: {sorted(components)}."
+                )
+        exported: dict[str, ExportedComponent] = {}
+        for name, component in components.items():
+            component_config = config[name] if isinstance(config, dict) else config
+            try:
+                exported[name] = self._export_component(component.module, component.inputs, component_config)
+            except Exception as e:
+                raise RuntimeError(
+                    f"{self.__class__.__name__}.export_program failed on component '{name}' "
+                    f"(submodel={type(component.module).__name__}, input keys={list(component.inputs)})."
+                ) from e
+        return exported
+
     def export(
         self,
         model: PreTrainedModel,
@@ -422,6 +464,50 @@ class HfExporter(ABC):
         component = self._export_component(model, sample_inputs, config)
         # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
         return ExportedModel({"model": component}, self.export_format, config=getattr(model, "config", None))
+
+    def export_multimodal(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, torch.Tensor | Cache],
+        config: ExportConfigMixin | dict[str, ExportConfigMixin],
+    ) -> ExportedModel:
+        """
+        Split a multi-modal model and export each component.
+
+        Takes **forward** kwargs, like [`~HfExporter.export`]. The model is split by
+        [`~exporters.decompose.decompose_multimodal`]: the token embeddings (`"text_embeddings_model"`), one graph per
+        modality present (`"vision_embeddings_model"`, `"audio_embeddings_model"`, ...), and the model itself on
+        `inputs_embeds` (`"language_model"`), its head included. Scattering the features into the embeddings stays
+        outside the graphs.
+
+        Args:
+            model ([`PreTrainedModel`]):
+                The multi-modal model to export.
+            sample_inputs (`dict[str, torch.Tensor]`):
+                **Forward** kwargs, typically a processor's output: `input_ids`, `attention_mask` and the modality
+                inputs (`pixel_values`, `input_features`, ...).
+            config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
+                Backend settings: one for all components, or a dict naming every component. With one config whose
+                quantizer has a `calibration_dataset` of forward kwargs, each component calibrates on its own inputs
+                to those samples.
+
+        Returns:
+            [`ExportedModel`]: One [`ExportedComponent`] per component.
+        """
+        components = decompose_multimodal(model, sample_inputs)
+
+        def calibration(dataset):
+            samples: dict[str, list] = {}
+            for sample in dataset:
+                for name, component in decompose_multimodal(model, sample).items():
+                    samples.setdefault(name, []).append(component.inputs)
+            return samples
+
+        return ExportedModel(
+            self._export_components(components, config, calibration),
+            self.export_format,
+            config=getattr(model, "config", None),
+        )
 
     def export_for_generation(
         self,
@@ -450,8 +536,8 @@ class HfExporter(ABC):
                 kwargs are captured internally.
             config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
                 Backend-specific configuration. Pass a single config to apply to every
-                component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
-                `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
+                component, or a `dict` keyed by component name (e.g. `"vision_embeddings_model"`,
+                `"language_model"`, `"decode"`) to override per-component —
                 all component names must be present in the dict.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 Forwarded to the `generate()` capture (defaults to the model's own). Pass one with
@@ -473,40 +559,16 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
         )
 
-        if isinstance(config, dict):
-            missing = set(components) - set(config)
-            if missing:
-                raise ValueError(
-                    f"Per-component `config` dict is missing entries for: {sorted(missing)}. "
-                    f"Expected one entry per component: {sorted(components)}."
-                )
-            configs = config
-        else:
-            configs = dict.fromkeys(components, config)
-            quantizer = config.quantizer
-            if quantizer is not None and quantizer.calibration_dataset:
-                # Generate-level samples: capture each component's own forward inputs from them.
-                calibration = capture_calibration_inputs(
-                    model,
-                    quantizer.calibration_dataset,
-                    generation_config=generation_config,
-                    multi_token_decode=multi_token_decode,
-                )
-                configs = {
-                    name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
-                    for name in components
-                }
+        def calibration(dataset):
+            # Generate-level samples: each component's own forward inputs, captured from them
+            return capture_calibration_inputs(
+                model, dataset, generation_config=generation_config, multi_token_decode=multi_token_decode
+            )
 
-        exported: dict[str, ExportedComponent] = {}
-        for name, (submodel, subinputs) in components.items():
-            try:
-                exported[name] = self._export_component(submodel, subinputs, configs[name])
-            except Exception as e:
-                raise RuntimeError(
-                    f"{self.__class__.__name__}.export_program failed on component '{name}' "
-                    f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
-                ) from e
-
+        components = {name: Component(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
         return ExportedModel(
-            exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config
+            self._export_components(components, config, calibration),
+            self.export_format,
+            config=getattr(model, "config", None),
+            generation_config=generation_config,
         )

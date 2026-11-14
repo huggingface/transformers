@@ -46,6 +46,7 @@ from transformers.exporters import utils as exporter_utils
 from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
 from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
+from transformers.exporters.decompose import decompose_multimodal, embedded_inputs
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -314,6 +315,46 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
             exporter_utils._PATCHES.pop(backend, None)
 
 
+@require_torch
+class ChunkedVisionAttentionPatchTest(unittest.TestCase):
+    def test_window_attention_with_uneven_windows(self):
+        # Window attention leaves smaller windows at the image's edges when the grid isn't a multiple of the window
+        from transformers import Qwen2_5_VLConfig
+        from transformers.exporters import exporter_dynamo  # noqa: F401
+        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
+
+        torch.manual_seed(0)
+        config = Qwen2_5_VLConfig(vision_config={"hidden_size": 32, "num_heads": 4}).vision_config
+        config._attn_implementation = "sdpa"
+        attention = Qwen2_5_VLVisionAttention(config).eval()
+
+        def inputs(cu_seqlens):
+            length = cu_seqlens[-1]
+            angles = torch.randn(length, 4).repeat(1, 2)
+            return torch.randn(length, 32), torch.tensor(cu_seqlens, dtype=torch.int32), (angles.cos(), angles.sin())
+
+        class Wrapper(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attention = attention
+
+            def forward(self, hidden_states, cu_seqlens, cos, sin):
+                return self.attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
+
+        hidden_states, cu_seqlens, (cos, sin) = inputs([0, 4, 8, 10])
+        auto = {0: torch.export.Dim.AUTO}
+        with torch.no_grad(), exporter_utils.apply_patches("dynamo"):
+            program = torch.export.export(
+                Wrapper(), (hidden_states, cu_seqlens, cos, sin), dynamic_shapes=(auto, auto, auto, auto)
+            )
+
+        hidden_states, cu_seqlens, (cos, sin) = inputs([0, 6, 9, 12, 13])
+        with torch.no_grad():
+            expected = attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
+            actual = program.module()(hidden_states, cu_seqlens, cos, sin)
+        torch.testing.assert_close(actual, expected)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Leaf-tensor invariants that integration tests wouldn't visibly catch
 # ─────────────────────────────────────────────────────────────────────────────
@@ -353,6 +394,24 @@ class LeafTensorInvariantsTest(unittest.TestCase):
         self.assertEqual(out["hidden"].dtype, torch.float16)
 
 
+@require_torch
+class AutoDynamicShapesTest(unittest.TestCase):
+    def test_batch_feature_keeps_its_nested_structure(self):
+        """A processor's `BatchFeature` exports like the dict of its items, a list under one key included (a
+        deepstack tower's per-layer features)."""
+        from transformers import BatchFeature
+        from transformers.exporters import DynamoExporter
+
+        class Model(nn.Module):
+            def forward(self, hidden, deepstack):
+                return hidden + deepstack[0] + deepstack[1]
+
+        inputs = BatchFeature({"hidden": torch.randn(2, 4), "deepstack": [torch.randn(2, 4), torch.randn(2, 4)]})
+        exported = DynamoExporter().export(Model().eval(), inputs, DynamoConfig(dynamic=True))
+        hidden, deepstack = torch.randn(3, 4), [torch.randn(3, 4), torch.randn(3, 4)]
+        torch.testing.assert_close(exported(hidden=hidden, deepstack=deepstack), hidden + deepstack[0] + deepstack[1])
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # decompose_prefill_decode guard (dead code without this test — no real generator
 # calls forward < 2 times, so the branch would rot silently)
@@ -381,3 +440,175 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "captured 1"):
             decompose_prefill_decode(_FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)})
+
+
+def _tiny_llava():
+    """A two-layer LLaVA and forward inputs with one 30x30 image (25 patch tokens)."""
+    from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
+
+    vision_config = CLIPVisionConfig(
+        hidden_size=32, intermediate_size=37, num_hidden_layers=2, num_attention_heads=4, image_size=30, patch_size=6
+    )
+    text_config = LlamaConfig(
+        vocab_size=99, hidden_size=32, intermediate_size=37, num_hidden_layers=2, num_attention_heads=4, pad_token_id=0
+    )
+    config = LlavaConfig(vision_config=vision_config, text_config=text_config, image_token_index=98)
+    model = LlavaForConditionalGeneration(config).eval()
+    input_ids = torch.cat([torch.full((1, 25), 98), torch.randint(1, 98, (1, 7))], dim=1)
+    inputs = {
+        "input_ids": input_ids,
+        "attention_mask": torch.ones_like(input_ids),
+        "pixel_values": torch.randn(1, 3, 30, 30),
+    }
+    return model, inputs
+
+
+@require_torch
+class DecomposeMultimodalTest(unittest.TestCase):
+    def test_language_model_is_the_model_on_inputs_embeds(self):
+        """The main graph is the model itself on the embeddings its text stack received, so it returns what the whole
+        model does, head included."""
+        model, inputs = _tiny_llava()
+        components = decompose_multimodal(model, inputs)
+        self.assertEqual(set(components), {"text_embeddings_model", "vision_embeddings_model", "language_model"})
+        main = components["language_model"]
+        self.assertIs(main.module, model)
+        self.assertNotIn("pixel_values", main.inputs)
+        self.assertNotIn("input_ids", main.inputs)
+        with torch.no_grad():
+            expected = model(**inputs).logits
+            actual = main.module(**main.inputs).logits
+        torch.testing.assert_close(actual, expected)
+
+    def test_vision_graph_runs_on_another_image_count(self):
+        """The vision graph takes other image counts than it was traced on: it exports `get_image_embeddings`, whose
+        features are one tensor, where `get_image_features`' per-image split would have fixed the count."""
+        from transformers import Qwen2VLConfig, Qwen2VLForConditionalGeneration
+        from transformers.exporters import DynamoExporter
+        from transformers.exporters.decompose import decompose_multimodal
+        from transformers.exporters.precompute import precompute_export_inputs
+
+        config = Qwen2VLConfig(
+            text_config={
+                "vocab_size": 99,
+                "hidden_size": 32,
+                "intermediate_size": 37,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 2,
+                "rope_parameters": {"rope_type": "default", "mrope_section": [1, 1, 2]},
+            },
+            vision_config={
+                "depth": 2,
+                "embed_dim": 32,
+                "hidden_size": 32,
+                "num_heads": 4,
+                "patch_size": 2,
+                "spatial_merge_size": 2,
+                "temporal_patch_size": 2,
+            },
+            image_token_id=98,
+            vision_start_token_id=96,
+            vision_end_token_id=97,
+        )
+        model = Qwen2VLForConditionalGeneration(config).eval()
+
+        def images(count):
+            # 4x4 patches each, merged into 4 tokens
+            return torch.randn(16 * count, 3 * 2 * 2 * 2), torch.tensor([[1, 4, 4]] * count)
+
+        pixel_values, grid = images(2)
+        input_ids = torch.tensor([([96] + [98] * 4 + [97]) * 2 + [5, 6, 7]])
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "mm_token_type_ids": (input_ids == 98).long(),
+            "pixel_values": pixel_values,
+            "image_grid_thw": grid,
+        }
+        vision = decompose_multimodal(model, inputs)["vision_embeddings_model"]
+        exported = DynamoExporter().export(vision.module, vision.inputs, DynamoConfig(dynamic=True))
+        with torch.no_grad():
+            for count in (2, 3, 5):
+                pixel_values, grid = images(count)
+                feed = precompute_export_inputs(config, {"pixel_values": pixel_values, "grid_thw": grid})
+                expected = torch.cat(model.model.get_image_features(pixel_values, grid).pooler_output)
+                torch.testing.assert_close(exported(**{k: v for k, v in feed.items() if k in vision.inputs}), expected)
+
+    def test_embedded_inputs_drop_the_modality_side_inputs(self):
+        """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
+        `image_position_ids`, LLaVA-OneVision's `batch_num_images`, LFM2-VL's `spatial_shapes`, an audio tower's
+        `input_features_mask`), which a text-only call doesn't carry."""
+        inputs = {
+            "inputs_embeds": torch.randn(2, 6, 16),
+            "attention_mask": torch.ones(2, 6, dtype=torch.long),
+            "pixel_values": torch.randn(2, 16, 48),
+            "image_position_ids": torch.zeros(2, 16, 2, dtype=torch.long),
+            "batch_num_images": torch.ones(2, dtype=torch.long),
+            "spatial_shapes": torch.ones(2, 2, dtype=torch.long),
+            "input_features": torch.randn(2, 10, 8),
+            "input_features_mask": torch.ones(2, 10, dtype=torch.bool),
+        }
+        self.assertEqual(sorted(embedded_inputs(inputs, {})), ["attention_mask", "inputs_embeds"])
+
+    def test_modality_specs_cover_every_getter_only_input(self):
+        """Every `forward` input a multimodal model reads only to compute its features belongs to a modality in
+        `_MODALITY_SPECS`: the language model would otherwise keep it as a graph input, which a text-only call can't
+        give. Checked on the source of each model that scatters features into its embeddings, since the processor
+        inputs that hit it (LLaVA-OneVision's `batch_num_images`) are rarely in a model tester's."""
+        import ast
+
+        import transformers.models
+        from transformers.exporters.decompose import _MODALITY_SPECS
+
+        getters = {"get_image_features", "get_video_features", "get_audio_features"}
+        merges = {"get_placeholder_mask", "masked_scatter"}
+        # Settings rather than tensors, and the anyres image sizes, which only the runtime reads
+        not_graph_inputs = {
+            "vision_feature_layer",
+            "vision_feature_select_strategy",
+            "interpolate_pos_encoding",
+            "downsample_mode",
+            "sample",
+            "image_sizes",
+        }
+        known = {key for spec in _MODALITY_SPECS for key in (*spec.input_keys, spec.grid_key)} | not_graph_inputs
+        missing = []
+        for path in sorted(Path(transformers.models.__path__[0]).glob("*/modeling_*.py")):
+            for cls in [node for node in ast.parse(path.read_text()).body if isinstance(node, ast.ClassDef)]:
+                for forward in [
+                    node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "forward"
+                ]:
+                    attributes = {node.attr for node in ast.walk(forward) if isinstance(node, ast.Attribute)}
+                    if not (attributes & getters and attributes & merges):
+                        continue
+                    getter_calls = [
+                        node
+                        for node in ast.walk(forward)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in getters
+                    ]
+                    in_getters = {id(node) for call in getter_calls for node in ast.walk(call)}
+                    for argument in forward.args.args[1:] + forward.args.kwonlyargs:
+                        reads = [
+                            node
+                            for node in ast.walk(forward)
+                            if isinstance(node, ast.Name)
+                            and node.id == argument.arg
+                            and isinstance(node.ctx, ast.Load)
+                        ]
+                        if reads and argument.arg not in known and all(id(node) in in_getters for node in reads):
+                            missing.append(f"{cls.name}.{argument.arg}")
+        self.assertEqual(missing, [], "add these inputs to their modality in `exporters.decompose._MODALITY_SPECS`")
+
+    def test_export_multimodal_exports_each_component(self):
+        from transformers.exporters import DynamoExporter
+
+        model, inputs = _tiny_llava()
+        exported = DynamoExporter().export_multimodal(model, inputs, DynamoConfig())
+        names = {"text_embeddings_model", "vision_embeddings_model", "language_model"}
+        self.assertEqual(set(exported.components), names)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            self.assertEqual(set(ExportedModel.from_pretrained(directory).components), names)

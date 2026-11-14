@@ -125,9 +125,11 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("slice_start_id", 12)
         kwargs.setdefault("slice_end_id", 13)
         kwargs.setdefault("newline_id", 14)
-        # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
+        # patch_size=8, image_size=64 → 8×8 grid → vit_merger [4×4] → merger [2×2] = 4 tokens
         kwargs.setdefault("image_size", 64)
         kwargs.setdefault("patch_size", 8)
+        # The tower's position grid is larger than an image, as the checkpoint's (980 against 448): a 16×16 grid.
+        kwargs.setdefault("vision_image_size", 128)
         kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("vocab_size", 256)
         kwargs.setdefault("hidden_size", 64)
