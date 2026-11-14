@@ -2019,6 +2019,63 @@ class SyntheticCacheTest(unittest.TestCase):
             [[1.0, 2.0], [100.0, 200.0]],
         )
 
+    def test_falcon_h1_hybrid_cache_batch_select_indices(self):
+        """Test batch_select_indices correctly reorders convolution and recurrent states in hybrid layers."""
+        from transformers.models.falcon_h1.configuration_falcon_h1 import FalconH1Config
+
+        shapes = {
+            "keys": (2, 1, 2, 4),
+            "values": (2, 1, 2, 4),
+            "conv": (2, 8, 2),
+            "recurrent": (2, 2, 2, 2),
+        }
+        bases = {"keys": 1000, "values": 2000, "conv": 3000, "recurrent": 4000}
+
+        def label(name):
+            shape = shapes[name]
+            n = torch.tensor(shape[1:]).prod().item()
+            return torch.tensor(
+                [[bases[name] + 100 * row + j for j in range(n)] for row in range(2)],
+                dtype=torch.float32,
+            ).reshape(shape)
+
+        config = FalconH1Config(
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            mamba_d_ssm=4,
+            mamba_n_heads=2,
+            mamba_d_head=2,
+            mamba_n_groups=1,
+            mamba_d_state=2,
+            mamba_d_conv=2,
+        )
+        cache = DynamicCache(config=config)
+        self.assertEqual(type(cache.layers[0]).__name__, "LinearAttentionAndFullAttentionLayer")
+
+        cache.update(label("keys"), label("values"), layer_idx=0)
+        cache.update_conv_state(label("conv"), layer_idx=0, conv_kernel_size=2)
+        cache.update_recurrent_state(label("recurrent"), layer_idx=0)
+
+        indices = torch.tensor([1, 0], dtype=torch.long)
+        cache.batch_select_indices(indices)
+
+        layer = cache.layers[0]
+        self.assertTrue(torch.equal(layer.keys, label("keys").index_select(0, indices)))
+        self.assertTrue(torch.equal(layer.values, label("values").index_select(0, indices)))
+        self.assertTrue(torch.equal(layer.conv_states[0], label("conv").index_select(0, indices)))
+        self.assertTrue(torch.equal(layer.recurrent_states[0], label("recurrent").index_select(0, indices)))
+
+        cache.batch_repeat_interleave(2)
+        self.assertEqual(layer.keys.shape[0], 4)
+        self.assertEqual(layer.conv_states[0].shape[0], 4)
+        self.assertEqual(layer.recurrent_states[0].shape[0], 4)
+        self.assertTrue(
+            torch.equal(layer.conv_states[0], label("conv").index_select(0, indices).repeat_interleave(2, dim=0))
+        )
+
     def test_hybrid_cache(self):
         """
         Test hybrid StaticCache with a mix of static and sliding layers,
