@@ -22,6 +22,8 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    Gemma3ForCausalLM,
+    Gemma3TextConfig,
     GenerationConfig,
     GgufConfig,
     Lfm2ForCausalLM,
@@ -501,6 +503,64 @@ class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
     prompt = "The capital of France is Paris. The capital of Germany is"
     expected_completion = " Berlin"
+
+
+@require_torch_accelerator
+@slow
+class Gemma3GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/gemma-3-1b-it-GGUF"
+    gguf_file = "gemma-3-1b-it-BF16.gguf"
+    quantized_gguf_file = "gemma-3-1b-it-Q4_K_M.gguf"
+    reference_repo = "google/gemma-3-1b-it"
+    model_class = Gemma3ForCausalLM
+
+    prompt = "The capital of France is Paris. The capital of Germany is"
+    expected_completion = " Berlin"
+
+
+class Gemma3GgufConfigTest(unittest.TestCase):
+    """The keys only the larger Gemma 3 files carry, as llama.cpp's converter writes them for the 27B."""
+
+    metadata = {
+        "general.architecture": "gemma3",
+        "gemma3.context_length": 131072,
+        "gemma3.embedding_length": 5376,
+        "gemma3.block_count": 62,
+        "gemma3.feed_forward_length": 21504,
+        "gemma3.attention.head_count": 32,
+        "gemma3.attention.head_count_kv": 16,
+        "gemma3.attention.key_length": 128,
+        "gemma3.attention.value_length": 128,
+        "gemma3.attention.layer_norm_rms_epsilon": 1e-6,
+        "gemma3.attention.sliding_window": 1024,
+        "gemma3.rope.freq_base": 1_000_000.0,
+        "gemma3.rope.freq_base_swa": 10_000.0,
+        "gemma3.rope.scaling.type": "linear",
+        "gemma3.rope.scaling.factor": 8.0,
+        "tokenizer.ggml.tokens": 262144,
+    }
+
+    def config(self, overrides=None):
+        from transformers.integrations.gguf import get_gguf_config
+
+        return Gemma3TextConfig(**get_gguf_config(self.metadata | (overrides or {}), ("token_embd.weight",)))
+
+    def test_rope_scaling_on_full_attention_only(self):
+        rope = self.config().rope_parameters
+        self.assertEqual(rope["full_attention"], {"rope_type": "linear", "factor": 8.0, "rope_theta": 1_000_000.0})
+        self.assertEqual(rope["sliding_attention"], {"rope_type": "default", "rope_theta": 10_000.0})
+
+    def test_query_pre_attn_scalar(self):
+        # google/gemma-3-27b-it: 5376 / 32 = 168, where every other size uses `head_dim`
+        self.assertEqual(self.config().query_pre_attn_scalar, 168)
+        # google/gemma-3-4b-it
+        four_b = {
+            "gemma3.block_count": 34,
+            "gemma3.embedding_length": 2560,
+            "gemma3.attention.head_count": 8,
+            "gemma3.attention.key_length": 256,
+        }
+        self.assertEqual(self.config(four_b).query_pre_attn_scalar, 256)
 
 
 @slow
