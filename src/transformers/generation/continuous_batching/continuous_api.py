@@ -1163,12 +1163,19 @@ class ContinuousBatchingManager:
 
         # Create the PagedAttentionCache
         supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
-        # The linear attention layers declare the per-request states the cache holds for them
-        cache_states = {
-            module.layer_idx: module.cache_states()
-            for module in self.model.modules()
-            if hasattr(module, "cache_states")
-        }
+        # The layers declare the rows per token and the states per request the cache holds for them, by name. Several
+        # modules of a layer may declare states, so their declarations are merged
+        cache_rows, cache_states = {}, {}
+        for module in self.model.modules():
+            for method, declarations in (("cache_rows", cache_rows), ("cache_states", cache_states)):
+                if hasattr(module, method):
+                    layer_declarations = declarations.setdefault(module.layer_idx, {})
+                    for name, spec in getattr(module, method)().items():
+                        if name in layer_declarations:
+                            raise ValueError(
+                                f"Two modules of layer {module.layer_idx} declare the same {method} {name}"
+                            )
+                        layer_declarations[name] = spec
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config.get_text_config(),
             continuous_batching_config=self.continuous_batching_config,
@@ -1176,6 +1183,7 @@ class ContinuousBatchingManager:
             distributed_helper=self.distributed_helper,
             dtype=self.model.dtype,
             model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
+            cache_rows=cache_rows,
             cache_states=cache_states,
         )
         # Update the approximation now that we know if there is prefix sharing
