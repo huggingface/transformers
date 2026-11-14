@@ -45,7 +45,7 @@ class DiffLlamaConfig(PreTrainedConfig):
     """
 
     model_type = "diffllama"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 32000
     hidden_size: int = 2048

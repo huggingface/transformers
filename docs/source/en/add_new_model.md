@@ -552,7 +552,7 @@ If you do need to implement a new image processor, each model has two processor 
 - `image_processing_<model>.py`: the **default** torchvision-backed processor (`<Model>ImageProcessor`), inheriting from [`TorchvisionBackend`]. This replaces the old "fast" processor.
 - `image_processing_pil_<model>.py`: the PIL/NumPy alternative processor (`<Model>ImageProcessorPil`), inheriting from [`PilBackend`]. This replaces the old "slow" processor.
 
-The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings. Refer to the [IMAGE_PROCESSOR_REFACTORING_GUIDE.md](https://github.com/huggingface/transformers/blob/main/IMAGE_PROCESSOR_REFACTORING_GUIDE.md) for a step-by-step walkthrough and complete examples.
+The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings.
 
 Add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well.
 

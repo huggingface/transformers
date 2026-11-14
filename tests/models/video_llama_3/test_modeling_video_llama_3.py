@@ -948,6 +948,9 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
                 ("xpu", 3): ['user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
                              'user\n\nDescribe the image.\nassistant\nThe image depicts a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
                             ],
+                ("cuda", (8, 6)): ['user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the',
+                                   'user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the',
+                                  ],
             }
         )
         # fmt: on
@@ -979,10 +982,18 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
 
-        EXPECTED_DECODED_TEXT = [
-            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
-            'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                    'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'
+                ],
+                ("cuda", (8, 6)): [
+                    'user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the',
+                    'user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by'
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),

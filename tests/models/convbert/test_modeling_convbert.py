@@ -363,8 +363,8 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 # Question Answering model returns start_logits and end_logits
                 if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 

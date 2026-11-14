@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -83,12 +84,13 @@ class Lfm2Attention(LlamaAttention):
         del self.o_proj
         del self.attention_dropout
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -101,8 +103,8 @@ class Lfm2Attention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -150,10 +152,11 @@ class Lfm2ShortConv(nn.Module):
         self.layer_type = config.layer_types[layer_idx]
 
     @force_accelerate_hooks("conv")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
@@ -164,26 +167,26 @@ class Lfm2ShortConv(nn.Module):
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        if past_key_values is not None:
-            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
         else:
             conv_state = None
 
-        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
             )
         else:
-            if past_key_values is not None:
-                hidden_states = past_key_values.update_conv_state(
+            if cache is not None:
+                hidden_states = cache.update_conv_state(
                     hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
             hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
 
             # Drop the additional previous states
-            if past_key_values is not None:
+            if cache is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         y = C * hidden_states
@@ -205,13 +208,14 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -221,13 +225,13 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
         else:
             hidden_states = self.conv(
                 hidden_states=self.operator_norm(hidden_states),
-                past_key_values=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -247,12 +251,13 @@ class Lfm2Model(LlamaModel):
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -263,11 +268,11 @@ class Lfm2Model(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -276,7 +281,7 @@ class Lfm2Model(LlamaModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -294,7 +299,7 @@ class Lfm2Model(LlamaModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -302,7 +307,7 @@ class Lfm2Model(LlamaModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
