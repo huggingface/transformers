@@ -1250,6 +1250,13 @@ class PreTrainedModel(
         self.config = config
         self.name_or_path = config.name_or_path
 
+        # A config whose `rope_parameters` was explicitly reset to `None` after init (e.g. through the
+        # legacy `rope_scaling` alias, whose setter deliberately stores `None`) asks for the config's
+        # default RoPE parameters back: re-derive them through the config's own dict round trip, which
+        # re-runs the same per-model `__post_init__` derivation the constructor used.
+        if getattr(config, "rope_parameters", "missing") is None:
+            config.rope_parameters = type(config).from_dict(config.to_dict()).rope_parameters
+
         # Make kernel_config an attribute that can be used by the model.
         self.kernel_config = None
 

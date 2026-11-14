@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import copy
 import logging as stdlib_logging
 import math
 import unittest
@@ -20,7 +21,7 @@ import warnings
 
 from parameterized import parameterized
 
-from transformers import Gemma3TextConfig, LlamaConfig, PreTrainedConfig
+from transformers import BeamConfig, Gemma3TextConfig, LlamaConfig, Mistral4Config, PreTrainedConfig
 from transformers.testing_utils import CaptureLogger, is_torch_available, require_torch, torch_device
 from transformers.utils import logging as transformers_logging
 
@@ -28,7 +29,7 @@ from transformers.utils import logging as transformers_logging
 if is_torch_available():
     import torch
 
-    from transformers import ROPE_INIT_FUNCTIONS
+    from transformers import ROPE_INIT_FUNCTIONS, BeamModel, LlamaModel, Mistral4Model
     from transformers.models.gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
@@ -78,6 +79,79 @@ class RopeTest(unittest.TestCase):
             config.rope_scaling = None
         self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
         self.assertIsNone(config.rope_parameters)
+
+    def test_rope_scaling_setter_none_model_build_uses_default_rope(self):
+        tiny = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "vocab_size": 128,
+            "max_position_embeddings": 64,
+        }
+        config = LlamaConfig(rope_theta=500000.0, **tiny)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            config.rope_scaling = None
+        # The setter deliberately stores `None` (see test_rope_scaling_setter_accepts_none)...
+        self.assertIsNone(config.rope_parameters)
+        # ...but building a model from that config must restore the model's default RoPE parameters,
+        # mirroring the constructor path, instead of crashing in the rotary embedding.
+        model = LlamaModel(config)
+        self.assertEqual(config.rope_parameters, {"rope_theta": config.default_theta, "rope_type": "default"})
+        input_ids = torch.randint(0, 128, (1, 5))
+        model(input_ids=input_ids)
+
+    def test_rope_scaling_setter_none_restores_nested_layer_types(self):
+        tiny = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "vocab_size": 128,
+            "max_position_embeddings": 64,
+        }
+        config = BeamConfig(**tiny)
+        expected = copy.deepcopy(config.rope_parameters)
+        # Beam legitimately runs `full_attention` layers without positional encoding: the nested `None`
+        # must survive the reset-and-restore, only the deliberate top-level reset is recovered.
+        self.assertIsNone(expected["full_attention"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            config.rope_scaling = None
+        self.assertIsNone(config.rope_parameters)
+        BeamModel(config)
+        self.assertEqual(config.rope_parameters, expected)
+
+    def test_rope_scaling_setter_none_restores_instance_derived_params(self):
+        # Mistral4 derives its default RoPE parameters from instance fields: with qk_rope_head_dim=16
+        # and qk_nope_head_dim=48 the partial rotary factor must be 0.25 (the class default would give
+        # 0.5 and break the attention head split), and max_position_embeddings must come from the
+        # instance as well.
+        tiny = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "vocab_size": 128,
+            "max_position_embeddings": 4096,
+            "qk_rope_head_dim": 16,
+            "qk_nope_head_dim": 48,
+        }
+        config = Mistral4Config(**tiny)
+        expected = copy.deepcopy(config.rope_parameters)
+        self.assertEqual(expected["partial_rotary_factor"], 0.25)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            config.rope_scaling = None
+        self.assertIsNone(config.rope_parameters)
+        model = Mistral4Model(config)
+        self.assertEqual(config.rope_parameters, expected)
+        input_ids = torch.randint(0, 128, (1, 5))
+        model(input_ids=input_ids)
 
     def get_config_with_rope_parameters(
         self, rope_params: dict, is_nested: bool = False, same_rope_per_layer: bool = False
