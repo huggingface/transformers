@@ -476,7 +476,8 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
             latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_pass, k_rot = latent[None, None, :, : self.kv_lora_rank], latent[None, None, :, self.kv_lora_rank :]
             k_rot = k_rot[..., : self.qk_rope_head_dim]
-        elif cache is not None and not self.is_kv_shared_layer:
+        # On the paged cache, which already holds the latents, this only selects the arguments of this layer
+        if cache is not None and not self.is_kv_shared_layer:
             k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
         if self.store_full_length_kv:

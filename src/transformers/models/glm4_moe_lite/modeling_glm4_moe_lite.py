@@ -341,7 +341,8 @@ class Glm4MoeLiteAttention(nn.Module):
             latent = torch.cat((kv_nope, k_rot), dim=-1)[0, 0]
             latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             kv_nope, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        elif cache is not None:
+        # On the paged cache, which already holds the latents, this only selects the arguments of this layer
+        if cache is not None:
             kv_nope, k_rot = cache.update(kv_nope, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
