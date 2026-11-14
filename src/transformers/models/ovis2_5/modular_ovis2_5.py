@@ -604,7 +604,8 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     _no_split_modules = ["Ovis2_5VisionEncoderLayer"]
     _supports_cache_class = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False
+    # Vision encoding runs eagerly before fullgraph-compiled cached text decoding.
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

@@ -507,7 +507,8 @@ class Ovis2_5PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False
+    # Vision encoding runs eagerly before fullgraph-compiled cached text decoding.
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _supports_cache_class = True
     _supports_flex_attn = True
