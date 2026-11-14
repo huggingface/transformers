@@ -70,6 +70,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_stacked_frames",
     ],  # Used via the `input_size` property
     "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
+    "Zonos3MiniConfig": ["codebook_size"],  # Used via the `audio_vocab_size` property
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
         "patch_size",

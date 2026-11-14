@@ -647,9 +647,11 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
         ("youtu", "YoutuModel"),
+        ("zac", "ZacModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
         ("zaya", "ZayaModel"),
+        ("zonos3_mini", "Zonos3MiniForConditionalGeneration"),
     ]
 )
 
@@ -1991,6 +1993,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
+        ("zonos3_mini", "Zonos3MiniForConditionalGeneration"),
     ]
 )
 
@@ -2151,6 +2154,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
+        ("zac", "ZacModel"),
     ]
 )
 

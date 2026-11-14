@@ -568,10 +568,12 @@ if TYPE_CHECKING:
     from .yolos import *
     from .yoso import *
     from .youtu import *
+    from .zac import *
     from .zamba import *
     from .zamba2 import *
     from .zaya import *
     from .zoedepth import *
+    from .zonos3_mini import *
 else:
     import sys
 

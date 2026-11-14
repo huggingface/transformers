@@ -816,10 +816,13 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
         ("youtu", "YoutuConfig"),
+        ("zac", "ZacConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zaya", "ZayaConfig"),
         ("zoedepth", "ZoeDepthConfig"),
+        ("zonos3_mini", "Zonos3MiniConfig"),
+        ("zonos3_mini_speaker_encoder", "Zonos3MiniSpeakerEncoderConfig"),
     ]
 )
 
@@ -1128,6 +1131,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip_vision_model", "x_clip"),
         ("xlm-roberta", "xlm_roberta"),
         ("xlm-roberta-xl", "xlm_roberta_xl"),
+        ("zonos3_mini_speaker_encoder", "zonos3_mini"),
     ]
 )
 
@@ -1206,6 +1210,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xcodec2", "Xcodec2FeatureExtractor"),
+        ("zac", "ZacFeatureExtractor"),
+        ("zonos3_mini", "Zonos3MiniFeatureExtractor"),
     ]
 )
 
@@ -1372,6 +1378,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2BertProcessor"),
         ("whisper", "WhisperProcessor"),
+        ("zonos3_mini", "Zonos3MiniProcessor"),
     ]
 )
 

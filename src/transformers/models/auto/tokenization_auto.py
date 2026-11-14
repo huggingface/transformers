@@ -384,6 +384,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("xmod", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("zaya", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("zonos3_mini", "TokenizersBackend" if is_tokenizers_available() else None),
     ]
 )
 

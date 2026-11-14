@@ -154,6 +154,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "Zonos3MiniModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
@@ -447,6 +448,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
         "Florence2VisionBackbone",  # Building part of a bigger model
         "HiggsAudioV2Model",  # Building part of a bigger model
+        "Zonos3MiniModel",  # Building part of a bigger model
         "Dots3NoteAudioModel",  # Building part of Dots3NoteForConditionalGeneration
         "Dots3NoteVisionModel",  # Building part of Dots3NoteForConditionalGeneration
         "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
