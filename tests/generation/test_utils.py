@@ -2702,7 +2702,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             with self.subTest(model_class.__name__):
-                model = model_class(config)
+                model = model_class(config).to(torch_device)
                 model.eval()
 
                 generate_kwarg = {
