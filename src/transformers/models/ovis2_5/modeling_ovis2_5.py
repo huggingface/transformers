@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -472,28 +472,18 @@ class Ovis2_5VisualFeaturesOutput(BaseModelOutputWithPooling):
     """
 )
 @dataclass
-class Ovis2_5ModelOutputWithPast(ModelOutput):
+class Ovis2_5ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_images_features, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_video_features, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    image_pooler_output (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
+        Image features produced by the vision encoder and projected to the language model hidden size.
+    video_pooler_output (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(num_video_tokens, hidden_size)`.
+        Video features produced by the vision encoder and projected to the language model hidden size.
     """
 
-    last_hidden_state: torch.Tensor = None
-    cache: list[torch.Tensor] | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    video_hidden_states: torch.Tensor | None = None
+    image_pooler_output: torch.FloatTensor | None = None
+    video_pooler_output: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -713,9 +703,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is not None and mm_encoder_outputs.get("video") is not None:
             raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
-        merged_inputs_embeds: torch.Tensor = (
-            self.get_input_embeddings()(input_ids) if inputs_embeds is None else inputs_embeds
-        )
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
@@ -732,41 +721,37 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
 
-        image_hidden_states = None
-        video_hidden_states = None
-        visual_features = None
-        visual_indicator_features = None
-        num_visual_inputs = 0
-        is_video = False
+        image_features = None
+        video_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_outputs = mm_encoder_outputs["image"]
-            image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0)
-            visual_features = image_hidden_states
-            visual_indicator_features = image_outputs.visual_indicator_features
-            num_visual_inputs = len(image_outputs.pooler_output)
-        elif mm_encoder_outputs.get("video") is not None:
-            video_outputs = mm_encoder_outputs["video"]
-            video_hidden_states = torch.cat(video_outputs.pooler_output, dim=0)
-            visual_features = video_hidden_states
-            visual_indicator_features = video_outputs.visual_indicator_features
-            num_visual_inputs = len(video_outputs.pooler_output)
-            is_video = True
-
-        if visual_features is not None:
-            merged_inputs_embeds = self._merge_visual_features(
+            image_features = torch.cat(image_outputs.pooler_output, dim=0)
+            inputs_embeds = self._merge_visual_features(
                 input_ids,
-                merged_inputs_embeds,
-                visual_features,
-                visual_indicator_features,
-                num_visual_inputs,
-                is_video,
+                inputs_embeds,
+                image_features,
+                image_outputs.visual_indicator_features,
+                num_visual_inputs=len(image_outputs.pooler_output),
+                is_video=False,
+            )
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_outputs = mm_encoder_outputs["video"]
+            video_features = torch.cat(video_outputs.pooler_output, dim=0)
+            inputs_embeds = self._merge_visual_features(
+                input_ids,
+                inputs_embeds,
+                video_features,
+                video_outputs.visual_indicator_features,
+                num_visual_inputs=len(video_outputs.pooler_output),
+                is_video=True,
             )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
-            inputs_embeds=merged_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -776,8 +761,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-            video_hidden_states=video_hidden_states,
+            image_pooler_output=image_features,
+            video_pooler_output=video_features,
         )
 
     @accepts_precomputed_kwargs(modality="video")

@@ -121,6 +121,33 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         # The official-key mapping targets the conditional model's `model.*` subtree.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
+    @parameterized.expand([("image",), ("video",)])
+    def test_visual_pooler_outputs(self, modality):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Ovis2_5Model(config).to(torch_device).eval()
+        if modality == "video":
+            inputs["pixel_values_videos"] = inputs.pop("pixel_values")
+            inputs["video_grid_thw"] = inputs.pop("image_grid_thw")
+            inputs["input_ids"][inputs["input_ids"] == config.image_start_token_id] = config.video_start_token_id
+            inputs["input_ids"][inputs["input_ids"] == config.image_end_token_id] = config.video_end_token_id
+
+        text_inputs = []
+
+        def capture_text_inputs(module, args, kwargs):
+            text_inputs.append(kwargs["inputs_embeds"].detach())
+
+        hook = model.language_model.register_forward_pre_hook(capture_text_inputs, with_kwargs=True)
+        with torch.no_grad():
+            outputs = model(**inputs)
+        hook.remove()
+
+        pooler_output = getattr(outputs, f"{modality}_pooler_output")
+        visual_mask = inputs["input_ids"] == getattr(config, f"{modality}_token_id")
+        torch.testing.assert_close(pooler_output, text_inputs[0][visual_mask], rtol=0, atol=0)
+        other_modality = "video" if modality == "image" else "image"
+        self.assertIsNone(getattr(outputs, f"{other_modality}_pooler_output"))
+        self.assertNotIn(f"{modality}_hidden_states", outputs)
+
     def test_video_forward(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
