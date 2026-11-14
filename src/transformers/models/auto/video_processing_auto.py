@@ -116,30 +116,56 @@ def video_processor_class_from_name(class_name: str):
     return None
 
 
+def _find_mapping_for_video_processor(video_processor_class_name: str):
+    """Return the backend mapping that contains `video_processor_class_name`, or None."""
+    for mapping_dict in (
+        *VIDEO_PROCESSOR_MAPPING._extra_content.values(),
+        *VIDEO_PROCESSOR_MAPPING_NAMES.values(),
+    ):
+        if mapping_dict is None:
+            continue
+        if any(
+            video_processor_class_name == (v if not isinstance(v, type) else v.__name__) for v in mapping_dict.values()
+        ):
+            return mapping_dict
+    return None
+
+
 def _load_backend_class(video_processor_class_name: str, backend: str):
     """
     Load video processor class for a given backend. Uses the mapping from
     VIDEO_PROCESSOR_MAPPING when `video_processor_class_name` is found in its
     values (so config overrides and custom backends are respected). Falls
     back to base+Pil convention for remote code / unknown processors.
-    """
-    mapping = {"torchvision": video_processor_class_name}
-    for mapping_dict in (
-        *VIDEO_PROCESSOR_MAPPING._extra_content.values(),
-        *VIDEO_PROCESSOR_MAPPING_NAMES.values(),
-    ):
-        if any(
-            video_processor_class_name == (v if not isinstance(v, type) else v.__name__) for v in mapping_dict.values()
-        ):
-            mapping = mapping_dict
-            break
 
-    if (processor_class := mapping.get(backend)) is not None:
+    Not every model ships a processor for every backend (e.g. Gemma4 only has a
+    torchvision video processor). Just like `AutoImageProcessor`, an unavailable
+    backend makes us fall back to whatever backend the model does support,
+    instead of failing the whole load.
+    """
+    mapping = _find_mapping_for_video_processor(video_processor_class_name)
+    if mapping is None:
+        mapping = {"torchvision": video_processor_class_name}
+
+    backends_to_try = [backend] + [k for k in mapping if k != backend]
+    for b in backends_to_try:
+        processor_class = mapping.get(b)
+        if processor_class is None:
+            continue
         if isinstance(processor_class, str):
             processor_class = video_processor_class_from_name(processor_class)
+        if processor_class is None or getattr(processor_class, "is_dummy", False):
+            continue
+        if b != backend:
+            logger.warning_once(f"Requested {backend} backend is not available. Falling back to {b} backend.")
         return processor_class
-    else:
-        raise ImportError(f"Video processor cannot be loaded - requested {backend} backend is not available.")
+
+    # Remote code keeps the class as `module.ClassName` and that module is only imported once the
+    # dynamic module is loaded. Same for a class that was registered after the auto class was
+    # imported: we know nothing about its backends, so hand the name back and let the caller load
+    # it the way it always did. Only names we actually find in a mapping are judged on their
+    # backend above.
+    return video_processor_class_name
 
 
 def get_video_processor_config(
@@ -403,6 +429,9 @@ class AutoVideoProcessor:
         resolved_video_processor_class = video_processor_class
         if video_processor_class is not None:
             video_processor_class = _load_backend_class(video_processor_class, backend)
+            # remote code is resolved from `auto_map` below, it is never a local class
+            if video_processor_auto_map is not None and not isinstance(video_processor_class, type):
+                video_processor_class = None
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
