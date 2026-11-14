@@ -40,6 +40,7 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
+import functools
 import inspect
 import sys
 import types
@@ -493,7 +494,9 @@ def _class_to_path(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
+@functools.cache
 def _path_to_class(path: str) -> type:
+    # Cached: a runner rebuilds its outputs (a cache's classes among them) on every call.
     return import_dotted_path(path.replace(":", "."))
 
 

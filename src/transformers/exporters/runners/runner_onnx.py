@@ -177,7 +177,8 @@ class OnnxModelRunner(ModelRunner):
                 raise ValueError(
                     f"The CUDA graph was captured with `{name}` of shape {tuple(buffer.shape)}, got {tuple(leaf.shape)}."
                 )
-            buffer.copy_(leaf)
+        # One launch for every input (a cache has two per layer), not one per input.
+        torch._foreach_copy_(list(buffers.values()), [inputs[name] for name in buffers])
         # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
         torch.cuda.current_stream(device).synchronize()
         self.session.run_with_iobinding(binding)

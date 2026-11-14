@@ -306,7 +306,11 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                 }
         stateful = runner.stateful
         inputs = {name: value for name, value in kwargs.items() if name in traced}
-        outputs = runner(share_outputs=stateful and self._generating, **inputs)
+        # While generating, a graph replayed from its capture (a CUDA graph) hands out its own output buffers too: the
+        # logits are read before the next step, and the cache it returns is copied into the capture's inputs before the
+        # next step overwrites them.
+        replayed = getattr(runner, "replays_cuda_graph", False)
+        outputs = runner(share_outputs=(stateful or replayed) and self._generating, **inputs)
         # A backend keeping the cache as state (OpenVINO's stateful model) never hands the loop's cache back advanced.
         if stateful and kwargs.get("cache") is not None:
             advance_cache_length(kwargs["cache"], kwargs[_text_name(kwargs)].shape[1])
