@@ -36,6 +36,7 @@ if is_datasets_available():
     import datasets
 
 if TYPE_CHECKING:
+    import optuna
     from torch.utils.data import IterableDataset
 
     from .data.data_collator import DataCollator
@@ -86,11 +87,20 @@ class Seq2SeqTrainer(Trainer):
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
-        # Override self.model.generation_config if a GenerationConfig is specified in args.
+        self._apply_generation_config()
+
+    def _apply_generation_config(self) -> None:
+        """Override `self.model.generation_config` if a `generation_config` is specified in args."""
         # Priority: args.generation_config > model.generation_config > default GenerationConfig.
         if self.args.generation_config is not None:
-            gen_config = self.load_generation_config(self.args.generation_config)
-            self.model.generation_config = gen_config
+            self.model.generation_config = self.load_generation_config(self.args.generation_config)
+
+    def _hp_search_setup(self, trial: "optuna.Trial | dict[str, Any] | None") -> None:
+        super()._hp_search_setup(trial)
+        # With `model_init`, `train()` creates a new model, so the generation config applied in `__init__` is lost.
+        # Apply it again here, once the trial params (which may include `generation_config`) are set.
+        if self.model_init is not None:
+            self._apply_generation_config()
 
     @staticmethod
     def load_generation_config(gen_config_arg: str | GenerationConfig) -> GenerationConfig:
@@ -98,7 +108,7 @@ class Seq2SeqTrainer(Trainer):
         Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
         Args:
-            gen_config_arg (`str` or [`~generation.GenerationConfig]`):
+            gen_config_arg (`str`, `dict` or [`~generation.GenerationConfig]`):
                 `Seq2SeqTrainingArguments.generation_config` argument.
 
         Returns:
@@ -108,6 +118,9 @@ class Seq2SeqTrainer(Trainer):
         # GenerationConfig provided, nothing to do
         if isinstance(gen_config_arg, GenerationConfig):
             gen_config = deepcopy(gen_config_arg)
+        # dict of generation parameters, e.g. from a hyperparameter search space
+        elif isinstance(gen_config_arg, dict):
+            gen_config = GenerationConfig.from_dict(gen_config_arg)
         else:
             # str or Path
             pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg

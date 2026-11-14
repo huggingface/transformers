@@ -20,7 +20,13 @@ Ray Tune (with client), W&B sweeps, and backend availability detection.
 import tempfile
 import unittest
 
-from transformers import TrainingArguments
+from transformers import (
+    GenerationConfig,
+    Seq2SeqTrainer,
+    Seq2SeqTrainingArguments,
+    TrainerCallback,
+    TrainingArguments,
+)
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, HPSearchBackend
 from transformers.testing_utils import require_optuna, require_ray, require_torch, require_wandb, torch_device
 from transformers.trainer_utils import IntervalStrategy
@@ -31,6 +37,8 @@ from .trainer_test_utils import (
     RegressionModelConfig,
     RegressionPreTrainedModel,
     get_regression_trainer,
+    get_tiny_seq2seq_dataset,
+    get_tiny_seq2seq_model,
 )
 
 
@@ -167,6 +175,46 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
 
 
 @require_torch
+@require_optuna
+class TrainerHyperParameterOptunaGenerationConfigTest(unittest.TestCase):
+    def test_hyperparameter_search_with_generation_config(self):
+        class GenerationConfigRecorder(TrainerCallback):
+            def __init__(self):
+                self.records = []
+
+            def on_evaluate(self, args, state, control, model=None, **kwargs):
+                self.records.append((state.trial_params["num_beams"], model.generation_config.num_beams))
+
+        def hp_space(trial):
+            return {"generation_config": GenerationConfig(num_beams=trial.suggest_int("num_beams", 2, 4))}
+
+        recorder = GenerationConfigRecorder()
+        dataset = get_tiny_seq2seq_dataset()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = Seq2SeqTrainingArguments(
+                tmp_dir,
+                max_steps=1,
+                eval_strategy="steps",
+                eval_steps=1,
+                save_strategy="no",
+                report_to="none",
+                disable_tqdm=True,
+            )
+            trainer = Seq2SeqTrainer(
+                model_init=get_tiny_seq2seq_model,
+                args=args,
+                train_dataset=dataset,
+                eval_dataset=dataset,
+                callbacks=[recorder],
+            )
+            trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, backend="optuna", n_trials=3)
+
+        self.assertGreaterEqual(len(recorder.records), 3)
+        for suggested_num_beams, used_num_beams in recorder.records:
+            self.assertEqual(used_num_beams, suggested_num_beams)
+
+
+@require_torch
 @require_ray
 @unittest.skip("don't work because of a serialization issue")
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
@@ -298,6 +346,35 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
             self.assertEqual(updated_best_run.run_summary, best_run.run_summary)
             updated_hp_keys = set(updated_best_run.hyperparameters.keys())
             self.assertSetEqual(updated_hp_keys, {"a", "b", "assignments", "metric"})
+
+
+@require_torch
+class TrainerHyperParameterSearchSetupTest(unittest.TestCase):
+    """
+    Calls `_hp_search_setup` directly with the RAY backend
+    (trial params as a plain dict), without running Ray.
+    """
+
+    def get_trainer(self, output_dir, generation_config=None):
+        args = Seq2SeqTrainingArguments(output_dir, generation_config=generation_config, report_to="none")
+        trainer = Seq2SeqTrainer(model_init=get_tiny_seq2seq_model, args=args)
+        # With Ray, the trial is the dict of params itself, so no backend has to run
+        trainer.hp_search_backend = HPSearchBackend.RAY
+        return trainer
+
+    def test_generation_config_object_is_not_cast(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = self.get_trainer(tmp_dir, generation_config=GenerationConfig(num_beams=2))
+            trial_generation_config = GenerationConfig(num_beams=3)
+            trainer._hp_search_setup({"generation_config": trial_generation_config})
+            self.assertIs(trainer.args.generation_config, trial_generation_config)
+
+    def test_generation_config_dict_is_not_cast(self):
+        for initial_generation_config in (None, GenerationConfig(num_beams=2)):
+            with self.subTest(initial=initial_generation_config), tempfile.TemporaryDirectory() as tmp_dir:
+                trainer = self.get_trainer(tmp_dir, generation_config=initial_generation_config)
+                trainer._hp_search_setup({"generation_config": {"num_beams": 3}})
+                self.assertEqual(trainer.args.generation_config, {"num_beams": 3})
 
 
 class HyperParameterSearchBackendsTest(unittest.TestCase):

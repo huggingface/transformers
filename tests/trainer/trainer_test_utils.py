@@ -60,6 +60,8 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
+        BartConfig,
+        BartForConditionalGeneration,
         PreTrainedModel,
         Trainer,
         TrainerState,
@@ -521,6 +523,38 @@ if is_torch_available():
         )
 
         return trainer
+
+    def get_tiny_seq2seq_model():
+        """
+        Tiny (small values) randomly initialized seq2seq model,
+        so `Seq2SeqTrainer` tests run fast on CPU without downloads.
+        """
+        config = BartConfig(
+            vocab_size=64,
+            d_model=16,
+            encoder_layers=1,
+            decoder_layers=1,
+            encoder_attention_heads=1,
+            decoder_attention_heads=1,
+            encoder_ffn_dim=16,
+            decoder_ffn_dim=16,
+            max_position_embeddings=32,
+        )
+        return BartForConditionalGeneration(config)
+
+    def get_tiny_seq2seq_dataset(length=8, seq_len=8):
+        """
+        Deterministic dataset of random `input_ids` and `labels`
+        for the tiny seq2seq model, no tokenizer needed.
+        """
+        generator = torch.Generator().manual_seed(0)
+        return [
+            {
+                "input_ids": torch.randint(4, 64, (seq_len,), generator=generator),
+                "labels": torch.randint(4, 64, (seq_len,), generator=generator),
+            }
+            for _ in range(length)
+        ]
 
 
 class TrainerIntegrationCommon:
