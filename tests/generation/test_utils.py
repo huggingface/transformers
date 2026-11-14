@@ -3135,6 +3135,38 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
+    def test_beam_sampling_sorts_candidates(self):
+        from transformers.generation.utils import GenerationMixin
+
+        scores = torch.tensor(
+            [[-1.0, -0.1, -0.45, -1.2, -1.5, -2.0,
+              -2.5, -3.0, -3.5, -1.1, -2.3, -2.9]]
+        )
+        sequences = torch.zeros((1, 2, 3), dtype=torch.long)
+        beam_indices = torch.full((1, 2, 2), -1, dtype=torch.int32)
+
+        with patch(
+            "transformers.generation.utils.torch.multinomial",
+            return_value=torch.tensor([[3, 0, 1, 9]]),
+        ):
+            picked, tokens, beams = GenerationMixin()._get_top_k_continuations(
+                accumulated_log_probs=scores,
+                running_sequences=sequences,
+                running_beam_indices=beam_indices,
+                cur_len=1,
+                decoder_prompt_len=1,
+                do_sample=True,
+                beams_to_keep=4,
+                num_beams=2,
+                batch_size=1,
+            )
+
+        torch.testing.assert_close(
+            picked, torch.tensor([[-0.1, -1.0, -1.1, -1.2]])
+        )
+        self.assertEqual(tokens[0, :, 1].tolist(), [1, 0, 3, 3])
+        self.assertEqual(beams[0, :, 0].tolist(), [0, 0, 1, 0])
+
     def test_speculative_sampling(self):
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
