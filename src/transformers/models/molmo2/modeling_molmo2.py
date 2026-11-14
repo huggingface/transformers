@@ -748,7 +748,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is a "
         "tuple with one `(num_image_tokens, hidden_size)` tensor per image."
@@ -760,23 +759,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_shape = None
-        if pixel_values.dim() == 4:
-            image_shape = pixel_values.shape[:3]
-            pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
-
-        image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
-        image_features = torch.cat(
-            [
-                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
-                for layer in self.config.adapter_config.vision_feature_layer
-            ],
-            dim=-1,
+        image_outputs = self.get_image_embeddings(
+            pixel_values, image_token_pooling, image_grids, return_dict=True, **kwargs
         )
-
-        if image_shape is not None:
-            image_features = image_features.reshape(*image_shape, -1)
-        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        pooled_features = image_outputs.pooler_output
         split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
         image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
         return image_outputs
@@ -843,9 +829,9 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_token_pooling, image_grids)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_token_pooling, image_grids)
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_token_pooling, video_grids
             )
 
@@ -856,7 +842,9 @@ class Molmo2Model(Molmo2PreTrainedModel):
             image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device)
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device)
             # `get_placeholder_mask` returns a [batch, seq, 1] mask; Molmo2 *adds* the image features onto
             # the placeholder-token embeddings (residual), which means we index `inputs_embeds` directly.
             # Boolean indexing does not broadcast, so the mask must be expanded to the hidden dim first.
@@ -899,10 +887,58 @@ class Molmo2Model(Molmo2PreTrainedModel):
         )
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring(
-        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "
-        "tuple with one `(num_video_tokens, hidden_size)` tensor per video."
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
+        "one `(num_image_tokens, hidden_size)` tensor for all images."
     )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        image_shape = None
+        if pixel_values.dim() == 4:
+            image_shape = pixel_values.shape[:3]
+            pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
+
+        image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
+        image_features = torch.cat(
+            [
+                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
+                for layer in self.config.adapter_config.vision_feature_layer
+            ],
+            dim=-1,
+        )
+
+        if image_shape is not None:
+            image_features = image_features.reshape(*image_shape, -1)
+        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        image_outputs.pooler_output = pooled_features
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is "
+        "one `(num_video_tokens, hidden_size)` tensor for all videos."
+    )
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
+        num_frames, rows, cols = video_grids.unbind(-1)
+        image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
+        return self.get_image_embeddings(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
+
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -937,6 +973,16 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_embeddings(pixel_values, image_token_pooling, image_grids, **kwargs)
+
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -945,6 +991,16 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
+
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_video_embeddings(pixel_values_videos, video_token_pooling, video_grids, **kwargs)
 
     @auto_docstring
     def get_video_features(

@@ -930,14 +930,28 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All videos' features as one tensor; `get_video_features` splits them per video.
+        """
+        video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
+        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
+        video_outputs.pooler_output = video_embeds
+        return video_outputs
+
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
-        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
+        video_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        video_embeds = video_outputs.pooler_output
         split_sizes = (
             video_grid_thw.prod(-1)
             // self.vision_tower.spatial_merge_size**2
@@ -946,14 +960,28 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
         return video_outputs
 
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
+        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
+        image_outputs.pooler_output = image_embeds
+        return image_outputs
+
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
-        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
+        image_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = image_outputs.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
         image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return image_outputs
@@ -992,18 +1020,20 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1011,7 +1041,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(video_embeds, torch.Tensor):
+                video_embeds = torch.cat(video_embeds, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

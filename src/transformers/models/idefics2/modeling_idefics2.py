@@ -820,13 +820,15 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        All real (non-padding) images' features as one tensor; `get_image_features` splits them per batch row.
+
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         pixel_attention_mask (`torch.LongTensor`, *optional*):
@@ -839,7 +841,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
         # Remove padding images - padding images are full 0.
         nb_values_per_image = pixel_values.shape[1:].numel()
         real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
         pixel_values = pixel_values[real_images_inds].contiguous()
 
         # Handle the vision attention mask
@@ -868,9 +869,30 @@ class Idefics2Model(Idefics2PreTrainedModel):
         image_features = self.connector(
             image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
         )
-        image_outputs.pooler_output = [
-            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
-        ]
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
+        # Padding images are all zeros
+        real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
+        num_real_images_per_batch = real_images.sum(dim=1)
+        tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)
+        split_sizes = (num_real_images_per_batch * tokens_per_image).tolist()
+        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, split_sizes))
 
         return image_outputs
 
@@ -931,7 +953,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
-                mm_encoder_outputs["image"] = self.get_image_features(
+                mm_encoder_outputs["image"] = self.get_image_embeddings(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output
@@ -1000,6 +1022,23 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
 
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        return self.model.get_image_embeddings(
+            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
+        )
 
     @auto_docstring
     def get_image_features(

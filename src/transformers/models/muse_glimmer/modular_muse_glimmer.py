@@ -1079,12 +1079,15 @@ class MuseGlimmerModel(Kimi_K25Model):
         self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -1093,6 +1096,17 @@ class MuseGlimmerModel(Kimi_K25Model):
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
+        vision_outputs.pooler_output = vision_features
+        return vision_outputs
+
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        vision_features = vision_outputs.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
         return vision_outputs

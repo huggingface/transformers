@@ -1046,12 +1046,15 @@ class Glm4vModel(Glm4vPreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All videos' features as one tensor; `get_video_features` splits them per video.
+        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
@@ -1063,11 +1066,36 @@ class Glm4vModel(Glm4vPreTrainedModel):
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
+        return vision_outputs
+
+    @can_return_tuple
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1076,8 +1104,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
@@ -1206,24 +1233,28 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(video_embeds, torch.Tensor):
+                video_embeds = torch.cat(video_embeds, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
@@ -1264,6 +1295,19 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1275,6 +1319,19 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(

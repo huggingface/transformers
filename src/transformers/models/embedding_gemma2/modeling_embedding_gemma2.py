@@ -679,14 +679,8 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 "Image features were requested, but the model was initialized without a vision_config. "
                 "Cannot process images without a vision tower and vision embedder."
             )
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
+        vision_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True, **kwargs)
+        pooler_output = vision_outputs.pooler_output
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
         non_pad_mask = (image_position_ids != -1).all(dim=-1)
@@ -784,8 +778,10 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = self.get_image_embeddings(
+                pixel_values, image_position_ids, return_dict=True
+            ).pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -882,6 +878,68 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         return audio_outputs
 
     @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        vision_outputs.pooler_output = pooler_output
+        return vision_outputs
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        All videos' features as one tensor; `get_video_features` splits them per video.
+
+        pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+            The frames of every video in the batch, concatenated along the frame axis rather than stacked
+            on a separate video axis, so that videos of different lengths can be batched together.
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
+            2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
+            Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
+            Number of frames belonging to each video, used to split the flat frame sequence back per video.
+        """
+        if num_frames_per_video is None:
+            raise ValueError(
+                "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
+                "videos are concatenated along a single axis, so the per-video frame counts are the only "
+                "way to split the result back per video. The video processor returns them."
+            )
+
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values_videos,
+            pixel_position_ids=video_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        vision_outputs.pooler_output = pooler_output
+        return vision_outputs
+
+    @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_features(
         self,
@@ -905,21 +963,10 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
                 "Video features were requested, but the model was initialized without a vision_config. "
                 "Cannot process video without a vision tower and vision embedder."
             )
-        if num_frames_per_video is None:
-            raise ValueError(
-                "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
-                "videos are concatenated along a single axis, so the per-video frame counts are the only "
-                "way to split the result back per video. The video processor returns them."
-            )
-
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values_videos,
-            pixel_position_ids=video_position_ids,
-            **kwargs,
+        vision_outputs = self.get_video_embeddings(
+            pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True, **kwargs
         )
-        last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
+        pooler_output = vision_outputs.pooler_output
         k_squared = self.config.vision_config.pooling_kernel_size**2
         non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
         num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared

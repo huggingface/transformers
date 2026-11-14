@@ -2165,6 +2165,20 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All videos' features as one tensor; `get_video_features` splits them per video.
+        """
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -2177,14 +2191,27 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
@@ -2389,6 +2416,19 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         self.post_init()
 
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -2400,6 +2440,19 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
