@@ -305,7 +305,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertTrue("loss" in output)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # Mllama has cross attention layers and those have a different shape than normal attention layers
         self.assertIsInstance(attentions, tuple)
@@ -315,8 +315,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
-        use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+        use_cache = decoder_cache is not None
+        has_static_cache = isinstance(decoder_cache, StaticCache)
 
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -332,7 +332,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                     key_length = self.model_tester.image_length
                 elif has_static_cache:
                     # a static cache is preallocated, so attention spans the whole cache
-                    key_length = decoder_past_key_values.get_max_length(layer_idx)
+                    key_length = decoder_cache.get_max_length(layer_idx)
                 else:
                     key_length = prompt_length + generated_length
                 expected_shapes.append((batch_size, config.num_attention_heads, model_input_length, key_length))
@@ -387,20 +387,20 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     # overridden because mllama has special cache for self and cross attentions
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, Cache)
 
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 
-        for layer_idx in range(len(past_key_values)):
+        for layer_idx in range(len(cache)):
             if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
                 expected_shape = (batch_size, num_heads, self.model_tester.image_length, head_dim)
             else:
                 expected_shape = (batch_size, num_heads, seq_length, head_dim)
             # check shape key, value
-            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_shape)
-            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_shape)
+            self.assertEqual(cache.layers[layer_idx].keys.shape, expected_shape)
+            self.assertEqual(cache.layers[layer_idx].values.shape, expected_shape)
 
     def test_generate_text_only_with_cache(self):
         """
@@ -443,12 +443,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 return_dict_in_generate=True,
             )
 
-            past_key_values = output.past_key_values
-            self.assertIsInstance(past_key_values, StaticCache)
-            self.assertTrue(past_key_values.is_compileable)
+            cache = output.cache
+            self.assertIsInstance(cache, StaticCache)
+            self.assertTrue(cache.is_compileable)
             # `generate` sizes the static cache to `max_length - 1`
             max_cache_len = inputs["input_ids"].shape[1] + 4 - 1
-            for layer_idx, layer in enumerate(past_key_values.layers):
+            for layer_idx, layer in enumerate(cache.layers):
                 self.assertIsInstance(layer, StaticLayer)
                 expected_length = (
                     self.model_tester.image_length if layer_idx in cross_attention_layers else max_cache_len

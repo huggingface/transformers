@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blt import (
@@ -145,6 +146,7 @@ class BltTransformerLayer(GradientCheckpointingLayer):
 
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -153,7 +155,7 @@ class BltTransformerLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -166,9 +168,9 @@ class BltTransformerLayer(GradientCheckpointingLayer):
                 query_sequence_length, key_sequence_length)` if default attention is used.
 
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            cache (`Cache`, *optional*): cached past key and value projection states
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -185,7 +187,7 @@ class BltTransformerLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -291,12 +293,13 @@ class BltSelfAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
-        past_key_values=None,
+        cache=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -312,8 +315,8 @@ class BltSelfAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -359,6 +362,7 @@ class BltCrossAttention(nn.Module):
         self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.is_causal = False
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -586,6 +590,7 @@ class BltLocalEncoder(BltPreTrainedModel):
 
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -593,7 +598,7 @@ class BltLocalEncoder(BltPreTrainedModel):
         patch_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         num_patches: int | None = None,
         patch_ids: torch.Tensor | None = None,
@@ -618,7 +623,7 @@ class BltLocalEncoder(BltPreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
             if idx == len(self.layers) - 1 or self.config.cross_attn_all_layers:
@@ -697,6 +702,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -704,7 +710,7 @@ class BltLocalDecoder(BltPreTrainedModel):
         patch_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -739,7 +745,7 @@ class BltLocalDecoder(BltPreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
         logits = self.norm(hidden_states)
@@ -770,12 +776,13 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = inputs_embeds.shape
@@ -791,7 +798,7 @@ class BltGlobalTransformer(BltPreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
         return hidden_states
@@ -863,12 +870,13 @@ class BltPatcher(BltPreTrainedModel):
 
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         patch_size: int | None = None,
@@ -882,11 +890,11 @@ class BltPatcher(BltPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -895,7 +903,7 @@ class BltPatcher(BltPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -1164,13 +1172,14 @@ class BltModel(BltPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         patch_lengths: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1179,14 +1188,12 @@ class BltModel(BltPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache:
-            if past_key_values is None:
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache(config=self.config), DynamicCache(config=self.config)
-                )
-            elif not isinstance(past_key_values, EncoderDecoderCache):
+            if cache is None:
+                cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            elif not isinstance(cache, EncoderDecoderCache):
                 # BLT uses an encoder-decoder cache even though it is not en encoder-decoder model. Create a cross-cache
                 # if not yet created by the user
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
+                cache = EncoderDecoderCache(cache, DynamicCache(config=self.config))
 
         # Extract input embeddings as early as possible
         if inputs_embeds is not None:
@@ -1225,7 +1232,7 @@ class BltModel(BltPreTrainedModel):
         patch_ids = self._patch_ids_from_lengths(patch_lengths, sequence_length)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1236,7 +1243,7 @@ class BltModel(BltPreTrainedModel):
             config=self.config.encoder_config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
+            cache=cache.self_attention_cache if cache is not None else None,
             position_ids=position_ids,
         )
 
@@ -1256,7 +1263,7 @@ class BltModel(BltPreTrainedModel):
             encoder_attention_mask=cross_attn_mask_enc,
             num_patches=patch_lengths.shape[1],
             patch_ids=patch_ids,
-            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
+            cache=cache.self_attention_cache if cache is not None else None,
             **kwargs,
         )
         encoder_cross_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
@@ -1266,7 +1273,7 @@ class BltModel(BltPreTrainedModel):
             config=self.config,
             inputs_embeds=encoder_cross_states,
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             position_ids=None,
         )
 
@@ -1291,13 +1298,13 @@ class BltModel(BltPreTrainedModel):
             patch_embeds=global_hidden_states,
             attention_mask=causal_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values.cross_attention_cache if past_key_values is not None else None,
+            cache=cache.cross_attention_cache if cache is not None else None,
             encoder_attention_mask=cross_attn_mask_dec,
             **kwargs,
         )
         return BaseModelOutputWithPast(
             last_hidden_state=output,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
     def get_input_embeddings(self):
@@ -1341,6 +1348,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1349,7 +1357,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         cross_attention_states: torch.LongTensor | None = None,  # Keep for compatibility
         cross_attention_mask: torch.LongTensor | None = None,
         full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1403,7 +1411,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             cross_attention_mask=cross_attention_mask,
             full_text_row_masked_out_mask=full_text_row_masked_out_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1420,7 +1428,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
