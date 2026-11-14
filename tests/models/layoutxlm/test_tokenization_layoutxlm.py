@@ -1651,6 +1651,9 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100, -100])
 
+        encoding = tokenizer_r(["☐", "Name"], boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100])
+
         tokenizer_r = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base", only_label_first_subword=False)
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 0, 1, 1, -100])
