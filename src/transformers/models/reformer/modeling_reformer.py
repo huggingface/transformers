@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_reformer import ReformerConfig
 
 
@@ -79,7 +80,7 @@ class ReformerDynamicCache:
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
+        Support for backwards-compatible `cache` length, e.g. `len(cache)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.states_cache)
@@ -2256,18 +2257,19 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         # Overwritten -- attention mask or input ids size doesn't match with actual input size
         return None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
+        self, input_ids, cache=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
     ):
         # Overitten -- different expected inputs/outputs
 
         # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values is not None:
+        if cache is not None:
             input_ids = input_ids[:, -1:]
 
         model_inputs = {
             "input_ids": input_ids,
-            "past_buckets_states": past_key_values,
+            "past_buckets_states": cache,
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }

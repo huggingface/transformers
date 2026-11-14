@@ -39,6 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_roformer import RoFormerConfig
 
 
@@ -69,13 +70,13 @@ class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
+        self, input_ids_shape: torch.Size, cache_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
             bsz, seq_len = input_ids_shape[:2]
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+                cache_length, cache_length + seq_len, dtype=torch.long, device=self.weight.device
             )
         return super().forward(position_ids)
 
@@ -135,13 +136,14 @@ class RoFormerSelfAttention(nn.Module):
         self.rotary_value = config.rotary_value
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         sinusoidal_pos=None,
         encoder_hidden_states=None,
-        past_key_values=None,
+        cache=None,
         output_attentions=False,
         **kwargs,
     ):
@@ -154,22 +156,22 @@ class RoFormerSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
 
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_values.layers[self.layer_idx].keys
-            value_layer = curr_past_key_values.layers[self.layer_idx].values
+            key_layer = curr_cache.layers[self.layer_idx].keys
+            value_layer = curr_cache.layers[self.layer_idx].values
         else:
             kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
             key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
@@ -186,12 +188,12 @@ class RoFormerSelfAttention(nn.Module):
                         sinusoidal_pos, query_layer, key_layer
                     )
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)
+                key_layer, value_layer = curr_cache.update(key_layer, value_layer, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -265,13 +267,14 @@ class RoFormerAttention(nn.Module):
         self.self = RoFormerSelfAttention(config, layer_idx=layer_idx)
         self.output = RoFormerSelfOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         sinusoidal_pos=None,
         encoder_hidden_states=None,
-        past_key_values=None,
+        cache=None,
         output_attentions=False,
         **kwargs,
     ):
@@ -280,7 +283,7 @@ class RoFormerAttention(nn.Module):
             attention_mask=attention_mask,
             sinusoidal_pos=sinusoidal_pos,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             output_attentions=output_attentions,
             **kwargs,
         )
@@ -335,6 +338,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
         self.intermediate = RoFormerIntermediate(config)
         self.output = RoFormerOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
@@ -342,7 +346,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
         sinusoidal_pos=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         output_attentions=False,
         **kwargs,
     ):
@@ -351,7 +355,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             sinusoidal_pos=sinusoidal_pos,
             output_attentions=output_attentions,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = self_attention_outputs[0]
@@ -369,7 +373,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 sinusoidal_pos=sinusoidal_pos,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_values=past_key_values,
+                cache=cache,
                 output_attentions=output_attentions,
                 **kwargs,
             )
@@ -397,13 +401,14 @@ class RoFormerEncoder(nn.Module):
         self.layer = nn.ModuleList([RoFormerLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
@@ -421,10 +426,10 @@ class RoFormerEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_length = cache.get_seq_length() if cache is not None else 0
 
         # [sequence_length, embed_size_per_head] -> [batch_size, num_heads, sequence_length, embed_size_per_head]
-        sinusoidal_pos = self.embed_positions(hidden_states.shape[:-1], past_key_values_length)[None, None, :, :]
+        sinusoidal_pos = self.embed_positions(hidden_states.shape[:-1], cache_length)[None, None, :, :]
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -436,7 +441,7 @@ class RoFormerEncoder(nn.Module):
                 sinusoidal_pos,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_values,
+                cache,
                 output_attentions,
                 **kwargs,
             )
@@ -455,7 +460,7 @@ class RoFormerEncoder(nn.Module):
                 v
                 for v in [
                     hidden_states,
-                    past_key_values,
+                    cache,
                     all_hidden_states,
                     all_self_attentions,
                     all_cross_attentions,
@@ -464,7 +469,7 @@ class RoFormerEncoder(nn.Module):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
@@ -663,6 +668,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -671,7 +677,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -702,17 +708,17 @@ class RoFormerModel(RoFormerPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if use_cache and past_key_values is None:
-            past_key_values = (
+        if use_cache and cache is None:
+            cache = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
 
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        cache_length = 0 if cache is None else cache.get_seq_length()
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length + cache_length)), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
@@ -727,7 +733,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
             config=self.config,
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
-            past_key_values=past_key_values if self.config.is_decoder else None,
+            cache=cache if self.config.is_decoder else None,
         )
 
         if encoder_attention_mask is not None:
@@ -743,7 +749,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -757,7 +763,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
-            past_key_values=encoder_outputs.past_key_values,
+            cache=encoder_outputs.cache,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
@@ -874,6 +880,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         self.cls.predictions.bias = new_embeddings.bias
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -882,7 +889,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
@@ -922,7 +929,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -945,7 +952,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,

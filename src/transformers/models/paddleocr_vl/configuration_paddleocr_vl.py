@@ -93,7 +93,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "paddleocr_vl_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 500000.0
     # Default tensor parallel plan for base model `PaddleOCRTextModel`
     base_model_tp_plan = {
@@ -163,7 +163,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         "vision_config": PaddleOCRVisionConfig,
         "text_config": PaddleOCRTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
