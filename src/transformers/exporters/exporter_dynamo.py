@@ -438,6 +438,7 @@ def _reshaped_vision_attention_forward(
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.lfm3_vl.modeling_lfm3_vl.Lfm3VlVisionAttention.forward",
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
+    "transformers.models.ovis2_5.modeling_ovis2_5.Ovis2_5VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
     "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",
