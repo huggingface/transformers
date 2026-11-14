@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: read
     name: Get supported Python versions
+    if: github.repository == 'huggingface/transformers'
     runs-on: ubuntu-latest
     outputs:
       versions: ${{ steps.extract-versions.outputs.versions }}
@@ -125,6 +126,7 @@ jobs:
   precheck-slack:
     permissions: {}
     name: Check Slack token availability
+    if: github.repository == 'huggingface/transformers'
     runs-on: ubuntu-latest
     outputs:
       has_slack_token: ${{ steps.chk.outputs.has_token }}
