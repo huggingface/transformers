@@ -39,6 +39,16 @@ if TYPE_CHECKING:
     from .configs import ExportFormat
 
 
+def _text_name(kwargs: dict, traced=None) -> str:
+    """Which of a step's kwargs is its text: its embeddings, decoder ids or ids, among those the graph was `traced`
+    with if given."""
+    return next(
+        name
+        for name in ("inputs_embeds", "decoder_input_ids", "input_ids")
+        if kwargs.get(name) is not None and (traced is None or name in traced)
+    )
+
+
 def _with_signature(function, names) -> Any:
     """`function`, with keyword parameters `names` as its signature: `generate` reads a model's `forward` signature to
     decide which kwargs to build."""
@@ -210,11 +220,7 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
 
     def _step(self, **kwargs) -> Any:
         traced = self.runner.metadata.kwargs
-        text_name = next(
-            name
-            for name in ("inputs_embeds", "decoder_input_ids", "input_ids")
-            if name in traced and kwargs.get(name) is not None
-        )
+        text_name = _text_name(kwargs, traced)
         query_length = kwargs[text_name].shape[1]
         # A multi-token decode graph is traced on two tokens; one traced on a single token (any static export, or a
         # dynamic one whose model can't decode several at once) takes the prompt a token at a time.
@@ -289,12 +295,7 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         outputs = self.runner(share_outputs=stateful and self._generating, **inputs)
         # A backend keeping the cache as state (OpenVINO's stateful model) never hands the loop's cache back advanced.
         if stateful and kwargs.get("cache") is not None:
-            text = next(
-                kwargs[name]
-                for name in ("inputs_embeds", "decoder_input_ids", "input_ids")
-                if kwargs.get(name) is not None
-            )
-            advance_cache_length(kwargs["cache"], text.shape[1])
+            advance_cache_length(kwargs["cache"], kwargs[_text_name(kwargs)].shape[1])
         return outputs
 
     def _causal_mask(self, kwargs: dict, padding_mask, dtype: str):
@@ -302,11 +303,7 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         zeros masked out."""
         if padding_mask is not None and padding_mask.dim() == 4:
             return padding_mask
-        text = next(
-            kwargs[name]
-            for name in ("input_ids", "decoder_input_ids", "inputs_embeds")
-            if kwargs.get(name) is not None
-        )
+        text = kwargs[_text_name(kwargs)]
         cache = kwargs.get("cache")
         cache = getattr(cache, "self_attention_cache", cache)
         width = mask_width(cache, text.shape[1])

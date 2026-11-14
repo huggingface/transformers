@@ -186,6 +186,11 @@ def capture_cross_writers(model: PreTrainedModel):
             hook.remove()
 
 
+def _text(call: dict):
+    """A call's token ids, or the embeddings in their place."""
+    return next((call[key] for key in ("input_ids", "inputs_embeds") if call.get(key) is not None), None)
+
+
 def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     """Merge consecutive single-token decode captures into one multi-token decode input.
 
@@ -196,14 +201,7 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     merged = copy.copy(first)
 
     # With `use_cache` off each step re-runs the whole sequence, already multi-token, so take the last.
-    def query_length(call: dict) -> int | None:
-        for key in ("input_ids", "inputs_embeds"):
-            value = call.get(key)
-            if value is not None:
-                return value.shape[1]
-        return None
-
-    if any(query_length(call) != 1 for call in decode_calls):
+    if any(_text(call) is None or _text(call).shape[1] != 1 for call in decode_calls):
         return copy.copy(decode_calls[-1])
 
     def concat_along(key: str, dim: int) -> None:
@@ -272,8 +270,7 @@ def decompose_prefill_decode(
         and capture_config.max_new_tokens is not None
     ):
         # A fixed-size cache sized for the generation the config asks for, not for the few steps captured.
-        text = next(inputs[name] for name in ("input_ids", "inputs_embeds") if inputs.get(name) is not None)
-        prompt_length = 1 if getattr(model.config, "is_encoder_decoder", False) else text.shape[1]
+        prompt_length = 1 if getattr(model.config, "is_encoder_decoder", False) else _text(inputs).shape[1]
         capture_config.max_cache_len = prompt_length + capture_config.max_new_tokens
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
@@ -540,19 +537,19 @@ def decompose_multimodal(
 
     # An encoder-decoder consumed its modality inputs before prefill; the caller passes the recorded calls.
     recorded_features = recorded_features or {}
-    active_modalities = []
-    for spec in _MODALITY_SPECS:
-        if (owner := _modality_owner(model, spec.getter)) is None:
-            continue
-        if any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component):
-            active_modalities.append((spec.component, spec.getter, owner, spec.grid_key))
+    active_modalities = [
+        (spec, owner)
+        for spec in _MODALITY_SPECS
+        if (owner := _modality_owner(model, spec.getter)) is not None
+        and (any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component))
+    ]
 
     try:
         with contextlib.ExitStack() as stack, torch.no_grad():
             decoder_calls = stack.enter_context(_capture_calls(decoder, "forward"))
             captured_features = {
-                name: stack.enter_context(_capture_calls(owner, getter))
-                for name, getter, owner, _ in active_modalities
+                spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
+                for spec, owner in active_modalities
             }
             model(**copy.deepcopy(inputs))
     except Exception as e:
@@ -579,12 +576,15 @@ def decompose_multimodal(
             TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids}
         )
 
-    for name, getter, owner, grid_key in active_modalities:
+    for spec, owner in active_modalities:
+        name = spec.component
         calls = captured_features.get(name) or recorded_features.get(name) or []
         if not calls:
             continue
         feature_inputs = {
-            ("grid_thw" if key == grid_key else key): value for key, value in calls[-1].items() if value is not None
+            ("grid_thw" if key == spec.grid_key else key): value
+            for key, value in calls[-1].items()
+            if value is not None
         }
         # Config-derived tensors become graph inputs: a getter reading its grid as data cannot be traced.
         if name == "vision_embeddings_model" and packs_anyres_features(owner, model.config):
@@ -601,7 +601,7 @@ def decompose_multimodal(
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = Component(ModalityEncoder(owner, getter, grid_key), feature_inputs)
+        components[name] = Component(ModalityEncoder(owner, spec.getter, spec.grid_key), feature_inputs)
     return components
 
 
@@ -794,9 +794,8 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
-    accepted = inspect.signature(model.forward).parameters
     # The rope index alone: the precompute's modality preparers reuse the name (MiniCPM-V's vision `position_ids`).
-    if main_inputs.get("position_ids") is None and "position_ids" in accepted:
+    if main_inputs.get("position_ids") is None and "position_ids" in inspect.signature(model.forward).parameters:
         if (rope_index := get_rope_index_from_config(model.config, inputs)) is not None:
             main_inputs["position_ids"] = rope_index[0]
     main_inputs = embedded_inputs(main_inputs, {})
@@ -876,9 +875,8 @@ def decompose_for_generation(
     # tokens are text, so zeros let the one graph build the prefill step's mask too.
     token_types = prompt.inputs.get("token_type_ids")
     if token_types is not None and decode.inputs.get("token_type_ids") is None:
-        text = next(decode.inputs[key] for key in ("input_ids", "inputs_embeds") if decode.inputs.get(key) is not None)
         decode = components["decode"] = replace(
-            decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(text.shape[:2])}
+            decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(_text(decode.inputs).shape[:2])}
         )
     deepstack = {}
     if multimodal:
@@ -948,8 +946,7 @@ def _prefill_mask(prefill_inputs: dict, decode_mask: Any) -> Any:
         return None
     if isinstance(decode_mask, dict):
         return {key: _prefill_mask(prefill_inputs, mask) for key, mask in decode_mask.items()}
-    text = next(prefill_inputs[key] for key in ("input_ids", "inputs_embeds") if prefill_inputs.get(key) is not None)
-    batch_size, query_length = text.shape[:2]
+    batch_size, query_length = _text(prefill_inputs).shape[:2]
     cache_len = mask_width(prefill_inputs.get("cache"), query_length)
     if decode_mask.dim() == 2:
         return torch.ones(batch_size, cache_len, dtype=decode_mask.dtype, device=decode_mask.device)
