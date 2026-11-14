@@ -15,6 +15,7 @@
 
 import collections
 import math
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -31,7 +32,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
@@ -199,6 +200,34 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         return embeddings
 
 
+def cogview_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
+    # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
+    attn_weights = torch.matmul(query * scaling, key.transpose(2, 3))
+
+    # The mask also holds the relative position biases, see `LayoutLMv3Encoder._add_position_bias_to_mask`
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    # Use the trick of the CogView paper to stabilize training
+    attn_weights = module.cogview_attention(attn_weights)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class LayoutLMv3SelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -207,18 +236,19 @@ class LayoutLMv3SelfAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
+        self.config = config
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.has_relative_attention_bias = config.has_relative_attention_bias
-        self.has_spatial_attention_bias = config.has_spatial_attention_bias
 
     def cogview_attention(self, attention_scores, alpha=32):
         """
@@ -234,58 +264,33 @@ class LayoutLMv3SelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        rel_pos=None,
-        rel_2d_pos=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        batch_size = hidden_states.shape[0]
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, cogview_eager_attention_forward
         )
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
-        # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
-        attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
-
-        if self.has_relative_attention_bias and self.has_spatial_attention_bias:
-            attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
-        elif self.has_relative_attention_bias:
-            attention_scores += rel_pos / math.sqrt(self.attention_head_size)
-
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        # Use the trick of the CogView paper to stabilize training
-        attention_probs = self.cogview_attention(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        return context_layer, attention_probs
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
@@ -303,7 +308,6 @@ class LayoutLMv3SelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Attention with LayoutLMv2->LayoutLMv3
 class LayoutLMv3Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -312,25 +316,20 @@ class LayoutLMv3Attention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        rel_pos=None,
-        rel_2d_pos=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> torch.Tensor:
         residual = hidden_states
         attention_output, _ = self.self(
             hidden_states,
             attention_mask,
-            rel_pos=rel_pos,
-            rel_2d_pos=rel_2d_pos,
             **kwargs,
         )
         attention_output = self.output(attention_output, residual)
         return attention_output
 
 
-# Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
 class LayoutLMv3Layer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
@@ -342,18 +341,14 @@ class LayoutLMv3Layer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
-            rel_pos=rel_pos,
-            rel_2d_pos=rel_2d_pos,
+            **kwargs,
         )
 
         layer_output = apply_chunking_to_forward(
@@ -412,49 +407,81 @@ class LayoutLMv3Encoder(nn.Module):
         ret += torch.where(is_small, n, val_if_large)
         return ret
 
-    def _cal_1d_pos_emb(self, position_ids):
-        rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
+    def _relative_position_lookup(self, positions, bias, num_buckets, max_distance):
+        """
+        Looks up `bias` at the bucketed relative position `positions[key] - positions[query]` of every pair, and returns
+        it with shape `(batch_size, num_heads, seq_len, seq_len)`.
 
-        rel_pos = self.relative_position_bucket(
-            rel_pos_mat,
-            num_buckets=self.rel_pos_bins,
-            max_distance=self.max_rel_pos,
-        )
+        The bucket only depends on the relative position and stays the same beyond `max_distance`, so the buckets are
+        computed once for the `2 * max_distance + 1` distinct (clamped) relative positions instead of for every pair.
+        """
+        relative_positions = torch.arange(-max_distance, max_distance + 1, device=positions.device)
+        buckets = self.relative_position_bucket(relative_positions, num_buckets=num_buckets, max_distance=max_distance)
+
+        positions = positions.int()
+        indices = positions.unsqueeze(-2) - positions.unsqueeze(-1)
+        indices = indices.clamp_(-max_distance, max_distance).add_(max_distance)
         # Since this is a simple indexing operation that is independent of the input,
         # no need to track gradients for this operation
         #
         # Without this no_grad context, training speed slows down significantly
         with torch.no_grad():
-            rel_pos = self.rel_pos_bias.weight.t()[rel_pos].permute(0, 3, 1, 2)
-        rel_pos = rel_pos.contiguous()
-        return rel_pos
+            table = bias.weight[:, buckets]
+            # Gathered as (num_heads, batch_size, seq_len, seq_len), so the transpose below needs no copy
+            values = table.index_select(1, indices.flatten()).view(-1, *indices.shape)
+        return values.transpose(0, 1)
+
+    def _cal_1d_pos_emb(self, position_ids):
+        return self._relative_position_lookup(position_ids, self.rel_pos_bias, self.rel_pos_bins, self.max_rel_pos)
 
     def _cal_2d_pos_emb(self, bbox):
-        position_coord_x = bbox[:, :, 0]
-        position_coord_y = bbox[:, :, 3]
-        rel_pos_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(-1)
-        rel_pos_y_2d_mat = position_coord_y.unsqueeze(-2) - position_coord_y.unsqueeze(-1)
-        rel_pos_x = self.relative_position_bucket(
-            rel_pos_x_2d_mat,
-            num_buckets=self.rel_2d_pos_bins,
-            max_distance=self.max_rel_2d_pos,
+        rel_pos_x = self._relative_position_lookup(
+            bbox[:, :, 0], self.rel_pos_x_bias, self.rel_2d_pos_bins, self.max_rel_2d_pos
         )
-        rel_pos_y = self.relative_position_bucket(
-            rel_pos_y_2d_mat,
-            num_buckets=self.rel_2d_pos_bins,
-            max_distance=self.max_rel_2d_pos,
+        rel_pos_y = self._relative_position_lookup(
+            bbox[:, :, 3], self.rel_pos_y_bias, self.rel_2d_pos_bins, self.max_rel_2d_pos
         )
-        # Since this is a simple indexing operation that is independent of the input,
-        # no need to track gradients for this operation
-        #
-        # Without this no_grad context, training speed slows down significantly
-        with torch.no_grad():
-            rel_pos_x = self.rel_pos_x_bias.weight.t()[rel_pos_x].permute(0, 3, 1, 2)
-            rel_pos_y = self.rel_pos_y_bias.weight.t()[rel_pos_y].permute(0, 3, 1, 2)
-        rel_pos_x = rel_pos_x.contiguous()
-        rel_pos_y = rel_pos_y.contiguous()
-        rel_2d_pos = rel_pos_x + rel_pos_y
-        return rel_2d_pos
+        return rel_pos_x.add_(rel_pos_y)
+
+    def _compute_position_bias(self, position_ids, bbox):
+        """
+        Computes the relative position bias added to the attention scores, shared by all the layers.
+        """
+        # As in the original implementation, the spatial bias is only used together with the 1D one
+        if not self.has_relative_attention_bias:
+            return None
+        if self.has_spatial_attention_bias:
+            # The 2D bias is built first so that at most two (batch_size, num_heads, seq_len, seq_len) tensors are alive
+            position_bias = self._cal_2d_pos_emb(bbox).add_(self._cal_1d_pos_emb(position_ids))
+        else:
+            position_bias = self._cal_1d_pos_emb(position_ids)
+        return position_bias.div_(math.sqrt(int(self.config.hidden_size / self.config.num_attention_heads)))
+
+    def _add_position_bias_to_mask(self, attention_mask, position_ids, bbox, hidden_states):
+        """
+        The relative position biases are the same in every layer, so they are added to the attention mask once, giving
+        a single float mask shared by all the layers (which SDPA can also take).
+        """
+        position_bias = self._compute_position_bias(position_ids, bbox)
+        if position_bias is None:
+            return attention_mask
+
+        # The mask is cast once to the dtype of the attention, instead of in every layer under autocast
+        device_type = hidden_states.device.type
+        dtype = (
+            torch.get_autocast_dtype(device_type) if torch.is_autocast_enabled(device_type) else hidden_states.dtype
+        )
+        # The last dim is padded to a multiple of 8 (then sliced) so that SDPA doesn't re-align the mask in every layer
+        seq_len = position_bias.shape[-1]
+        padded_seq_len = (seq_len + 7) // 8 * 8
+        merged_mask = position_bias.new_empty((*position_bias.shape[:-1], padded_seq_len), dtype=dtype)
+        merged_mask = merged_mask[..., :seq_len].copy_(position_bias)
+        if attention_mask is None:
+            return merged_mask
+        if attention_mask.dtype == torch.bool:
+            return merged_mask.masked_fill_(~attention_mask, torch.finfo(dtype).min)
+        # Clamped so that a float mask in a wider dtype can't overflow to -inf (NaN in fully masked rows)
+        return merged_mask.add_(attention_mask).clamp_(min=torch.finfo(dtype).min)
 
     def forward(
         self,
@@ -466,17 +493,10 @@ class LayoutLMv3Encoder(nn.Module):
         patch_width=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        rel_pos = self._cal_1d_pos_emb(position_ids) if self.has_relative_attention_bias else None
-        rel_2d_pos = self._cal_2d_pos_emb(bbox) if self.has_spatial_attention_bias else None
+        attention_mask = self._add_position_bias_to_mask(attention_mask, position_ids, bbox, hidden_states)
 
         for layer_module in self.layer:
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask,
-                rel_pos=rel_pos,
-                rel_2d_pos=rel_2d_pos,
-                **kwargs,
-            )
+            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -517,6 +537,7 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
     config: LayoutLMv3Config
     base_model_prefix = "layoutlmv3"
     input_modalities = ("image", "text")
+    _supports_sdpa = True
     _can_record_outputs = {"hidden_states": LayoutLMv3Layer, "attentions": LayoutLMv3SelfAttention}
 
     @torch.no_grad()

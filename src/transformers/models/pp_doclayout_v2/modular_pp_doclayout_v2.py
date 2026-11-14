@@ -440,58 +440,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
 
 
 class PPDocLayoutV2ReadingOrderSelfAttention(LayoutLMv3SelfAttention):
-    def forward(
-        self, hidden_states, attention_mask=None, rel_pos=None, rel_2d_pos=None, **kwargs: Unpack[TransformersKwargs]
-    ):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
-        # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
-        attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
-
-        # NOTE:
-        # PPDocLayoutV2ReadingOrder applies unscaled rel_2d_pos
-        # unlike LayoutLMv3 which uses (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
-        if rel_2d_pos is not None:
-            attention_scores += rel_2d_pos
-        elif self.has_relative_attention_bias:
-            attention_scores += rel_pos / math.sqrt(self.attention_head_size)
-
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        # Use the trick of the CogView paper to stabilize training
-        attention_probs = self.cogview_attention(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        return context_layer, attention_probs
+    pass
 
 
 class PPDocLayoutV2ReadingOrderSelfOutput(LayoutLMv3SelfOutput):
@@ -564,6 +513,18 @@ class PPDocLayoutV2ReadingOrderEncoder(LayoutLMv3Encoder):
         result = self.rel_bias_module(center_width_height_bbox)
 
         return result
+
+    def _compute_position_bias(self, position_ids, bbox):
+        # NOTE:
+        # PPDocLayoutV2ReadingOrder applies unscaled rel_2d_pos, and only uses rel_pos without it,
+        # unlike LayoutLMv3 which uses (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
+        if self.has_spatial_attention_bias:
+            return self._cal_2d_pos_emb(bbox)
+        if self.has_relative_attention_bias:
+            return self._cal_1d_pos_emb(position_ids) / math.sqrt(
+                int(self.config.hidden_size / self.config.num_attention_heads)
+            )
+        return None
 
 
 class PPDocLayoutV2TextEmbeddings(LayoutLMv3TextEmbeddings):
@@ -639,7 +600,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     config: PPDocLayoutV2ReadingOrderConfig
 
-    # Attention is based on LayoutLMv3 (no interface)
+    # Attention is based on LayoutLMv3, only the eager path has been validated for this model
     _supports_sdpa = False
     _supports_flash_attn = False
     _supports_attention_backend = False
