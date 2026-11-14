@@ -36,6 +36,7 @@ if is_torch_available():
         create_chunked_causal_mask,
         create_masks_for_generate,
         create_recurrent_attention_mask,
+        create_sliding_window_causal_mask,
         find_packed_sequence_indices,
     )
 
@@ -399,6 +400,47 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: on
 
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
+    def _assert_packed_blockwise_overlay_preserves_isolation(self, mask_fn):
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+        config.sliding_window = 4
+        config.attention_chunk_size = 3
+
+        position_ids = torch.tensor([[0, 1, 2, 0, 1, 2]])
+        block_ids = torch.tensor([[0, 0, -1, 0, 0, -1]])
+
+        # fmt: off
+        EXPECTED = torch.tensor(
+             [[[[1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 1]]]],
+            dtype=torch.bool,
+        )
+        # fmt: on
+
+        mask = mask_fn(
+            config=config,
+            inputs_embeds=torch.zeros(1, 6, config.hidden_size),
+            attention_mask=None,
+            past_key_values=None,
+            position_ids=position_ids,
+            block_sequence_ids=block_ids,
+            allow_is_causal_skip=False,
+        )
+        self.assertTrue(torch.equal(mask, EXPECTED))
+
+    def test_packed_blockwise_overlay_causal(self):
+        self._assert_packed_blockwise_overlay_preserves_isolation(create_causal_mask)
+
+    def test_packed_blockwise_overlay_sliding_window(self):
+        self._assert_packed_blockwise_overlay_preserves_isolation(create_sliding_window_causal_mask)
+
+    def test_packed_blockwise_overlay_chunked(self):
+        self._assert_packed_blockwise_overlay_preserves_isolation(create_chunked_causal_mask)
 
     @staticmethod
     def _run_bidirectional_mask(mask_fn, attn_implementation):
