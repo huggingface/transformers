@@ -42,7 +42,7 @@ class BarkSubModelConfig(PreTrainedConfig):
         Whether or not to use bias in the linear layers and layer norm layers.
     """
 
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_attention_heads": "num_heads",

@@ -175,3 +175,8 @@ For streaming, [`~PreTrainedTokenizerBase.get_response_parser`] returns a parser
 
 [[autodoc]] BeamForCausalLM
     - forward
+
+## BeamForTokenClassification
+
+[[autodoc]] BeamForTokenClassification
+    - forward

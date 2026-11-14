@@ -108,7 +108,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     """
 
     model_type = "step3p5"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Same as `MiniMaxM3VLTextConfig.base_model_tp_plan` plus `g_proj` (sharded like q/k/v, since it
     # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
     # generated files have no cross-model imports, so that name wouldn't resolve there.
