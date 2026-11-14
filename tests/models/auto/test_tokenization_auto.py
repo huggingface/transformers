@@ -63,6 +63,7 @@ from transformers.testing_utils import (
     SMALL_MODEL_IDENTIFIER,
     CaptureLogger,
     RequestCounter,
+    get_tests_dir,
     require_mistral_common,
     require_sentencepiece,
     require_tokenizers,
@@ -1111,3 +1112,31 @@ class NopConfig(PreTrainedConfig):
             tokenizer_tok(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
             tokenizer_auto(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)["input_ids"],
         )
+
+
+class TokenizerBackendLabelTest(unittest.TestCase):
+    def test_backend_kwarg_does_not_override_label(self):
+        tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER, backend="sentencepiece")
+        self.assertEqual(tokenizer.backend, "tokenizers")
+
+    def test_backend_is_not_saved(self):
+        tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER, backend="sentencepiece")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            self.assertEqual(AutoTokenizer.from_pretrained(tmp_dir).backend, "tokenizers")
+
+    @require_sentencepiece
+    def test_sentencepiece_keeps_its_own_name(self):
+        from transformers import BertGenerationTokenizer
+
+        tokenizer = BertGenerationTokenizer(vocab_file=get_tests_dir("fixtures/test_sentencepiece.model"))
+        self.assertEqual(tokenizer.backend, "sentencepiece")
+
+    def test_custom_tokenizer_keeps_given_backend(self):
+        from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+
+        class CustomTokenizer(PreTrainedTokenizerBase):
+            pass
+
+        tokenizer = CustomTokenizer(backend="test_backend")
+        self.assertEqual(tokenizer.backend, "test_backend")

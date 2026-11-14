@@ -58,6 +58,7 @@ from transformers.testing_utils import (
     is_staging_test,
     require_scipy,
     require_tokenizers,
+    require_vision,
 )
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
@@ -620,6 +621,15 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # Verify they are different types
             self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
             self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessor)
+
+
+@require_tokenizers
+@require_vision
+class ProcessorBackendKwargTest(unittest.TestCase):
+    def test_image_backend_does_not_mislabel_tokenizer(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-CLIPModel", backend="pil")
+        self.assertEqual(processor.image_processor.backend, "pil")
+        self.assertEqual(processor.tokenizer.backend, "tokenizers")
 
 
 @is_staging_test
