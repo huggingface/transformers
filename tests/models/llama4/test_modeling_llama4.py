@@ -18,6 +18,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_torch,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -31,9 +32,38 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Llama4ForCausalLM,
         Llama4ForConditionalGeneration,
         Llama4Processor,
+        Llama4TextConfig,
     )
+
+
+@require_torch
+class Llama4TextModelTest(unittest.TestCase):
+    def test_generate_without_attention_chunk_size(self):
+        # `meta-llama/Llama-Guard-4-12B` sets `attention_chunk_size` to None, i.e. no chunked attention
+        config = Llama4TextConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=37,
+            intermediate_size_mlp=37,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            moe_layers=[],
+            no_rope_layers=[1, 1],
+            attention_chunk_size=None,
+        )
+        model = Llama4ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.randint(0, config.vocab_size, (1, 7), device=torch_device)
+        for cache_implementation in ("dynamic", "static"):
+            with self.subTest(cache_implementation=cache_implementation):
+                output = model.generate(
+                    input_ids, max_new_tokens=3, do_sample=False, cache_implementation=cache_implementation
+                )
+                self.assertEqual(output.shape, (1, 10))
 
 
 @slow
