@@ -36,6 +36,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import AttentionInterface, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
@@ -79,7 +80,7 @@ class DogeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "doge"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `DogeModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -226,12 +227,13 @@ class DogeAttention(nn.Module):
         self.q_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -244,8 +246,8 @@ class DogeAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         # calculate dynamic mask from value_states
         dt_states = self.dt_proj(
@@ -394,13 +396,14 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
         self.post_attention_residual = nn.Parameter(torch.ones(config.hidden_size))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
@@ -412,7 +415,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -455,12 +458,13 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
 
 class DogeModel(MixtralModel):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -468,14 +472,14 @@ class DogeModel(MixtralModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -484,7 +488,7 @@ class DogeModel(MixtralModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
             # Always materialize the mask: the dynamic mask is added onto it in `prepare_dynamic_mask`.
             allow_is_causal_skip=False,
@@ -498,7 +502,7 @@ class DogeModel(MixtralModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -508,7 +512,7 @@ class DogeModel(MixtralModel):
 
         return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -625,24 +629,26 @@ class DogeForCausalLM(MixtralForCausalLM):
         self.num_experts = config.num_experts
 
     @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         mask_kwargs = {
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
             "allow_is_causal_skip": False,  # Always force creation, as in `DogeModel.forward`
         }
         mask_function = create_causal_mask if config.sliding_window is None else create_sliding_window_causal_mask
         return mask_function(**mask_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -676,7 +682,7 @@ class DogeForCausalLM(MixtralForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
@@ -707,7 +713,7 @@ class DogeForCausalLM(MixtralForCausalLM):
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

@@ -31,7 +31,6 @@ REPO_CONSISTENCY_CHECKERS := \
 	config_docstrings, \
 	config_attributes, \
 	doctest_list, \
-	gitattributes, \
 	update_metadata, \
 	add_dates, \
 	deps_table

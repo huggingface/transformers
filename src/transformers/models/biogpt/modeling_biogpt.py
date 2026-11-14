@@ -40,6 +40,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_biogpt import BioGptConfig
@@ -62,7 +63,7 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
     def forward(
         self,
         attention_mask: torch.LongTensor,
-        past_key_values_length: int = 0,
+        cache_length: int = 0,
         position_ids: torch.LongTensor | None = None,
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
@@ -70,8 +71,8 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
         if position_ids is None:
             position_ids = torch.cumsum(attention_mask, dim=1)
             position_ids = (position_ids * attention_mask - 1).long()
-            # cut positions if `past_key_values_length` is > 0
-            position_ids = position_ids[:, past_key_values_length:]
+            # cut positions if `cache_length` is > 0
+            position_ids = position_ids[:, cache_length:]
 
         return super().forward(position_ids + self.offset)
 
@@ -159,11 +160,12 @@ class BioGptAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -184,22 +186,22 @@ class BioGptAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -207,11 +209,11 @@ class BioGptAttention(nn.Module):
             key_states = key_states.view(kv_shape).transpose(1, 2)
             value_states = value_states.view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -258,11 +260,12 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.intermediate_size, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = True,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -272,7 +275,7 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            past_key_values (`Cache`): cached past key and value projection states
+            cache (`Cache`): cached past key and value projection states
         """
         residual = hidden_states
 
@@ -281,7 +284,7 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             position_ids=position_ids,
             **kwargs,
@@ -343,12 +346,13 @@ class BioGptModel(BioGptPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -359,33 +363,33 @@ class BioGptModel(BioGptPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # initialize past_key_values
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        # initialize cache
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_length = cache.get_seq_length() if cache is not None else 0
 
         if attention_mask is None:
             # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
+            mask_seq_length = cache_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
-        self_attn_cache = past_key_values
+        self_attn_cache = cache
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=self_attn_cache,
+            cache=self_attn_cache,
         )
 
         # embed positions
         if position_ids is None:
-            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + cache_length
             position_ids = position_ids.unsqueeze(0)
 
-        positions = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
+        positions = self.embed_positions(attention_mask, cache_length, position_ids=position_ids)
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -398,7 +402,7 @@ class BioGptModel(BioGptPreTrainedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_ids=position_ids,
                 **kwargs,
@@ -408,7 +412,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -437,12 +441,13 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -459,7 +464,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_ids=position_ids,
             **kwargs,
@@ -476,7 +481,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
@@ -501,12 +506,13 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -521,7 +527,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         """
         transformer_outputs = self.biogpt(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -580,11 +586,12 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -594,7 +601,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
     ) -> tuple | SequenceClassifierOutputWithPast:
         transformer_outputs = self.biogpt(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -654,7 +661,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )

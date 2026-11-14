@@ -25,6 +25,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
@@ -79,10 +80,9 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     # Overrides from Glm4MoeConfig
@@ -255,12 +255,13 @@ class MiMoV2FlashAttention(Qwen2Attention):
         self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -276,8 +277,8 @@ class MiMoV2FlashAttention(Qwen2Attention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

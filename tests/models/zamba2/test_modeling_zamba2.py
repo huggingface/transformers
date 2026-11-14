@@ -220,7 +220,7 @@ class Zamba2ModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -238,7 +238,7 @@ class Zamba2ModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -282,14 +282,14 @@ class Zamba2ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(

@@ -171,7 +171,7 @@ class UdopModelTester:
         )
         result = model(input_ids=input_ids, bbox=bbox, decoder_input_ids=decoder_input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
@@ -201,7 +201,7 @@ class UdopModelTester:
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
-    def create_and_check_generate_with_past_key_values(
+    def create_and_check_generate_with_cache(
         self,
         config,
         input_ids,
@@ -313,9 +313,9 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -346,6 +346,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = sorted([*signature.parameters.keys()])
+            arg_names.remove("cache")  # rename past_key_value -> cache got the arg higher in the sorted list
 
             expected_arg_names = [
                 "attention_mask",
