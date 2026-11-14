@@ -247,3 +247,37 @@ class CompressedLoadTest(unittest.TestCase):
                     saved = self._read_safetensors(tmpdirname)
 
                 self._assert_same_tensors(saved, checkpoint)
+
+
+@require_compressed_tensors
+@require_torch
+class ExpertsDequantizeTest(unittest.TestCase):
+    def test_fp8_group_scales(self):
+        "MXFP8 experts: e4m3 weights with a ue8m0 scale (saved as `uint8`) per 32 values decompress per expert"
+        from types import SimpleNamespace
+
+        from compressed_tensors.quantization import QuantizationScheme
+
+        from transformers.integrations.compressed_tensors import CompressedTensorsDequantize
+
+        scheme = QuantizationScheme(
+            targets=["Linear"],
+            weights={"num_bits": 8, "type": "float", "strategy": "group", "group_size": 32, "scale_dtype": "uint8"},
+        )
+        hf_quantizer = SimpleNamespace(
+            compressor=SimpleNamespace(quantization_config=SimpleNamespace(format="mxfp8-quantized"))
+        )
+        model = SimpleNamespace(get_parameter=lambda name: torch.empty(0, dtype=torch.bfloat16))
+        weights = [(torch.randn(8, 64) * 3).to(torch.float8_e4m3fn) for _ in range(2)]
+        scales = [torch.randint(120, 130, (8, 2), dtype=torch.uint8) for _ in range(2)]
+        output = CompressedTensorsDequantize(hf_quantizer, scheme).convert(
+            {"experts.*.gate_proj.weight": weights, "experts.*.gate_proj.weight_scale": scales},
+            source_patterns=[],
+            target_patterns=[],
+            full_layer_name="experts.gate_up_proj",
+            model=model,
+        )
+        expected = torch.stack(
+            [w.float() * torch.exp2(s.float() - 127).repeat_interleave(32, -1) for w, s in zip(weights, scales)]
+        )
+        torch.testing.assert_close(output["experts.*.gate_proj.weight"].float(), expected.bfloat16().float())
