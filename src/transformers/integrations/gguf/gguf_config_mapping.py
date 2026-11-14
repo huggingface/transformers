@@ -117,7 +117,45 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def resolve_gguf_architecture(metadata: dict) -> str:
+    """Resolve Mixtral, which llama.cpp stores under the shared `llama` architecture."""
+    architecture = metadata["general.architecture"]
+    if architecture == "llama" and metadata.get("llama.expert_count", 0) > 0:
+        if metadata.get("llama.expert_shared_count", 0) or metadata.get("llama.expert_gating_func", 1) != 1:
+            raise ValueError(
+                "This llama expert layout is not supported by Mixtral: expected no shared experts and softmax routing."
+            )
+        return "mixtral"
+    return architecture
+
+
+def _mixtral_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    key = lambda name: metadata[f"llama.{name}"]  # noqa: E731
+    return {
+        "model_type": "mixtral",
+        "architectures": ["MixtralForCausalLM"],
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        "hidden_size": key("embedding_length"),
+        "intermediate_size": key("feed_forward_length"),
+        "num_hidden_layers": key("block_count"),
+        "num_attention_heads": key("attention.head_count"),
+        "num_key_value_heads": key("attention.head_count_kv"),
+        "head_dim": metadata.get("llama.attention.key_length", key("embedding_length") // key("attention.head_count")),
+        "max_position_embeddings": key("context_length"),
+        "rms_norm_eps": key("attention.layer_norm_rms_epsilon"),
+        "num_local_experts": key("expert_count"),
+        "num_experts_per_tok": key("expert_used_count"),
+        "sliding_window": metadata.get("llama.attention.sliding_window"),
+        "rope_parameters": {"rope_type": "default", "rope_theta": key("rope.freq_base")},
+        "tie_word_embeddings": "output.weight" not in tensor_names,
+        "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
+        "eos_token_id": metadata.get("tokenizer.ggml.eos_token_id"),
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
+    "mixtral": _mixtral_config,
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
     "lfm2": _lfm2_config,
@@ -129,7 +167,7 @@ def get_gguf_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
 
     Raises for an architecture with no entry above; callers with a fallback check `GGUF_CONFIG_ARCHS`.
     """
-    architecture = metadata["general.architecture"]
+    architecture = resolve_gguf_architecture(metadata)
     if architecture not in GGUF_CONFIG_ARCHS:
         raise ValueError(
             f"Cannot rebuild a config from a GGUF file of architecture {architecture!r}. "
