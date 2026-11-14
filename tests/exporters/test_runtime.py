@@ -41,7 +41,7 @@ import unittest
 import pytest
 
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.decompose import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
@@ -82,12 +82,15 @@ def _tiny_model():
 
 
 def _decompose_static_decode(model, prompt):
-    """Capture the multi-token `decode` component against a fixed-size `StaticCache`."""
+    """Capture the multi-token decode graph (`model`) against a fixed-size `StaticCache`."""
     inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
     gen_config = GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
-    return decompose_for_generation(
+    decode = decompose_for_generation(
         model, copy.deepcopy(inputs), generation_config=gen_config, multi_token_decode=True
-    )["decode"]
+    )["model"]
+    # As `export_for_generation(keep_all_logits=True)`: logits for every query position.
+    decode.inputs.pop("logits_to_keep", None)
+    return decode.module, decode.inputs
 
 
 @slow
@@ -150,6 +153,33 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         self.assertEqual(int(cache.get_seq_length()), 4)
         run(torch.randint(0, 64, (1, 1)), torch.tensor([4]))  # one decode step
         self.assertEqual(int(cache.get_seq_length()), 5)
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino_cross_attention_state_computed_once_per_sequence(self):
+        """An encoder-decoder's OpenVINO decode graph writes its cross-attention cache into state from the
+        variable's initializer, which runs only while the variable is empty: every later step reads it back
+        instead of projecting the encoder output again."""
+        from transformers import T5Config, T5ForConditionalGeneration
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        config = T5Config(
+            vocab_size=99, d_model=32, d_kv=8, d_ff=37, num_layers=2, num_heads=4, decoder_start_token_id=0
+        )
+        model = T5ForConditionalGeneration(config).eval()
+        inputs = {"input_ids": torch.randint(1, 99, (1, 7)), "attention_mask": torch.ones(1, 7, dtype=torch.long)}
+        decode = (
+            OpenVINOExporter()
+            .export_for_generation(model, inputs, OpenVINOConfig(dynamic=True))["decoder_model"]
+            .program
+        )
+
+        cross = [op for op in decode.get_sinks() if "cross_attention_cache" in op.get_variable_id()]
+        self.assertTrue(cross, "no cross-attention state in the decode graph")
+        for assign in cross:
+            source = assign.input_value(0).get_node()
+            self.assertEqual(source.get_type_name(), "ReadValue", assign.get_variable_id())
+            self.assertGreater(source.get_input_size(), 0, f"{assign.get_variable_id()} has no initializer")
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
@@ -561,8 +591,18 @@ class ExportedModelTest(unittest.TestCase):
         from transformers.exporters import ExportedComponent, ExportedModel, ExportMetadata
 
         component = ExportedComponent("program", ExportMetadata())
-        exported = ExportedModel({"prefill": component, "decode": component}, "dynamo")
+        exported = ExportedModel({"encoder_model": component, "decoder_model": component}, "dynamo")
         with self.assertRaisesRegex(ValueError, "2 components"):
+            exported(input_ids=None)
+
+    def test_call_refuses_a_generation_export(self):
+        """A causal LM's generation export is one `model` graph, but takes a cache: calling it can't run it as a
+        forward."""
+        from transformers.exporters import ExportedComponent, ExportedModel, ExportMetadata
+
+        component = ExportedComponent("program", ExportMetadata())
+        exported = ExportedModel({"model": component}, "dynamo", generation=True)
+        with self.assertRaisesRegex(ValueError, "generation export"):
             exported(input_ids=None)
 
 

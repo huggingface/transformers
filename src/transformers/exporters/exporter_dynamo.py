@@ -118,7 +118,7 @@ class DynamoExporter(HfExporter):
             apply_patches("dynamo"),
             reset_model_state(model),
             patch_model_config(model, output_flags),
-            patch_forward_signature(model, sample_inputs),
+            patch_forward_signature(model, sample_inputs, output_flags),
         ):
             exported_program: ExportedProgram = torch.export.export(
                 model,
@@ -181,8 +181,10 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
 
 
 @contextmanager
-def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
-    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
+def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any], output_flags: dict[str, Any]):
+    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`, passing the
+    `output_flags` the config doesn't declare (`patch_model_config` applies the rest, e.g. `logits_to_keep`) as fixed
+    values.
 
     `torch.export` infers the exported function signature from `model.forward.__signature__`.
     Most transformers models use `**kwargs: Unpack[TransformersKwargs]`, which causes
@@ -191,9 +193,11 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
     minimal signature containing only the keys present in `inputs`.
     """
     original_forward = model.forward
+    config = getattr(model, "config", None)
+    fixed = {flag: value for flag, value in output_flags.items() if value is not None and not hasattr(config, flag)}
 
     def _flat_forward(**kwargs):
-        return original_forward(**kwargs)
+        return original_forward(**kwargs, **fixed)
 
     _flat_forward.__signature__ = inspect.Signature(
         [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
@@ -573,7 +577,14 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        attributes = dict(vars(obj))
+        # Sliding-layer step counters would pin the graph to the traced step (see
+        # `_patch_sliding_window_layer`); normalised before the walk so no SymInt leaf is orphaned.
+        if "sliding_window" in attributes and not isinstance(attributes.get("cumulative_length", 0), torch.Tensor):
+            attributes["cumulative_length"] = 0
+        if "cumulative_length_int" in attributes:
+            attributes["cumulative_length_int"] = 0
+        state = {k: _flatten_to_context(v, tensors) for k, v in attributes.items()}
         return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")

@@ -24,7 +24,12 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.decompose import decompose_multimodal, is_multimodal
+from transformers.exporters.decompose import (
+    decode_graph_name,
+    decompose_for_generation,
+    decompose_multimodal,
+    is_multimodal,
+)
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -32,7 +37,6 @@ from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExp
 from transformers.exporters.multimodal import ExportedMultimodalModel
 from transformers.exporters.utils import (
     cast_leaf_tensors,
-    decompose_for_generation,
     get_leaf_tensors,
     module_device,
     module_dtype,
@@ -162,6 +166,26 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "`decompose_prefill_decode` can't capture the full generate path reliably, causing flaky "
             "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
         ),
+        # Refused by `decompose_for_generation`: the prefill step would need a graph of its own, a second copy of
+        # the weights.
+        "CohereAsrForConditionalGeneration": (
+            "The decoder projects the cross-attention keys/values from the encoder output inside its forward, and "
+            "neither the encoder graph nor the decode graph can write that cache. TODO: compute it in the encoder."
+        ),
+        "FSMTForConditionalGeneration": "Same cross-attention cache as `CohereAsrForConditionalGeneration`.",
+        "Pix2StructForConditionalGeneration": "Same cross-attention cache as `CohereAsrForConditionalGeneration`.",
+        "PPFormulaNetForConditionalGeneration": "Same cross-attention cache as `CohereAsrForConditionalGeneration`.",
+        "IdeficsForVisionText2Text": (
+            "Its gated cross-attention re-reads the image features on every step instead of caching their K/V. "
+            "TODO: cache them, then compute them in the vision encoder graph."
+        ),
+        "GitForCausalLM": (
+            "Its image encoder runs inside the forward on the prefill step only. TODO: expose the image features as "
+            "an embedding prefix, so the image becomes a component of its own."
+        ),
+        "Kosmos2_5ForConditionalGeneration": "Same image encoder inside the forward as `GitForCausalLM`.",
+        "PerceptionLMForConditionalGeneration": "Same as `GitForCausalLM`, for its video input.",
+        "HiggsAudioV2ForConditionalGeneration": "Same as `GitForCausalLM`, for its audio input.",
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
@@ -207,6 +231,74 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
+        # The multi-token decode graph also serves the prefill step, and these can't take that call.
+        "MambaForCausalLM": (
+            "The selective scan runs as a python loop under export, which unrolls to the traced length, so the "
+            "decode graph can't take the prefill call (`Guard failed: input_ids.size()[1] == 2`)."
+        ),
+        "FalconMambaForCausalLM": "Same unrolled selective scan as `MambaForCausalLM`.",
+        "JambaForCausalLM": "Same unrolled selective scan as `MambaForCausalLM`.",
+        "ZambaForCausalLM": (
+            "Its per-head mixer runs the selective scan as a python loop, which unrolls under export and fixes the query "
+            "axis to the traced length (`Guard failed: input_ids.size()[1] == 2`)."
+        ),
+        "NemotronH_Omni_Reasoning_V3": (
+            "The Mamba2 chunked scan fixes the query axis to one chunk (`Guard failed: 8 >= inputs_embeds.size()[1] "
+            "+ ...`), so a prompt longer than `chunk_size` can't take the decode graph."
+        ),
+        "ZayaForCausalLM": (
+            "The router slices `router_hidden_states[:, -seq_len + 1 :]`, fixing the query axis to the traced length "
+            "(`Guard failed: -1 + input_ids.size()[1] == 1`)."
+        ),
+        "ProphetNetForConditionalGeneration": (
+            "Its ngram decoder bakes the traced cache length (`Guard failed: 1 + past_key_values[0].size()[2] == 4`)."
+        ),
+        "ClvpForCausalLM": "Its position handling bakes the traced length (`attention_mask.size()[1] >= 4`).",
+        "DiaForConditionalGeneration": "Its decoder mask bakes the traced length (`decoder_attention_mask >= 3`).",
+        "KyutaiSpeechToTextForConditionalGeneration": (
+            "Encodes audio window by window inside `prepare_inputs_for_generation`, and the graph bakes a one-token "
+            "cache (`Guard failed: past_key_values[0].size()[2] == 1`)."
+        ),
+        "Ernie4_5_VLMoeForConditionalGeneration": (
+            "The MoE takes its vision experts only when `moe_mm_token_type_ids.any()`, a data-dependent branch, so the "
+            "decode graph runs the prefill step's image tokens through the text experts."
+        ),
+        "PocketTTSForConditionalGeneration": (
+            "Feeds each step's generated audio latents back in, which the merged decode capture doesn't concatenate "
+            "and the prefill step doesn't take. TODO: carry per-step model inputs through the decomposition."
+        ),
+        "GradiumPhononTTSForConditionalGeneration": "Same fed-back audio latents as `PocketTTSForConditionalGeneration`.",
+        "MiniMaxForCausalLM": (
+            "`MiniMaxCache` keeps its lightning-attention state in a separate `linear_cache` list the prefill call "
+            "can't materialize. TODO: move it into `LinearAttentionLayer`s."
+        ),
+        "xLSTMForCausalLM": "Carries its state under `cache_params`, an `xLSTMCache` without the `Cache` API.",
+        "RwkvForCausalLM": "Carries its state under its own `state` kwarg rather than a `Cache`.",
+        "XLNetLMHeadModel": (
+            "`prepare_inputs_for_generation` builds `perm_mask` / `target_mapping` and a three-token step over `mems` "
+            "every step."
+        ),
+        "XLMWithLMHeadModel": (
+            "`prepare_inputs_for_generation` appends a mask token and builds `langs` every step, so its calls don't "
+            "share one input structure."
+        ),
+        "OpenAIGPTLMHeadModel": (
+            "Uses no KV cache: each step re-runs the whole sequence, branching on `next_sequence_length`."
+        ),
+        "BltForCausalLM": "Expects an `EncoderDecoderCache` pair, which the prefill call's plain cache doesn't match.",
+        "DeepseekV4ForCausalLM": (
+            "Its compressor cache state is `None` until the compressor first fires, so the prefill call has fewer "
+            "cache leaves than the traced decode step."
+        ),
+        "MiniMaxM3SparseForConditionalGeneration": (
+            "Its sparse layers keep indexer keys (`idx_keys`) outside the shared indexer-cache API, so the prefill "
+            "call can't materialize them. TODO: use the shared indexer cache layer."
+        ),
+        "InternVLForConditionalGeneration": (
+            "The vision downsampling checks divisibility by the float `scale_factor`, which dynamic shapes can't "
+            "range (`ValueRangeError`)."
+        ),
+        "QianfanOCRForConditionalGeneration": "Same float `scale_factor` check as `InternVLForConditionalGeneration`.",
         "MllamaForConditionalGeneration": (
             "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
             "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
@@ -225,6 +317,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "with an unconditional call, mismatching the query and cache axes (`size 5 vs 3` in attention). "
             "Single-token static generate is fine (it captures a conditional decode step). "
             "TODO: make the capture branch-aware."
+        ),
+    },
+    # Generate with a static cache, every backend.
+    "static-cache": {
+        "T5Gemma2ForConditionalGeneration": (
+            "Its decoder merges self- and cross-attention, so with a static cache neither the encoder graph nor the "
+            "decode graph can write the cross-attention cache. The dynamic cache works."
         ),
     },
     # ONNX, every variant.
@@ -750,12 +849,12 @@ def _run_openvino_model(ov_model, inputs) -> dict:
 
 
 def _run_executorch_program(exported, inputs):
-    """Run an ExecuTorch export through its runner, returning its outputs, or `None` to skip this component when
+    """Run an ExecuTorch export through its runner, returning its outputs as `{name: tensor}`, or `None` when
     ExecuTorch's own runtime can't service it (a missing portable kernel, an oversized arena, a portable-kernel or
     XNNPACK-delegate failure): a runtime limitation, not a transformers export defect."""
     set_seed(1234)
     try:
-        return list(get_leaf_tensors(exported(**inputs)).values())
+        return get_leaf_tensors(exported(**inputs))
     except (RuntimeError, MemoryError) as e:
         if _is_executorch_runtime_limit(e):
             return None
@@ -1223,9 +1322,9 @@ class ExportTesterMixin:
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported = exporter.export(model, inputs, config=config)
                     executorch_outputs = _run_executorch_program(exported, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit
+                    if executorch_outputs is None:  # an ExecuTorch runtime limitation, not an export defect
                         continue
-                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+                    self.assertEqual(set(executorch_outputs), set(eager_outputs[name]))
 
 
 class ExportGenerateTesterMixin(ExportTesterMixin):
@@ -1249,23 +1348,16 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     ):
         """Decompose a generative model into exportable components.
 
-        For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
-        For decoder-only models: returns prefill and decode components.
+        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` so the ``generate()`` call
+        inside :func:`decompose_for_generation` runs on CPU — a device-side assert there (e.g. a VLM
+        ``masked_scatter`` size mismatch) would otherwise poison the xdist worker's CUDA context.
 
-        ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` so the
-        ``generate()`` call inside :func:`decompose_for_generation` runs on CPU — a device-side
-        assert there (e.g. a VLM ``masked_scatter`` size mismatch) would otherwise poison the
-        xdist worker's CUDA context and cascade to every later test on it.
-
-        ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own).
-        Pass one with ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
-
-        ``multi_token_decode`` captures the ``decode`` component with a multi-token query axis
-        (continuation-from-past, or a plain prefill when the cache is empty) instead of the classic
-        single-token step — see :func:`decompose_for_generation`.
+        ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own). Pass one with
+        ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
 
         Returns:
-            `{name: (model, inputs)}`: the components mapping (see `_prepare_export_model_and_inputs`).
+            `{name: (model, inputs)}`: one entry per component, plus `"prefill"` with `multi_token_decode`: the decode
+            graph's call on the prefill step, not a graph of its own (see `_calls_served`).
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -1276,9 +1368,21 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
-        return decompose_for_generation(
+        components = decompose_for_generation(
             model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
         )
+        if not multi_token_decode:
+            components.pop("prefill")
+        return {name: (component.module, component.inputs) for name, component in components.items()}
+
+    @staticmethod
+    def _calls_served(components: dict, name: str) -> dict:
+        """`{call: inputs}` an exported component runs on: its own call, plus the prefill call for a decode graph
+        that serves the prefill step too."""
+        calls = {name: components[name][1]}
+        if name == decode_graph_name(components) and "prefill" in components:
+            calls["prefill"] = components["prefill"][1]
+        return calls
 
     # ──────────────────── torch.export tests ─────────────────────
 
@@ -1289,9 +1393,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_torch_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
-        """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
+        """Export each generation component with ``torch.export`` and verify outputs match eager on every call."""
         self._skip_if_not_exportable()
-
         exporter = DynamoExporter()
         config = DynamoConfig(dynamic=dynamic)
 
@@ -1300,6 +1403,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
             ):
                 continue
+
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
@@ -1309,31 +1413,26 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             )
 
             for name, (model, inputs) in components.items():
-                check_device = True
+                if name == "prefill":
+                    continue
+                exported = exporter.export(model, copy.deepcopy(inputs), config=config)
+                # A cache whose shared layers stay uninitialized keeps their `cumulative_length` on the CPU.
                 cache = inputs.get("cache")
-                # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
-                # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
-                if (
-                    cache is not None
-                    and hasattr(cache, "layers")
-                    and any(
-                        hasattr(layer, "is_initialized")
-                        and not layer.is_initialized
-                        and hasattr(layer, "cumulative_length")
-                        for layer in cache.layers
-                    )
-                ):
-                    check_device = False
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported = exporter.export(model, inputs, config=config)
-                    set_seed(1234)
-                    exported_outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
-                    self.assertTrue(exported_outputs, "Exported outputs are empty.")
-
-                    if check_exactness:
-                        self._check_outputs_close(
-                            exported_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=check_device
-                        )
+                check_device = not any(
+                    hasattr(layer, "is_initialized")
+                    and not layer.is_initialized
+                    and hasattr(layer, "cumulative_length")
+                    for layer in getattr(cache, "layers", [])
+                )
+                for call, call_inputs in self._calls_served(components, name).items():
+                    with self.subTest(f"{model_class.__name__}/{call}"):
+                        set_seed(1234)
+                        exported_outputs = get_leaf_tensors(exported(**copy.deepcopy(call_inputs)))
+                        self.assertEqual(set(exported_outputs), set(eager_outputs[call]))
+                        if check_exactness:
+                            self._check_outputs_close(
+                                exported_outputs, eager_outputs[call], atol=atol, rtol=rtol, check_device=check_device
+                            )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -1346,8 +1445,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_onnx_export_generate(self, dynamic, generation_config):
-        """Export prefill and decode stages to ONNX and verify output names match eager."""
+        """Export each generation component to ONNX, run it on every call, and verify output names match eager."""
         self._skip_if_not_exportable()
+        exporter = OnnxExporter()
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
@@ -1356,23 +1456,23 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 continue
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
-            exporter = OnnxExporter()
             # The fusions need the onnxscript optimization, and target the CPU and CUDA providers only.
             ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
             config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
-
             components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported = exporter.export(model, inputs, config=config)
-                    set_seed(1234)
-                    onnx_outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
-                    self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
-                    self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+                if name == "prefill":
+                    continue
+                exported = exporter.export(model, copy.deepcopy(inputs), config=config)
+                for call, call_inputs in self._calls_served(components, name).items():
+                    with self.subTest(f"{model_class.__name__}/{call}"):
+                        set_seed(1234)
+                        onnx_outputs = get_leaf_tensors(exported(**copy.deepcopy(call_inputs)))
+                        self.assertEqual(set(onnx_outputs), set(eager_outputs[call]))
 
     # ──────────────────── OpenVINO tests ─────────────────────────
 
@@ -1383,7 +1483,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @disable_hub_kernels
     def test_openvino_export_generate(self, dynamic, generation_config):
-        """Export prefill and decode stages to OpenVINO IR and verify output names match eager."""
+        """Export each generation component to OpenVINO IR, run it on every call, and verify output names match
+        eager."""
         self._skip_if_not_exportable()
         exporter = OpenVINOExporter()
         config = OpenVINOConfig(dynamic=dynamic)
@@ -1400,11 +1501,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config).program
-                    ov_outputs = _run_openvino_model(ov_model, inputs)
-                    self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
-                    self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+                if name == "prefill":
+                    continue
+                exported = exporter.export(model, copy.deepcopy(inputs), config=config)
+                for call, call_inputs in self._calls_served(components, name).items():
+                    with self.subTest(f"{model_class.__name__}/{call}"):
+                        ov_outputs = _run_openvino_model(exported.program, copy.deepcopy(call_inputs))
+                        self.assertEqual(set(ov_outputs), set(eager_outputs[call]))
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1416,8 +1519,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_executorch_export_generate(self, backend, dynamic, generation_config):
-        """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
-
+        """Export each generation component to ExecuTorch, run it on every call, and verify output names match
+        eager."""
         self._skip_if_not_exportable()
         exporter = ExecutorchExporter()
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
@@ -1430,18 +1533,20 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 for scope in ("executorch", backend)
             ):
                 continue
+
+            # On CPU: XNNPACK targets it, and a device-side assert while capturing would poison the worker's GPU.
             components = self._prepare_export_generate_model_and_inputs(
-                model_class,
-                device="cpu",
-                generation_config=generation_config,
-                multi_token_decode=dynamic,
+                model_class, device="cpu", generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs, _ = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported = exporter.export(model, inputs, config=config)
-                    executorch_outputs = _run_executorch_program(exported, inputs)
-                    if executorch_outputs is None:  # ExecuTorch runtime limit
-                        continue
-                    self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+                if name == "prefill":
+                    continue
+                exported = exporter.export(model, copy.deepcopy(inputs), config=config)
+                for call, call_inputs in self._calls_served(components, name).items():
+                    with self.subTest(f"{model_class.__name__}/{call}"):
+                        executorch_outputs = _run_executorch_program(exported, copy.deepcopy(call_inputs))
+                        if executorch_outputs is None:  # an ExecuTorch runtime limitation, not an export defect
+                            continue
+                        self.assertEqual(set(executorch_outputs), set(eager_outputs[call]))
