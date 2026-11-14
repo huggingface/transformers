@@ -192,64 +192,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
-
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        batch_size, num_images, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
-        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-        # Remove padding images - padding images are full 0.
-        nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-        # If no images, leave one empty image.
-        real_images_inds[0] |= ~torch.any(real_images_inds)
-
-        pixel_values = pixel_values[real_images_inds].contiguous()
-        # Handle the vision attention mask
-        if pixel_attention_mask is None:
-            pixel_attention_mask = torch.ones(
-                size=[pixel_values.shape[i] for i in (0, 2, 3)],
-                dtype=torch.bool,
-                device=pixel_values.device,
-            )
-        else:
-            # Remove padding images from the mask
-            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
-            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-        patch_size = self.config.vision_config.patch_size
-        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-        # Get sequence from the vision encoder
-        image_outputs = self.vision_model(
-            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
-        )
-        image_hidden_states = image_outputs.last_hidden_state
-
-        # Modality projection & resampling
-        image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        return image_outputs
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
-    )
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -263,7 +205,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             The attention mask indicating padded regions in the image.
         """
         image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
-        # Padding images are full 0 (one is kept when all are): the features hold the real ones' tokens, in batch order
+        # Padding images are all zeros (one is kept when all are)
         real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
         real_images.view(-1)[0] |= ~torch.any(real_images)
         num_real_images_per_batch = real_images.sum(dim=1)
@@ -309,13 +251,14 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # Images processing
         if pixel_values is not None:
-            image_hidden_states = self.get_image_features(
+            image_hidden_states = self.get_image_embeddings(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
             ).pooler_output
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
-            image_hidden_states = torch.cat(image_hidden_states, dim=0)
+            if not isinstance(image_hidden_states, torch.Tensor):
+                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
@@ -359,6 +302,63 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
+    )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        batch_size, num_images, num_channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
+        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
+
+        # Remove padding images - padding images are full 0.
+        nb_values_per_image = pixel_values.shape[1:].numel()
+        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
+
+        # If no images, leave one empty image.
+        real_images_inds[0] |= ~torch.any(real_images_inds)
+
+        pixel_values = pixel_values[real_images_inds].contiguous()
+        # Handle the vision attention mask
+        if pixel_attention_mask is None:
+            pixel_attention_mask = torch.ones(
+                size=[pixel_values.shape[i] for i in (0, 2, 3)],
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+        else:
+            # Remove padding images from the mask
+            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
+            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
+        patch_size = self.config.vision_config.patch_size
+        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
+        # Get sequence from the vision encoder
+        image_outputs = self.vision_model(
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
+        )
+        image_hidden_states = image_outputs.last_hidden_state
+
+        # Modality projection & resampling
+        image_features = self.connector(image_hidden_states)
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        return image_outputs
 
 
 class ModernVBertPredictionHead(nn.Module):

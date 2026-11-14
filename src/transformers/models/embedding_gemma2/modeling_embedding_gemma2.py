@@ -778,8 +778,10 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = self.get_image_embeddings(
+                pixel_values, image_position_ids, return_dict=True
+            ).pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -884,8 +886,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
 
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -910,8 +911,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        The features of all videos as one tensor, in the order the model embeds them: `get_video_features` splits
-        them per video.
+        All videos' features as one tensor; `get_video_features` splits them per video.
 
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked

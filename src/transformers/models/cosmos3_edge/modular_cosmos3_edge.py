@@ -581,8 +581,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
@@ -609,7 +608,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        # Video frames use the same vision tower and projector path as images.
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
 
     def get_video_features(

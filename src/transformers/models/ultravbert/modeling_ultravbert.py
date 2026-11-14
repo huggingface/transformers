@@ -210,6 +210,110 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
+        # Padding images are all zeros (one is kept when all are)
+        real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
+        real_images.view(-1)[0] |= ~torch.any(real_images)
+        num_real_images_per_batch = real_images.sum(dim=1)
+        tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)
+        split_sizes = (num_real_images_per_batch * tokens_per_image).tolist()
+        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, split_sizes))
+
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
+        image_hidden_states: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | UltraVBertBaseModelOutput:
+        r"""
+        pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
+            Mask over the real pixels of each image tile.
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        """
+
+        if inputs_embeds is None:
+            inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
+
+        # Images processing
+        if pixel_values is not None:
+            image_hidden_states = self.get_image_embeddings(
+                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
+            ).pooler_output
+
+        # Merge image and text embeddings
+        if image_hidden_states is not None:
+            if not isinstance(image_hidden_states, torch.Tensor):
+                image_hidden_states = torch.cat(image_hidden_states, dim=0)
+            image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
+
+        # Language model pass
+        outputs = self.text_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            **kwargs,
+        )
+
+        return UltraVBertBaseModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_hidden_states,
+        )
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+        )
+        return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
+    )
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -217,8 +321,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
 
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -263,109 +366,6 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         image_features = self.connector(image_hidden_states)
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
         return image_outputs
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
-        # Padding images are full 0 (one is kept when all are): the features hold the real ones' tokens, in batch order
-        real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
-        real_images.view(-1)[0] |= ~torch.any(real_images)
-        num_real_images_per_batch = real_images.sum(dim=1)
-        tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)
-        split_sizes = (num_real_images_per_batch * tokens_per_image).tolist()
-        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, split_sizes))
-
-        return image_outputs
-
-    @can_return_tuple
-    @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UltraVBertBaseModelOutput:
-        r"""
-        pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
-            Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
-        """
-
-        if inputs_embeds is None:
-            inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
-
-        # Images processing
-        if pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
-            ).pooler_output
-
-        # Merge image and text embeddings
-        if image_hidden_states is not None:
-            image_hidden_states = torch.cat(image_hidden_states, dim=0)
-            image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-            special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
-
-        # Language model pass
-        outputs = self.text_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            **kwargs,
-        )
-
-        return UltraVBertBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-        )
-
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
-    ):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
-        torch_compilable_check(
-            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
-        )
-        return special_image_mask
 
 
 class UltraVBertPredictionHead(nn.Module):
