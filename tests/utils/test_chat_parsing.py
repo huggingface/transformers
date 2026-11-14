@@ -18,6 +18,7 @@ here in the new region-spec shape and asserted against the same expected
 output dicts. Any divergence indicates a regression in the new executor."""
 
 import copy
+import json
 import random
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ import unittest
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
+from transformers.utils.chat_parsing.content_parsers import parse_content
 from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
 from transformers.utils.chat_parsing.response_templates import load_response_template
 
@@ -1365,6 +1367,80 @@ class ResponseEventStreamTest(unittest.TestCase):
         # Only the default fields should remain; nothing else is required.
         self.assertEqual(result, {"role": "assistant"})
         self.assertEqual(final_events, [])
+
+    def test_close_pattern_captures_reach_transform(self):
+        """Named groups in `close_pattern` are available to the transform alongside the ones from
+        `open_pattern`, with the closing capture winning when both patterns use the same name."""
+        spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "[BEGIN]",
+            "fields": {
+                "item": {
+                    "open_pattern": r"<(?P<tag>item):(?P<id>\w+)>",
+                    "close_pattern": r"</(?P<tag>\w+)>",
+                    "repeats": True,
+                    "transform": {"tag": "{tag}", "id": "{id}", "body": "{content}"},
+                },
+            },
+        }
+        text = "<item:first>one</done><item:second>two</finished>"
+        expected = [{"tag": "done", "id": "first", "body": "one"}, {"tag": "finished", "id": "second", "body": "two"}]
+        self.assertEqual(parse_response(text, spec, prefix="")["item"], expected)
+        for split in range(len(text) + 1):
+            with self.subTest(split=split):
+                streamer = ResponseParser(spec, prefix="")
+                streamer.feed(text[:split])
+                streamer.feed(text[split:])
+                self.assertEqual(streamer.finalize()[0]["item"], expected)
+
+    def test_end_of_input_closers_wait_for_end_of_stream(self):
+        """`$` also matches just before a trailing newline, so a chunk ending in "\\n" must not close a
+        region whose closer depends on end-of-input. A plain lookahead closer still fires immediately."""
+        for close_pattern in ("$", "(?=$)", "END$", r"(?=\n\Z)"):
+            spec = {
+                "defaults": {"role": "assistant"},
+                "start_anchor": "[BEGIN]",
+                "fields": {
+                    "item": {"open": "<item>", "close_pattern": close_pattern, "content_args": {"strip": False}}
+                },
+            }
+            marker = "END" if close_pattern.startswith("END") else ""
+            text = f"<item>hello{marker}\nworld{marker}"
+            expected = parse_response(text, spec, prefix="")
+            for split in range(len(text) + 1):
+                with self.subTest(close_pattern=close_pattern, split=split):
+                    streamer = ResponseParser(spec, prefix="")
+                    events = streamer.feed(text[:split])
+                    self.assertFalse(any(e["type"] == "region_close" for e in events))
+                    streamer.feed(text[split:])
+                    self.assertEqual(streamer.finalize()[0], expected)
+
+        spec = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "[BEGIN]",
+            "fields": {"item": {"open": "<item>", "close_pattern": "(?=NEXT)"}, "content": {}},
+        }
+        streamer = ResponseParser(spec, prefix="")
+        self.assertIn({"type": "region_close", "field": "item", "value": "hello"}, streamer.feed("<item>helloNEXT"))
+        self.assertEqual(streamer.finalize()[0], {"role": "assistant", "item": "hello", "content": "NEXT"})
+
+    def test_unquoted_keys_leaves_strings_alone(self):
+        """`unquoted_keys` only quotes bare keys. Key-like text inside a string value (or a key that is
+        already quoted) must come through untouched, so valid JSON never fails with the option enabled."""
+        args = {"unquoted_keys": True}
+        values = [
+            {"text": "note,warning: hot", "n": 1},
+            {"text": 'quote: ",warning: hot', "nested": {"text": "{key:value}"}},
+            {"text": "backslash: \\", "items": [{"text": "comma,key:value"}]},
+            {"quoted,key:here": "value"},
+        ]
+        for value in values:
+            with self.subTest(value=value):
+                self.assertEqual(parse_content(json.dumps(value, separators=(",", ":")), "json", args), value)
+        self.assertEqual(
+            parse_content('{text:"note,warning: hot",nested:{n:1}}', "json", args),
+            {"text": "note,warning: hot", "nested": {"n": 1}},
+        )
 
 
 class PrefixAndTruncationTest(unittest.TestCase):
