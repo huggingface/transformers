@@ -681,6 +681,35 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
+    @require_onnxscript
+    @require_onnxruntime
+    @require_modelopt
+    @pytest.mark.onnx_export_test
+    @disable_hub_kernels
+    def test_modelopt_onnx_calibration_generator(self):
+        """ModelOpt reads the calibration feeds more than once (the first one, then the calibration pass): a one-shot
+        `calibration_dataset` still hands it every sample."""
+        import shutil
+
+        from transformers.exporters import ModelOptOnnxQuantizer, OnnxConfig, OnnxExporter
+        from transformers.exporters.quantizers import quantizer_modelopt
+
+        model, inputs = self._quantization_target("dense")
+        feeds = []
+
+        def quantize(path, calibration_data_reader, output_path, **kwargs):
+            # ModelOpt's reads, without its calibration: the first feed, then every feed
+            calibration_data_reader.get_first()
+            while (feed := calibration_data_reader.get_next()) is not None:
+                feeds.append(feed)
+            shutil.copy(path, output_path)
+
+        samples = (copy.deepcopy(inputs) for _ in range(3))
+        quantizer = ModelOptOnnxQuantizer(calibration_dataset=samples)
+        with patch.object(quantizer_modelopt, "modelopt_quantize", quantize):
+            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        self.assertEqual(len(feeds), 3)
+
 
 @slow
 @require_torch

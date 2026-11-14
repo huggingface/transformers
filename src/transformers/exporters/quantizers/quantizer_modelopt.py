@@ -121,7 +121,12 @@ class ModelOptOnnxQuantizer(ExportQuantizer):
         self, model: onnx_ir.Model, sample_inputs: dict[str, Any], export_format: ExportFormat
     ) -> onnx_ir.Model:
         names = [graph_input.name for graph_input in model.graph.inputs]
-        calibration = CalibrationSet(self.calibration_dataset, sample_inputs, lambda sample: onnx_feed(names, sample))
+        # ModelOpt reads the feeds more than once (the first one for its graph analysis, then every calibration pass),
+        # so a one-shot `calibration_dataset` such as a generator is read once here: re-iterating it would drop the
+        # first sample, then every sample of a later pass
+        calibration = list(
+            CalibrationSet(self.calibration_dataset, sample_inputs, lambda sample: onnx_feed(names, sample))
+        )
         with tempfile.TemporaryDirectory() as tmp:
             # ModelOpt quantizes from and to files with external data, so models past protobuf's 2GB limit work
             path = os.path.join(tmp, "model.onnx")
