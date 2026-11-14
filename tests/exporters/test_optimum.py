@@ -52,9 +52,9 @@ if is_torch_available():
     import torch
 
 
-def _load(test, repo, library):
+def _load(test, repo, library, trust_remote_code=False):
     with CaptureLogger(optimum.logger) as captured:
-        model = ExportedModel.from_pretrained(repo, device="cpu")
+        model = ExportedModel.from_pretrained(repo, device="cpu", trust_remote_code=trust_remote_code)
     test.assertIn(f"is an {library} export", captured.out)
     return model
 
@@ -151,6 +151,25 @@ class OptimumIntelTest(unittest.TestCase):
     def test_multimodal_with_crops_glue(self):
         """MiniCPM-V 4.7's vision graph, taking the position, window and merge indices of each image's crops."""
         _check_names_the_cats(self, "OpenVINO/MiniCPM-V-4.7-1B-int4-ov", "optimum-intel", max_new_tokens=60)
+
+    def test_multimodal_with_resampler(self):
+        """MiniCPM-V 4.5's vision graph fused with its resampler, run per crop (its config and processor are remote
+        code, its prompt its own)."""
+        from transformers.image_utils import load_image
+
+        repo = "OpenVINO/MiniCPM-V-4_5-int4-cw-ov"
+        processor = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
+        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+        prompt = "(<image>./</image>)\nWhat animal is in this picture? Answer in one word."
+        text = processor.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True
+        )
+        inputs = processor(text=[text], images=[[image]], return_tensors="pt")
+        model = _load(self, repo, "optimum-intel", trust_remote_code=True)
+        self.assertIsInstance(model, ExportedMultimodalModelForCausalLM)
+        generated = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=16, do_sample=False))
+        answer = processor.tokenizer.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        self.assertIn("cat", answer.lower())
 
 
 @slow

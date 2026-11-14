@@ -118,6 +118,14 @@ OPENVINO_VISION_MERGER = "vision_embeddings_merger_model"
 _OPENVINO_CROP_GLUE = {"position_ids", "window_index", "merge_index"}
 # Qwen3-VL's third vision graph: the learned position embeddings it interpolates to each image's grid
 OPENVINO_VISION_POSITIONS = "vision_embeddings_pos_model"
+# MiniCPM-V 4.5's second vision graph: a resampler taking the patch features, fused like a merger; the vision graph takes
+# each crop's position ids, the resampler its 2D sin-cos position embeddings, both their padding masks
+OPENVINO_VISION_RESAMPLER = "resampler_model"
+_OPENVINO_RESAMPLER_GLUE = {"patch_attention_mask", "position_ids", "pos_embed", "key_padding_mask"}
+# Its image placeholder token, which its config doesn't name, and what its processor returns besides the crops: their
+# patch grids, read by the glue, and the placeholders' spans and video frame ids, which the placeholders already give
+_OPENVINO_RESAMPLER_PLACEHOLDER = "<unk>"
+_OPENVINO_RESAMPLER_INPUTS = {"tgt_sizes", "image_bound", "temporal_ids"}
 _OPENVINO_MERGER_GLUE = {
     "attention_mask",
     "rotary_pos_emb",
@@ -158,15 +166,18 @@ def _openvino_metadata(config, kwargs: dict[str, Any], outputs: Any, stateful: b
 
 
 def _fuse_openvino_vision(
-    embeddings: openvino.Model, merger: openvino.Model, positions: openvino.Model | None = None
+    embeddings: openvino.Model,
+    merger: openvino.Model,
+    positions: openvino.Model | None = None,
+    hidden: str = "hidden_states",
 ) -> openvino.Model:
-    """One vision graph from a tower split in two or three: the merger's `hidden_states` input fed the embeddings'
-    output (plus, for Qwen3-VL, the position embeddings at the bilinear `position_index`, weighted by
-    `position_weights` and summed), and the embeddings' input named `pixel_values`, as the runtime feeds it."""
+    """One vision graph from a tower split in two or three: the merger's `hidden` input fed the embeddings' output
+    (plus, for Qwen3-VL, the position embeddings at the bilinear `position_index`, weighted by `position_weights` and
+    summed), and the embeddings' input named `pixel_values`, as the runtime feeds it."""
     import openvino
     import openvino.opset13 as ops
 
-    hidden_states = merger.input("hidden_states").get_node()
+    hidden_states = merger.input(hidden).get_node()
     source = embeddings.get_results()[0].input_value(0)
     parameters = list(embeddings.get_parameters())
     if positions is not None:
@@ -302,6 +313,47 @@ def _crop_features(config, runner, pixel_values: torch.Tensor, target_sizes: tor
     return torch.cat(features)
 
 
+def _sincos(dim: int, positions: torch.Tensor) -> torch.Tensor:
+    omega = 1.0 / 10000 ** (torch.arange(dim // 2, dtype=torch.float64) / (dim / 2))
+    angles = positions[..., None].double() * omega
+    return torch.cat([angles.sin(), angles.cos()], dim=-1)
+
+
+def _navit_position_ids(height: int, width: int, side: int) -> torch.Tensor:
+    """MiniCPM-V 4.5's position ids: each patch's bucket on a `side` grid, from coordinates stepped by `arange` as its
+    vision tower computes them (`i / height` rounds differently at bucket edges)."""
+    boundaries = torch.arange(1 / side, 1.0, 1 / side)
+    rows = torch.bucketize(torch.arange(0, 1 - 1e-6, 1 / height), boundaries, right=True)
+    columns = torch.bucketize(torch.arange(0, 1 - 1e-6, 1 / width), boundaries, right=True)
+    return (rows[:, None] * side + columns).flatten()
+
+
+def _resampled_features(config, runner, pixel_values: list, tgt_sizes: list) -> torch.Tensor:
+    """Features from a vision graph fused with its resampler (MiniCPM-V 4.5's), run per crop on the processor's crops
+    `[channels, patch, patches * patch]`, each fed its position ids and the 2D sin-cos position embeddings of its
+    patch grid, as optimum-intel computes them."""
+    crops = [crop for image_crops in pixel_values for crop in image_crops]
+    sizes = torch.cat([sizes for sizes in tgt_sizes if isinstance(sizes, torch.Tensor)])
+    dim = config.hidden_size
+    side = config.vision_config.image_size // config.patch_size
+    features = []
+    for crop, (height, width) in zip(crops, sizes.tolist()):
+        rows, columns = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
+        # The column coordinate's half first, as the resampler was trained
+        pos_embed = torch.cat([_sincos(dim // 2, columns), _sincos(dim // 2, rows)], dim=-1).flatten(0, 1)
+        patches = height * width
+        crop_features = runner(
+            pixel_values=crop[None].float(),
+            patch_attention_mask=torch.ones(1, 1, patches, dtype=torch.bool),
+            position_ids=_navit_position_ids(height, width, side)[None],
+            pos_embed=pos_embed[:, None].float(),
+            key_padding_mask=torch.zeros(1, patches, dtype=torch.bool),
+            share_outputs=True,
+        )
+        features.append(crop_features.reshape(-1, crop_features.shape[-1]))
+    return torch.cat(features)
+
+
 def _load_openvino_multimodal(
     pretrained_model_name_or_path, config, **kwargs
 ) -> tuple[dict[str, ExportedComponent], bool]:
@@ -321,7 +373,17 @@ def _load_openvino_multimodal(
     }
     reason = None
     merger = positions = None
-    if OPENVINO_VISION_MERGER in graphs:
+    hidden, merger_glue = "hidden_states", _OPENVINO_MERGER_GLUE
+    if OPENVINO_VISION_RESAMPLER in graphs:
+        merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_RESAMPLER}.xml", **kwargs)
+        hidden, merger_glue = "image_feature", _OPENVINO_RESAMPLER_GLUE
+        graphs = graphs - {OPENVINO_VISION_RESAMPLER}
+        if getattr(config, "image_token_id", None) is None:
+            from tokenizers import Tokenizer
+
+            tokenizer = Tokenizer.from_file(cached_file(pretrained_model_name_or_path, "tokenizer.json", **kwargs))
+            config.image_token_id = tokenizer.token_to_id(_OPENVINO_RESAMPLER_PLACEHOLDER)
+    elif OPENVINO_VISION_MERGER in graphs:
         merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_MERGER}.xml", **kwargs)
         glue = {port.get_any_name() for port in merger.inputs} - {"hidden_states"}
         if glue <= _OPENVINO_MERGER_GLUE:
@@ -350,13 +412,13 @@ def _load_openvino_multimodal(
             continue
         program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
         if name == "vision_embeddings_model" and merger is not None:
-            program = _fuse_openvino_vision(program, merger, positions)
+            program = _fuse_openvino_vision(program, merger, positions, hidden)
         for port in program.inputs:
             # The image grid, which the runtime feeds a modality graph as `grid_thw`
             if port.get_any_name() == "image_grid_thw":
                 port.get_tensor().set_names({"grid_thw"})
         port_names = [port.get_any_name() for port in program.inputs]
-        glue_ports = {"grid_thw"} | (_OPENVINO_MERGER_GLUE if merger is not None else set())
+        glue_ports = {"grid_thw"} | (merger_glue if merger is not None else set())
         if set(port_names) >= _OPENVINO_CROP_GLUE:
             glue_ports |= _OPENVINO_CROP_GLUE
         data_ports = [port for port in port_names if port not in glue_ports]
@@ -815,6 +877,8 @@ class _OptimumGenerationMixin:
         if "rotary_pos_emb" in traced and grid is not None:
             kwargs = {**kwargs, **_vision_glue(self.config, grid, traced)}
         pixel_values = kwargs.get("pixel_values")
+        if "pos_embed" in traced and kwargs.get("tgt_sizes") is not None:
+            return _resampled_features(self.config, runner, pixel_values, kwargs["tgt_sizes"]), None
         if "merge_index" in traced and kwargs.get("target_sizes") is not None:
             return _crop_features(self.config, runner, pixel_values, kwargs["target_sizes"]), None
         if traced.get("pixel_values", {}).get("rank") == 4 and grid is not None and pixel_values.dim() == 2:
@@ -841,11 +905,14 @@ class _OptimumGenerationMixin:
         return outputs
 
     def _validate_model_kwargs(self, model_kwargs: dict):
-        """Also accept a processor's token types (Gemma 3's), which a graph with its attention built in doesn't take."""
+        """Also accept a processor's token types (Gemma 3's), which a graph with its attention built in doesn't take,
+        and MiniCPM-V 4.5's crop inputs, for a vision graph fused with its resampler."""
         traced = self._decode_metadata().kwargs
-        if "token_type_ids" not in traced:
-            model_kwargs = {key: value for key, value in model_kwargs.items() if key != "token_type_ids"}
-        super()._validate_model_kwargs(model_kwargs)
+        accepted = set() if "token_type_ids" in traced else {"token_type_ids"}
+        vision = self.components.get("vision_embeddings_model")
+        if vision is not None and "pos_embed" in vision.metadata.kwargs:
+            accepted |= _OPENVINO_RESAMPLER_INPUTS
+        super()._validate_model_kwargs({key: value for key, value in model_kwargs.items() if key not in accepted})
 
     def prepare_inputs_for_generation(self, *args, attention_mask=None, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(*args, attention_mask=attention_mask, **kwargs)
