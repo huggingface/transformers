@@ -1148,6 +1148,7 @@ class MiniMaxM3VLModel(LlavaModel):
 class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
 
+    @auto_docstring
     def get_image_embeddings(self, pixel_values, image_grid_thw, **kwargs):
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
