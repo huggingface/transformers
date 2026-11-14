@@ -29,7 +29,6 @@ from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, Suppr
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
-    from .configuration_utils import GenerationConfig
 
 
 class CandidateGenerator:
@@ -721,11 +720,9 @@ class AssistantToTargetTranslator:
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
             if self.assistant_prune_lm_head and assistant_model is not None:
-                self.assistant_overlap_token_ids = torch.tensor(
-                    list(self.target_to_assistant_input_ids.values()),
-                    dtype=torch.long,
-                    device=self._assistant_model_device,
-                )
+                self.assistant_overlap_token_ids = torch.where(
+                    self._assistant_to_target_input_ids != self.SUPPRESS_TOKEN_ID
+                )[0]
                 original_lm_head = assistant_model.get_output_embeddings()
                 pruned_lm_head = _PruneReindexingLMHead(original_lm_head, self.assistant_overlap_token_ids)
                 del original_lm_head
