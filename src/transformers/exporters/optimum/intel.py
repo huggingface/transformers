@@ -139,6 +139,12 @@ def _openvino_metadata(config, kwargs: dict[str, Any], outputs: Any, stateful: b
     )
 
 
+def _rewire(parameter, source) -> None:
+    """Feed every consumer of graph input `parameter` from `source` instead: one graph's input fed another's output."""
+    for target in parameter.output(0).get_target_inputs():
+        target.replace_source_output(source)
+
+
 def _fuse_openvino_vision(
     embeddings: openvino.Model,
     merger: openvino.Model,
@@ -162,8 +168,7 @@ def _fuse_openvino_vision(
         weighted = ops.multiply(looked_up, ops.unsqueeze(weights, ops.constant(-1)))
         source = ops.add(source, ops.reduce_sum(weighted, ops.constant(0), keep_dims=False)).output(0)
         parameters += [*positions.get_parameters(), weights]
-    for target in hidden_states.output(0).get_target_inputs():
-        target.replace_source_output(source)
+    _rewire(hidden_states, source)
     embeddings.input(0).get_tensor().set_names({"pixel_values"})
     parameters += [p for p in merger.get_parameters() if p is not hidden_states]
     return openvino.Model(merger.get_results(), parameters, "vision_embeddings_model")
@@ -306,9 +311,7 @@ def _fuse_openvino_projection(embeddings: openvino.Model, projection: openvino.M
     merged = ops.reshape(merged, ops.constant(np.array([1, -1, projected_width])), False)
     separators = np.concatenate([np.array(config.sub_GN), np.array(config.glb_GN)[None]], axis=-2)
     merged = ops.concat([merged, ops.constant(separators.reshape(1, 2, projected_width).astype(np.float32))], 1)
-    projection_input = projection.inputs[0].get_node()
-    for target in projection_input.output(0).get_target_inputs():
-        target.replace_source_output(merged.output(0))
+    _rewire(projection.inputs[0].get_node(), merged.output(0))
     embeddings.input(0).get_tensor().set_names({"pixel_values"})
     return openvino.Model(projection.get_results(), list(embeddings.get_parameters()), "vision_embeddings_model")
 
@@ -363,9 +366,7 @@ def _fuse_openvino_audio(graphs: dict[str, openvino.Model]) -> openvino.Model:
     import openvino.opset13 as ops
 
     def feed(model, source, name=None):
-        node = (model.input(name) if name else model.inputs[0]).get_node()
-        for target in node.output(0).get_target_inputs():
-            target.replace_source_output(source)
+        _rewire((model.input(name) if name else model.inputs[0]).get_node(), source)
 
     def output(model):
         return model.get_results()[0].input_value(0)
@@ -479,39 +480,33 @@ def _load_openvino_multimodal(
         for file in _repo_files(pretrained_model_name_or_path, **kwargs)
         if file.startswith("openvino_") and file.endswith("_model.xml")
     }
+
+    def read(name):
+        return _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
+
     reason = None
     merger = positions = projection = None
     hidden, merger_glue = "hidden_states", _OPENVINO_MERGER_GLUE
     if OPENVINO_VISION_RESAMPLER in graphs:
-        merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_RESAMPLER}.xml", **kwargs)
+        merger = read(OPENVINO_VISION_RESAMPLER)
         hidden, merger_glue = "image_feature", _OPENVINO_RESAMPLER_GLUE
-        graphs = graphs - {OPENVINO_VISION_RESAMPLER}
+        graphs.discard(OPENVINO_VISION_RESAMPLER)
     elif OPENVINO_VISION_PROJECTION in graphs and getattr(config, "sub_GN", None) is not None:
-        projection = _read_openvino(
-            pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_PROJECTION}.xml", **kwargs
-        )
-        graphs = graphs - {OPENVINO_VISION_PROJECTION}
+        projection = read(OPENVINO_VISION_PROJECTION)
+        graphs.discard(OPENVINO_VISION_PROJECTION)
     elif OPENVINO_VISION_MERGER in graphs:
-        merger = _read_openvino(pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_MERGER}.xml", **kwargs)
-        glue = {port.get_any_name() for port in merger.inputs} - {"hidden_states"}
-        if glue <= _OPENVINO_MERGER_GLUE:
-            graphs = graphs - {OPENVINO_VISION_MERGER}
+        merger = read(OPENVINO_VISION_MERGER)
+        if {port.get_any_name() for port in merger.inputs} - {"hidden_states"} <= _OPENVINO_MERGER_GLUE:
+            graphs.discard(OPENVINO_VISION_MERGER)
             if OPENVINO_VISION_POSITIONS in graphs:
-                positions = _read_openvino(
-                    pretrained_model_name_or_path, f"openvino_{OPENVINO_VISION_POSITIONS}.xml", **kwargs
-                )
-                graphs = graphs - {OPENVINO_VISION_POSITIONS}
+                positions = read(OPENVINO_VISION_POSITIONS)
+                graphs.discard(OPENVINO_VISION_POSITIONS)
         else:
             merger = None
     audio = None
     if set(OPENVINO_AUDIO_GRAPHS) <= graphs:
-        audio = _fuse_openvino_audio(
-            {
-                name: _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
-                for name in OPENVINO_AUDIO_GRAPHS
-            }
-        )
-        graphs = graphs - set(OPENVINO_AUDIO_GRAPHS[1:])
+        audio = _fuse_openvino_audio({name: read(name) for name in OPENVINO_AUDIO_GRAPHS})
+        graphs -= set(OPENVINO_AUDIO_GRAPHS[1:])
     placeholders = {
         field: token
         for field, token in _OPENVINO_PLACEHOLDERS.get(getattr(config, "model_type", None), {}).items()
@@ -538,10 +533,7 @@ def _load_openvino_multimodal(
     for name, input_names in _OPENVINO_MODALITY_INPUTS.items():
         if reason is not None or name not in graphs:
             continue
-        if name == "audio_embeddings_model" and audio is not None:
-            program = audio
-        else:
-            program = _read_openvino(pretrained_model_name_or_path, f"openvino_{name}.xml", **kwargs)
+        program = audio if name == "audio_embeddings_model" and audio is not None else read(name)
         if name == "vision_embeddings_model" and merger is not None:
             program = _fuse_openvino_vision(program, merger, positions, hidden)
         if name == "vision_embeddings_model" and projection is not None:
@@ -576,7 +568,7 @@ def _load_openvino_multimodal(
             f"{pretrained_model_name_or_path} is an optimum-intel multimodal export this runtime can't run: {reason}. "
             "Re-export it with `OpenVINOExporter().export_for_generation`, which splits it into one graph per modality."
         )
-    text = _read_openvino(pretrained_model_name_or_path, "openvino_text_embeddings_model.xml", **kwargs)
+    text = read("text_embeddings_model")
     text.input(0).get_tensor().set_names({"input_ids"})
     components["text_embeddings_model"] = ExportedComponent(
         text, _openvino_metadata(config, {"input_ids": text.input(0)}, torch.zeros(1), False)

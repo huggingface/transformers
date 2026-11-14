@@ -210,15 +210,17 @@ def _onnx_decoder_component(program: onnx_ir.Model, config, geometry: dict) -> E
     return ExportedComponent(program, metadata)
 
 
-def _onnx_graph_component(program: onnx_ir.Model, config, by_name: bool = False) -> ExportedComponent:
+def _onnx_graph_component(program: onnx_ir.Model, config, by_name: bool = False, returns=None) -> ExportedComponent:
     """A graph without a cache (an embedder, a modality encoder, an encoder) as a component: its inputs as the graph
-    names them, its one output as a tensor, or several (or any, with `by_name`) as a dict by their names."""
+    names them, and `returns` as its output structure, by default its one output as a tensor, or several (or any, with
+    `by_name`) as a dict by their names."""
     from ..base import ExportedComponent
 
     graph = program.graph
     inputs = {value.name: value for value in graph.inputs}
     outputs = [value.name for value in graph.outputs]
-    returns = torch.zeros(1) if len(outputs) == 1 and not by_name else dict.fromkeys(outputs, torch.zeros(1))
+    if returns is None:
+        returns = torch.zeros(1) if len(outputs) == 1 and not by_name else dict.fromkeys(outputs, torch.zeros(1))
     metadata = ExportMetadata(
         architecture=_architecture(config),
         export_dtype=str(graph.outputs[0].dtype.numpy()),
@@ -323,16 +325,6 @@ def _load_onnx_seq2seq(
     if encoder_outputs:
         encoder.graph.outputs.clear()
         encoder.graph.outputs.extend(encoder_outputs)
-    encoder_inputs = [value.name for value in encoder.graph.inputs]
-    encoder_metadata = ExportMetadata(
-        architecture=_architecture(config),
-        export_dtype="float32",
-        export_device="cpu",
-        kwargs={value.name: _onnx_traced(value) for value in encoder.graph.inputs},
-        in_spec=treespec_dumps(tree_structure(((), dict.fromkeys(encoder_inputs, 0)))),
-        out_spec=treespec_dumps(tree_structure(hidden)),
-        export_config={"export_format": "onnx", "dynamic": True},
-    )
 
     decoder = _read_onnx(pretrained_model_name_or_path, decoder_file, **kwargs)
     geometry = _rename_onnx_cache(decoder)
@@ -366,7 +358,7 @@ def _load_onnx_seq2seq(
         cache_geometry=_cache_geometry(geometry),
     )
     return {
-        "encoder_model": ExportedComponent(encoder, encoder_metadata),
+        "encoder_model": _onnx_graph_component(encoder, config, returns=hidden),
         "decoder_model": ExportedComponent(decoder, decoder_metadata),
     }, True
 
