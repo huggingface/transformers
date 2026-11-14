@@ -151,7 +151,7 @@ class OnnxExporter(DynamoExporter):
             apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
             patch_attribute(torch.nn.functional, "scaled_dot_product_attention", _additive_sdpa_mask)
-            if ort_fusions
+            if ort_fusions != "tensorrt"
             else nullcontext(),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
@@ -170,7 +170,7 @@ class OnnxExporter(DynamoExporter):
         _name_graph_outputs(onnx_program.model.graph, outputs_names)
         apply_onnx_ir_fixes(onnx_program)
 
-        if ort_fusions:
+        if ort_fusions not in (None, "tensorrt"):
             fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
@@ -323,12 +323,13 @@ def _patch_sdpa(original):
 
 
 def _additive_sdpa_mask(original):
-    """Turn a boolean attention mask into an additive one, for the ONNX Runtime fusions (`OnnxConfig(ort_fusions=...)`).
+    """Turn a boolean attention mask into an additive one, unless the export is for TensorRT
+    (`OnnxConfig(ort_fusions="tensorrt")`).
 
     torchlib's boolean softmax guards every attention with an `IsNaN`/`Where` over the scores, which `_patch_sdpa`
     makes redundant and which ONNX Runtime pays for (2x on a 2520-patch vision attention on its CPU provider).
     TensorRT, on the other hand, builds a faster engine from the boolean form (2.53 ms against 3.00 ms on EmbeddingGemma2
-    in bf16 on a B200), so the boolean mask stays when the export isn't fused for ONNX Runtime.
+    in bf16 on a B200).
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):

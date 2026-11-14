@@ -149,19 +149,23 @@ class OnnxConfig(DynamoConfig):
             hit upstream `onnxscript` optimiser bugs.
         ort_fusions (`str`, *optional*):
             Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
-            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
+            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`. `"tensorrt"`
+            prepares it for the TensorRT provider instead: no fusions (TensorRT fuses the graph itself), and attention
+            masks kept boolean, which TensorRT builds a faster engine from.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
     opset_version: int | None = None
     optimize: bool = True
-    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
+    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml", "tensorrt"] | None = None
 
     def __post_init__(self):
-        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml"):
-            raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_fusions!r}")
-        if self.ort_fusions is not None and not self.optimize:
+        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml", "tensorrt"):
+            raise ValueError(
+                f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu', 'dml' or 'tensorrt', got {self.ort_fusions!r}"
+            )
+        if self.ort_fusions not in (None, "tensorrt") and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 
 
