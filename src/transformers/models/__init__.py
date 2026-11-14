@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ..utils import _LazyModule
-from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -573,5 +572,7094 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "afmoe.configuration_afmoe": {
+                "AfmoeConfig",
+            },
+            "aimv2.configuration_aimv2": {
+                "Aimv2Config",
+                "Aimv2TextConfig",
+                "Aimv2VisionConfig",
+            },
+            "albert.configuration_albert": {
+                "AlbertConfig",
+            },
+            "albert.tokenization_albert": {
+                "AlbertTokenizer",
+            },
+            "align.configuration_align": {
+                "AlignConfig",
+                "AlignTextConfig",
+                "AlignVisionConfig",
+            },
+            "align.processing_align": {
+                "AlignProcessor",
+            },
+            "altclip.configuration_altclip": {
+                "AltCLIPConfig",
+                "AltCLIPTextConfig",
+                "AltCLIPVisionConfig",
+            },
+            "altclip.processing_altclip": {
+                "AltCLIPProcessor",
+            },
+            "apertus.configuration_apertus": {
+                "ApertusConfig",
+            },
+            "arcee.configuration_arcee": {
+                "ArceeConfig",
+            },
+            "aria.configuration_aria": {
+                "AriaConfig",
+                "AriaTextConfig",
+            },
+            "aria.processing_aria": {
+                "AriaProcessor",
+            },
+            "audio_spectrogram_transformer.configuration_audio_spectrogram_transformer": {
+                "ASTConfig",
+            },
+            "audioflamingo3.configuration_audioflamingo3": {
+                "AudioFlamingo3Config",
+                "AudioFlamingo3EncoderConfig",
+            },
+            "auto.auto_factory": {
+                "get_values",
+            },
+            "auto.configuration_auto": {
+                "AutoConfig",
+                "CONFIG_MAPPING",
+            },
+            "auto.feature_extraction_auto": {
+                "AutoFeatureExtractor",
+                "FEATURE_EXTRACTOR_MAPPING",
+            },
+            "auto.processing_auto": {
+                "AutoProcessor",
+                "PROCESSOR_MAPPING",
+            },
+            "auto.tokenization_auto": {
+                "AutoTokenizer",
+                "TOKENIZER_MAPPING",
+            },
+            "autoformer.configuration_autoformer": {
+                "AutoformerConfig",
+            },
+            "axk1.configuration_axk1": {
+                "AXK1Config",
+            },
+            "axk2.configuration_axk2": {
+                "AXK2Config",
+            },
+            "aya_vision.configuration_aya_vision": {
+                "AyaVisionConfig",
+            },
+            "aya_vision.processing_aya_vision": {
+                "AyaVisionProcessor",
+            },
+            "bailing_hybrid.configuration_bailing_hybrid": {
+                "BailingHybridConfig",
+            },
+            "bamba.configuration_bamba": {
+                "BambaConfig",
+            },
+            "bark.configuration_bark": {
+                "BarkCoarseConfig",
+                "BarkConfig",
+                "BarkFineConfig",
+                "BarkSemanticConfig",
+            },
+            "bark.processing_bark": {
+                "BarkProcessor",
+            },
+            "bart.configuration_bart": {
+                "BartConfig",
+            },
+            "bart.tokenization_bart": {
+                "BartTokenizer",
+                "BartTokenizerFast",
+            },
+            "barthez.tokenization_barthez": {
+                "BarthezTokenizer",
+            },
+            "beam.configuration_beam": {
+                "BeamConfig",
+            },
+            "beit.configuration_beit": {
+                "BeitConfig",
+            },
+            "bert.configuration_bert": {
+                "BertConfig",
+            },
+            "bert.tokenization_bert": {
+                "BertTokenizer",
+            },
+            "bert.tokenization_bert_legacy": {
+                "BasicTokenizer",
+                "BertTokenizerLegacy",
+                "WordpieceTokenizer",
+            },
+            "bert_generation.configuration_bert_generation": {
+                "BertGenerationConfig",
+            },
+            "bert_japanese.tokenization_bert_japanese": {
+                "BertJapaneseTokenizer",
+                "CharacterTokenizer",
+                "MecabTokenizer",
+            },
+            "bertweet.tokenization_bertweet": {
+                "BertweetTokenizer",
+            },
+            "big_bird.configuration_big_bird": {
+                "BigBirdConfig",
+            },
+            "big_bird.tokenization_big_bird": {
+                "BigBirdTokenizer",
+            },
+            "bigbird_pegasus.configuration_bigbird_pegasus": {
+                "BigBirdPegasusConfig",
+            },
+            "biogpt.configuration_biogpt": {
+                "BioGptConfig",
+            },
+            "biogpt.tokenization_biogpt": {
+                "BioGptTokenizer",
+            },
+            "bit.configuration_bit": {
+                "BitConfig",
+            },
+            "bitnet.configuration_bitnet": {
+                "BitNetConfig",
+            },
+            "blenderbot.configuration_blenderbot": {
+                "BlenderbotConfig",
+            },
+            "blenderbot.tokenization_blenderbot": {
+                "BlenderbotTokenizer",
+            },
+            "blenderbot_small.configuration_blenderbot_small": {
+                "BlenderbotSmallConfig",
+            },
+            "blenderbot_small.tokenization_blenderbot_small": {
+                "BlenderbotSmallTokenizer",
+            },
+            "blip.configuration_blip": {
+                "BlipConfig",
+                "BlipTextConfig",
+                "BlipVisionConfig",
+            },
+            "blip.processing_blip": {
+                "BlipProcessor",
+            },
+            "blip_2.configuration_blip_2": {
+                "Blip2Config",
+                "Blip2QFormerConfig",
+                "Blip2VisionConfig",
+            },
+            "blip_2.processing_blip_2": {
+                "Blip2Processor",
+            },
+            "bloom.configuration_bloom": {
+                "BloomConfig",
+            },
+            "blt.configuration_blt": {
+                "BltConfig",
+                "BltGlobalTransformerConfig",
+                "BltLocalDecoderConfig",
+                "BltLocalEncoderConfig",
+                "BltPatcherConfig",
+            },
+            "bridgetower.configuration_bridgetower": {
+                "BridgeTowerConfig",
+                "BridgeTowerTextConfig",
+                "BridgeTowerVisionConfig",
+            },
+            "bridgetower.processing_bridgetower": {
+                "BridgeTowerProcessor",
+            },
+            "bros.configuration_bros": {
+                "BrosConfig",
+            },
+            "bros.processing_bros": {
+                "BrosProcessor",
+            },
+            "byt5.tokenization_byt5": {
+                "ByT5Tokenizer",
+            },
+            "camembert.configuration_camembert": {
+                "CamembertConfig",
+            },
+            "camembert.tokenization_camembert": {
+                "CamembertTokenizer",
+            },
+            "canary.configuration_canary": {
+                "CanaryConfig",
+                "CanaryDecoderConfig",
+            },
+            "canine.configuration_canine": {
+                "CanineConfig",
+            },
+            "canine.tokenization_canine": {
+                "CanineTokenizer",
+            },
+            "chameleon.configuration_chameleon": {
+                "ChameleonConfig",
+                "ChameleonVQVAEConfig",
+            },
+            "chameleon.processing_chameleon": {
+                "ChameleonProcessor",
+            },
+            "chinese_clip.configuration_chinese_clip": {
+                "ChineseCLIPConfig",
+                "ChineseCLIPTextConfig",
+                "ChineseCLIPVisionConfig",
+            },
+            "chinese_clip.processing_chinese_clip": {
+                "ChineseCLIPProcessor",
+            },
+            "chmv2.configuration_chmv2": {
+                "CHMv2Config",
+            },
+            "clap.configuration_clap": {
+                "ClapAudioConfig",
+                "ClapConfig",
+                "ClapTextConfig",
+            },
+            "clap.processing_clap": {
+                "ClapProcessor",
+            },
+            "clip.configuration_clip": {
+                "CLIPConfig",
+                "CLIPTextConfig",
+                "CLIPVisionConfig",
+            },
+            "clip.processing_clip": {
+                "CLIPProcessor",
+            },
+            "clip.tokenization_clip": {
+                "CLIPTokenizer",
+            },
+            "clipseg.configuration_clipseg": {
+                "CLIPSegConfig",
+                "CLIPSegTextConfig",
+                "CLIPSegVisionConfig",
+            },
+            "clipseg.processing_clipseg": {
+                "CLIPSegProcessor",
+            },
+            "clvp.configuration_clvp": {
+                "ClvpConfig",
+                "ClvpDecoderConfig",
+                "ClvpEncoderConfig",
+            },
+            "clvp.feature_extraction_clvp": {
+                "ClvpFeatureExtractor",
+            },
+            "clvp.processing_clvp": {
+                "ClvpProcessor",
+            },
+            "clvp.tokenization_clvp": {
+                "ClvpTokenizer",
+            },
+            "code_llama.tokenization_code_llama": {
+                "CodeLlamaTokenizer",
+                "CodeLlamaTokenizerFast",
+            },
+            "codegen.configuration_codegen": {
+                "CodeGenConfig",
+            },
+            "codegen.tokenization_codegen": {
+                "CodeGenTokenizer",
+            },
+            "cohere2.configuration_cohere2": {
+                "Cohere2Config",
+            },
+            "cohere2_moe.configuration_cohere2_moe": {
+                "Cohere2MoeConfig",
+            },
+            "cohere2_vision.configuration_cohere2_vision": {
+                "Cohere2VisionConfig",
+            },
+            "cohere2_vision.processing_cohere2_vision": {
+                "Cohere2VisionProcessor",
+            },
+            "cohere.configuration_cohere": {
+                "CohereConfig",
+            },
+            "cohere.tokenization_cohere": {
+                "CohereTokenizer",
+            },
+            "cohere_asr.configuration_cohere_asr": {
+                "CohereAsrConfig",
+            },
+            "cohere_compass.configuration_cohere_compass": {
+                "CohereCompassConfig",
+                "CohereCompassTextConfig",
+                "CohereCompassVisionConfig",
+            },
+            "cohere_compass.processing_cohere_compass": {
+                "CohereCompassProcessor",
+            },
+            "colmodernvbert.configuration_colmodernvbert": {
+                "ColModernVBertConfig",
+            },
+            "colpali.configuration_colpali": {
+                "ColPaliConfig",
+            },
+            "colpali.processing_colpali": {
+                "ColPaliProcessor",
+            },
+            "colqwen2.configuration_colqwen2": {
+                "ColQwen2Config",
+            },
+            "colqwen2.processing_colqwen2": {
+                "ColQwen2Processor",
+            },
+            "conditional_detr.configuration_conditional_detr": {
+                "ConditionalDetrConfig",
+            },
+            "convbert.configuration_convbert": {
+                "ConvBertConfig",
+            },
+            "convbert.tokenization_convbert": {
+                "ConvBertTokenizer",
+            },
+            "convnext.configuration_convnext": {
+                "ConvNextConfig",
+            },
+            "convnextv2.configuration_convnextv2": {
+                "ConvNextV2Config",
+            },
+            "cosmos3_edge.configuration_cosmos3_edge": {
+                "Cosmos3EdgeConfig",
+                "Cosmos3EdgeTextConfig",
+                "Cosmos3EdgeVisionConfig",
+            },
+            "cosmos3_edge.processing_cosmos3_edge": {
+                "Cosmos3EdgeProcessor",
+            },
+            "cosmos3_omni.configuration_cosmos3_omni": {
+                "Cosmos3OmniConfig",
+            },
+            "cpmant.configuration_cpmant": {
+                "CpmAntConfig",
+            },
+            "cpmant.tokenization_cpmant": {
+                "CpmAntTokenizer",
+            },
+            "csm.configuration_csm": {
+                "CsmConfig",
+                "CsmDepthDecoderConfig",
+            },
+            "ctrl.configuration_ctrl": {
+                "CTRLConfig",
+            },
+            "ctrl.tokenization_ctrl": {
+                "CTRLTokenizer",
+            },
+            "cvt.configuration_cvt": {
+                "CvtConfig",
+            },
+            "cwm.configuration_cwm": {
+                "CwmConfig",
+            },
+            "d_fine.configuration_d_fine": {
+                "DFineConfig",
+            },
+            "dab_detr.configuration_dab_detr": {
+                "DabDetrConfig",
+            },
+            "dac.configuration_dac": {
+                "DacConfig",
+            },
+            "dac.feature_extraction_dac": {
+                "DacFeatureExtractor",
+            },
+            "data2vec.configuration_data2vec_audio": {
+                "Data2VecAudioConfig",
+            },
+            "data2vec.configuration_data2vec_text": {
+                "Data2VecTextConfig",
+            },
+            "data2vec.configuration_data2vec_vision": {
+                "Data2VecVisionConfig",
+            },
+            "dbrx.configuration_dbrx": {
+                "DbrxConfig",
+            },
+            "deberta.configuration_deberta": {
+                "DebertaConfig",
+            },
+            "deberta.tokenization_deberta": {
+                "DebertaTokenizer",
+            },
+            "deberta_v2.configuration_deberta_v2": {
+                "DebertaV2Config",
+            },
+            "deberta_v2.tokenization_deberta_v2": {
+                "DebertaV2Tokenizer",
+            },
+            "decision_transformer.configuration_decision_transformer": {
+                "DecisionTransformerConfig",
+            },
+            "deepseek_ocr2.configuration_deepseek_ocr2": {
+                "DeepseekOcr2Config",
+                "DeepseekOcr2SamVisionConfig",
+                "DeepseekOcr2TextConfig",
+                "DeepseekOcr2VisionConfig",
+                "DeepseekOcr2VisionEncoderConfig",
+            },
+            "deepseek_ocr2.processing_deepseek_ocr2": {
+                "DeepseekOcr2Processor",
+            },
+            "deepseek_v2.configuration_deepseek_v2": {
+                "DeepseekV2Config",
+            },
+            "deepseek_v3.configuration_deepseek_v3": {
+                "DeepseekV3Config",
+            },
+            "deepseek_v4.configuration_deepseek_v4": {
+                "DeepseekV4Config",
+            },
+            "deepseek_v32.configuration_deepseek_v32": {
+                "DeepseekV32Config",
+            },
+            "deepseek_vl.configuration_deepseek_vl": {
+                "DeepseekVLConfig",
+            },
+            "deepseek_vl.processing_deepseek_vl": {
+                "DeepseekVLProcessor",
+            },
+            "deepseek_vl_hybrid.configuration_deepseek_vl_hybrid": {
+                "DeepseekVLHybridConfig",
+            },
+            "deepseek_vl_hybrid.processing_deepseek_vl_hybrid": {
+                "DeepseekVLHybridProcessor",
+            },
+            "deformable_detr.configuration_deformable_detr": {
+                "DeformableDetrConfig",
+            },
+            "deimv2.configuration_deimv2": {
+                "Deimv2Config",
+            },
+            "deit.configuration_deit": {
+                "DeiTConfig",
+            },
+            "depth_anything.configuration_depth_anything": {
+                "DepthAnythingConfig",
+            },
+            "depth_pro.configuration_depth_pro": {
+                "DepthProConfig",
+            },
+            "detr.configuration_detr": {
+                "DetrConfig",
+            },
+            "dia.configuration_dia": {
+                "DiaConfig",
+                "DiaDecoderConfig",
+                "DiaEncoderConfig",
+            },
+            "dia.feature_extraction_dia": {
+                "DiaFeatureExtractor",
+            },
+            "dia.tokenization_dia": {
+                "DiaTokenizer",
+            },
+            "diffllama.configuration_diffllama": {
+                "DiffLlamaConfig",
+            },
+            "diffusion_gemma.configuration_diffusion_gemma": {
+                "DiffusionGemmaConfig",
+                "DiffusionGemmaTextConfig",
+            },
+            "dinat.configuration_dinat": {
+                "DinatConfig",
+            },
+            "dinov2.configuration_dinov2": {
+                "Dinov2Config",
+            },
+            "dinov2_with_registers.configuration_dinov2_with_registers": {
+                "Dinov2WithRegistersConfig",
+            },
+            "dinov3_convnext.configuration_dinov3_convnext": {
+                "DINOv3ConvNextConfig",
+            },
+            "dinov3_vit.configuration_dinov3_vit": {
+                "DINOv3ViTConfig",
+            },
+            "distilbert.configuration_distilbert": {
+                "DistilBertConfig",
+            },
+            "distilbert.tokenization_distilbert": {
+                "DistilBertTokenizer",
+                "DistilBertTokenizerFast",
+            },
+            "doge.configuration_doge": {
+                "DogeConfig",
+            },
+            "donut.configuration_donut_swin": {
+                "DonutSwinConfig",
+            },
+            "donut.processing_donut": {
+                "DonutProcessor",
+            },
+            "dots1.configuration_dots1": {
+                "Dots1Config",
+            },
+            "dpr.configuration_dpr": {
+                "DPRConfig",
+            },
+            "dpr.tokenization_dpr": {
+                "DPRContextEncoderTokenizer",
+                "DPRQuestionEncoderTokenizer",
+                "DPRReaderOutput",
+                "DPRReaderTokenizer",
+            },
+            "dpt.configuration_dpt": {
+                "DPTConfig",
+            },
+            "edgetam.configuration_edgetam": {
+                "EdgeTamConfig",
+                "EdgeTamMaskDecoderConfig",
+                "EdgeTamPromptEncoderConfig",
+                "EdgeTamVisionConfig",
+            },
+            "edgetam_video.configuration_edgetam_video": {
+                "EdgeTamVideoConfig",
+                "EdgeTamVideoMaskDecoderConfig",
+                "EdgeTamVideoPromptEncoderConfig",
+            },
+            "efficientloftr.configuration_efficientloftr": {
+                "EfficientLoFTRConfig",
+            },
+            "efficientnet.configuration_efficientnet": {
+                "EfficientNetConfig",
+            },
+            "electra.configuration_electra": {
+                "ElectraConfig",
+            },
+            "embedding_gemma2.configuration_embedding_gemma2": {
+                "EmbeddingGemma2Config",
+                "EmbeddingGemma2TextConfig",
+            },
+            "embedding_gemma2.processing_embedding_gemma2": {
+                "EmbeddingGemma2Processor",
+            },
+            "emu3.configuration_emu3": {
+                "Emu3Config",
+                "Emu3TextConfig",
+                "Emu3VQVAEConfig",
+            },
+            "encodec.configuration_encodec": {
+                "EncodecConfig",
+            },
+            "encodec.feature_extraction_encodec": {
+                "EncodecFeatureExtractor",
+            },
+            "encoder_decoder.configuration_encoder_decoder": {
+                "EncoderDecoderConfig",
+            },
+            "eomt.configuration_eomt": {
+                "EomtConfig",
+            },
+            "eomt_dinov3.configuration_eomt_dinov3": {
+                "EomtDinov3Config",
+            },
+            "ernie4_5.configuration_ernie4_5": {
+                "Ernie4_5Config",
+            },
+            "ernie4_5_moe.configuration_ernie4_5_moe": {
+                "Ernie4_5_MoeConfig",
+            },
+            "ernie4_5_vl_moe.configuration_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeConfig",
+                "Ernie4_5_VLMoeTextConfig",
+                "Ernie4_5_VLMoeVisionConfig",
+                "Ernie4_5_VL_MoeConfig",
+                "Ernie4_5_VL_MoeTextConfig",
+                "Ernie4_5_VL_MoeVisionConfig",
+            },
+            "ernie4_5_vl_moe.processing_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeProcessor",
+            },
+            "ernie.configuration_ernie": {
+                "ErnieConfig",
+            },
+            "esm.configuration_esm": {
+                "EsmConfig",
+            },
+            "esm.tokenization_esm": {
+                "EsmTokenizer",
+            },
+            "esmc.configuration_esmc": {
+                "EsmcConfig",
+            },
+            "esmc.tokenization_esmc": {
+                "EsmcTokenizer",
+            },
+            "esmfold2.configuration_esmfold2": {
+                "EsmFold2Config",
+            },
+            "eurobert.configuration_eurobert": {
+                "EuroBertConfig",
+            },
+            "evolla.configuration_evolla": {
+                "EvollaConfig",
+            },
+            "evolla.processing_evolla": {
+                "EvollaProcessor",
+            },
+            "exaone4.configuration_exaone4": {
+                "Exaone4Config",
+            },
+            "exaone4_5.configuration_exaone4_5": {
+                "Exaone4_5_Config",
+                "Exaone4_5_VisionConfig",
+            },
+            "exaone4_5.processing_exaone4_5": {
+                "Exaone4_5_Processor",
+            },
+            "exaone_moe.configuration_exaone_moe": {
+                "ExaoneMoeConfig",
+            },
+            "falcon.configuration_falcon": {
+                "FalconConfig",
+            },
+            "falcon_h1.configuration_falcon_h1": {
+                "FalconH1Config",
+            },
+            "falcon_mamba.configuration_falcon_mamba": {
+                "FalconMambaConfig",
+            },
+            "fast_vlm.configuration_fast_vlm": {
+                "FastVlmConfig",
+            },
+            "fastspeech2_conformer.configuration_fastspeech2_conformer": {
+                "FastSpeech2ConformerConfig",
+                "FastSpeech2ConformerHifiGanConfig",
+                "FastSpeech2ConformerWithHifiGanConfig",
+            },
+            "fastspeech2_conformer.tokenization_fastspeech2_conformer": {
+                "FastSpeech2ConformerTokenizer",
+            },
+            "flaubert.configuration_flaubert": {
+                "FlaubertConfig",
+            },
+            "flaubert.tokenization_flaubert": {
+                "FlaubertTokenizer",
+            },
+            "flava.configuration_flava": {
+                "FlavaConfig",
+                "FlavaImageCodebookConfig",
+                "FlavaImageConfig",
+                "FlavaMultimodalConfig",
+                "FlavaTextConfig",
+            },
+            "flava.processing_flava": {
+                "FlavaProcessor",
+            },
+            "flex_olmo.configuration_flex_olmo": {
+                "FlexOlmoConfig",
+            },
+            "flint.configuration_flint": {
+                "FlintConfig",
+            },
+            "florence2.configuration_florence2": {
+                "Florence2Config",
+                "Florence2VisionConfig",
+            },
+            "florence2.processing_florence2": {
+                "Florence2Processor",
+            },
+            "fnet.configuration_fnet": {
+                "FNetConfig",
+            },
+            "fnet.tokenization_fnet": {
+                "FNetTokenizer",
+                "FNetTokenizerFast",
+            },
+            "focalnet.configuration_focalnet": {
+                "FocalNetConfig",
+            },
+            "fsmt.configuration_fsmt": {
+                "FSMTConfig",
+            },
+            "fsmt.tokenization_fsmt": {
+                "FSMTTokenizer",
+            },
+            "fun_asr_nano.configuration_fun_asr_nano": {
+                "FunAsrNanoAdaptorConfig",
+                "FunAsrNanoConfig",
+                "FunAsrNanoEncoderConfig",
+            },
+            "fun_asr_nano.processing_fun_asr_nano": {
+                "FunAsrNanoProcessor",
+            },
+            "funnel.configuration_funnel": {
+                "FunnelConfig",
+            },
+            "funnel.tokenization_funnel": {
+                "FunnelTokenizer",
+            },
+            "fuyu.configuration_fuyu": {
+                "FuyuConfig",
+            },
+            "gemma2.configuration_gemma2": {
+                "Gemma2Config",
+            },
+            "gemma3.configuration_gemma3": {
+                "Gemma3Config",
+                "Gemma3TextConfig",
+            },
+            "gemma3.processing_gemma3": {
+                "Gemma3Processor",
+            },
+            "gemma3n.configuration_gemma3n": {
+                "Gemma3nAudioConfig",
+                "Gemma3nConfig",
+                "Gemma3nTextConfig",
+                "Gemma3nVisionConfig",
+            },
+            "gemma3n.feature_extraction_gemma3n": {
+                "Gemma3nAudioFeatureExtractor",
+            },
+            "gemma3n.processing_gemma3n": {
+                "Gemma3nProcessor",
+            },
+            "gemma4.configuration_gemma4": {
+                "Gemma4AudioConfig",
+                "Gemma4Config",
+                "Gemma4TextConfig",
+                "Gemma4VisionConfig",
+            },
+            "gemma4.feature_extraction_gemma4": {
+                "Gemma4AudioFeatureExtractor",
+            },
+            "gemma4.processing_gemma4": {
+                "Gemma4Processor",
+            },
+            "gemma4_assistant.configuration_gemma4_assistant": {
+                "Gemma4AssistantConfig",
+            },
+            "gemma4_unified.configuration_gemma4_unified": {
+                "Gemma4UnifiedAudioConfig",
+                "Gemma4UnifiedConfig",
+                "Gemma4UnifiedTextConfig",
+                "Gemma4UnifiedVisionConfig",
+            },
+            "gemma4_unified.feature_extraction_gemma4_unified": {
+                "Gemma4UnifiedAudioFeatureExtractor",
+            },
+            "gemma4_unified.processing_gemma4_unified": {
+                "Gemma4UnifiedProcessor",
+            },
+            "gemma4_unified_assistant.configuration_gemma4_unified_assistant": {
+                "Gemma4UnifiedAssistantConfig",
+            },
+            "gemma.configuration_gemma": {
+                "GemmaConfig",
+            },
+            "gemma.tokenization_gemma": {
+                "GemmaTokenizer",
+            },
+            "git.configuration_git": {
+                "GitConfig",
+                "GitVisionConfig",
+            },
+            "git.processing_git": {
+                "GitProcessor",
+            },
+            "glm4.configuration_glm4": {
+                "Glm4Config",
+            },
+            "glm4_moe.configuration_glm4_moe": {
+                "Glm4MoeConfig",
+            },
+            "glm4_moe_lite.configuration_glm4_moe_lite": {
+                "Glm4MoeLiteConfig",
+            },
+            "glm4v.configuration_glm4v": {
+                "Glm4vConfig",
+                "Glm4vTextConfig",
+                "Glm4vVisionConfig",
+            },
+            "glm4v.processing_glm4v": {
+                "Glm4vProcessor",
+            },
+            "glm4v_moe.configuration_glm4v_moe": {
+                "Glm4vMoeConfig",
+                "Glm4vMoeTextConfig",
+                "Glm4vMoeVisionConfig",
+            },
+            "glm5_next.configuration_glm5_next": {
+                "Glm5NextConfig",
+                "Glm5NextTextConfig",
+                "Glm5NextVisionConfig",
+            },
+            "glm5_next.processing_glm5_next": {
+                "Glm5NextProcessor",
+            },
+            "glm46v.configuration_glm46v": {
+                "Glm46VConfig",
+            },
+            "glm46v.processing_glm46v": {
+                "Glm46VProcessor",
+            },
+            "glm.configuration_glm": {
+                "GlmConfig",
+            },
+            "glm_image.configuration_glm_image": {
+                "GlmImageConfig",
+                "GlmImageTextConfig",
+                "GlmImageVQVAEConfig",
+                "GlmImageVisionConfig",
+            },
+            "glm_moe_dsa.configuration_glm_moe_dsa": {
+                "GlmMoeDsaConfig",
+            },
+            "glm_ocr.configuration_glm_ocr": {
+                "GlmOcrConfig",
+                "GlmOcrTextConfig",
+                "GlmOcrVisionConfig",
+            },
+            "glmasr.configuration_glmasr": {
+                "GlmAsrConfig",
+                "GlmAsrEncoderConfig",
+            },
+            "glmga.configuration_glmga": {
+                "GlmgaConfig",
+            },
+            "glpn.configuration_glpn": {
+                "GLPNConfig",
+            },
+            "got_ocr2.configuration_got_ocr2": {
+                "GotOcr2Config",
+                "GotOcr2VisionConfig",
+            },
+            "got_ocr2.processing_got_ocr2": {
+                "GotOcr2Processor",
+            },
+            "gpt2.configuration_gpt2": {
+                "GPT2Config",
+            },
+            "gpt2.tokenization_gpt2": {
+                "GPT2Tokenizer",
+            },
+            "gpt_bigcode.configuration_gpt_bigcode": {
+                "GPTBigCodeConfig",
+            },
+            "gpt_neo.configuration_gpt_neo": {
+                "GPTNeoConfig",
+            },
+            "gpt_neox.configuration_gpt_neox": {
+                "GPTNeoXConfig",
+            },
+            "gpt_neox.tokenization_gpt_neox": {
+                "GPTNeoXTokenizer",
+            },
+            "gpt_neox_japanese.configuration_gpt_neox_japanese": {
+                "GPTNeoXJapaneseConfig",
+            },
+            "gpt_neox_japanese.tokenization_gpt_neox_japanese": {
+                "GPTNeoXJapaneseTokenizer",
+            },
+            "gpt_oss.configuration_gpt_oss": {
+                "GptOssConfig",
+            },
+            "gptj.configuration_gptj": {
+                "GPTJConfig",
+            },
+            "gradium_phonon_tts.configuration_gradium_phonon_tts": {
+                "GradiumPhononTTSConfig",
+                "GradiumPhononTTSFlowHeadConfig",
+            },
+            "granite4_vision.configuration_granite4_vision": {
+                "Granite4VisionConfig",
+                "Granite4VisionTextConfig",
+            },
+            "granite4_vision.processing_granite4_vision": {
+                "Granite4VisionProcessor",
+            },
+            "granite.configuration_granite": {
+                "GraniteConfig",
+            },
+            "granite_speech5.configuration_granite_speech5": {
+                "GraniteSpeech5CTCConfig",
+                "GraniteSpeech5EncoderConfig",
+            },
+            "granite_speech5.processing_granite_speech5": {
+                "GraniteSpeech5Processor",
+            },
+            "granite_speech.configuration_granite_speech": {
+                "GraniteSpeechConfig",
+                "GraniteSpeechEncoderConfig",
+            },
+            "granite_speech.feature_extraction_granite_speech": {
+                "GraniteSpeechFeatureExtractor",
+            },
+            "granite_speech.processing_granite_speech": {
+                "GraniteSpeechProcessor",
+            },
+            "granite_speech_plus.configuration_granite_speech_plus": {
+                "GraniteSpeechPlusConfig",
+                "GraniteSpeechPlusEncoderConfig",
+            },
+            "granite_swa.configuration_granite_swa": {
+                "GraniteSWAConfig",
+            },
+            "granitemoe.configuration_granitemoe": {
+                "GraniteMoeConfig",
+            },
+            "granitemoe_swa.configuration_granitemoe_swa": {
+                "GraniteMoeSWAConfig",
+            },
+            "granitemoehybrid.configuration_granitemoehybrid": {
+                "GraniteMoeHybridConfig",
+            },
+            "granitemoeshared.configuration_granitemoeshared": {
+                "GraniteMoeSharedConfig",
+            },
+            "grounding_dino.configuration_grounding_dino": {
+                "GroundingDinoConfig",
+            },
+            "grounding_dino.processing_grounding_dino": {
+                "GroundingDinoProcessor",
+            },
+            "groupvit.configuration_groupvit": {
+                "GroupViTConfig",
+                "GroupViTTextConfig",
+                "GroupViTVisionConfig",
+            },
+            "gte.configuration_gte": {
+                "GteConfig",
+            },
+            "helium.configuration_helium": {
+                "HeliumConfig",
+            },
+            "herbert.tokenization_herbert": {
+                "HerbertTokenizer",
+            },
+            "hgnet_v2.configuration_hgnet_v2": {
+                "HGNetV2Config",
+            },
+            "hiera.configuration_hiera": {
+                "HieraConfig",
+            },
+            "higgs_audio_v2.configuration_higgs_audio_v2": {
+                "HiggsAudioV2Config",
+            },
+            "higgs_audio_v2_tokenizer.configuration_higgs_audio_v2_tokenizer": {
+                "HiggsAudioV2TokenizerConfig",
+            },
+            "hrm_text.configuration_hrm_text": {
+                "HrmTextConfig",
+            },
+            "hubert.configuration_hubert": {
+                "HubertConfig",
+            },
+            "hunyuan_v1_dense.configuration_hunyuan_v1_dense": {
+                "HunYuanDenseV1Config",
+            },
+            "hunyuan_v1_moe.configuration_hunyuan_v1_moe": {
+                "HunYuanMoEV1Config",
+            },
+            "hunyuan_vl.configuration_hunyuan_vl": {
+                "HunYuanVLConfig",
+                "HunYuanVLTextConfig",
+                "HunYuanVLVisionConfig",
+            },
+            "hunyuan_vl.processing_hunyuan_vl": {
+                "HunYuanVLProcessor",
+            },
+            "hy_v3.configuration_hy_v3": {
+                "HYV3Config",
+            },
+            "hy_v4.configuration_hy_v4": {
+                "HYV4Config",
+            },
+            "hyperclovax.configuration_hyperclovax": {
+                "HyperCLOVAXConfig",
+            },
+            "hyperclovax_vision_v2.configuration_hyperclovax_vision_v2": {
+                "HyperCLOVAXVisionV2Config",
+            },
+            "hyperclovax_vision_v2.processing_hyperclovax_vision_v2": {
+                "HyperCLOVAXVisionV2Processor",
+            },
+            "ibert.configuration_ibert": {
+                "IBertConfig",
+            },
+            "idefics2.configuration_idefics2": {
+                "Idefics2Config",
+                "Idefics2PerceiverConfig",
+                "Idefics2VisionConfig",
+            },
+            "idefics2.processing_idefics2": {
+                "Idefics2Processor",
+            },
+            "idefics3.configuration_idefics3": {
+                "Idefics3Config",
+                "Idefics3VisionConfig",
+            },
+            "idefics3.processing_idefics3": {
+                "Idefics3Processor",
+            },
+            "idefics.configuration_idefics": {
+                "IdeficsConfig",
+                "IdeficsPerceiverConfig",
+                "IdeficsVisionConfig",
+            },
+            "idefics.processing_idefics": {
+                "IdeficsProcessor",
+            },
+            "ijepa.configuration_ijepa": {
+                "IJepaConfig",
+            },
+            "imagegpt.configuration_imagegpt": {
+                "ImageGPTConfig",
+            },
+            "informer.configuration_informer": {
+                "InformerConfig",
+            },
+            "inkling.configuration_inkling": {
+                "InklingAudioConfig",
+                "InklingConfig",
+                "InklingTextConfig",
+                "InklingVisionConfig",
+            },
+            "instructblip.configuration_instructblip": {
+                "InstructBlipConfig",
+                "InstructBlipQFormerConfig",
+                "InstructBlipVisionConfig",
+            },
+            "instructblip.processing_instructblip": {
+                "InstructBlipProcessor",
+            },
+            "instructblipvideo.configuration_instructblipvideo": {
+                "InstructBlipVideoConfig",
+                "InstructBlipVideoQFormerConfig",
+                "InstructBlipVideoVisionConfig",
+            },
+            "instructblipvideo.processing_instructblipvideo": {
+                "InstructBlipVideoProcessor",
+            },
+            "internvl.configuration_internvl": {
+                "InternVLConfig",
+                "InternVLVisionConfig",
+            },
+            "internvl.processing_internvl": {
+                "InternVLProcessor",
+            },
+            "jais2.configuration_jais2": {
+                "Jais2Config",
+            },
+            "jamba.configuration_jamba": {
+                "JambaConfig",
+            },
+            "janus.configuration_janus": {
+                "JanusConfig",
+                "JanusVQVAEConfig",
+                "JanusVisionConfig",
+            },
+            "janus.processing_janus": {
+                "JanusProcessor",
+            },
+            "jetmoe.configuration_jetmoe": {
+                "JetMoeConfig",
+            },
+            "jina_embeddings_v3.configuration_jina_embeddings_v3": {
+                "JinaEmbeddingsV3Config",
+            },
+            "kimi_k25.configuration_kimi_k25": {
+                "Kimi_K25Config",
+                "Kimi_K25VisionConfig",
+            },
+            "kimi_k25.processing_kimi_k25": {
+                "Kimi_K25Processor",
+            },
+            "kimi_linear.configuration_kimi_linear": {
+                "KimiLinearConfig",
+            },
+            "kolibri1.configuration_kolibri1": {
+                "Kolibri1Config",
+            },
+            "kosmos2.configuration_kosmos2": {
+                "Kosmos2Config",
+                "Kosmos2TextConfig",
+                "Kosmos2VisionConfig",
+            },
+            "kosmos2.processing_kosmos2": {
+                "Kosmos2Processor",
+            },
+            "kosmos2_5.configuration_kosmos2_5": {
+                "Kosmos2_5Config",
+                "Kosmos2_5TextConfig",
+                "Kosmos2_5VisionConfig",
+            },
+            "kosmos2_5.processing_kosmos2_5": {
+                "Kosmos2_5Processor",
+            },
+            "kyutai_speech_to_text.configuration_kyutai_speech_to_text": {
+                "KyutaiSpeechToTextConfig",
+            },
+            "kyutai_speech_to_text.feature_extraction_kyutai_speech_to_text": {
+                "KyutaiSpeechToTextFeatureExtractor",
+            },
+            "kyutai_speech_to_text.processing_kyutai_speech_to_text": {
+                "KyutaiSpeechToTextProcessor",
+            },
+            "laguna.configuration_laguna": {
+                "LagunaConfig",
+            },
+            "lasr.configuration_lasr": {
+                "LasrCTCConfig",
+                "LasrEncoderConfig",
+            },
+            "lasr.processing_lasr": {
+                "LasrProcessor",
+            },
+            "lasr.tokenization_lasr": {
+                "LasrTokenizer",
+            },
+            "layoutlm.configuration_layoutlm": {
+                "LayoutLMConfig",
+            },
+            "layoutlmv2.configuration_layoutlmv2": {
+                "LayoutLMv2Config",
+            },
+            "layoutlmv2.processing_layoutlmv2": {
+                "LayoutLMv2Processor",
+            },
+            "layoutlmv2.tokenization_layoutlmv2": {
+                "LayoutLMv2Tokenizer",
+            },
+            "layoutlmv3.configuration_layoutlmv3": {
+                "LayoutLMv3Config",
+            },
+            "layoutlmv3.processing_layoutlmv3": {
+                "LayoutLMv3Processor",
+            },
+            "layoutlmv3.tokenization_layoutlmv3": {
+                "LayoutLMv3Tokenizer",
+                "LayoutLMv3TokenizerFast",
+            },
+            "layoutxlm.configuration_layoutxlm": {
+                "LayoutXLMConfig",
+            },
+            "layoutxlm.processing_layoutxlm": {
+                "LayoutXLMProcessor",
+            },
+            "layoutxlm.tokenization_layoutxlm": {
+                "LayoutXLMTokenizer",
+            },
+            "led.configuration_led": {
+                "LEDConfig",
+            },
+            "levit.configuration_levit": {
+                "LevitConfig",
+            },
+            "lfm2.configuration_lfm2": {
+                "Lfm2Config",
+            },
+            "lfm2_moe.configuration_lfm2_moe": {
+                "Lfm2MoeConfig",
+            },
+            "lfm2_vl.configuration_lfm2_vl": {
+                "Lfm2VlConfig",
+            },
+            "lfm2_vl.processing_lfm2_vl": {
+                "Lfm2VlProcessor",
+            },
+            "lfm3.configuration_lfm3": {
+                "Lfm3Config",
+            },
+            "lightglue.configuration_lightglue": {
+                "LightGlueConfig",
+            },
+            "lighton_ocr.configuration_lighton_ocr": {
+                "LightOnOcrConfig",
+            },
+            "lighton_ocr.processing_lighton_ocr": {
+                "LightOnOcrProcessor",
+            },
+            "lilt.configuration_lilt": {
+                "LiltConfig",
+            },
+            "llama4.configuration_llama4": {
+                "Llama4Config",
+                "Llama4TextConfig",
+                "Llama4VisionConfig",
+            },
+            "llama4.processing_llama4": {
+                "Llama4Processor",
+            },
+            "llama.configuration_llama": {
+                "LlamaConfig",
+            },
+            "llama.tokenization_llama": {
+                "LlamaTokenizer",
+                "LlamaTokenizerFast",
+            },
+            "llava.configuration_llava": {
+                "LlavaConfig",
+            },
+            "llava.processing_llava": {
+                "LlavaProcessor",
+            },
+            "llava_next.configuration_llava_next": {
+                "LlavaNextConfig",
+            },
+            "llava_next.processing_llava_next": {
+                "LlavaNextProcessor",
+            },
+            "llava_next_video.configuration_llava_next_video": {
+                "LlavaNextVideoConfig",
+            },
+            "llava_next_video.processing_llava_next_video": {
+                "LlavaNextVideoProcessor",
+            },
+            "llava_onevision.configuration_llava_onevision": {
+                "LlavaOnevisionConfig",
+            },
+            "llava_onevision.processing_llava_onevision": {
+                "LlavaOnevisionProcessor",
+            },
+            "longcat_flash.configuration_longcat_flash": {
+                "LongcatFlashConfig",
+            },
+            "longformer.configuration_longformer": {
+                "LongformerConfig",
+            },
+            "longt5.configuration_longt5": {
+                "LongT5Config",
+            },
+            "luke.configuration_luke": {
+                "LukeConfig",
+            },
+            "luke.tokenization_luke": {
+                "LukeTokenizer",
+            },
+            "lw_detr.configuration_lw_detr": {
+                "LwDetrConfig",
+                "LwDetrViTConfig",
+            },
+            "lxmert.configuration_lxmert": {
+                "LxmertConfig",
+            },
+            "m2m_100.configuration_m2m_100": {
+                "M2M100Config",
+            },
+            "mamba2.configuration_mamba2": {
+                "Mamba2Config",
+            },
+            "mamba.configuration_mamba": {
+                "MambaConfig",
+            },
+            "marian.configuration_marian": {
+                "MarianConfig",
+            },
+            "markuplm.configuration_markuplm": {
+                "MarkupLMConfig",
+            },
+            "markuplm.feature_extraction_markuplm": {
+                "MarkupLMFeatureExtractor",
+            },
+            "markuplm.processing_markuplm": {
+                "MarkupLMProcessor",
+            },
+            "markuplm.tokenization_markuplm": {
+                "MarkupLMTokenizer",
+                "MarkupLMTokenizerFast",
+            },
+            "mask2former.configuration_mask2former": {
+                "Mask2FormerConfig",
+            },
+            "maskformer.configuration_maskformer": {
+                "MaskFormerConfig",
+                "MaskFormerDetrConfig",
+            },
+            "maskformer.configuration_maskformer_swin": {
+                "MaskFormerSwinConfig",
+            },
+            "mbart50.tokenization_mbart50": {
+                "MBart50Tokenizer",
+            },
+            "mbart.configuration_mbart": {
+                "MBartConfig",
+            },
+            "mbart.tokenization_mbart": {
+                "MBartTokenizer",
+            },
+            "megatron_bert.configuration_megatron_bert": {
+                "MegatronBertConfig",
+            },
+            "mellum.configuration_mellum": {
+                "MellumConfig",
+            },
+            "metaclip_2.configuration_metaclip_2": {
+                "MetaClip2Config",
+                "MetaClip2TextConfig",
+                "MetaClip2VisionConfig",
+            },
+            "mgp_str.configuration_mgp_str": {
+                "MgpstrConfig",
+            },
+            "mgp_str.tokenization_mgp_str": {
+                "MgpstrTokenizer",
+            },
+            "mimi.configuration_mimi": {
+                "MimiConfig",
+                "MimiDecoderConfig",
+                "MimiEncoderConfig",
+            },
+            "mimo_v2_flash.configuration_mimo_v2_flash": {
+                "MiMoV2FlashConfig",
+            },
+            "minicpm3.configuration_minicpm3": {
+                "MiniCPM3Config",
+            },
+            "minicpm_ocr.configuration_minicpm_ocr": {
+                "MiniCPMOcrConfig",
+                "MiniCPMOcrVisionConfig",
+            },
+            "minicpm_ocr.processing_minicpm_ocr": {
+                "MiniCPMOcrProcessor",
+            },
+            "minicpmv4_6.configuration_minicpmv4_6": {
+                "MiniCPMV4_6Config",
+                "MiniCPMV4_6VisionConfig",
+            },
+            "minicpmv4_6.processing_minicpmv4_6": {
+                "MiniCPMV4_6Processor",
+            },
+            "minicpmv4_7.configuration_minicpmv4_7": {
+                "MiniCPMV4_7Config",
+                "MiniCPMV4_7VisionConfig",
+            },
+            "minicpmv4_7.processing_minicpmv4_7": {
+                "MiniCPMV4_7Processor",
+            },
+            "minimax.configuration_minimax": {
+                "MiniMaxConfig",
+            },
+            "minimax_m2.configuration_minimax_m2": {
+                "MiniMaxM2Config",
+            },
+            "minimax_m3_vl.configuration_minimax_m3_vl": {
+                "MiniMaxM3VLConfig",
+                "MiniMaxM3VLTextConfig",
+                "MiniMaxM3VLVisionConfig",
+            },
+            "minimax_m3_vl.processing_minimax_m3_vl": {
+                "MiniMaxM3VLProcessor",
+            },
+            "ministral3.configuration_ministral3": {
+                "Ministral3Config",
+            },
+            "ministral.configuration_ministral": {
+                "MinistralConfig",
+            },
+            "mistral3.configuration_mistral3": {
+                "Mistral3Config",
+            },
+            "mistral4.configuration_mistral4": {
+                "Mistral4Config",
+            },
+            "mistral.configuration_mistral": {
+                "MistralConfig",
+            },
+            "mistral_large4.configuration_mistral_large4": {
+                "MistralLarge4Config",
+                "MistralLarge4TextConfig",
+            },
+            "mixtral.configuration_mixtral": {
+                "MixtralConfig",
+            },
+            "mlcd.configuration_mlcd": {
+                "MLCDVisionConfig",
+            },
+            "mllama.configuration_mllama": {
+                "MllamaConfig",
+                "MllamaTextConfig",
+                "MllamaVisionConfig",
+            },
+            "mllama.processing_mllama": {
+                "MllamaProcessor",
+            },
+            "mluke.tokenization_mluke": {
+                "MLukeTokenizer",
+            },
+            "mm_grounding_dino.configuration_mm_grounding_dino": {
+                "MMGroundingDinoConfig",
+            },
+            "mobilebert.configuration_mobilebert": {
+                "MobileBertConfig",
+            },
+            "mobilebert.tokenization_mobilebert": {
+                "MobileBertTokenizer",
+                "MobileBertTokenizerFast",
+            },
+            "mobilenet_v1.configuration_mobilenet_v1": {
+                "MobileNetV1Config",
+            },
+            "mobilenet_v2.configuration_mobilenet_v2": {
+                "MobileNetV2Config",
+            },
+            "mobilevit.configuration_mobilevit": {
+                "MobileViTConfig",
+            },
+            "mobilevitv2.configuration_mobilevitv2": {
+                "MobileViTV2Config",
+            },
+            "modernbert.configuration_modernbert": {
+                "ModernBertConfig",
+            },
+            "modernbert_decoder.configuration_modernbert_decoder": {
+                "ModernBertDecoderConfig",
+            },
+            "modernvbert.configuration_modernvbert": {
+                "ModernVBertConfig",
+            },
+            "molmo2.configuration_molmo2": {
+                "Molmo2AdapterConfig",
+                "Molmo2Config",
+                "Molmo2TextConfig",
+                "Molmo2VisionConfig",
+            },
+            "molmo2.processing_molmo2": {
+                "Molmo2Processor",
+            },
+            "moonshine.configuration_moonshine": {
+                "MoonshineConfig",
+            },
+            "moonshine_streaming.configuration_moonshine_streaming": {
+                "MoonshineStreamingConfig",
+                "MoonshineStreamingEncoderConfig",
+            },
+            "moonshine_streaming.processing_moonshine_streaming": {
+                "MoonshineStreamingProcessor",
+            },
+            "moshi.configuration_moshi": {
+                "MoshiConfig",
+                "MoshiDepthConfig",
+            },
+            "moss_transcribe_diarize.configuration_moss_transcribe_diarize": {
+                "MossTranscribeDiarizeAudioConfig",
+                "MossTranscribeDiarizeConfig",
+            },
+            "moss_transcribe_diarize.feature_extraction_moss_transcribe_diarize": {
+                "MossTranscribeDiarizeFeatureExtractor",
+            },
+            "mpnet.configuration_mpnet": {
+                "MPNetConfig",
+            },
+            "mpnet.tokenization_mpnet": {
+                "MPNetTokenizer",
+            },
+            "mpt.configuration_mpt": {
+                "MptConfig",
+            },
+            "mra.configuration_mra": {
+                "MraConfig",
+            },
+            "mt5.configuration_mt5": {
+                "MT5Config",
+            },
+            "muse_glimmer.configuration_muse_glimmer": {
+                "MuseGlimmerConfig",
+                "MuseGlimmerTextConfig",
+                "MuseGlimmerVisionConfig",
+            },
+            "muse_glimmer.processing_muse_glimmer": {
+                "MuseGlimmerProcessor",
+            },
+            "muse_glimmer_assistant.configuration_muse_glimmer_assistant": {
+                "MuseGlimmerAssistantConfig",
+            },
+            "muse_spark.configuration_muse_spark": {
+                "MuseSparkAudioConfig",
+                "MuseSparkConfig",
+                "MuseSparkTextConfig",
+                "MuseSparkVisionConfig",
+            },
+            "muse_spark.feature_extraction_muse_spark": {
+                "MuseSparkFeatureExtractor",
+            },
+            "muse_spark.processing_muse_spark": {
+                "MuseSparkProcessor",
+            },
+            "musicflamingo.configuration_musicflamingo": {
+                "MusicFlamingoConfig",
+            },
+            "musicgen.configuration_musicgen": {
+                "MusicgenConfig",
+                "MusicgenDecoderConfig",
+            },
+            "musicgen.processing_musicgen": {
+                "MusicgenProcessor",
+            },
+            "musicgen_melody.configuration_musicgen_melody": {
+                "MusicgenMelodyConfig",
+                "MusicgenMelodyDecoderConfig",
+            },
+            "mvp.configuration_mvp": {
+                "MvpConfig",
+            },
+            "myt5.tokenization_myt5": {
+                "MyT5Tokenizer",
+            },
+            "nanochat.configuration_nanochat": {
+                "NanoChatConfig",
+            },
+            "nemotron3_5_asr.configuration_nemotron3_5_asr": {
+                "Nemotron3_5AsrConfig",
+            },
+            "nemotron3_5_transcribe.configuration_nemotron3_5_transcribe": {
+                "Nemotron3_5TranscribeAsrAudioConfig",
+                "Nemotron3_5TranscribeAudioConfig",
+                "Nemotron3_5TranscribeConfig",
+                "Nemotron3_5TranscribeWordTimestampConfig",
+            },
+            "nemotron3_diarization.configuration_nemotron3_diarization": {
+                "Nemotron3DiarizationAudioConfig",
+                "Nemotron3DiarizationConfig",
+                "Nemotron3DiarizationHeadConfig",
+                "Nemotron3DiarizationStreamingConfig",
+            },
+            "nemotron3_diarization.processing_nemotron3_diarization": {
+                "Nemotron3DiarizationProcessor",
+            },
+            "nemotron.configuration_nemotron": {
+                "NemotronConfig",
+            },
+            "nemotron_asr_streaming.configuration_nemotron_asr_streaming": {
+                "NemotronAsrStreamingConfig",
+                "NemotronAsrStreamingEncoderConfig",
+            },
+            "nemotron_asr_streaming.processing_nemotron_asr_streaming": {
+                "NemotronAsrStreamingProcessor",
+            },
+            "nemotron_h.configuration_nemotron_h": {
+                "NemotronHConfig",
+            },
+            "nemotron_h_omni.configuration_nemotron_h_omni": {
+                "NemotronH_Omni_Reasoning_V3_Config",
+            },
+            "nemotron_h_omni.processing_nemotron_h_omni": {
+                "NemotronH_Omni_Reasoning_V3Processor",
+            },
+            "neomme.configuration_neomme": {
+                "NeoMMEConfig",
+            },
+            "neomme.processing_neomme": {
+                "NeoMMEProcessor",
+            },
+            "neucodec.configuration_neucodec": {
+                "NeuCodecConfig",
+            },
+            "nllb.tokenization_nllb": {
+                "NllbTokenizer",
+            },
+            "nllb_moe.configuration_nllb_moe": {
+                "NllbMoeConfig",
+            },
+            "nomic_bert.configuration_nomic_bert": {
+                "NomicBertConfig",
+            },
+            "nougat.configuration_nougat": {
+                "NougatConfig",
+            },
+            "nougat.processing_nougat": {
+                "NougatProcessor",
+            },
+            "nougat.tokenization_nougat": {
+                "NougatTokenizer",
+            },
+            "nystromformer.configuration_nystromformer": {
+                "NystromformerConfig",
+            },
+            "olmo2.configuration_olmo2": {
+                "Olmo2Config",
+            },
+            "olmo3.configuration_olmo3": {
+                "Olmo3Config",
+            },
+            "olmo.configuration_olmo": {
+                "OlmoConfig",
+            },
+            "olmo_hybrid.configuration_olmo_hybrid": {
+                "OlmoHybridConfig",
+            },
+            "olmoe.configuration_olmoe": {
+                "OlmoeConfig",
+            },
+            "omdet_turbo.configuration_omdet_turbo": {
+                "OmDetTurboConfig",
+            },
+            "oneformer.configuration_oneformer": {
+                "OneFormerConfig",
+            },
+            "oneformer.processing_oneformer": {
+                "OneFormerProcessor",
+            },
+            "openai.configuration_openai": {
+                "OpenAIGPTConfig",
+            },
+            "openai.tokenization_openai": {
+                "OpenAIGPTTokenizer",
+            },
+            "openai_privacy_filter.configuration_openai_privacy_filter": {
+                "OpenAIPrivacyFilterConfig",
+            },
+            "opt.configuration_opt": {
+                "OPTConfig",
+            },
+            "ovis2.configuration_ovis2": {
+                "Ovis2Config",
+                "Ovis2VisionConfig",
+            },
+            "ovis2.processing_ovis2": {
+                "Ovis2Processor",
+            },
+            "owlv2.configuration_owlv2": {
+                "Owlv2Config",
+                "Owlv2TextConfig",
+                "Owlv2VisionConfig",
+            },
+            "owlv2.processing_owlv2": {
+                "Owlv2Processor",
+            },
+            "owlvit.configuration_owlvit": {
+                "OwlViTConfig",
+                "OwlViTTextConfig",
+                "OwlViTVisionConfig",
+            },
+            "owlvit.processing_owlvit": {
+                "OwlViTProcessor",
+            },
+            "paddleocr_vl.configuration_paddleocr_vl": {
+                "PaddleOCRTextConfig",
+                "PaddleOCRVLConfig",
+                "PaddleOCRVisionConfig",
+            },
+            "paddleocr_vl.processing_paddleocr_vl": {
+                "PaddleOCRVLProcessor",
+            },
+            "paligemma.configuration_paligemma": {
+                "PaliGemmaConfig",
+            },
+            "paligemma.processing_paligemma": {
+                "PaliGemmaProcessor",
+            },
+            "parakeet.configuration_parakeet": {
+                "ParakeetCTCConfig",
+                "ParakeetEncoderConfig",
+                "ParakeetRNNTConfig",
+                "ParakeetTDTConfig",
+            },
+            "parakeet.processing_parakeet": {
+                "ParakeetProcessor",
+            },
+            "parakeet.tokenization_parakeet": {
+                "ParakeetTokenizer",
+            },
+            "patchtsmixer.configuration_patchtsmixer": {
+                "PatchTSMixerConfig",
+            },
+            "patchtst.configuration_patchtst": {
+                "PatchTSTConfig",
+            },
+            "pe_audio.configuration_pe_audio": {
+                "PeAudioConfig",
+                "PeAudioEncoderConfig",
+            },
+            "pe_audio.feature_extraction_pe_audio": {
+                "PeAudioFeatureExtractor",
+            },
+            "pe_audio.processing_pe_audio": {
+                "PeAudioProcessor",
+            },
+            "pe_audio_video.configuration_pe_audio_video": {
+                "PeAudioVideoConfig",
+                "PeAudioVideoEncoderConfig",
+            },
+            "pe_audio_video.processing_pe_audio_video": {
+                "PeAudioVideoProcessor",
+            },
+            "pe_video.configuration_pe_video": {
+                "PeVideoConfig",
+                "PeVideoEncoderConfig",
+            },
+            "pe_video.processing_pe_video": {
+                "PeVideoProcessor",
+            },
+            "pegasus.configuration_pegasus": {
+                "PegasusConfig",
+            },
+            "pegasus.tokenization_pegasus": {
+                "PegasusTokenizer",
+            },
+            "pegasus_x.configuration_pegasus_x": {
+                "PegasusXConfig",
+            },
+            "perceiver.configuration_perceiver": {
+                "PerceiverConfig",
+            },
+            "perceiver.tokenization_perceiver": {
+                "PerceiverTokenizer",
+            },
+            "perception_lm.configuration_perception_lm": {
+                "PerceptionLMConfig",
+            },
+            "perception_lm.processing_perception_lm": {
+                "PerceptionLMProcessor",
+            },
+            "persimmon.configuration_persimmon": {
+                "PersimmonConfig",
+            },
+            "phi3.configuration_phi3": {
+                "Phi3Config",
+            },
+            "phi4_multimodal.configuration_phi4_multimodal": {
+                "Phi4MultimodalAudioConfig",
+                "Phi4MultimodalConfig",
+                "Phi4MultimodalVisionConfig",
+            },
+            "phi4_multimodal.feature_extraction_phi4_multimodal": {
+                "Phi4MultimodalFeatureExtractor",
+            },
+            "phi4_multimodal.processing_phi4_multimodal": {
+                "Phi4MultimodalProcessor",
+            },
+            "phi.configuration_phi": {
+                "PhiConfig",
+            },
+            "phimoe.configuration_phimoe": {
+                "PhimoeConfig",
+            },
+            "phobert.tokenization_phobert": {
+                "PhobertTokenizer",
+            },
+            "pi0.configuration_pi0": {
+                "PI0Config",
+            },
+            "pix2struct.configuration_pix2struct": {
+                "Pix2StructConfig",
+                "Pix2StructTextConfig",
+                "Pix2StructVisionConfig",
+            },
+            "pix2struct.processing_pix2struct": {
+                "Pix2StructProcessor",
+            },
+            "pixio.configuration_pixio": {
+                "PixioConfig",
+            },
+            "pixtral.configuration_pixtral": {
+                "PixtralVisionConfig",
+            },
+            "plbart.configuration_plbart": {
+                "PLBartConfig",
+            },
+            "pocket_tts.configuration_pocket_tts": {
+                "PocketTTSConfig",
+                "PocketTTSFlowHeadConfig",
+            },
+            "pocket_tts_audio_tokenizer.configuration_pocket_tts_audio_tokenizer": {
+                "PocketTTSAudioTokenizerConfig",
+                "PocketTTSAudioTokenizerDecoderConfig",
+                "PocketTTSAudioTokenizerEncoderConfig",
+            },
+            "poolformer.configuration_poolformer": {
+                "PoolFormerConfig",
+            },
+            "pop2piano.configuration_pop2piano": {
+                "Pop2PianoConfig",
+            },
+            "pp_chart2table.configuration_pp_chart2table": {
+                "PPChart2TableConfig",
+                "PPChart2TableVisionConfig",
+            },
+            "pp_chart2table.processing_pp_chart2table": {
+                "PPChart2TableProcessor",
+            },
+            "pp_doclayout_v2.configuration_pp_doclayout_v2": {
+                "PPDocLayoutV2Config",
+            },
+            "pp_doclayout_v3.configuration_pp_doclayout_v3": {
+                "PPDocLayoutV3Config",
+            },
+            "pp_doclayout_v4.configuration_pp_doclayout_v4": {
+                "PPDocLayoutV4Config",
+            },
+            "pp_formulanet.configuration_pp_formulanet": {
+                "PPFormulaNetConfig",
+                "PPFormulaNetTextConfig",
+                "PPFormulaNetVisionConfig",
+            },
+            "pp_formulanet.processing_pp_formulanet": {
+                "PPFormulaNetProcessor",
+            },
+            "pp_lcnet.configuration_pp_lcnet": {
+                "PPLCNetConfig",
+            },
+            "pp_lcnet_v3.configuration_pp_lcnet_v3": {
+                "PPLCNetV3Config",
+            },
+            "pp_lcnet_v4.configuration_pp_lcnet_v4": {
+                "PPLCNetV4Config",
+            },
+            "pp_ocrv5_mobile_det.configuration_pp_ocrv5_mobile_det": {
+                "PPOCRV5MobileDetConfig",
+            },
+            "pp_ocrv5_mobile_rec.configuration_pp_ocrv5_mobile_rec": {
+                "PPOCRV5MobileRecConfig",
+            },
+            "pp_ocrv5_server_det.configuration_pp_ocrv5_server_det": {
+                "PPOCRV5ServerDetConfig",
+            },
+            "pp_ocrv5_server_rec.configuration_pp_ocrv5_server_rec": {
+                "PPOCRV5ServerRecConfig",
+            },
+            "pp_ocrv6_medium_det.configuration_pp_ocrv6_medium_det": {
+                "PPOCRV6MediumDetConfig",
+            },
+            "pp_ocrv6_small_det.configuration_pp_ocrv6_small_det": {
+                "PPOCRV6SmallDetConfig",
+            },
+            "pp_ocrv6_small_rec.configuration_pp_ocrv6_small_rec": {
+                "PPOCRV6SmallRecConfig",
+            },
+            "pp_ocrv6_tiny_rec.configuration_pp_ocrv6_tiny_rec": {
+                "PPOCRV6TinyRecConfig",
+            },
+            "prompt_depth_anything.configuration_prompt_depth_anything": {
+                "PromptDepthAnythingConfig",
+            },
+            "prophetnet.configuration_prophetnet": {
+                "ProphetNetConfig",
+            },
+            "prophetnet.tokenization_prophetnet": {
+                "ProphetNetTokenizer",
+            },
+            "pvt.configuration_pvt": {
+                "PvtConfig",
+            },
+            "pvt_v2.configuration_pvt_v2": {
+                "PvtV2Config",
+            },
+            "qianfan_ocr.configuration_qianfan_ocr": {
+                "QianfanOCRConfig",
+                "QianfanOCRVisionConfig",
+            },
+            "qianfan_ocr.processing_qianfan_ocr": {
+                "QianfanOCRProcessor",
+            },
+            "qwen2.configuration_qwen2": {
+                "Qwen2Config",
+            },
+            "qwen2.tokenization_qwen2": {
+                "Qwen2Tokenizer",
+            },
+            "qwen2_5_omni.configuration_qwen2_5_omni": {
+                "Qwen2_5OmniAudioEncoderConfig",
+                "Qwen2_5OmniBigVGANConfig",
+                "Qwen2_5OmniConfig",
+                "Qwen2_5OmniDiTConfig",
+                "Qwen2_5OmniTalkerConfig",
+                "Qwen2_5OmniTextConfig",
+                "Qwen2_5OmniThinkerConfig",
+                "Qwen2_5OmniToken2WavConfig",
+                "Qwen2_5OmniVisionEncoderConfig",
+            },
+            "qwen2_5_omni.processing_qwen2_5_omni": {
+                "Qwen2_5OmniProcessor",
+            },
+            "qwen2_5_vl.configuration_qwen2_5_vl": {
+                "Qwen2_5_VLConfig",
+                "Qwen2_5_VLTextConfig",
+                "Qwen2_5_VLVisionConfig",
+            },
+            "qwen2_5_vl.processing_qwen2_5_vl": {
+                "Qwen2_5_VLProcessor",
+            },
+            "qwen2_audio.configuration_qwen2_audio": {
+                "Qwen2AudioConfig",
+                "Qwen2AudioEncoderConfig",
+            },
+            "qwen2_audio.processing_qwen2_audio": {
+                "Qwen2AudioProcessor",
+            },
+            "qwen2_moe.configuration_qwen2_moe": {
+                "Qwen2MoeConfig",
+            },
+            "qwen2_vl.configuration_qwen2_vl": {
+                "Qwen2VLConfig",
+                "Qwen2VLTextConfig",
+                "Qwen2VLVisionConfig",
+            },
+            "qwen2_vl.processing_qwen2_vl": {
+                "Qwen2VLProcessor",
+            },
+            "qwen3.configuration_qwen3": {
+                "Qwen3Config",
+            },
+            "qwen3_5.configuration_qwen3_5": {
+                "Qwen3_5Config",
+                "Qwen3_5TextConfig",
+                "Qwen3_5VisionConfig",
+            },
+            "qwen3_5.tokenization_qwen3_5": {
+                "Qwen3_5Tokenizer",
+            },
+            "qwen3_5_moe.configuration_qwen3_5_moe": {
+                "Qwen3_5MoeConfig",
+                "Qwen3_5MoeTextConfig",
+                "Qwen3_5MoeVisionConfig",
+            },
+            "qwen3_asr.configuration_qwen3_asr": {
+                "Qwen3ASRConfig",
+                "Qwen3ASREncoderConfig",
+            },
+            "qwen3_asr.processing_qwen3_asr": {
+                "Qwen3ASRProcessor",
+            },
+            "qwen3_moe.configuration_qwen3_moe": {
+                "Qwen3MoeConfig",
+            },
+            "qwen3_next.configuration_qwen3_next": {
+                "Qwen3NextConfig",
+            },
+            "qwen3_omni_moe.configuration_qwen3_omni_moe": {
+                "Qwen3OmniMoeAudioEncoderConfig",
+                "Qwen3OmniMoeConfig",
+                "Qwen3OmniMoeTalkerCodePredictorConfig",
+                "Qwen3OmniMoeTalkerConfig",
+                "Qwen3OmniMoeTalkerTextConfig",
+                "Qwen3OmniMoeTextConfig",
+                "Qwen3OmniMoeThinkerConfig",
+                "Qwen3OmniMoeVisionEncoderConfig",
+            },
+            "qwen3_omni_moe.processing_qwen3_omni_moe": {
+                "Qwen3OmniMoeProcessor",
+            },
+            "qwen3_vl.configuration_qwen3_vl": {
+                "Qwen3VLConfig",
+                "Qwen3VLTextConfig",
+                "Qwen3VLVisionConfig",
+            },
+            "qwen3_vl.processing_qwen3_vl": {
+                "Qwen3VLProcessor",
+            },
+            "qwen3_vl_moe.configuration_qwen3_vl_moe": {
+                "Qwen3VLMoeConfig",
+                "Qwen3VLMoeTextConfig",
+                "Qwen3VLMoeVisionConfig",
+            },
+            "qwen4_exp.configuration_qwen4_exp": {
+                "Qwen4ExpConfig",
+                "Qwen4ExpTextConfig",
+                "Qwen4ExpVisionConfig",
+            },
+            "radio.configuration_radio": {
+                "RadioConfig",
+            },
+            "rag.configuration_rag": {
+                "RagConfig",
+            },
+            "rag.retrieval_rag": {
+                "RagRetriever",
+            },
+            "rag.tokenization_rag": {
+                "RagTokenizer",
+            },
+            "recurrent_gemma.configuration_recurrent_gemma": {
+                "RecurrentGemmaConfig",
+            },
+            "reformer.configuration_reformer": {
+                "ReformerConfig",
+            },
+            "reformer.tokenization_reformer": {
+                "ReformerTokenizer",
+            },
+            "regnet.configuration_regnet": {
+                "RegNetConfig",
+            },
+            "rembert.configuration_rembert": {
+                "RemBertConfig",
+            },
+            "rembert.tokenization_rembert": {
+                "RemBertTokenizer",
+            },
+            "resnet.configuration_resnet": {
+                "ResNetConfig",
+            },
+            "rf_detr.configuration_rf_detr": {
+                "RfDetrConfig",
+                "RfDetrDinov2Config",
+            },
+            "roberta.configuration_roberta": {
+                "RobertaConfig",
+            },
+            "roberta.tokenization_roberta": {
+                "RobertaTokenizer",
+                "RobertaTokenizerFast",
+            },
+            "roberta_prelayernorm.configuration_roberta_prelayernorm": {
+                "RobertaPreLayerNormConfig",
+            },
+            "roc_bert.configuration_roc_bert": {
+                "RoCBertConfig",
+            },
+            "roc_bert.tokenization_roc_bert": {
+                "RoCBertTokenizer",
+            },
+            "roformer.configuration_roformer": {
+                "RoFormerConfig",
+            },
+            "roformer.tokenization_roformer": {
+                "RoFormerTokenizer",
+                "RoFormerTokenizerFast",
+            },
+            "rt_detr.configuration_rt_detr": {
+                "RTDetrConfig",
+            },
+            "rt_detr.configuration_rt_detr_resnet": {
+                "RTDetrResNetConfig",
+            },
+            "rt_detr_v2.configuration_rt_detr_v2": {
+                "RTDetrV2Config",
+            },
+            "rwkv.configuration_rwkv": {
+                "RwkvConfig",
+            },
+            "sam2.configuration_sam2": {
+                "Sam2Config",
+                "Sam2HieraDetConfig",
+                "Sam2MaskDecoderConfig",
+                "Sam2PromptEncoderConfig",
+                "Sam2VisionConfig",
+            },
+            "sam2_video.configuration_sam2_video": {
+                "Sam2VideoConfig",
+                "Sam2VideoMaskDecoderConfig",
+                "Sam2VideoPromptEncoderConfig",
+            },
+            "sam3.configuration_sam3": {
+                "Sam3Config",
+                "Sam3DETRDecoderConfig",
+                "Sam3DETREncoderConfig",
+                "Sam3GeometryEncoderConfig",
+                "Sam3MaskDecoderConfig",
+                "Sam3ViTConfig",
+                "Sam3VisionConfig",
+            },
+            "sam3_lite_text.configuration_sam3_lite_text": {
+                "Sam3LiteTextConfig",
+                "Sam3LiteTextDETRDecoderConfig",
+                "Sam3LiteTextDETREncoderConfig",
+                "Sam3LiteTextGeometryEncoderConfig",
+                "Sam3LiteTextMaskDecoderConfig",
+                "Sam3LiteTextTextConfig",
+            },
+            "sam3_tracker.configuration_sam3_tracker": {
+                "Sam3TrackerConfig",
+                "Sam3TrackerMaskDecoderConfig",
+                "Sam3TrackerPromptEncoderConfig",
+            },
+            "sam3_tracker_video.configuration_sam3_tracker_video": {
+                "Sam3TrackerVideoConfig",
+                "Sam3TrackerVideoMaskDecoderConfig",
+                "Sam3TrackerVideoPromptEncoderConfig",
+            },
+            "sam3_video.configuration_sam3_video": {
+                "Sam3VideoConfig",
+            },
+            "sam.configuration_sam": {
+                "SamConfig",
+                "SamMaskDecoderConfig",
+                "SamPromptEncoderConfig",
+                "SamVisionConfig",
+            },
+            "sam.processing_sam": {
+                "SamProcessor",
+            },
+            "sam_hq.configuration_sam_hq": {
+                "SamHQConfig",
+                "SamHQMaskDecoderConfig",
+                "SamHQPromptEncoderConfig",
+                "SamHQVisionConfig",
+            },
+            "sam_hq.processing_sam_hq": {
+                "SamHQProcessor",
+            },
+            "sapiens2.configuration_sapiens2": {
+                "Sapiens2Config",
+                "Sapiens2HeadConfig",
+            },
+            "seamless_m4t.configuration_seamless_m4t": {
+                "SeamlessM4TConfig",
+            },
+            "seamless_m4t.feature_extraction_seamless_m4t": {
+                "SeamlessM4TFeatureExtractor",
+            },
+            "seamless_m4t.processing_seamless_m4t": {
+                "SeamlessM4TProcessor",
+            },
+            "seamless_m4t.tokenization_seamless_m4t": {
+                "SeamlessM4TTokenizer",
+            },
+            "seamless_m4t_v2.configuration_seamless_m4t_v2": {
+                "SeamlessM4Tv2Config",
+            },
+            "seed_oss.configuration_seed_oss": {
+                "SeedOssConfig",
+            },
+            "segformer.configuration_segformer": {
+                "SegformerConfig",
+            },
+            "seggpt.configuration_seggpt": {
+                "SegGptConfig",
+            },
+            "sew.configuration_sew": {
+                "SEWConfig",
+            },
+            "sew_d.configuration_sew_d": {
+                "SEWDConfig",
+            },
+            "shieldgemma2.configuration_shieldgemma2": {
+                "ShieldGemma2Config",
+            },
+            "shieldgemma2.processing_shieldgemma2": {
+                "ShieldGemma2Processor",
+            },
+            "siglip2.configuration_siglip2": {
+                "Siglip2Config",
+                "Siglip2TextConfig",
+                "Siglip2VisionConfig",
+            },
+            "siglip2.processing_siglip2": {
+                "Siglip2Processor",
+            },
+            "siglip2.tokenization_siglip2": {
+                "Siglip2Tokenizer",
+            },
+            "siglip.configuration_siglip": {
+                "SiglipConfig",
+                "SiglipTextConfig",
+                "SiglipVisionConfig",
+            },
+            "siglip.processing_siglip": {
+                "SiglipProcessor",
+            },
+            "slanet.configuration_slanet": {
+                "SLANetConfig",
+            },
+            "slanext.configuration_slanext": {
+                "SLANeXtConfig",
+                "SLANeXtVisionConfig",
+            },
+            "smollm3.configuration_smollm3": {
+                "SmolLM3Config",
+            },
+            "smolvlm.configuration_smolvlm": {
+                "SmolVLMConfig",
+                "SmolVLMVisionConfig",
+            },
+            "smolvlm.processing_smolvlm": {
+                "SmolVLMProcessor",
+            },
+            "solar_open.configuration_solar_open": {
+                "SolarOpenConfig",
+            },
+            "speech_encoder_decoder.configuration_speech_encoder_decoder": {
+                "SpeechEncoderDecoderConfig",
+            },
+            "speech_to_text.configuration_speech_to_text": {
+                "Speech2TextConfig",
+            },
+            "speech_to_text.feature_extraction_speech_to_text": {
+                "Speech2TextFeatureExtractor",
+            },
+            "speech_to_text.processing_speech_to_text": {
+                "Speech2TextProcessor",
+            },
+            "speecht5.configuration_speecht5": {
+                "SpeechT5Config",
+                "SpeechT5HifiGanConfig",
+            },
+            "speecht5.feature_extraction_speecht5": {
+                "SpeechT5FeatureExtractor",
+            },
+            "speecht5.processing_speecht5": {
+                "SpeechT5Processor",
+            },
+            "splinter.configuration_splinter": {
+                "SplinterConfig",
+            },
+            "splinter.tokenization_splinter": {
+                "SplinterTokenizer",
+            },
+            "squeezebert.configuration_squeezebert": {
+                "SqueezeBertConfig",
+            },
+            "squeezebert.tokenization_squeezebert": {
+                "SqueezeBertTokenizer",
+                "SqueezeBertTokenizerFast",
+            },
+            "stablelm.configuration_stablelm": {
+                "StableLmConfig",
+            },
+            "starcoder2.configuration_starcoder2": {
+                "Starcoder2Config",
+            },
+            "step3p7.configuration_step3p7": {
+                "Step3p7Config",
+                "Step3p7TextConfig",
+                "Step3p7VisionConfig",
+            },
+            "step3p7.processing_step3p7": {
+                "Step3p7Processor",
+            },
+            "superglue.configuration_superglue": {
+                "SuperGlueConfig",
+            },
+            "superpoint.configuration_superpoint": {
+                "SuperPointConfig",
+            },
+            "swiftformer.configuration_swiftformer": {
+                "SwiftFormerConfig",
+            },
+            "swin2sr.configuration_swin2sr": {
+                "Swin2SRConfig",
+            },
+            "swin.configuration_swin": {
+                "SwinConfig",
+            },
+            "swinv2.configuration_swinv2": {
+                "Swinv2Config",
+            },
+            "switch_transformers.configuration_switch_transformers": {
+                "SwitchTransformersConfig",
+            },
+            "t5.configuration_t5": {
+                "T5Config",
+            },
+            "t5.tokenization_t5": {
+                "T5Tokenizer",
+            },
+            "t5gemma2.configuration_t5gemma2": {
+                "T5Gemma2Config",
+                "T5Gemma2DecoderConfig",
+                "T5Gemma2EncoderConfig",
+                "T5Gemma2TextConfig",
+            },
+            "t5gemma.configuration_t5gemma": {
+                "T5GemmaConfig",
+                "T5GemmaModuleConfig",
+            },
+            "table_transformer.configuration_table_transformer": {
+                "TableTransformerConfig",
+            },
+            "tapas.configuration_tapas": {
+                "TapasConfig",
+            },
+            "tapas.tokenization_tapas": {
+                "TapasTokenizer",
+            },
+            "textnet.configuration_textnet": {
+                "TextNetConfig",
+            },
+            "time_series_transformer.configuration_time_series_transformer": {
+                "TimeSeriesTransformerConfig",
+            },
+            "timesfm2_5.configuration_timesfm2_5": {
+                "TimesFm2_5Config",
+            },
+            "timesfm.configuration_timesfm": {
+                "TimesFmConfig",
+            },
+            "timesformer.configuration_timesformer": {
+                "TimesformerConfig",
+            },
+            "timm_backbone.configuration_timm_backbone": {
+                "TimmBackboneConfig",
+            },
+            "timm_wrapper.configuration_timm_wrapper": {
+                "TimmWrapperConfig",
+            },
+            "tipsv2.configuration_tipsv2": {
+                "Tipsv2Config",
+                "Tipsv2TextConfig",
+                "Tipsv2VisionConfig",
+            },
+            "tipsv2.processing_tipsv2": {
+                "Tipsv2Processor",
+            },
+            "tipsv2.tokenization_tipsv2": {
+                "Tipsv2Tokenizer",
+            },
+            "tipsv2_dpt.configuration_tipsv2_dpt": {
+                "Tipsv2DptConfig",
+            },
+            "trocr.configuration_trocr": {
+                "TrOCRConfig",
+            },
+            "trocr.processing_trocr": {
+                "TrOCRProcessor",
+            },
+            "tvp.configuration_tvp": {
+                "TvpConfig",
+            },
+            "tvp.processing_tvp": {
+                "TvpProcessor",
+            },
+            "udop.configuration_udop": {
+                "UdopConfig",
+            },
+            "udop.processing_udop": {
+                "UdopProcessor",
+            },
+            "udop.tokenization_udop": {
+                "UdopTokenizer",
+            },
+            "ultrabert.configuration_ultrabert": {
+                "UltrabertConfig",
+            },
+            "ultravbert.configuration_ultravbert": {
+                "UltraVBertConfig",
+            },
+            "umt5.configuration_umt5": {
+                "UMT5Config",
+            },
+            "unispeech.configuration_unispeech": {
+                "UniSpeechConfig",
+            },
+            "unispeech_sat.configuration_unispeech_sat": {
+                "UniSpeechSatConfig",
+            },
+            "univnet.configuration_univnet": {
+                "UnivNetConfig",
+            },
+            "univnet.feature_extraction_univnet": {
+                "UnivNetFeatureExtractor",
+            },
+            "unlimited_ocr.configuration_unlimited_ocr": {
+                "UnlimitedOcrConfig",
+                "UnlimitedOcrSamVisionConfig",
+                "UnlimitedOcrTextConfig",
+                "UnlimitedOcrVisionConfig",
+                "UnlimitedOcrVisionEncoderConfig",
+            },
+            "unlimited_ocr.processing_unlimited_ocr": {
+                "UnlimitedOcrProcessor",
+            },
+            "upernet.configuration_upernet": {
+                "UperNetConfig",
+            },
+            "uvdoc.configuration_uvdoc": {
+                "UVDocBackboneConfig",
+                "UVDocConfig",
+            },
+            "vaultgemma.configuration_vaultgemma": {
+                "VaultGemmaConfig",
+            },
+            "vibevoice.configuration_vibevoice": {
+                "VibeVoiceConfig",
+                "VibeVoiceDiffusionHeadConfig",
+            },
+            "vibevoice_acoustic_tokenizer.configuration_vibevoice_acoustic_tokenizer": {
+                "VibeVoiceAcousticTokenizerConfig",
+                "VibeVoiceAcousticTokenizerDecoderConfig",
+                "VibeVoiceAcousticTokenizerEncoderConfig",
+            },
+            "vibevoice_asr.configuration_vibevoice_asr": {
+                "VibeVoiceAsrConfig",
+            },
+            "vibevoice_asr.processing_vibevoice_asr": {
+                "VibeVoiceAsrProcessor",
+            },
+            "video_llama_3.configuration_video_llama_3": {
+                "VideoLlama3Config",
+                "VideoLlama3VisionConfig",
+            },
+            "video_llama_3.processing_video_llama_3": {
+                "VideoLlama3Processor",
+            },
+            "video_llava.configuration_video_llava": {
+                "VideoLlavaConfig",
+            },
+            "video_llava.processing_video_llava": {
+                "VideoLlavaProcessor",
+            },
+            "videomae.configuration_videomae": {
+                "VideoMAEConfig",
+            },
+            "videomt.configuration_videomt": {
+                "VideomtConfig",
+            },
+            "videoprism.configuration_videoprism": {
+                "VideoPrismConfig",
+                "VideoPrismTextConfig",
+                "VideoPrismVisionConfig",
+            },
+            "videoprism.processing_videoprism": {
+                "VideoPrismProcessor",
+            },
+            "videoprism.tokenization_videoprism": {
+                "VideoPrismTokenizer",
+            },
+            "vilt.configuration_vilt": {
+                "ViltConfig",
+            },
+            "vilt.processing_vilt": {
+                "ViltProcessor",
+            },
+            "vipllava.configuration_vipllava": {
+                "VipLlavaConfig",
+            },
+            "vision_encoder_decoder.configuration_vision_encoder_decoder": {
+                "VisionEncoderDecoderConfig",
+            },
+            "vision_text_dual_encoder.configuration_vision_text_dual_encoder": {
+                "VisionTextDualEncoderConfig",
+            },
+            "vision_text_dual_encoder.processing_vision_text_dual_encoder": {
+                "VisionTextDualEncoderProcessor",
+            },
+            "visual_bert.configuration_visual_bert": {
+                "VisualBertConfig",
+            },
+            "vit.configuration_vit": {
+                "ViTConfig",
+            },
+            "vit_mae.configuration_vit_mae": {
+                "ViTMAEConfig",
+            },
+            "vit_msn.configuration_vit_msn": {
+                "ViTMSNConfig",
+            },
+            "vitdet.configuration_vitdet": {
+                "VitDetConfig",
+            },
+            "vitmatte.configuration_vitmatte": {
+                "VitMatteConfig",
+            },
+            "vitpose.configuration_vitpose": {
+                "VitPoseConfig",
+            },
+            "vitpose_backbone.configuration_vitpose_backbone": {
+                "VitPoseBackboneConfig",
+            },
+            "vits.configuration_vits": {
+                "VitsConfig",
+            },
+            "vits.tokenization_vits": {
+                "VitsTokenizer",
+            },
+            "vivit.configuration_vivit": {
+                "VivitConfig",
+            },
+            "vjepa2.configuration_vjepa2": {
+                "VJEPA2Config",
+            },
+            "voxtral.configuration_voxtral": {
+                "VoxtralConfig",
+                "VoxtralEncoderConfig",
+            },
+            "voxtral_realtime.configuration_voxtral_realtime": {
+                "VoxtralRealtimeConfig",
+                "VoxtralRealtimeEncoderConfig",
+                "VoxtralRealtimeTextConfig",
+            },
+            "wav2vec2.configuration_wav2vec2": {
+                "Wav2Vec2Config",
+            },
+            "wav2vec2.feature_extraction_wav2vec2": {
+                "Wav2Vec2FeatureExtractor",
+            },
+            "wav2vec2.processing_wav2vec2": {
+                "Wav2Vec2Processor",
+            },
+            "wav2vec2.tokenization_wav2vec2": {
+                "Wav2Vec2CTCTokenizer",
+            },
+            "wav2vec2_bert.configuration_wav2vec2_bert": {
+                "Wav2Vec2BertConfig",
+            },
+            "wav2vec2_bert.processing_wav2vec2_bert": {
+                "Wav2Vec2BertProcessor",
+            },
+            "wav2vec2_conformer.configuration_wav2vec2_conformer": {
+                "Wav2Vec2ConformerConfig",
+            },
+            "wav2vec2_phoneme.tokenization_wav2vec2_phoneme": {
+                "Wav2Vec2PhonemeCTCTokenizer",
+            },
+            "wav2vec2_with_lm.processing_wav2vec2_with_lm": {
+                "Wav2Vec2ProcessorWithLM",
+            },
+            "wavlm.configuration_wavlm": {
+                "WavLMConfig",
+            },
+            "whisper.configuration_whisper": {
+                "WhisperConfig",
+            },
+            "whisper.feature_extraction_whisper": {
+                "WhisperFeatureExtractor",
+            },
+            "whisper.processing_whisper": {
+                "WhisperProcessor",
+            },
+            "whisper.tokenization_whisper": {
+                "WhisperTokenizer",
+            },
+            "x_clip.configuration_x_clip": {
+                "XCLIPConfig",
+                "XCLIPTextConfig",
+                "XCLIPVisionConfig",
+            },
+            "x_clip.processing_x_clip": {
+                "XCLIPProcessor",
+            },
+            "xcodec2.configuration_xcodec2": {
+                "Xcodec2Config",
+            },
+            "xcodec.configuration_xcodec": {
+                "XcodecConfig",
+            },
+            "xglm.configuration_xglm": {
+                "XGLMConfig",
+            },
+            "xglm.tokenization_xglm": {
+                "XGLMTokenizer",
+            },
+            "xlm.configuration_xlm": {
+                "XLMConfig",
+            },
+            "xlm.tokenization_xlm": {
+                "XLMTokenizer",
+            },
+            "xlm_roberta.configuration_xlm_roberta": {
+                "XLMRobertaConfig",
+            },
+            "xlm_roberta.tokenization_xlm_roberta": {
+                "XLMRobertaTokenizer",
+            },
+            "xlm_roberta_xl.configuration_xlm_roberta_xl": {
+                "XLMRobertaXLConfig",
+            },
+            "xlnet.configuration_xlnet": {
+                "XLNetConfig",
+            },
+            "xlnet.tokenization_xlnet": {
+                "XLNetTokenizer",
+            },
+            "xlstm.configuration_xlstm": {
+                "xLSTMConfig",
+            },
+            "xmod.configuration_xmod": {
+                "XmodConfig",
+            },
+            "yolos.configuration_yolos": {
+                "YolosConfig",
+            },
+            "yoso.configuration_yoso": {
+                "YosoConfig",
+            },
+            "youtu.configuration_youtu": {
+                "YoutuConfig",
+            },
+            "zamba2.configuration_zamba2": {
+                "Zamba2Config",
+            },
+            "zamba.configuration_zamba": {
+                "ZambaConfig",
+            },
+            "zaya.configuration_zaya": {
+                "ZayaConfig",
+            },
+            "zoedepth.configuration_zoedepth": {
+                "ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP",
+                "ZoeDepthConfig",
+            },
+        },
+        frozenset({"essentia", "librosa", "pretty_midi", "scipy", "torch"}): {
+            "pop2piano.processing_pop2piano": {
+                "Pop2PianoProcessor",
+            },
+        },
+        frozenset({"essentia", "librosa", "scipy", "torch"}): {
+            "pop2piano.feature_extraction_pop2piano": {
+                "Pop2PianoFeatureExtractor",
+            },
+        },
+        frozenset({"librosa", "torch"}): {
+            "cohere_asr.feature_extraction_cohere_asr": {
+                "CohereAsrFeatureExtractor",
+            },
+            "nemotron_asr_streaming.feature_extraction_nemotron_asr_streaming": {
+                "NemotronAsrStreamingFeatureExtractor",
+            },
+            "parakeet.feature_extraction_parakeet": {
+                "ParakeetFeatureExtractor",
+            },
+        },
+        frozenset({"mistral-common"}): {
+            "voxtral_realtime.processing_voxtral_realtime": {
+                "VoxtralRealtimeProcessor",
+            },
+        },
+        frozenset({"pretty_midi", "torch"}): {
+            "pop2piano.tokenization_pop2piano": {
+                "Pop2PianoTokenizer",
+            },
+        },
+        frozenset({"sentencepiece"}): {
+            "bartpho.tokenization_bartpho": {
+                "BartphoTokenizer",
+            },
+            "bert_generation.tokenization_bert_generation": {
+                "BertGenerationTokenizer",
+            },
+            "cpm.tokenization_cpm": {
+                "CpmTokenizer",
+            },
+            "gpt_sw3.tokenization_gpt_sw3": {
+                "GPTSw3Tokenizer",
+            },
+            "m2m_100.tokenization_m2m_100": {
+                "M2M100Tokenizer",
+            },
+            "marian.tokenization_marian": {
+                "MarianTokenizer",
+            },
+            "mgp_str.processing_mgp_str": {
+                "MgpstrProcessor",
+            },
+            "plbart.tokenization_plbart": {
+                "PLBartTokenizer",
+            },
+            "siglip.tokenization_siglip": {
+                "SiglipTokenizer",
+            },
+            "speech_to_text.tokenization_speech_to_text": {
+                "Speech2TextTokenizer",
+            },
+            "speecht5.tokenization_speecht5": {
+                "SpeechT5Tokenizer",
+            },
+        },
+        frozenset({"timm", "torch", "torchvision", "vision"}): {
+            "timm_wrapper.image_processing_timm_wrapper": {
+                "TimmWrapperImageProcessor",
+            },
+        },
+        frozenset({"tokenizers"}): {
+            "cpm.tokenization_cpm_fast": {
+                "CpmTokenizerFast",
+            },
+            "dpr.tokenization_dpr_fast": {
+                "DPRContextEncoderTokenizerFast",
+                "DPRQuestionEncoderTokenizerFast",
+                "DPRReaderTokenizerFast",
+            },
+        },
+        frozenset({"torch"}): {
+            "afmoe.modeling_afmoe": {
+                "AfmoeForCausalLM",
+                "AfmoeModel",
+                "AfmoePreTrainedModel",
+            },
+            "aimv2.modeling_aimv2": {
+                "Aimv2Model",
+                "Aimv2PreTrainedModel",
+                "Aimv2TextModel",
+                "Aimv2VisionModel",
+            },
+            "albert.modeling_albert": {
+                "AlbertForMaskedLM",
+                "AlbertForMultipleChoice",
+                "AlbertForPreTraining",
+                "AlbertForQuestionAnswering",
+                "AlbertForSequenceClassification",
+                "AlbertForTokenClassification",
+                "AlbertModel",
+                "AlbertPreTrainedModel",
+            },
+            "align.modeling_align": {
+                "AlignModel",
+                "AlignPreTrainedModel",
+                "AlignTextModel",
+                "AlignVisionModel",
+            },
+            "altclip.modeling_altclip": {
+                "AltCLIPModel",
+                "AltCLIPPreTrainedModel",
+                "AltCLIPTextModel",
+                "AltCLIPVisionModel",
+            },
+            "apertus.modeling_apertus": {
+                "ApertusForCausalLM",
+                "ApertusForTokenClassification",
+                "ApertusModel",
+                "ApertusPreTrainedModel",
+            },
+            "arcee.modeling_arcee": {
+                "ArceeForCausalLM",
+                "ArceeForQuestionAnswering",
+                "ArceeForSequenceClassification",
+                "ArceeForTokenClassification",
+                "ArceeModel",
+                "ArceePreTrainedModel",
+            },
+            "aria.modeling_aria": {
+                "AriaForConditionalGeneration",
+                "AriaModel",
+                "AriaPreTrainedModel",
+                "AriaTextForCausalLM",
+                "AriaTextModel",
+                "AriaTextPreTrainedModel",
+            },
+            "audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer": {
+                "ASTFeatureExtractor",
+            },
+            "audio_spectrogram_transformer.modeling_audio_spectrogram_transformer": {
+                "ASTForAudioClassification",
+                "ASTModel",
+                "ASTPreTrainedModel",
+            },
+            "audioflamingo3.modeling_audioflamingo3": {
+                "AudioFlamingo3Encoder",
+                "AudioFlamingo3ForConditionalGeneration",
+                "AudioFlamingo3Model",
+                "AudioFlamingo3PreTrainedModel",
+            },
+            "audioflamingo3.processing_audioflamingo3": {
+                "AudioFlamingo3Processor",
+            },
+            "auto.modeling_auto": {
+                "AutoBackbone",
+                "AutoModel",
+                "AutoModelForAudioClassification",
+                "AutoModelForAudioFrameClassification",
+                "AutoModelForAudioTokenization",
+                "AutoModelForAudioXVector",
+                "AutoModelForCTC",
+                "AutoModelForCausalLM",
+                "AutoModelForDepthEstimation",
+                "AutoModelForDocumentQuestionAnswering",
+                "AutoModelForImageClassification",
+                "AutoModelForImageMatting",
+                "AutoModelForImageSegmentation",
+                "AutoModelForImageTextToText",
+                "AutoModelForImageToImage",
+                "AutoModelForInstanceSegmentation",
+                "AutoModelForKeypointDetection",
+                "AutoModelForKeypointMatching",
+                "AutoModelForMaskGeneration",
+                "AutoModelForMaskedImageModeling",
+                "AutoModelForMaskedLM",
+                "AutoModelForMultimodalLM",
+                "AutoModelForMultipleChoice",
+                "AutoModelForNextSentencePrediction",
+                "AutoModelForNormalEstimation",
+                "AutoModelForObjectDetection",
+                "AutoModelForPointmapEstimation",
+                "AutoModelForPoseEstimation",
+                "AutoModelForPreTraining",
+                "AutoModelForQuestionAnswering",
+                "AutoModelForRNNT",
+                "AutoModelForSemanticSegmentation",
+                "AutoModelForSeq2SeqLM",
+                "AutoModelForSequenceClassification",
+                "AutoModelForSpeechSeq2Seq",
+                "AutoModelForTDT",
+                "AutoModelForTableQuestionAnswering",
+                "AutoModelForTableRecognition",
+                "AutoModelForTextEncoding",
+                "AutoModelForTextRecognition",
+                "AutoModelForTextToSpectrogram",
+                "AutoModelForTextToWaveform",
+                "AutoModelForTimeSeriesPrediction",
+                "AutoModelForTokenClassification",
+                "AutoModelForUniversalSegmentation",
+                "AutoModelForVideoClassification",
+                "AutoModelForVisualQuestionAnswering",
+                "AutoModelForZeroShotImageClassification",
+                "AutoModelForZeroShotObjectDetection",
+                "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_AUDIO_TOKENIZATION_MAPPING",
+                "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
+                "MODEL_FOR_BACKBONE_MAPPING",
+                "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
+                "MODEL_FOR_CAUSAL_LM_MAPPING",
+                "MODEL_FOR_CTC_MAPPING",
+                "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
+                "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
+                "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_IMAGE_MAPPING",
+                "MODEL_FOR_IMAGE_MATTING_MAPPING",
+                "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+                "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING",
+                "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
+                "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
+                "MODEL_FOR_KEYPOINT_DETECTION_MAPPING",
+                "MODEL_FOR_KEYPOINT_MATCHING_MAPPING",
+                "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
+                "MODEL_FOR_MASKED_LM_MAPPING",
+                "MODEL_FOR_MASK_GENERATION_MAPPING",
+                "MODEL_FOR_MULTIMODAL_LM_MAPPING",
+                "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
+                "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
+                "MODEL_FOR_NORMAL_ESTIMATION_MAPPING",
+                "MODEL_FOR_OBJECT_DETECTION_MAPPING",
+                "MODEL_FOR_POINTMAP_ESTIMATION_MAPPING",
+                "MODEL_FOR_POSE_ESTIMATION_MAPPING",
+                "MODEL_FOR_PRETRAINING_MAPPING",
+                "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+                "MODEL_FOR_RETRIEVAL_MAPPING",
+                "MODEL_FOR_RNNT_MAPPING",
+                "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
+                "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
+                "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
+                "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
+                "MODEL_FOR_TABLE_RECOGNITION_MAPPING",
+                "MODEL_FOR_TDT_MAPPING",
+                "MODEL_FOR_TEXT_ENCODING_MAPPING",
+                "MODEL_FOR_TEXT_RECOGNITION_MAPPING",
+                "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
+                "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
+                "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING",
+                "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
+                "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
+                "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
+                "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
+                "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
+                "MODEL_MAPPING",
+            },
+            "autoformer.modeling_autoformer": {
+                "AutoformerForPrediction",
+                "AutoformerModel",
+                "AutoformerPreTrainedModel",
+            },
+            "axk1.modeling_axk1": {
+                "AXK1ForCausalLM",
+                "AXK1ForSequenceClassification",
+                "AXK1ForTokenClassification",
+                "AXK1Model",
+                "AXK1PreTrainedModel",
+            },
+            "axk2.modeling_axk2": {
+                "AXK2ForCausalLM",
+                "AXK2ForSequenceClassification",
+                "AXK2ForTokenClassification",
+                "AXK2Model",
+                "AXK2PreTrainedModel",
+            },
+            "aya_vision.modeling_aya_vision": {
+                "AyaVisionForConditionalGeneration",
+                "AyaVisionModel",
+                "AyaVisionPreTrainedModel",
+            },
+            "bailing_hybrid.modeling_bailing_hybrid": {
+                "BailingHybridForCausalLM",
+                "BailingHybridModel",
+                "BailingHybridPreTrainedModel",
+            },
+            "bamba.modeling_bamba": {
+                "BambaForCausalLM",
+                "BambaModel",
+                "BambaPreTrainedModel",
+            },
+            "bark.modeling_bark": {
+                "BarkCausalModel",
+                "BarkCoarseModel",
+                "BarkFineModel",
+                "BarkModel",
+                "BarkPreTrainedModel",
+                "BarkSemanticModel",
+            },
+            "bart.modeling_bart": {
+                "BartForCausalLM",
+                "BartForConditionalGeneration",
+                "BartForQuestionAnswering",
+                "BartForSequenceClassification",
+                "BartModel",
+                "BartPreTrainedModel",
+                "BartPretrainedModel",
+                "PretrainedBartModel",
+            },
+            "beam.modeling_beam": {
+                "BeamForCausalLM",
+                "BeamModel",
+                "BeamPreTrainedModel",
+            },
+            "beit.modeling_beit": {
+                "BeitBackbone",
+                "BeitForImageClassification",
+                "BeitForMaskedImageModeling",
+                "BeitForSemanticSegmentation",
+                "BeitModel",
+                "BeitPreTrainedModel",
+            },
+            "bert.modeling_bert": {
+                "BertForMaskedLM",
+                "BertForMultipleChoice",
+                "BertForNextSentencePrediction",
+                "BertForPreTraining",
+                "BertForQuestionAnswering",
+                "BertForSequenceClassification",
+                "BertForTokenClassification",
+                "BertLMHeadModel",
+                "BertLayer",
+                "BertModel",
+                "BertPreTrainedModel",
+            },
+            "bert_generation.modeling_bert_generation": {
+                "BertGenerationDecoder",
+                "BertGenerationEncoder",
+                "BertGenerationPreTrainedModel",
+            },
+            "big_bird.modeling_big_bird": {
+                "BigBirdForCausalLM",
+                "BigBirdForMaskedLM",
+                "BigBirdForMultipleChoice",
+                "BigBirdForPreTraining",
+                "BigBirdForQuestionAnswering",
+                "BigBirdForSequenceClassification",
+                "BigBirdForTokenClassification",
+                "BigBirdLayer",
+                "BigBirdModel",
+                "BigBirdPreTrainedModel",
+            },
+            "bigbird_pegasus.modeling_bigbird_pegasus": {
+                "BigBirdPegasusForCausalLM",
+                "BigBirdPegasusForConditionalGeneration",
+                "BigBirdPegasusForQuestionAnswering",
+                "BigBirdPegasusForSequenceClassification",
+                "BigBirdPegasusModel",
+                "BigBirdPegasusPreTrainedModel",
+            },
+            "biogpt.modeling_biogpt": {
+                "BioGptForCausalLM",
+                "BioGptForSequenceClassification",
+                "BioGptForTokenClassification",
+                "BioGptModel",
+                "BioGptPreTrainedModel",
+            },
+            "bit.modeling_bit": {
+                "BitBackbone",
+                "BitForImageClassification",
+                "BitModel",
+                "BitPreTrainedModel",
+            },
+            "bitnet.modeling_bitnet": {
+                "BitNetForCausalLM",
+                "BitNetModel",
+                "BitNetPreTrainedModel",
+            },
+            "blenderbot.modeling_blenderbot": {
+                "BlenderbotForCausalLM",
+                "BlenderbotForConditionalGeneration",
+                "BlenderbotModel",
+                "BlenderbotPreTrainedModel",
+            },
+            "blenderbot_small.modeling_blenderbot_small": {
+                "BlenderbotSmallForCausalLM",
+                "BlenderbotSmallForConditionalGeneration",
+                "BlenderbotSmallModel",
+                "BlenderbotSmallPreTrainedModel",
+            },
+            "blip.modeling_blip": {
+                "BlipForConditionalGeneration",
+                "BlipForImageTextRetrieval",
+                "BlipForQuestionAnswering",
+                "BlipModel",
+                "BlipPreTrainedModel",
+                "BlipTextModel",
+                "BlipVisionModel",
+            },
+            "blip.modeling_blip_text": {
+                "BlipTextLMHeadModel",
+                "BlipTextModel",
+                "BlipTextPreTrainedModel",
+            },
+            "blip_2.modeling_blip_2": {
+                "Blip2ForConditionalGeneration",
+                "Blip2ForImageTextRetrieval",
+                "Blip2Model",
+                "Blip2PreTrainedModel",
+                "Blip2QFormerModel",
+                "Blip2TextModelWithProjection",
+                "Blip2VisionModel",
+                "Blip2VisionModelWithProjection",
+            },
+            "bloom.modeling_bloom": {
+                "BloomForCausalLM",
+                "BloomForQuestionAnswering",
+                "BloomForSequenceClassification",
+                "BloomForTokenClassification",
+                "BloomModel",
+                "BloomPreTrainedModel",
+            },
+            "blt.modeling_blt": {
+                "BltForCausalLM",
+                "BltModel",
+                "BltPatcher",
+                "BltPreTrainedModel",
+            },
+            "bridgetower.modeling_bridgetower": {
+                "BridgeTowerForContrastiveLearning",
+                "BridgeTowerForImageAndTextRetrieval",
+                "BridgeTowerForMaskedLM",
+                "BridgeTowerModel",
+                "BridgeTowerPreTrainedModel",
+            },
+            "bros.modeling_bros": {
+                "BrosForTokenClassification",
+                "BrosModel",
+                "BrosPreTrainedModel",
+                "BrosSpadeEEForTokenClassification",
+                "BrosSpadeELForTokenClassification",
+            },
+            "camembert.modeling_camembert": {
+                "CamembertForCausalLM",
+                "CamembertForMaskedLM",
+                "CamembertForMultipleChoice",
+                "CamembertForQuestionAnswering",
+                "CamembertForSequenceClassification",
+                "CamembertForTokenClassification",
+                "CamembertModel",
+                "CamembertPreTrainedModel",
+            },
+            "canary.modeling_canary": {
+                "CanaryForConditionalGeneration",
+                "CanaryModel",
+                "CanaryPreTrainedModel",
+            },
+            "canary.processing_canary": {
+                "CanaryProcessor",
+            },
+            "canine.modeling_canine": {
+                "CanineForMultipleChoice",
+                "CanineForQuestionAnswering",
+                "CanineForSequenceClassification",
+                "CanineForTokenClassification",
+                "CanineLayer",
+                "CanineModel",
+                "CaninePreTrainedModel",
+            },
+            "chameleon.modeling_chameleon": {
+                "ChameleonForConditionalGeneration",
+                "ChameleonModel",
+                "ChameleonPreTrainedModel",
+                "ChameleonVQVAE",
+            },
+            "chinese_clip.modeling_chinese_clip": {
+                "ChineseCLIPModel",
+                "ChineseCLIPPreTrainedModel",
+                "ChineseCLIPTextModel",
+                "ChineseCLIPVisionModel",
+            },
+            "chmv2.modeling_chmv2": {
+                "CHMv2ForDepthEstimation",
+                "CHMv2PreTrainedModel",
+            },
+            "clap.feature_extraction_clap": {
+                "ClapFeatureExtractor",
+            },
+            "clap.modeling_clap": {
+                "ClapAudioModel",
+                "ClapAudioModelWithProjection",
+                "ClapModel",
+                "ClapPreTrainedModel",
+                "ClapTextModel",
+                "ClapTextModelWithProjection",
+            },
+            "clip.modeling_clip": {
+                "CLIPForImageClassification",
+                "CLIPModel",
+                "CLIPPreTrainedModel",
+                "CLIPTextModel",
+                "CLIPTextModelWithProjection",
+                "CLIPVisionModel",
+                "CLIPVisionModelWithProjection",
+            },
+            "clipseg.modeling_clipseg": {
+                "CLIPSegForImageSegmentation",
+                "CLIPSegModel",
+                "CLIPSegPreTrainedModel",
+                "CLIPSegTextModel",
+                "CLIPSegVisionModel",
+            },
+            "clvp.modeling_clvp": {
+                "ClvpDecoder",
+                "ClvpEncoder",
+                "ClvpForCausalLM",
+                "ClvpModel",
+                "ClvpModelForConditionalGeneration",
+                "ClvpPreTrainedModel",
+            },
+            "codegen.modeling_codegen": {
+                "CodeGenForCausalLM",
+                "CodeGenModel",
+                "CodeGenPreTrainedModel",
+            },
+            "cohere2.modeling_cohere2": {
+                "Cohere2ForCausalLM",
+                "Cohere2Model",
+                "Cohere2PreTrainedModel",
+            },
+            "cohere2_moe.modeling_cohere2_moe": {
+                "Cohere2MoeForCausalLM",
+                "Cohere2MoeModel",
+                "Cohere2MoePreTrainedModel",
+            },
+            "cohere2_vision.modeling_cohere2_vision": {
+                "Cohere2VisionForConditionalGeneration",
+                "Cohere2VisionModel",
+                "Cohere2VisionPreTrainedModel",
+            },
+            "cohere.modeling_cohere": {
+                "CohereForCausalLM",
+                "CohereModel",
+                "CoherePreTrainedModel",
+            },
+            "cohere_asr.modeling_cohere_asr": {
+                "CohereAsrForConditionalGeneration",
+                "CohereAsrModel",
+                "CohereAsrPreTrainedModel",
+            },
+            "cohere_asr.processing_cohere_asr": {
+                "CohereAsrProcessor",
+            },
+            "cohere_compass.modeling_cohere_compass": {
+                "CohereCompassForCausalLM",
+                "CohereCompassForConditionalGeneration",
+                "CohereCompassModel",
+                "CohereCompassPreTrainedModel",
+                "CohereCompassTextForSequenceClassification",
+                "CohereCompassTextModel",
+                "CohereCompassVisionModel",
+            },
+            "colmodernvbert.modeling_colmodernvbert": {
+                "ColModernVBertForRetrieval",
+                "ColModernVBertPreTrainedModel",
+            },
+            "colmodernvbert.processing_colmodernvbert": {
+                "ColModernVBertProcessor",
+            },
+            "colpali.modeling_colpali": {
+                "ColPaliForRetrieval",
+                "ColPaliPreTrainedModel",
+            },
+            "colqwen2.modeling_colqwen2": {
+                "ColQwen2ForRetrieval",
+                "ColQwen2PreTrainedModel",
+            },
+            "conditional_detr.modeling_conditional_detr": {
+                "ConditionalDetrForObjectDetection",
+                "ConditionalDetrForSegmentation",
+                "ConditionalDetrModel",
+                "ConditionalDetrPreTrainedModel",
+            },
+            "convbert.modeling_convbert": {
+                "ConvBertForMaskedLM",
+                "ConvBertForMultipleChoice",
+                "ConvBertForQuestionAnswering",
+                "ConvBertForSequenceClassification",
+                "ConvBertForTokenClassification",
+                "ConvBertLayer",
+                "ConvBertModel",
+                "ConvBertPreTrainedModel",
+            },
+            "convnext.modeling_convnext": {
+                "ConvNextBackbone",
+                "ConvNextForImageClassification",
+                "ConvNextModel",
+                "ConvNextPreTrainedModel",
+            },
+            "convnextv2.modeling_convnextv2": {
+                "ConvNextV2Backbone",
+                "ConvNextV2ForImageClassification",
+                "ConvNextV2Model",
+                "ConvNextV2PreTrainedModel",
+            },
+            "cosmos3_edge.modeling_cosmos3_edge": {
+                "Cosmos3EdgeForConditionalGeneration",
+                "Cosmos3EdgeModel",
+                "Cosmos3EdgePreTrainedModel",
+                "Cosmos3EdgeTextModel",
+                "Cosmos3EdgeVisionModel",
+            },
+            "cosmos3_omni.modeling_cosmos3_omni": {
+                "Cosmos3OmniForConditionalGeneration",
+                "Cosmos3OmniModel",
+                "Cosmos3OmniPreTrainedModel",
+            },
+            "cpmant.modeling_cpmant": {
+                "CpmAntForCausalLM",
+                "CpmAntModel",
+                "CpmAntPreTrainedModel",
+            },
+            "csm.modeling_csm": {
+                "CsmBackboneModel",
+                "CsmDepthDecoderForCausalLM",
+                "CsmDepthDecoderModel",
+                "CsmForConditionalGeneration",
+                "CsmPreTrainedModel",
+            },
+            "csm.processing_csm": {
+                "CsmProcessor",
+            },
+            "ctrl.modeling_ctrl": {
+                "CTRLForSequenceClassification",
+                "CTRLLMHeadModel",
+                "CTRLModel",
+                "CTRLPreTrainedModel",
+            },
+            "cvt.modeling_cvt": {
+                "CvtForImageClassification",
+                "CvtModel",
+                "CvtPreTrainedModel",
+            },
+            "cwm.modeling_cwm": {
+                "CwmForCausalLM",
+                "CwmModel",
+                "CwmPreTrainedModel",
+            },
+            "d_fine.modeling_d_fine": {
+                "DFineForObjectDetection",
+                "DFineModel",
+                "DFinePreTrainedModel",
+            },
+            "dab_detr.modeling_dab_detr": {
+                "DabDetrForObjectDetection",
+                "DabDetrModel",
+                "DabDetrPreTrainedModel",
+            },
+            "dac.modeling_dac": {
+                "DacModel",
+                "DacPreTrainedModel",
+            },
+            "data2vec.modeling_data2vec_audio": {
+                "Data2VecAudioForAudioFrameClassification",
+                "Data2VecAudioForCTC",
+                "Data2VecAudioForSequenceClassification",
+                "Data2VecAudioForXVector",
+                "Data2VecAudioModel",
+                "Data2VecAudioPreTrainedModel",
+            },
+            "data2vec.modeling_data2vec_text": {
+                "Data2VecTextForCausalLM",
+                "Data2VecTextForMaskedLM",
+                "Data2VecTextForMultipleChoice",
+                "Data2VecTextForQuestionAnswering",
+                "Data2VecTextForSequenceClassification",
+                "Data2VecTextForTokenClassification",
+                "Data2VecTextModel",
+                "Data2VecTextPreTrainedModel",
+            },
+            "data2vec.modeling_data2vec_vision": {
+                "Data2VecVisionForImageClassification",
+                "Data2VecVisionForSemanticSegmentation",
+                "Data2VecVisionModel",
+                "Data2VecVisionPreTrainedModel",
+            },
+            "dbrx.modeling_dbrx": {
+                "DbrxForCausalLM",
+                "DbrxModel",
+                "DbrxPreTrainedModel",
+            },
+            "deberta.modeling_deberta": {
+                "DebertaForMaskedLM",
+                "DebertaForQuestionAnswering",
+                "DebertaForSequenceClassification",
+                "DebertaForTokenClassification",
+                "DebertaModel",
+                "DebertaPreTrainedModel",
+            },
+            "deberta_v2.modeling_deberta_v2": {
+                "DebertaV2ForMaskedLM",
+                "DebertaV2ForMultipleChoice",
+                "DebertaV2ForQuestionAnswering",
+                "DebertaV2ForSequenceClassification",
+                "DebertaV2ForTokenClassification",
+                "DebertaV2Model",
+                "DebertaV2PreTrainedModel",
+            },
+            "decision_transformer.modeling_decision_transformer": {
+                "DecisionTransformerGPT2Model",
+                "DecisionTransformerGPT2PreTrainedModel",
+                "DecisionTransformerModel",
+                "DecisionTransformerPreTrainedModel",
+            },
+            "deepseek_ocr2.modeling_deepseek_ocr2": {
+                "DeepseekOcr2ForConditionalGeneration",
+                "DeepseekOcr2Model",
+                "DeepseekOcr2PreTrainedModel",
+                "DeepseekOcr2TextModel",
+                "DeepseekOcr2TextPreTrainedModel",
+                "DeepseekOcr2VisionModel",
+            },
+            "deepseek_v2.modeling_deepseek_v2": {
+                "DeepseekV2ForCausalLM",
+                "DeepseekV2ForSequenceClassification",
+                "DeepseekV2Model",
+                "DeepseekV2PreTrainedModel",
+            },
+            "deepseek_v3.modeling_deepseek_v3": {
+                "DeepseekV3ForCausalLM",
+                "DeepseekV3ForSequenceClassification",
+                "DeepseekV3ForTokenClassification",
+                "DeepseekV3Model",
+                "DeepseekV3PreTrainedModel",
+            },
+            "deepseek_v4.modeling_deepseek_v4": {
+                "DeepseekV4ForCausalLM",
+                "DeepseekV4Model",
+                "DeepseekV4PreTrainedModel",
+            },
+            "deepseek_v32.modeling_deepseek_v32": {
+                "DeepseekV32ForCausalLM",
+                "DeepseekV32Model",
+                "DeepseekV32PreTrainedModel",
+            },
+            "deepseek_vl.modeling_deepseek_vl": {
+                "DeepseekVLForConditionalGeneration",
+                "DeepseekVLModel",
+                "DeepseekVLPreTrainedModel",
+            },
+            "deepseek_vl_hybrid.modeling_deepseek_vl_hybrid": {
+                "DeepseekVLHybridForConditionalGeneration",
+                "DeepseekVLHybridModel",
+                "DeepseekVLHybridPreTrainedModel",
+            },
+            "deformable_detr.modeling_deformable_detr": {
+                "DeformableDetrForObjectDetection",
+                "DeformableDetrModel",
+                "DeformableDetrPreTrainedModel",
+            },
+            "deimv2.modeling_deimv2": {
+                "Deimv2ForObjectDetection",
+                "Deimv2Model",
+                "Deimv2PreTrainedModel",
+            },
+            "deit.modeling_deit": {
+                "DeiTForImageClassification",
+                "DeiTForImageClassificationWithTeacher",
+                "DeiTForMaskedImageModeling",
+                "DeiTModel",
+                "DeiTPreTrainedModel",
+            },
+            "depth_anything.modeling_depth_anything": {
+                "DepthAnythingForDepthEstimation",
+                "DepthAnythingPreTrainedModel",
+            },
+            "depth_pro.modeling_depth_pro": {
+                "DepthProForDepthEstimation",
+                "DepthProModel",
+                "DepthProPreTrainedModel",
+            },
+            "detr.modeling_detr": {
+                "DetrForObjectDetection",
+                "DetrForSegmentation",
+                "DetrModel",
+                "DetrPreTrainedModel",
+            },
+            "dia.modeling_dia": {
+                "DiaForConditionalGeneration",
+                "DiaModel",
+                "DiaPreTrainedModel",
+            },
+            "dia.processing_dia": {
+                "DiaProcessor",
+            },
+            "diffllama.modeling_diffllama": {
+                "DiffLlamaForCausalLM",
+                "DiffLlamaForQuestionAnswering",
+                "DiffLlamaForSequenceClassification",
+                "DiffLlamaForTokenClassification",
+                "DiffLlamaModel",
+                "DiffLlamaPreTrainedModel",
+            },
+            "diffusion_gemma.generation_diffusion_gemma": {
+                "DiffusionGemmaGenerationConfig",
+                "DiffusionGemmaGenerationMixin",
+                "DiffusionGemmaGenerationOutput",
+                "EntropyBoundSampler",
+                "EntropyBoundSamplerConfig",
+                "LinearTemperatureScheduleLogitsProcessor",
+                "StableAndConfidentStoppingCriteria",
+            },
+            "diffusion_gemma.modeling_diffusion_gemma": {
+                "DiffusionGemmaDecoderModel",
+                "DiffusionGemmaEncoderModel",
+                "DiffusionGemmaEncoderTextModel",
+                "DiffusionGemmaForBlockDiffusion",
+                "DiffusionGemmaModel",
+                "DiffusionGemmaPreTrainedModel",
+            },
+            "dinat.modeling_dinat": {
+                "DinatBackbone",
+                "DinatForImageClassification",
+                "DinatModel",
+                "DinatPreTrainedModel",
+            },
+            "dinov2.modeling_dinov2": {
+                "Dinov2Backbone",
+                "Dinov2ForImageClassification",
+                "Dinov2Model",
+                "Dinov2PreTrainedModel",
+            },
+            "dinov2_with_registers.modeling_dinov2_with_registers": {
+                "Dinov2WithRegistersBackbone",
+                "Dinov2WithRegistersForImageClassification",
+                "Dinov2WithRegistersModel",
+                "Dinov2WithRegistersPreTrainedModel",
+            },
+            "dinov3_convnext.modeling_dinov3_convnext": {
+                "DINOv3ConvNextBackbone",
+                "DINOv3ConvNextModel",
+                "DINOv3ConvNextPreTrainedModel",
+            },
+            "dinov3_vit.modeling_dinov3_vit": {
+                "DINOv3ViTBackbone",
+                "DINOv3ViTModel",
+                "DINOv3ViTPreTrainedModel",
+            },
+            "distilbert.modeling_distilbert": {
+                "DistilBertForMaskedLM",
+                "DistilBertForMultipleChoice",
+                "DistilBertForQuestionAnswering",
+                "DistilBertForSequenceClassification",
+                "DistilBertForTokenClassification",
+                "DistilBertModel",
+                "DistilBertPreTrainedModel",
+            },
+            "doge.modeling_doge": {
+                "DogeForCausalLM",
+                "DogeForSequenceClassification",
+                "DogeModel",
+                "DogePreTrainedModel",
+            },
+            "donut.modeling_donut_swin": {
+                "DonutSwinForImageClassification",
+                "DonutSwinModel",
+                "DonutSwinPreTrainedModel",
+            },
+            "dots1.modeling_dots1": {
+                "Dots1ForCausalLM",
+                "Dots1Model",
+                "Dots1PreTrainedModel",
+            },
+            "dpr.modeling_dpr": {
+                "DPRContextEncoder",
+                "DPRPreTrainedModel",
+                "DPRPretrainedContextEncoder",
+                "DPRPretrainedQuestionEncoder",
+                "DPRPretrainedReader",
+                "DPRQuestionEncoder",
+                "DPRReader",
+            },
+            "dpt.modeling_dpt": {
+                "DPTForDepthEstimation",
+                "DPTForSemanticSegmentation",
+                "DPTModel",
+                "DPTPreTrainedModel",
+            },
+            "edgetam.modeling_edgetam": {
+                "EdgeTamModel",
+                "EdgeTamPreTrainedModel",
+                "EdgeTamVisionModel",
+            },
+            "edgetam_video.modeling_edgetam_video": {
+                "EdgeTamVideoInferenceSession",
+                "EdgeTamVideoModel",
+                "EdgeTamVideoPreTrainedModel",
+            },
+            "efficientloftr.modeling_efficientloftr": {
+                "EfficientLoFTRForKeypointMatching",
+                "EfficientLoFTRModel",
+                "EfficientLoFTRPreTrainedModel",
+            },
+            "efficientnet.modeling_efficientnet": {
+                "EfficientNetForImageClassification",
+                "EfficientNetModel",
+                "EfficientNetPreTrainedModel",
+            },
+            "electra.modeling_electra": {
+                "ElectraForCausalLM",
+                "ElectraForMaskedLM",
+                "ElectraForMultipleChoice",
+                "ElectraForPreTraining",
+                "ElectraForQuestionAnswering",
+                "ElectraForSequenceClassification",
+                "ElectraForTokenClassification",
+                "ElectraModel",
+                "ElectraPreTrainedModel",
+            },
+            "embedding_gemma2.modeling_embedding_gemma2": {
+                "EmbeddingGemma2Model",
+                "EmbeddingGemma2PreTrainedModel",
+                "EmbeddingGemma2TextModel",
+            },
+            "emu3.modeling_emu3": {
+                "Emu3ForCausalLM",
+                "Emu3ForConditionalGeneration",
+                "Emu3Model",
+                "Emu3PreTrainedModel",
+                "Emu3TextModel",
+                "Emu3VQVAE",
+            },
+            "encodec.modeling_encodec": {
+                "EncodecModel",
+                "EncodecPreTrainedModel",
+            },
+            "encoder_decoder.modeling_encoder_decoder": {
+                "EncoderDecoderModel",
+            },
+            "eomt.modeling_eomt": {
+                "EomtForUniversalSegmentation",
+                "EomtPreTrainedModel",
+            },
+            "eomt_dinov3.modeling_eomt_dinov3": {
+                "EomtDinov3ForUniversalSegmentation",
+                "EomtDinov3PreTrainedModel",
+            },
+            "ernie4_5.modeling_ernie4_5": {
+                "Ernie4_5ForCausalLM",
+                "Ernie4_5Model",
+                "Ernie4_5PreTrainedModel",
+            },
+            "ernie4_5_moe.modeling_ernie4_5_moe": {
+                "Ernie4_5_MoeForCausalLM",
+                "Ernie4_5_MoeModel",
+                "Ernie4_5_MoePreTrainedModel",
+            },
+            "ernie4_5_vl_moe.modeling_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeForConditionalGeneration",
+                "Ernie4_5_VLMoeModel",
+                "Ernie4_5_VLMoePreTrainedModel",
+                "Ernie4_5_VLMoeTextModel",
+                "Ernie4_5_VLMoeVariableResolutionResamplerModel",
+                "Ernie4_5_VLMoeVisionTransformerPretrainedModel",
+                "Ernie4_5_VL_MoeForConditionalGeneration",
+                "Ernie4_5_VL_MoeModel",
+                "Ernie4_5_VL_MoePreTrainedModel",
+                "Ernie4_5_VL_MoeTextModel",
+                "Ernie4_5_VL_MoeVariableResolutionResamplerModel",
+                "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",
+            },
+            "ernie.modeling_ernie": {
+                "ErnieForCausalLM",
+                "ErnieForMaskedLM",
+                "ErnieForMultipleChoice",
+                "ErnieForNextSentencePrediction",
+                "ErnieForPreTraining",
+                "ErnieForQuestionAnswering",
+                "ErnieForSequenceClassification",
+                "ErnieForTokenClassification",
+                "ErnieModel",
+                "ErniePreTrainedModel",
+            },
+            "esm.modeling_esm": {
+                "EsmForMaskedLM",
+                "EsmForSequenceClassification",
+                "EsmForTokenClassification",
+                "EsmModel",
+                "EsmPreTrainedModel",
+            },
+            "esm.modeling_esmfold": {
+                "EsmFoldPreTrainedModel",
+                "EsmForProteinFolding",
+            },
+            "esmc.modeling_esmc": {
+                "EsmcForMaskedLM",
+                "EsmcForSequenceClassification",
+                "EsmcForTokenClassification",
+                "EsmcModel",
+                "EsmcPreTrainedModel",
+            },
+            "esmfold2.modeling_esmfold2": {
+                "EsmFold2Model",
+                "EsmFold2PreTrainedModel",
+            },
+            "eurobert.modeling_eurobert": {
+                "EuroBertForMaskedLM",
+                "EuroBertForSequenceClassification",
+                "EuroBertForTokenClassification",
+                "EuroBertModel",
+                "EuroBertPreTrainedModel",
+            },
+            "evolla.modeling_evolla": {
+                "EvollaForProteinText2Text",
+                "EvollaModel",
+                "EvollaPreTrainedModel",
+            },
+            "exaone4.modeling_exaone4": {
+                "Exaone4ForCausalLM",
+                "Exaone4ForQuestionAnswering",
+                "Exaone4ForSequenceClassification",
+                "Exaone4ForTokenClassification",
+                "Exaone4Model",
+                "Exaone4PreTrainedModel",
+            },
+            "exaone4_5.modeling_exaone4_5": {
+                "Exaone4_5_ForConditionalGeneration",
+                "Exaone4_5_Model",
+                "Exaone4_5_PreTrainedModel",
+                "Exaone4_5_VisionModel",
+            },
+            "exaone_moe.modeling_exaone_moe": {
+                "ExaoneMoeForCausalLM",
+                "ExaoneMoeModel",
+                "ExaoneMoePreTrainedModel",
+            },
+            "falcon.modeling_falcon": {
+                "FalconForCausalLM",
+                "FalconForQuestionAnswering",
+                "FalconForSequenceClassification",
+                "FalconForTokenClassification",
+                "FalconModel",
+                "FalconPreTrainedModel",
+            },
+            "falcon_h1.modeling_falcon_h1": {
+                "FalconH1ForCausalLM",
+                "FalconH1Model",
+                "FalconH1PreTrainedModel",
+            },
+            "falcon_mamba.modeling_falcon_mamba": {
+                "FalconMambaForCausalLM",
+                "FalconMambaModel",
+                "FalconMambaPreTrainedModel",
+            },
+            "fast_vlm.modeling_fast_vlm": {
+                "FastVlmForConditionalGeneration",
+                "FastVlmModel",
+                "FastVlmPreTrainedModel",
+            },
+            "fastspeech2_conformer.modeling_fastspeech2_conformer": {
+                "FastSpeech2ConformerHifiGan",
+                "FastSpeech2ConformerModel",
+                "FastSpeech2ConformerPreTrainedModel",
+                "FastSpeech2ConformerWithHifiGan",
+            },
+            "flaubert.modeling_flaubert": {
+                "FlaubertForMultipleChoice",
+                "FlaubertForQuestionAnswering",
+                "FlaubertForQuestionAnsweringSimple",
+                "FlaubertForSequenceClassification",
+                "FlaubertForTokenClassification",
+                "FlaubertModel",
+                "FlaubertPreTrainedModel",
+                "FlaubertWithLMHeadModel",
+            },
+            "flava.modeling_flava": {
+                "FlavaForPreTraining",
+                "FlavaImageCodebook",
+                "FlavaImageModel",
+                "FlavaModel",
+                "FlavaMultimodalModel",
+                "FlavaPreTrainedModel",
+                "FlavaTextModel",
+            },
+            "flex_olmo.modeling_flex_olmo": {
+                "FlexOlmoForCausalLM",
+                "FlexOlmoModel",
+                "FlexOlmoPreTrainedModel",
+            },
+            "flint.modeling_flint": {
+                "FlintForCausalLM",
+                "FlintModel",
+                "FlintPreTrainedModel",
+            },
+            "florence2.modeling_florence2": {
+                "Florence2ForConditionalGeneration",
+                "Florence2Model",
+                "Florence2PreTrainedModel",
+                "Florence2VisionBackbone",
+                "Florence2VisionPreTrainedModel",
+            },
+            "fnet.modeling_fnet": {
+                "FNetForMaskedLM",
+                "FNetForMultipleChoice",
+                "FNetForNextSentencePrediction",
+                "FNetForPreTraining",
+                "FNetForQuestionAnswering",
+                "FNetForSequenceClassification",
+                "FNetForTokenClassification",
+                "FNetLayer",
+                "FNetModel",
+                "FNetPreTrainedModel",
+            },
+            "focalnet.modeling_focalnet": {
+                "FocalNetBackbone",
+                "FocalNetForImageClassification",
+                "FocalNetForMaskedImageModeling",
+                "FocalNetModel",
+                "FocalNetPreTrainedModel",
+            },
+            "fsmt.modeling_fsmt": {
+                "FSMTForConditionalGeneration",
+                "FSMTModel",
+                "PretrainedFSMTModel",
+            },
+            "fun_asr_nano.modeling_fun_asr_nano": {
+                "FunAsrNanoEncoder",
+                "FunAsrNanoForConditionalGeneration",
+                "FunAsrNanoModel",
+                "FunAsrNanoPreTrainedModel",
+            },
+            "funnel.modeling_funnel": {
+                "FunnelBaseModel",
+                "FunnelForMaskedLM",
+                "FunnelForMultipleChoice",
+                "FunnelForPreTraining",
+                "FunnelForQuestionAnswering",
+                "FunnelForSequenceClassification",
+                "FunnelForTokenClassification",
+                "FunnelModel",
+                "FunnelPreTrainedModel",
+            },
+            "fuyu.modeling_fuyu": {
+                "FuyuForCausalLM",
+                "FuyuModel",
+                "FuyuPreTrainedModel",
+            },
+            "gemma2.modeling_gemma2": {
+                "Gemma2ForCausalLM",
+                "Gemma2ForSequenceClassification",
+                "Gemma2ForTokenClassification",
+                "Gemma2Model",
+                "Gemma2PreTrainedModel",
+            },
+            "gemma3.modeling_gemma3": {
+                "Gemma3ForCausalLM",
+                "Gemma3ForConditionalGeneration",
+                "Gemma3ForSequenceClassification",
+                "Gemma3Model",
+                "Gemma3PreTrainedModel",
+                "Gemma3TextForSequenceClassification",
+                "Gemma3TextModel",
+            },
+            "gemma3n.modeling_gemma3n": {
+                "Gemma3nAudioEncoder",
+                "Gemma3nForCausalLM",
+                "Gemma3nForConditionalGeneration",
+                "Gemma3nModel",
+                "Gemma3nPreTrainedModel",
+                "Gemma3nTextModel",
+            },
+            "gemma4.modeling_gemma4": {
+                "Gemma4AudioModel",
+                "Gemma4ForCausalLM",
+                "Gemma4ForConditionalGeneration",
+                "Gemma4Model",
+                "Gemma4PreTrainedModel",
+                "Gemma4TextModel",
+                "Gemma4VisionModel",
+            },
+            "gemma4_assistant.modeling_gemma4_assistant": {
+                "Gemma4AssistantForCausalLM",
+                "Gemma4AssistantPreTrainedModel",
+            },
+            "gemma4_unified.modeling_gemma4_unified": {
+                "Gemma4UnifiedForCausalLM",
+                "Gemma4UnifiedForConditionalGeneration",
+                "Gemma4UnifiedModel",
+                "Gemma4UnifiedPreTrainedModel",
+                "Gemma4UnifiedTextModel",
+            },
+            "gemma4_unified_assistant.modeling_gemma4_unified_assistant": {
+                "Gemma4UnifiedAssistantForCausalLM",
+                "Gemma4UnifiedAssistantPreTrainedModel",
+            },
+            "gemma.modeling_gemma": {
+                "GemmaForCausalLM",
+                "GemmaForSequenceClassification",
+                "GemmaForTokenClassification",
+                "GemmaModel",
+                "GemmaPreTrainedModel",
+            },
+            "git.modeling_git": {
+                "GitForCausalLM",
+                "GitModel",
+                "GitPreTrainedModel",
+                "GitVisionModel",
+            },
+            "glm4.modeling_glm4": {
+                "Glm4ForCausalLM",
+                "Glm4ForSequenceClassification",
+                "Glm4ForTokenClassification",
+                "Glm4Model",
+                "Glm4PreTrainedModel",
+            },
+            "glm4_moe.modeling_glm4_moe": {
+                "Glm4MoeForCausalLM",
+                "Glm4MoeModel",
+                "Glm4MoePreTrainedModel",
+            },
+            "glm4_moe_lite.modeling_glm4_moe_lite": {
+                "Glm4MoeLiteForCausalLM",
+                "Glm4MoeLiteModel",
+                "Glm4MoeLitePreTrainedModel",
+            },
+            "glm4v.modeling_glm4v": {
+                "Glm4vForConditionalGeneration",
+                "Glm4vModel",
+                "Glm4vPreTrainedModel",
+                "Glm4vTextModel",
+                "Glm4vVisionModel",
+            },
+            "glm4v_moe.modeling_glm4v_moe": {
+                "Glm4vMoeForConditionalGeneration",
+                "Glm4vMoeModel",
+                "Glm4vMoePreTrainedModel",
+                "Glm4vMoeTextModel",
+                "Glm4vMoeVisionModel",
+            },
+            "glm5_next.modeling_glm5_next": {
+                "Glm5NextForConditionalGeneration",
+                "Glm5NextModel",
+                "Glm5NextPreTrainedModel",
+                "Glm5NextTextModel",
+                "Glm5NextVisionModel",
+            },
+            "glm46v.modeling_glm46v": {
+                "Glm46VForConditionalGeneration",
+                "Glm46VModel",
+                "Glm46VPreTrainedModel",
+            },
+            "glm.modeling_glm": {
+                "GlmForCausalLM",
+                "GlmForSequenceClassification",
+                "GlmForTokenClassification",
+                "GlmModel",
+                "GlmPreTrainedModel",
+            },
+            "glm_image.modeling_glm_image": {
+                "GlmImageForConditionalGeneration",
+                "GlmImageModel",
+                "GlmImagePreTrainedModel",
+                "GlmImageTextModel",
+                "GlmImageVQVAE",
+                "GlmImageVisionModel",
+            },
+            "glm_image.processing_glm_image": {
+                "GlmImageProcessor",
+            },
+            "glm_moe_dsa.modeling_glm_moe_dsa": {
+                "GlmMoeDsaForCausalLM",
+                "GlmMoeDsaModel",
+                "GlmMoeDsaPreTrainedModel",
+            },
+            "glm_ocr.modeling_glm_ocr": {
+                "GlmOcrForConditionalGeneration",
+                "GlmOcrModel",
+                "GlmOcrPreTrainedModel",
+                "GlmOcrTextModel",
+                "GlmOcrVisionModel",
+            },
+            "glmasr.modeling_glmasr": {
+                "GlmAsrEncoder",
+                "GlmAsrForConditionalGeneration",
+                "GlmAsrModel",
+                "GlmAsrPreTrainedModel",
+            },
+            "glmasr.processing_glmasr": {
+                "GlmAsrProcessor",
+            },
+            "glpn.modeling_glpn": {
+                "GLPNForDepthEstimation",
+                "GLPNLayer",
+                "GLPNModel",
+                "GLPNPreTrainedModel",
+            },
+            "got_ocr2.modeling_got_ocr2": {
+                "GotOcr2ForConditionalGeneration",
+                "GotOcr2Model",
+                "GotOcr2PreTrainedModel",
+            },
+            "gpt2.modeling_gpt2": {
+                "GPT2DoubleHeadsModel",
+                "GPT2ForQuestionAnswering",
+                "GPT2ForSequenceClassification",
+                "GPT2ForTokenClassification",
+                "GPT2LMHeadModel",
+                "GPT2Model",
+                "GPT2PreTrainedModel",
+            },
+            "gpt_bigcode.modeling_gpt_bigcode": {
+                "GPTBigCodeForCausalLM",
+                "GPTBigCodeForSequenceClassification",
+                "GPTBigCodeForTokenClassification",
+                "GPTBigCodeModel",
+                "GPTBigCodePreTrainedModel",
+            },
+            "gpt_neo.modeling_gpt_neo": {
+                "GPTNeoForCausalLM",
+                "GPTNeoForQuestionAnswering",
+                "GPTNeoForSequenceClassification",
+                "GPTNeoForTokenClassification",
+                "GPTNeoModel",
+                "GPTNeoPreTrainedModel",
+            },
+            "gpt_neox.modeling_gpt_neox": {
+                "GPTNeoXForCausalLM",
+                "GPTNeoXForQuestionAnswering",
+                "GPTNeoXForSequenceClassification",
+                "GPTNeoXForTokenClassification",
+                "GPTNeoXLayer",
+                "GPTNeoXModel",
+                "GPTNeoXPreTrainedModel",
+            },
+            "gpt_neox_japanese.modeling_gpt_neox_japanese": {
+                "GPTNeoXJapaneseForCausalLM",
+                "GPTNeoXJapaneseLayer",
+                "GPTNeoXJapaneseModel",
+                "GPTNeoXJapanesePreTrainedModel",
+            },
+            "gpt_oss.modeling_gpt_oss": {
+                "GptOssForCausalLM",
+                "GptOssForSequenceClassification",
+                "GptOssForTokenClassification",
+                "GptOssModel",
+                "GptOssPreTrainedModel",
+            },
+            "gptj.modeling_gptj": {
+                "GPTJForCausalLM",
+                "GPTJForQuestionAnswering",
+                "GPTJForSequenceClassification",
+                "GPTJModel",
+                "GPTJPreTrainedModel",
+            },
+            "gradium_phonon_tts.modeling_gradium_phonon_tts": {
+                "GradiumPhononTTSForConditionalGeneration",
+                "GradiumPhononTTSModel",
+                "GradiumPhononTTSPreTrainedModel",
+            },
+            "granite4_vision.modeling_granite4_vision": {
+                "Granite4VisionForConditionalGeneration",
+                "Granite4VisionModel",
+                "Granite4VisionPreTrainedModel",
+                "Granite4VisionTextModel",
+            },
+            "granite.modeling_granite": {
+                "GraniteForCausalLM",
+                "GraniteModel",
+                "GranitePreTrainedModel",
+            },
+            "granite_speech5.modeling_granite_speech5": {
+                "GraniteSpeech5Encoder",
+                "GraniteSpeech5ForCTC",
+                "GraniteSpeech5PreTrainedModel",
+            },
+            "granite_speech.modeling_granite_speech": {
+                "GraniteSpeechCTCEncoder",
+                "GraniteSpeechForConditionalGeneration",
+                "GraniteSpeechModel",
+                "GraniteSpeechPreTrainedModel",
+            },
+            "granite_speech_plus.modeling_granite_speech_plus": {
+                "GraniteSpeechPlusCTCEncoder",
+                "GraniteSpeechPlusForConditionalGeneration",
+                "GraniteSpeechPlusModel",
+                "GraniteSpeechPlusPreTrainedModel",
+            },
+            "granite_swa.modeling_granite_swa": {
+                "GraniteSWAForCausalLM",
+                "GraniteSWAModel",
+                "GraniteSWAPreTrainedModel",
+            },
+            "granitemoe.modeling_granitemoe": {
+                "GraniteMoeForCausalLM",
+                "GraniteMoeModel",
+                "GraniteMoePreTrainedModel",
+            },
+            "granitemoe_swa.modeling_granitemoe_swa": {
+                "GraniteMoeSWAForCausalLM",
+                "GraniteMoeSWAModel",
+                "GraniteMoeSWAPreTrainedModel",
+            },
+            "granitemoehybrid.modeling_granitemoehybrid": {
+                "GraniteMoeHybridForCausalLM",
+                "GraniteMoeHybridModel",
+                "GraniteMoeHybridPreTrainedModel",
+            },
+            "granitemoeshared.modeling_granitemoeshared": {
+                "GraniteMoeSharedForCausalLM",
+                "GraniteMoeSharedModel",
+                "GraniteMoeSharedPreTrainedModel",
+            },
+            "grounding_dino.modeling_grounding_dino": {
+                "GroundingDinoForObjectDetection",
+                "GroundingDinoModel",
+                "GroundingDinoPreTrainedModel",
+            },
+            "groupvit.modeling_groupvit": {
+                "GroupViTModel",
+                "GroupViTPreTrainedModel",
+                "GroupViTTextModel",
+                "GroupViTVisionModel",
+            },
+            "gte.modeling_gte": {
+                "GteForMaskedLM",
+                "GteForSequenceClassification",
+                "GteForTokenClassification",
+                "GteModel",
+                "GtePreTrainedModel",
+            },
+            "helium.modeling_helium": {
+                "HeliumForCausalLM",
+                "HeliumForSequenceClassification",
+                "HeliumForTokenClassification",
+                "HeliumModel",
+                "HeliumPreTrainedModel",
+            },
+            "hgnet_v2.modeling_hgnet_v2": {
+                "HGNetV2Backbone",
+                "HGNetV2ForImageClassification",
+                "HGNetV2PreTrainedModel",
+            },
+            "hiera.modeling_hiera": {
+                "HieraBackbone",
+                "HieraForImageClassification",
+                "HieraForPreTraining",
+                "HieraModel",
+                "HieraPreTrainedModel",
+            },
+            "higgs_audio_v2.modeling_higgs_audio_v2": {
+                "HiggsAudioV2ForConditionalGeneration",
+                "HiggsAudioV2Model",
+                "HiggsAudioV2PreTrainedModel",
+            },
+            "higgs_audio_v2.processing_higgs_audio_v2": {
+                "HiggsAudioV2Processor",
+            },
+            "hrm_text.modeling_hrm_text": {
+                "HrmTextForCausalLM",
+                "HrmTextModel",
+                "HrmTextPreTrainedModel",
+            },
+            "hubert.modeling_hubert": {
+                "HubertForCTC",
+                "HubertForSequenceClassification",
+                "HubertModel",
+                "HubertPreTrainedModel",
+            },
+            "hunyuan_v1_dense.modeling_hunyuan_v1_dense": {
+                "HunYuanDenseV1ForCausalLM",
+                "HunYuanDenseV1ForSequenceClassification",
+                "HunYuanDenseV1Model",
+                "HunYuanDenseV1PreTrainedModel",
+            },
+            "hunyuan_v1_moe.modeling_hunyuan_v1_moe": {
+                "HunYuanMoEV1ForCausalLM",
+                "HunYuanMoEV1ForSequenceClassification",
+                "HunYuanMoEV1Model",
+                "HunYuanMoEV1PreTrainedModel",
+            },
+            "hunyuan_vl.modeling_hunyuan_vl": {
+                "HunYuanVLForConditionalGeneration",
+                "HunYuanVLModel",
+                "HunYuanVLPreTrainedModel",
+                "HunYuanVLTextModel",
+                "HunYuanVLVisionTransformer",
+            },
+            "hy_v3.modeling_hy_v3": {
+                "HYV3ForCausalLM",
+                "HYV3Model",
+                "HYV3PreTrainedModel",
+            },
+            "hy_v4.modeling_hy_v4": {
+                "HYV4ForCausalLM",
+                "HYV4Model",
+                "HYV4PreTrainedModel",
+            },
+            "hyperclovax.modeling_hyperclovax": {
+                "HyperCLOVAXForCausalLM",
+                "HyperCLOVAXModel",
+                "HyperCLOVAXPreTrainedModel",
+            },
+            "hyperclovax_vision_v2.modeling_hyperclovax_vision_v2": {
+                "HyperCLOVAXVisionV2ForConditionalGeneration",
+                "HyperCLOVAXVisionV2Model",
+                "HyperCLOVAXVisionV2PreTrainedModel",
+            },
+            "ibert.modeling_ibert": {
+                "IBertForMaskedLM",
+                "IBertForMultipleChoice",
+                "IBertForQuestionAnswering",
+                "IBertForSequenceClassification",
+                "IBertForTokenClassification",
+                "IBertModel",
+                "IBertPreTrainedModel",
+            },
+            "idefics2.modeling_idefics2": {
+                "Idefics2ForConditionalGeneration",
+                "Idefics2Model",
+                "Idefics2PreTrainedModel",
+            },
+            "idefics3.modeling_idefics3": {
+                "Idefics3ForConditionalGeneration",
+                "Idefics3Model",
+                "Idefics3PreTrainedModel",
+                "Idefics3VisionTransformer",
+            },
+            "idefics.modeling_idefics": {
+                "IdeficsForVisionText2Text",
+                "IdeficsModel",
+                "IdeficsPreTrainedModel",
+            },
+            "ijepa.modeling_ijepa": {
+                "IJepaForImageClassification",
+                "IJepaModel",
+                "IJepaPreTrainedModel",
+            },
+            "imagegpt.modeling_imagegpt": {
+                "ImageGPTForCausalImageModeling",
+                "ImageGPTForImageClassification",
+                "ImageGPTModel",
+                "ImageGPTPreTrainedModel",
+            },
+            "informer.modeling_informer": {
+                "InformerForPrediction",
+                "InformerModel",
+                "InformerPreTrainedModel",
+            },
+            "inkling.feature_extraction_inkling": {
+                "InklingFeatureExtractor",
+            },
+            "inkling.modeling_inkling": {
+                "InklingAudioModel",
+                "InklingForCausalLM",
+                "InklingForConditionalGeneration",
+                "InklingModel",
+                "InklingPreTrainedModel",
+                "InklingTextModel",
+                "InklingVisionModel",
+            },
+            "inkling.processing_inkling": {
+                "InklingProcessor",
+            },
+            "instructblip.modeling_instructblip": {
+                "InstructBlipForConditionalGeneration",
+                "InstructBlipModel",
+                "InstructBlipPreTrainedModel",
+                "InstructBlipQFormerModel",
+                "InstructBlipVisionModel",
+            },
+            "instructblipvideo.modeling_instructblipvideo": {
+                "InstructBlipVideoForConditionalGeneration",
+                "InstructBlipVideoModel",
+                "InstructBlipVideoPreTrainedModel",
+                "InstructBlipVideoQFormerModel",
+                "InstructBlipVideoVisionModel",
+            },
+            "internvl.modeling_internvl": {
+                "InternVLForConditionalGeneration",
+                "InternVLModel",
+                "InternVLPreTrainedModel",
+                "InternVLVisionModel",
+                "InternVLVisionPreTrainedModel",
+            },
+            "jais2.modeling_jais2": {
+                "Jais2ForCausalLM",
+                "Jais2Model",
+                "Jais2PreTrainedModel",
+            },
+            "jamba.modeling_jamba": {
+                "JambaForCausalLM",
+                "JambaForSequenceClassification",
+                "JambaModel",
+                "JambaPreTrainedModel",
+            },
+            "janus.modeling_janus": {
+                "JanusForConditionalGeneration",
+                "JanusModel",
+                "JanusPreTrainedModel",
+                "JanusVQVAE",
+                "JanusVisionModel",
+            },
+            "jetmoe.modeling_jetmoe": {
+                "JetMoeForCausalLM",
+                "JetMoeForSequenceClassification",
+                "JetMoeModel",
+                "JetMoePreTrainedModel",
+            },
+            "jina_embeddings_v3.modeling_jina_embeddings_v3": {
+                "JinaEmbeddingsV3ForMaskedLM",
+                "JinaEmbeddingsV3ForQuestionAnswering",
+                "JinaEmbeddingsV3ForSequenceClassification",
+                "JinaEmbeddingsV3ForTokenClassification",
+                "JinaEmbeddingsV3Layer",
+                "JinaEmbeddingsV3Model",
+                "JinaEmbeddingsV3PreTrainedModel",
+            },
+            "kimi_k25.modeling_kimi_k25": {
+                "Kimi_K25ForConditionalGeneration",
+                "Kimi_K25Model",
+                "Kimi_K25PreTrainedModel",
+                "Kimi_K25VisionModel",
+            },
+            "kimi_linear.modeling_kimi_linear": {
+                "KimiLinearForCausalLM",
+                "KimiLinearModel",
+                "KimiLinearPreTrainedModel",
+            },
+            "kolibri1.modeling_kolibri1": {
+                "Kolibri1ForCausalLM",
+                "Kolibri1Model",
+                "Kolibri1PreTrainedModel",
+            },
+            "kosmos2.modeling_kosmos2": {
+                "Kosmos2ForConditionalGeneration",
+                "Kosmos2Model",
+                "Kosmos2PreTrainedModel",
+            },
+            "kosmos2_5.modeling_kosmos2_5": {
+                "Kosmos2_5ForConditionalGeneration",
+                "Kosmos2_5Model",
+                "Kosmos2_5PreTrainedModel",
+            },
+            "kyutai_speech_to_text.modeling_kyutai_speech_to_text": {
+                "KyutaiSpeechToTextForConditionalGeneration",
+                "KyutaiSpeechToTextModel",
+                "KyutaiSpeechToTextPreTrainedModel",
+            },
+            "laguna.modeling_laguna": {
+                "LagunaForCausalLM",
+                "LagunaModel",
+                "LagunaPreTrainedModel",
+            },
+            "lasr.feature_extraction_lasr": {
+                "LasrFeatureExtractor",
+            },
+            "lasr.modeling_lasr": {
+                "LasrEncoder",
+                "LasrForCTC",
+                "LasrPreTrainedModel",
+            },
+            "layoutlm.modeling_layoutlm": {
+                "LayoutLMForMaskedLM",
+                "LayoutLMForQuestionAnswering",
+                "LayoutLMForSequenceClassification",
+                "LayoutLMForTokenClassification",
+                "LayoutLMModel",
+                "LayoutLMPreTrainedModel",
+            },
+            "layoutlmv2.modeling_layoutlmv2": {
+                "LayoutLMv2ForQuestionAnswering",
+                "LayoutLMv2ForSequenceClassification",
+                "LayoutLMv2ForTokenClassification",
+                "LayoutLMv2Layer",
+                "LayoutLMv2Model",
+                "LayoutLMv2PreTrainedModel",
+            },
+            "layoutlmv3.modeling_layoutlmv3": {
+                "LayoutLMv3ForQuestionAnswering",
+                "LayoutLMv3ForSequenceClassification",
+                "LayoutLMv3ForTokenClassification",
+                "LayoutLMv3Model",
+                "LayoutLMv3PreTrainedModel",
+            },
+            "led.modeling_led": {
+                "LEDForConditionalGeneration",
+                "LEDForQuestionAnswering",
+                "LEDModel",
+                "LEDPreTrainedModel",
+            },
+            "levit.modeling_levit": {
+                "LevitForImageClassification",
+                "LevitForImageClassificationWithTeacher",
+                "LevitModel",
+                "LevitPreTrainedModel",
+            },
+            "lfm2.modeling_lfm2": {
+                "Lfm2ForCausalLM",
+                "Lfm2Model",
+                "Lfm2PreTrainedModel",
+            },
+            "lfm2_moe.modeling_lfm2_moe": {
+                "Lfm2MoeForCausalLM",
+                "Lfm2MoeModel",
+                "Lfm2MoePreTrainedModel",
+            },
+            "lfm2_vl.modeling_lfm2_vl": {
+                "Lfm2VlForConditionalGeneration",
+                "Lfm2VlModel",
+                "Lfm2VlPreTrainedModel",
+            },
+            "lfm3.modeling_lfm3": {
+                "Lfm3ForCausalLM",
+                "Lfm3Model",
+                "Lfm3PreTrainedModel",
+            },
+            "lightglue.modeling_lightglue": {
+                "LightGlueForKeypointMatching",
+                "LightGluePreTrainedModel",
+            },
+            "lighton_ocr.modeling_lighton_ocr": {
+                "LightOnOcrForConditionalGeneration",
+                "LightOnOcrModel",
+                "LightOnOcrPreTrainedModel",
+            },
+            "lilt.modeling_lilt": {
+                "LiltForQuestionAnswering",
+                "LiltForSequenceClassification",
+                "LiltForTokenClassification",
+                "LiltModel",
+                "LiltPreTrainedModel",
+            },
+            "llama4.modeling_llama4": {
+                "Llama4ForCausalLM",
+                "Llama4ForConditionalGeneration",
+                "Llama4PreTrainedModel",
+                "Llama4TextModel",
+                "Llama4VisionModel",
+            },
+            "llama.modeling_llama": {
+                "LlamaForCausalLM",
+                "LlamaForQuestionAnswering",
+                "LlamaForSequenceClassification",
+                "LlamaForTokenClassification",
+                "LlamaModel",
+                "LlamaPreTrainedModel",
+            },
+            "llava.modeling_llava": {
+                "LlavaForConditionalGeneration",
+                "LlavaModel",
+                "LlavaPreTrainedModel",
+            },
+            "llava_next.modeling_llava_next": {
+                "LlavaNextForConditionalGeneration",
+                "LlavaNextModel",
+                "LlavaNextPreTrainedModel",
+            },
+            "llava_next_video.modeling_llava_next_video": {
+                "LlavaNextVideoForConditionalGeneration",
+                "LlavaNextVideoModel",
+                "LlavaNextVideoPreTrainedModel",
+            },
+            "llava_onevision.modeling_llava_onevision": {
+                "LlavaOnevisionForConditionalGeneration",
+                "LlavaOnevisionModel",
+                "LlavaOnevisionPreTrainedModel",
+            },
+            "longcat_flash.modeling_longcat_flash": {
+                "LongcatFlashForCausalLM",
+                "LongcatFlashModel",
+                "LongcatFlashPreTrainedModel",
+            },
+            "longformer.modeling_longformer": {
+                "LongformerForMaskedLM",
+                "LongformerForMultipleChoice",
+                "LongformerForQuestionAnswering",
+                "LongformerForSequenceClassification",
+                "LongformerForTokenClassification",
+                "LongformerModel",
+                "LongformerPreTrainedModel",
+                "LongformerSelfAttention",
+            },
+            "longt5.modeling_longt5": {
+                "LongT5EncoderModel",
+                "LongT5ForConditionalGeneration",
+                "LongT5Model",
+                "LongT5PreTrainedModel",
+            },
+            "luke.modeling_luke": {
+                "LukeForEntityClassification",
+                "LukeForEntityPairClassification",
+                "LukeForEntitySpanClassification",
+                "LukeForMaskedLM",
+                "LukeForMultipleChoice",
+                "LukeForQuestionAnswering",
+                "LukeForSequenceClassification",
+                "LukeForTokenClassification",
+                "LukeModel",
+                "LukePreTrainedModel",
+            },
+            "lw_detr.modeling_lw_detr": {
+                "LwDetrForObjectDetection",
+                "LwDetrModel",
+                "LwDetrPreTrainedModel",
+                "LwDetrViTBackbone",
+                "LwDetrViTPreTrainedModel",
+            },
+            "lxmert.modeling_lxmert": {
+                "LxmertEncoder",
+                "LxmertForPreTraining",
+                "LxmertForQuestionAnswering",
+                "LxmertModel",
+                "LxmertPreTrainedModel",
+                "LxmertVisualFeatureEncoder",
+                "LxmertXLayer",
+            },
+            "m2m_100.modeling_m2m_100": {
+                "M2M100ForConditionalGeneration",
+                "M2M100Model",
+                "M2M100PreTrainedModel",
+            },
+            "mamba2.modeling_mamba2": {
+                "Mamba2ForCausalLM",
+                "Mamba2Model",
+                "Mamba2PreTrainedModel",
+            },
+            "mamba.modeling_mamba": {
+                "MambaForCausalLM",
+                "MambaModel",
+                "MambaPreTrainedModel",
+            },
+            "marian.modeling_marian": {
+                "MarianForCausalLM",
+                "MarianMTModel",
+                "MarianModel",
+                "MarianPreTrainedModel",
+            },
+            "markuplm.modeling_markuplm": {
+                "MarkupLMForQuestionAnswering",
+                "MarkupLMForSequenceClassification",
+                "MarkupLMForTokenClassification",
+                "MarkupLMModel",
+                "MarkupLMPreTrainedModel",
+            },
+            "mask2former.modeling_mask2former": {
+                "Mask2FormerForUniversalSegmentation",
+                "Mask2FormerModel",
+                "Mask2FormerPreTrainedModel",
+            },
+            "maskformer.modeling_maskformer": {
+                "MaskFormerDetrPreTrainedModel",
+                "MaskFormerForInstanceSegmentation",
+                "MaskFormerModel",
+                "MaskFormerPreTrainedModel",
+            },
+            "maskformer.modeling_maskformer_swin": {
+                "MaskFormerSwinBackbone",
+                "MaskFormerSwinModel",
+                "MaskFormerSwinPreTrainedModel",
+            },
+            "mbart.modeling_mbart": {
+                "MBartForCausalLM",
+                "MBartForConditionalGeneration",
+                "MBartForQuestionAnswering",
+                "MBartForSequenceClassification",
+                "MBartModel",
+                "MBartPreTrainedModel",
+            },
+            "megatron_bert.modeling_megatron_bert": {
+                "MegatronBertForCausalLM",
+                "MegatronBertForMaskedLM",
+                "MegatronBertForMultipleChoice",
+                "MegatronBertForNextSentencePrediction",
+                "MegatronBertForPreTraining",
+                "MegatronBertForQuestionAnswering",
+                "MegatronBertForSequenceClassification",
+                "MegatronBertForTokenClassification",
+                "MegatronBertModel",
+                "MegatronBertPreTrainedModel",
+            },
+            "mellum.modeling_mellum": {
+                "MellumForCausalLM",
+                "MellumModel",
+                "MellumPreTrainedModel",
+            },
+            "metaclip_2.modeling_metaclip_2": {
+                "MetaClip2ForImageClassification",
+                "MetaClip2Model",
+                "MetaClip2PreTrainedModel",
+                "MetaClip2TextModel",
+                "MetaClip2TextModelWithProjection",
+                "MetaClip2VisionModel",
+                "MetaClip2VisionModelWithProjection",
+            },
+            "mgp_str.modeling_mgp_str": {
+                "MgpstrForSceneTextRecognition",
+                "MgpstrModel",
+                "MgpstrPreTrainedModel",
+            },
+            "mimi.modeling_mimi": {
+                "MimiDecoderModel",
+                "MimiEncoderModel",
+                "MimiModel",
+                "MimiPreTrainedModel",
+            },
+            "mimo_v2_flash.modeling_mimo_v2_flash": {
+                "MiMoV2FlashForCausalLM",
+                "MiMoV2FlashModel",
+                "MiMoV2FlashPreTrainedModel",
+            },
+            "minicpm3.modeling_minicpm3": {
+                "MiniCPM3ForCausalLM",
+                "MiniCPM3ForSequenceClassification",
+                "MiniCPM3Model",
+                "MiniCPM3PreTrainedModel",
+            },
+            "minicpm_ocr.modeling_minicpm_ocr": {
+                "MiniCPMOcrForConditionalGeneration",
+                "MiniCPMOcrModel",
+                "MiniCPMOcrPreTrainedModel",
+                "MiniCPMOcrVisionModel",
+                "MiniCPMOcrVisionPreTrainedModel",
+            },
+            "minicpmv4_6.modeling_minicpmv4_6": {
+                "MiniCPMV4_6ForConditionalGeneration",
+                "MiniCPMV4_6Model",
+                "MiniCPMV4_6PreTrainedModel",
+            },
+            "minicpmv4_7.modeling_minicpmv4_7": {
+                "MiniCPMV4_7ForConditionalGeneration",
+                "MiniCPMV4_7Model",
+                "MiniCPMV4_7PreTrainedModel",
+                "MiniCPMV4_7VisionModel",
+                "MiniCPMV4_7VisionPreTrainedModel",
+            },
+            "minimax.modeling_minimax": {
+                "MiniMaxForCausalLM",
+                "MiniMaxForQuestionAnswering",
+                "MiniMaxForSequenceClassification",
+                "MiniMaxForTokenClassification",
+                "MiniMaxModel",
+                "MiniMaxPreTrainedModel",
+            },
+            "minimax_m2.modeling_minimax_m2": {
+                "MiniMaxM2ForCausalLM",
+                "MiniMaxM2Model",
+                "MiniMaxM2PreTrainedModel",
+            },
+            "minimax_m3_vl.modeling_minimax_m3_vl": {
+                "MiniMaxM3SparseForConditionalGeneration",
+                "MiniMaxM3VLForCausalLM",
+                "MiniMaxM3VLModel",
+                "MiniMaxM3VLPreTrainedModel",
+                "MiniMaxM3VLTextModel",
+                "MiniMaxM3VLVisionModel",
+            },
+            "ministral3.modeling_ministral3": {
+                "Ministral3ForCausalLM",
+                "Ministral3ForQuestionAnswering",
+                "Ministral3ForSequenceClassification",
+                "Ministral3ForTokenClassification",
+                "Ministral3Model",
+                "Ministral3PreTrainedModel",
+            },
+            "ministral.modeling_ministral": {
+                "MinistralForCausalLM",
+                "MinistralForQuestionAnswering",
+                "MinistralForSequenceClassification",
+                "MinistralForTokenClassification",
+                "MinistralModel",
+                "MinistralPreTrainedModel",
+            },
+            "mistral3.modeling_mistral3": {
+                "Mistral3ForConditionalGeneration",
+                "Mistral3Model",
+                "Mistral3PreTrainedModel",
+            },
+            "mistral4.modeling_mistral4": {
+                "Mistral4ForCausalLM",
+                "Mistral4ForSequenceClassification",
+                "Mistral4ForTokenClassification",
+                "Mistral4Model",
+                "Mistral4PreTrainedModel",
+            },
+            "mistral.modeling_mistral": {
+                "MistralForCausalLM",
+                "MistralForQuestionAnswering",
+                "MistralForSequenceClassification",
+                "MistralForTokenClassification",
+                "MistralModel",
+                "MistralPreTrainedModel",
+            },
+            "mistral_large4.modeling_mistral_large4": {
+                "MistralLarge4ForConditionalGeneration",
+                "MistralLarge4Model",
+                "MistralLarge4PreTrainedModel",
+                "MistralLarge4TextModel",
+            },
+            "mixtral.modeling_mixtral": {
+                "MixtralForCausalLM",
+                "MixtralForQuestionAnswering",
+                "MixtralForSequenceClassification",
+                "MixtralForTokenClassification",
+                "MixtralModel",
+                "MixtralPreTrainedModel",
+            },
+            "mlcd.modeling_mlcd": {
+                "MLCDPreTrainedModel",
+                "MLCDVisionModel",
+            },
+            "mllama.modeling_mllama": {
+                "MllamaForCausalLM",
+                "MllamaForConditionalGeneration",
+                "MllamaModel",
+                "MllamaPreTrainedModel",
+                "MllamaTextModel",
+                "MllamaVisionModel",
+            },
+            "mm_grounding_dino.modeling_mm_grounding_dino": {
+                "MMGroundingDinoForObjectDetection",
+                "MMGroundingDinoModel",
+                "MMGroundingDinoPreTrainedModel",
+            },
+            "mobilebert.modeling_mobilebert": {
+                "MobileBertForMaskedLM",
+                "MobileBertForMultipleChoice",
+                "MobileBertForNextSentencePrediction",
+                "MobileBertForPreTraining",
+                "MobileBertForQuestionAnswering",
+                "MobileBertForSequenceClassification",
+                "MobileBertForTokenClassification",
+                "MobileBertLayer",
+                "MobileBertModel",
+                "MobileBertPreTrainedModel",
+            },
+            "mobilenet_v1.modeling_mobilenet_v1": {
+                "MobileNetV1ForImageClassification",
+                "MobileNetV1Model",
+                "MobileNetV1PreTrainedModel",
+            },
+            "mobilenet_v2.modeling_mobilenet_v2": {
+                "MobileNetV2ForImageClassification",
+                "MobileNetV2ForSemanticSegmentation",
+                "MobileNetV2Model",
+                "MobileNetV2PreTrainedModel",
+            },
+            "mobilevit.modeling_mobilevit": {
+                "MobileViTForImageClassification",
+                "MobileViTForSemanticSegmentation",
+                "MobileViTModel",
+                "MobileViTPreTrainedModel",
+            },
+            "mobilevitv2.modeling_mobilevitv2": {
+                "MobileViTV2ForImageClassification",
+                "MobileViTV2ForSemanticSegmentation",
+                "MobileViTV2Model",
+                "MobileViTV2PreTrainedModel",
+            },
+            "modernbert.modeling_modernbert": {
+                "ModernBertForMaskedLM",
+                "ModernBertForMultipleChoice",
+                "ModernBertForQuestionAnswering",
+                "ModernBertForSequenceClassification",
+                "ModernBertForTokenClassification",
+                "ModernBertModel",
+                "ModernBertPreTrainedModel",
+            },
+            "modernbert_decoder.modeling_modernbert_decoder": {
+                "ModernBertDecoderForCausalLM",
+                "ModernBertDecoderForSequenceClassification",
+                "ModernBertDecoderModel",
+                "ModernBertDecoderPreTrainedModel",
+            },
+            "modernvbert.modeling_modernvbert": {
+                "ModernVBertForMaskedLM",
+                "ModernVBertForSequenceClassification",
+                "ModernVBertForTokenClassification",
+                "ModernVBertModel",
+                "ModernVBertPreTrainedModel",
+            },
+            "molmo2.modeling_molmo2": {
+                "Molmo2Adapter",
+                "Molmo2ForConditionalGeneration",
+                "Molmo2Model",
+                "Molmo2PreTrainedModel",
+                "Molmo2TextModel",
+                "Molmo2VisionModel",
+            },
+            "moonshine.modeling_moonshine": {
+                "MoonshineForConditionalGeneration",
+                "MoonshineModel",
+                "MoonshinePreTrainedModel",
+            },
+            "moonshine_streaming.modeling_moonshine_streaming": {
+                "MoonshineStreamingForConditionalGeneration",
+                "MoonshineStreamingModel",
+                "MoonshineStreamingPreTrainedModel",
+            },
+            "moshi.modeling_moshi": {
+                "MoshiForCausalLM",
+                "MoshiForConditionalGeneration",
+                "MoshiModel",
+                "MoshiPreTrainedModel",
+            },
+            "moss_transcribe_diarize.modeling_moss_transcribe_diarize": {
+                "MossTranscribeDiarizeAudioModel",
+                "MossTranscribeDiarizeForConditionalGeneration",
+                "MossTranscribeDiarizeModel",
+                "MossTranscribeDiarizePreTrainedModel",
+            },
+            "moss_transcribe_diarize.processing_moss_transcribe_diarize": {
+                "MossTranscribeDiarizeProcessor",
+            },
+            "mpnet.modeling_mpnet": {
+                "MPNetForMaskedLM",
+                "MPNetForMultipleChoice",
+                "MPNetForQuestionAnswering",
+                "MPNetForSequenceClassification",
+                "MPNetForTokenClassification",
+                "MPNetLayer",
+                "MPNetModel",
+                "MPNetPreTrainedModel",
+            },
+            "mpt.modeling_mpt": {
+                "MptForCausalLM",
+                "MptForQuestionAnswering",
+                "MptForSequenceClassification",
+                "MptForTokenClassification",
+                "MptModel",
+                "MptPreTrainedModel",
+            },
+            "mra.modeling_mra": {
+                "MraForMaskedLM",
+                "MraForMultipleChoice",
+                "MraForQuestionAnswering",
+                "MraForSequenceClassification",
+                "MraForTokenClassification",
+                "MraLayer",
+                "MraModel",
+                "MraPreTrainedModel",
+            },
+            "mt5.modeling_mt5": {
+                "MT5EncoderModel",
+                "MT5ForConditionalGeneration",
+                "MT5ForQuestionAnswering",
+                "MT5ForSequenceClassification",
+                "MT5ForTokenClassification",
+                "MT5Model",
+                "MT5PreTrainedModel",
+            },
+            "muse_glimmer.modeling_muse_glimmer": {
+                "MuseGlimmerForConditionalGeneration",
+                "MuseGlimmerModel",
+                "MuseGlimmerPreTrainedModel",
+                "MuseGlimmerTextModel",
+                "MuseGlimmerVisionModel",
+            },
+            "muse_glimmer_assistant.modeling_muse_glimmer_assistant": {
+                "MuseGlimmerAssistantModel",
+                "MuseGlimmerAssistantPreTrainedModel",
+            },
+            "muse_spark.modeling_muse_spark": {
+                "MuseSparkAudioModel",
+                "MuseSparkForConditionalGeneration",
+                "MuseSparkModel",
+                "MuseSparkPreTrainedModel",
+                "MuseSparkTextModel",
+                "MuseSparkVisionModel",
+            },
+            "musicflamingo.modeling_musicflamingo": {
+                "MusicFlamingoForConditionalGeneration",
+                "MusicFlamingoModel",
+                "MusicFlamingoPreTrainedModel",
+            },
+            "musicflamingo.processing_musicflamingo": {
+                "MusicFlamingoProcessor",
+            },
+            "musicgen.modeling_musicgen": {
+                "MusicgenForCausalLM",
+                "MusicgenForConditionalGeneration",
+                "MusicgenModel",
+                "MusicgenPreTrainedModel",
+            },
+            "musicgen_melody.modeling_musicgen_melody": {
+                "MusicgenMelodyForCausalLM",
+                "MusicgenMelodyForConditionalGeneration",
+                "MusicgenMelodyModel",
+                "MusicgenMelodyPreTrainedModel",
+            },
+            "mvp.modeling_mvp": {
+                "MvpForCausalLM",
+                "MvpForConditionalGeneration",
+                "MvpForQuestionAnswering",
+                "MvpForSequenceClassification",
+                "MvpModel",
+                "MvpPreTrainedModel",
+            },
+            "nanochat.modeling_nanochat": {
+                "NanoChatForCausalLM",
+                "NanoChatModel",
+                "NanoChatPreTrainedModel",
+            },
+            "nemotron3_5_asr.modeling_nemotron3_5_asr": {
+                "Nemotron3_5AsrForRNNT",
+                "Nemotron3_5AsrPreTrainedModel",
+                "Nemotron3_5AsrRNNTOutput",
+            },
+            "nemotron3_5_asr.processing_nemotron3_5_asr": {
+                "Nemotron3_5AsrProcessor",
+            },
+            "nemotron3_5_transcribe.modeling_nemotron3_5_transcribe": {
+                "Nemotron3_5TranscribeAsrAudioModel",
+                "Nemotron3_5TranscribeAudioModel",
+                "Nemotron3_5TranscribeForConditionalGeneration",
+                "Nemotron3_5TranscribeModel",
+                "Nemotron3_5TranscribePreTrainedModel",
+                "Nemotron3_5TranscribeWordTimestampModel",
+            },
+            "nemotron3_5_transcribe.processing_nemotron3_5_transcribe": {
+                "Nemotron3_5TranscribeProcessor",
+            },
+            "nemotron3_diarization.modeling_nemotron3_diarization": {
+                "Nemotron3DiarizationAudioModel",
+                "Nemotron3DiarizationForAudioFrameClassification",
+                "Nemotron3DiarizationModel",
+                "Nemotron3DiarizationOutput",
+                "Nemotron3DiarizationPreTrainedModel",
+                "Nemotron3DiarizationSpeakerCache",
+            },
+            "nemotron.modeling_nemotron": {
+                "NemotronForCausalLM",
+                "NemotronForQuestionAnswering",
+                "NemotronForSequenceClassification",
+                "NemotronForTokenClassification",
+                "NemotronModel",
+                "NemotronPreTrainedModel",
+            },
+            "nemotron_asr_streaming.modeling_nemotron_asr_streaming": {
+                "NemotronAsrStreamingEncoder",
+                "NemotronAsrStreamingEncoderModelOutput",
+                "NemotronAsrStreamingForRNNT",
+                "NemotronAsrStreamingPreTrainedModel",
+                "NemotronAsrStreamingRNNTOutput",
+            },
+            "nemotron_h.modeling_nemotron_h": {
+                "NemotronHForCausalLM",
+                "NemotronHModel",
+                "NemotronHPreTrainedModel",
+            },
+            "nemotron_h_omni.modeling_nemotron_h_omni": {
+                "NemotronH_Omni_Reasoning_V3",
+                "NemotronH_Omni_Reasoning_V3PreTrainedModel",
+            },
+            "neomme.modeling_neomme": {
+                "NeoMMEForMaskedLM",
+                "NeoMMEForRetrieval",
+                "NeoMMEModel",
+                "NeoMMEPreTrainedModel",
+            },
+            "neucodec.modeling_neucodec": {
+                "NeuCodecModel",
+                "NeuCodecPreTrainedModel",
+            },
+            "nllb_moe.modeling_nllb_moe": {
+                "NllbMoeForConditionalGeneration",
+                "NllbMoeModel",
+                "NllbMoePreTrainedModel",
+                "NllbMoeSparseMLP",
+                "NllbMoeTop2Router",
+            },
+            "nomic_bert.modeling_nomic_bert": {
+                "NomicBertForMaskedLM",
+                "NomicBertForSequenceClassification",
+                "NomicBertForTokenClassification",
+                "NomicBertModel",
+                "NomicBertPreTrainedModel",
+            },
+            "nystromformer.modeling_nystromformer": {
+                "NystromformerForMaskedLM",
+                "NystromformerForMultipleChoice",
+                "NystromformerForQuestionAnswering",
+                "NystromformerForSequenceClassification",
+                "NystromformerForTokenClassification",
+                "NystromformerLayer",
+                "NystromformerModel",
+                "NystromformerPreTrainedModel",
+            },
+            "olmo2.modeling_olmo2": {
+                "Olmo2ForCausalLM",
+                "Olmo2ForSequenceClassification",
+                "Olmo2Model",
+                "Olmo2PreTrainedModel",
+            },
+            "olmo3.modeling_olmo3": {
+                "Olmo3ForCausalLM",
+                "Olmo3ForSequenceClassification",
+                "Olmo3Model",
+                "Olmo3PreTrainedModel",
+            },
+            "olmo.modeling_olmo": {
+                "OlmoForCausalLM",
+                "OlmoForSequenceClassification",
+                "OlmoModel",
+                "OlmoPreTrainedModel",
+            },
+            "olmo_hybrid.modeling_olmo_hybrid": {
+                "OlmoHybridForCausalLM",
+                "OlmoHybridModel",
+                "OlmoHybridPreTrainedModel",
+            },
+            "olmoe.modeling_olmoe": {
+                "OlmoeForCausalLM",
+                "OlmoeModel",
+                "OlmoePreTrainedModel",
+            },
+            "omdet_turbo.modeling_omdet_turbo": {
+                "OmDetTurboForObjectDetection",
+                "OmDetTurboPreTrainedModel",
+            },
+            "oneformer.modeling_oneformer": {
+                "OneFormerForUniversalSegmentation",
+                "OneFormerModel",
+                "OneFormerPreTrainedModel",
+            },
+            "openai.modeling_openai": {
+                "OpenAIGPTDoubleHeadsModel",
+                "OpenAIGPTForSequenceClassification",
+                "OpenAIGPTLMHeadModel",
+                "OpenAIGPTModel",
+                "OpenAIGPTPreTrainedModel",
+            },
+            "openai_privacy_filter.modeling_openai_privacy_filter": {
+                "OpenAIPrivacyFilterForTokenClassification",
+                "OpenAIPrivacyFilterModel",
+                "OpenAIPrivacyFilterPreTrainedModel",
+            },
+            "opt.modeling_opt": {
+                "OPTForCausalLM",
+                "OPTForQuestionAnswering",
+                "OPTForSequenceClassification",
+                "OPTModel",
+                "OPTPreTrainedModel",
+            },
+            "ovis2.modeling_ovis2": {
+                "Ovis2ForConditionalGeneration",
+                "Ovis2Model",
+                "Ovis2PreTrainedModel",
+            },
+            "owlv2.modeling_owlv2": {
+                "Owlv2ForObjectDetection",
+                "Owlv2Model",
+                "Owlv2PreTrainedModel",
+                "Owlv2TextModel",
+                "Owlv2VisionModel",
+            },
+            "owlvit.modeling_owlvit": {
+                "OwlViTForObjectDetection",
+                "OwlViTModel",
+                "OwlViTPreTrainedModel",
+                "OwlViTTextModel",
+                "OwlViTVisionModel",
+            },
+            "paddleocr_vl.modeling_paddleocr_vl": {
+                "PaddleOCRTextModel",
+                "PaddleOCRVLForConditionalGeneration",
+                "PaddleOCRVLModel",
+                "PaddleOCRVLPreTrainedModel",
+                "PaddleOCRVisionModel",
+                "PaddleOCRVisionTransformer",
+            },
+            "paligemma.modeling_paligemma": {
+                "PaliGemmaForConditionalGeneration",
+                "PaliGemmaModel",
+                "PaliGemmaPreTrainedModel",
+            },
+            "parakeet.modeling_parakeet": {
+                "ParakeetEncoder",
+                "ParakeetForCTC",
+                "ParakeetForRNNT",
+                "ParakeetForTDT",
+                "ParakeetPreTrainedModel",
+            },
+            "patchtsmixer.modeling_patchtsmixer": {
+                "PatchTSMixerForPrediction",
+                "PatchTSMixerForPretraining",
+                "PatchTSMixerForRegression",
+                "PatchTSMixerForTimeSeriesClassification",
+                "PatchTSMixerModel",
+                "PatchTSMixerPreTrainedModel",
+            },
+            "patchtst.modeling_patchtst": {
+                "PatchTSTForClassification",
+                "PatchTSTForPrediction",
+                "PatchTSTForPretraining",
+                "PatchTSTForRegression",
+                "PatchTSTModel",
+                "PatchTSTPreTrainedModel",
+            },
+            "pe_audio.modeling_pe_audio": {
+                "PeAudioEncoder",
+                "PeAudioFrameLevelModel",
+                "PeAudioModel",
+            },
+            "pe_audio_video.modeling_pe_audio_video": {
+                "PeAudioVideoEncoder",
+                "PeAudioVideoModel",
+            },
+            "pe_video.modeling_pe_video": {
+                "PeVideoEncoder",
+                "PeVideoModel",
+            },
+            "pegasus.modeling_pegasus": {
+                "PegasusForCausalLM",
+                "PegasusForConditionalGeneration",
+                "PegasusModel",
+                "PegasusPreTrainedModel",
+            },
+            "pegasus_x.modeling_pegasus_x": {
+                "PegasusXForConditionalGeneration",
+                "PegasusXModel",
+                "PegasusXPreTrainedModel",
+            },
+            "perceiver.modeling_perceiver": {
+                "PerceiverForImageClassificationConvProcessing",
+                "PerceiverForImageClassificationFourier",
+                "PerceiverForImageClassificationLearned",
+                "PerceiverForMaskedLM",
+                "PerceiverForMultimodalAutoencoding",
+                "PerceiverForOpticalFlow",
+                "PerceiverForSequenceClassification",
+                "PerceiverLayer",
+                "PerceiverModel",
+                "PerceiverPreTrainedModel",
+            },
+            "perception_lm.modeling_perception_lm": {
+                "PerceptionLMForConditionalGeneration",
+                "PerceptionLMModel",
+                "PerceptionLMPreTrainedModel",
+            },
+            "persimmon.modeling_persimmon": {
+                "PersimmonForCausalLM",
+                "PersimmonForSequenceClassification",
+                "PersimmonForTokenClassification",
+                "PersimmonModel",
+                "PersimmonPreTrainedModel",
+            },
+            "phi3.modeling_phi3": {
+                "Phi3ForCausalLM",
+                "Phi3ForSequenceClassification",
+                "Phi3ForTokenClassification",
+                "Phi3Model",
+                "Phi3PreTrainedModel",
+            },
+            "phi4_multimodal.modeling_phi4_multimodal": {
+                "Phi4MultimodalAudioModel",
+                "Phi4MultimodalAudioPreTrainedModel",
+                "Phi4MultimodalForCausalLM",
+                "Phi4MultimodalModel",
+                "Phi4MultimodalPreTrainedModel",
+                "Phi4MultimodalVisionModel",
+                "Phi4MultimodalVisionPreTrainedModel",
+            },
+            "phi.modeling_phi": {
+                "PhiForCausalLM",
+                "PhiForSequenceClassification",
+                "PhiForTokenClassification",
+                "PhiModel",
+                "PhiPreTrainedModel",
+            },
+            "phimoe.modeling_phimoe": {
+                "PhimoeForCausalLM",
+                "PhimoeForSequenceClassification",
+                "PhimoeModel",
+                "PhimoePreTrainedModel",
+            },
+            "pi0.modeling_pi0": {
+                "PI0ForConditionalGeneration",
+                "PI0Model",
+                "PI0PreTrainedModel",
+            },
+            "pix2struct.modeling_pix2struct": {
+                "Pix2StructForConditionalGeneration",
+                "Pix2StructPreTrainedModel",
+                "Pix2StructTextModel",
+                "Pix2StructVisionModel",
+            },
+            "pixio.modeling_pixio": {
+                "PixioBackbone",
+                "PixioModel",
+                "PixioPreTrainedModel",
+            },
+            "pixtral.modeling_pixtral": {
+                "PixtralPreTrainedModel",
+                "PixtralVisionModel",
+            },
+            "plbart.modeling_plbart": {
+                "PLBartForCausalLM",
+                "PLBartForConditionalGeneration",
+                "PLBartForSequenceClassification",
+                "PLBartModel",
+                "PLBartPreTrainedModel",
+            },
+            "pocket_tts.feature_extraction_pocket_tts": {
+                "PocketTTSFeatureExtractor",
+            },
+            "pocket_tts.modeling_pocket_tts": {
+                "PocketTTSForConditionalGeneration",
+                "PocketTTSModel",
+                "PocketTTSPreTrainedModel",
+            },
+            "pocket_tts.processing_pocket_tts": {
+                "PocketTTSProcessor",
+            },
+            "pocket_tts_audio_tokenizer.modeling_pocket_tts_audio_tokenizer": {
+                "PocketTTSAudioTokenizerDecoderModel",
+                "PocketTTSAudioTokenizerEncoderModel",
+                "PocketTTSAudioTokenizerModel",
+                "PocketTTSAudioTokenizerPreTrainedModel",
+            },
+            "poolformer.modeling_poolformer": {
+                "PoolFormerForImageClassification",
+                "PoolFormerModel",
+                "PoolFormerPreTrainedModel",
+            },
+            "pop2piano.modeling_pop2piano": {
+                "Pop2PianoForConditionalGeneration",
+                "Pop2PianoPreTrainedModel",
+            },
+            "pp_doclayout_v2.modeling_pp_doclayout_v2": {
+                "PPDocLayoutV2ForObjectDetection",
+                "PPDocLayoutV2Model",
+                "PPDocLayoutV2PreTrainedModel",
+                "PPDocLayoutV2ReadingOrder",
+            },
+            "pp_doclayout_v3.modeling_pp_doclayout_v3": {
+                "PPDocLayoutV3ForObjectDetection",
+                "PPDocLayoutV3Model",
+                "PPDocLayoutV3PreTrainedModel",
+            },
+            "pp_doclayout_v4.modeling_pp_doclayout_v4": {
+                "PPDocLayoutV4ForObjectDetection",
+                "PPDocLayoutV4Model",
+                "PPDocLayoutV4PreTrainedModel",
+            },
+            "pp_formulanet.modeling_pp_formulanet": {
+                "PPFormulaNetForConditionalGeneration",
+                "PPFormulaNetModel",
+                "PPFormulaNetPreTrainedModel",
+                "PPFormulaNetTextModel",
+                "PPFormulaNetVisionModel",
+            },
+            "pp_lcnet.modeling_pp_lcnet": {
+                "PPLCNetBackbone",
+                "PPLCNetForImageClassification",
+                "PPLCNetPreTrainedModel",
+            },
+            "pp_lcnet_v3.modeling_pp_lcnet_v3": {
+                "PPLCNetV3Backbone",
+                "PPLCNetV3PreTrainedModel",
+            },
+            "pp_lcnet_v4.modeling_pp_lcnet_v4": {
+                "PPLCNetV4Backbone",
+                "PPLCNetV4PreTrainedModel",
+            },
+            "pp_ocrv5_mobile_det.modeling_pp_ocrv5_mobile_det": {
+                "PPOCRV5MobileDetForObjectDetection",
+                "PPOCRV5MobileDetModel",
+                "PPOCRV5MobileDetPreTrainedModel",
+            },
+            "pp_ocrv5_mobile_rec.modeling_pp_ocrv5_mobile_rec": {
+                "PPOCRV5MobileRecEncoderWithSVTR",
+                "PPOCRV5MobileRecForTextRecognition",
+                "PPOCRV5MobileRecModel",
+                "PPOCRV5MobileRecPreTrainedModel",
+            },
+            "pp_ocrv5_server_det.modeling_pp_ocrv5_server_det": {
+                "PPOCRV5ServerDetForObjectDetection",
+                "PPOCRV5ServerDetModel",
+                "PPOCRV5ServerDetPreTrainedModel",
+            },
+            "pp_ocrv5_server_rec.modeling_pp_ocrv5_server_rec": {
+                "PPOCRV5ServerRecEncoderWithSVTR",
+                "PPOCRV5ServerRecForTextRecognition",
+                "PPOCRV5ServerRecModel",
+                "PPOCRV5ServerRecPreTrainedModel",
+            },
+            "pp_ocrv6_medium_det.modeling_pp_ocrv6_medium_det": {
+                "PPOCRV6MediumDetForObjectDetection",
+                "PPOCRV6MediumDetModel",
+                "PPOCRV6MediumDetPreTrainedModel",
+            },
+            "pp_ocrv6_small_det.modeling_pp_ocrv6_small_det": {
+                "PPOCRV6SmallDetForObjectDetection",
+                "PPOCRV6SmallDetModel",
+                "PPOCRV6SmallDetPreTrainedModel",
+            },
+            "pp_ocrv6_small_rec.modeling_pp_ocrv6_small_rec": {
+                "PPOCRV6SmallRecEncoderWithSVTR",
+                "PPOCRV6SmallRecForTextRecognition",
+                "PPOCRV6SmallRecModel",
+                "PPOCRV6SmallRecPreTrainedModel",
+            },
+            "pp_ocrv6_tiny_rec.modeling_pp_ocrv6_tiny_rec": {
+                "PPOCRV6TinyRecForTextRecognition",
+                "PPOCRV6TinyRecModel",
+                "PPOCRV6TinyRecPreTrainedModel",
+            },
+            "prompt_depth_anything.modeling_prompt_depth_anything": {
+                "PromptDepthAnythingForDepthEstimation",
+                "PromptDepthAnythingPreTrainedModel",
+            },
+            "prophetnet.modeling_prophetnet": {
+                "ProphetNetDecoder",
+                "ProphetNetEncoder",
+                "ProphetNetForCausalLM",
+                "ProphetNetForConditionalGeneration",
+                "ProphetNetModel",
+                "ProphetNetPreTrainedModel",
+            },
+            "pvt.modeling_pvt": {
+                "PvtForImageClassification",
+                "PvtModel",
+                "PvtPreTrainedModel",
+            },
+            "pvt_v2.modeling_pvt_v2": {
+                "PvtV2Backbone",
+                "PvtV2ForImageClassification",
+                "PvtV2Model",
+                "PvtV2PreTrainedModel",
+            },
+            "qianfan_ocr.modeling_qianfan_ocr": {
+                "QianfanOCRForConditionalGeneration",
+                "QianfanOCRModel",
+                "QianfanOCRPreTrainedModel",
+                "QianfanOCRVisionModel",
+                "QianfanOCRVisionPreTrainedModel",
+            },
+            "qwen2.modeling_qwen2": {
+                "Qwen2ForCausalLM",
+                "Qwen2ForQuestionAnswering",
+                "Qwen2ForSequenceClassification",
+                "Qwen2ForTokenClassification",
+                "Qwen2Model",
+                "Qwen2PreTrainedModel",
+                "Qwen2RMSNorm",
+            },
+            "qwen2_5_omni.modeling_qwen2_5_omni": {
+                "Qwen2_5OmniForConditionalGeneration",
+                "Qwen2_5OmniPreTrainedModel",
+                "Qwen2_5OmniPreTrainedModelForConditionalGeneration",
+                "Qwen2_5OmniTalkerForConditionalGeneration",
+                "Qwen2_5OmniTalkerModel",
+                "Qwen2_5OmniThinkerForConditionalGeneration",
+                "Qwen2_5OmniThinkerModel",
+                "Qwen2_5OmniThinkerTextModel",
+                "Qwen2_5OmniToken2WavBigVGANModel",
+                "Qwen2_5OmniToken2WavDiTModel",
+                "Qwen2_5OmniToken2WavModel",
+            },
+            "qwen2_5_vl.modeling_qwen2_5_vl": {
+                "Qwen2_5_VLForConditionalGeneration",
+                "Qwen2_5_VLModel",
+                "Qwen2_5_VLPreTrainedModel",
+                "Qwen2_5_VLTextModel",
+                "Qwen2_5_VisionTransformerPretrainedModel",
+            },
+            "qwen2_audio.modeling_qwen2_audio": {
+                "Qwen2AudioEncoder",
+                "Qwen2AudioForConditionalGeneration",
+                "Qwen2AudioModel",
+                "Qwen2AudioPreTrainedModel",
+            },
+            "qwen2_moe.modeling_qwen2_moe": {
+                "Qwen2MoeForCausalLM",
+                "Qwen2MoeForQuestionAnswering",
+                "Qwen2MoeForSequenceClassification",
+                "Qwen2MoeForTokenClassification",
+                "Qwen2MoeModel",
+                "Qwen2MoePreTrainedModel",
+            },
+            "qwen2_vl.modeling_qwen2_vl": {
+                "Qwen2VLForConditionalGeneration",
+                "Qwen2VLModel",
+                "Qwen2VLPreTrainedModel",
+                "Qwen2VLTextModel",
+            },
+            "qwen3.modeling_qwen3": {
+                "Qwen3ForCausalLM",
+                "Qwen3ForQuestionAnswering",
+                "Qwen3ForSequenceClassification",
+                "Qwen3ForTokenClassification",
+                "Qwen3Model",
+                "Qwen3PreTrainedModel",
+            },
+            "qwen3_5.modeling_qwen3_5": {
+                "Qwen3_5ForCausalLM",
+                "Qwen3_5ForConditionalGeneration",
+                "Qwen3_5ForSequenceClassification",
+                "Qwen3_5ForTokenClassification",
+                "Qwen3_5Model",
+                "Qwen3_5PreTrainedModel",
+                "Qwen3_5TextForSequenceClassification",
+                "Qwen3_5TextModel",
+                "Qwen3_5VisionModel",
+            },
+            "qwen3_5_moe.modeling_qwen3_5_moe": {
+                "Qwen3_5MoeForCausalLM",
+                "Qwen3_5MoeForConditionalGeneration",
+                "Qwen3_5MoeModel",
+                "Qwen3_5MoePreTrainedModel",
+                "Qwen3_5MoeTextModel",
+                "Qwen3_5MoeVisionModel",
+            },
+            "qwen3_asr.feature_extraction_qwen3_asr": {
+                "Qwen3ASRFeatureExtractor",
+            },
+            "qwen3_asr.modeling_qwen3_asr": {
+                "Qwen3ASREncoder",
+                "Qwen3ASRForConditionalGeneration",
+                "Qwen3ASRForTokenClassification",
+                "Qwen3ASRModel",
+                "Qwen3ASRPreTrainedModel",
+            },
+            "qwen3_moe.modeling_qwen3_moe": {
+                "Qwen3MoeForCausalLM",
+                "Qwen3MoeForQuestionAnswering",
+                "Qwen3MoeForSequenceClassification",
+                "Qwen3MoeForTokenClassification",
+                "Qwen3MoeModel",
+                "Qwen3MoePreTrainedModel",
+            },
+            "qwen3_next.modeling_qwen3_next": {
+                "Qwen3NextForCausalLM",
+                "Qwen3NextForQuestionAnswering",
+                "Qwen3NextForSequenceClassification",
+                "Qwen3NextForTokenClassification",
+                "Qwen3NextModel",
+                "Qwen3NextPreTrainedModel",
+            },
+            "qwen3_omni_moe.modeling_qwen3_omni_moe": {
+                "Qwen3OmniMoeCode2Wav",
+                "Qwen3OmniMoeCode2WavDecoderBlock",
+                "Qwen3OmniMoeCode2WavTransformerModel",
+                "Qwen3OmniMoeForConditionalGeneration",
+                "Qwen3OmniMoePreTrainedModel",
+                "Qwen3OmniMoePreTrainedModelForConditionalGeneration",
+                "Qwen3OmniMoeTalkerCodePredictorModel",
+                "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
+                "Qwen3OmniMoeTalkerForConditionalGeneration",
+                "Qwen3OmniMoeTalkerModel",
+                "Qwen3OmniMoeThinkerForConditionalGeneration",
+                "Qwen3OmniMoeThinkerModel",
+                "Qwen3OmniMoeThinkerTextModel",
+                "Qwen3OmniMoeThinkerTextPreTrainedModel",
+            },
+            "qwen3_vl.modeling_qwen3_vl": {
+                "Qwen3VLForConditionalGeneration",
+                "Qwen3VLModel",
+                "Qwen3VLPreTrainedModel",
+                "Qwen3VLTextModel",
+                "Qwen3VLVisionModel",
+            },
+            "qwen3_vl_moe.modeling_qwen3_vl_moe": {
+                "Qwen3VLMoeForConditionalGeneration",
+                "Qwen3VLMoeModel",
+                "Qwen3VLMoePreTrainedModel",
+                "Qwen3VLMoeTextModel",
+                "Qwen3VLMoeVisionModel",
+            },
+            "qwen4_exp.modeling_qwen4_exp": {
+                "Qwen4ExpForCausalLM",
+                "Qwen4ExpForConditionalGeneration",
+                "Qwen4ExpModel",
+                "Qwen4ExpPreTrainedModel",
+                "Qwen4ExpTextModel",
+                "Qwen4ExpVisionModel",
+            },
+            "radio.modeling_radio": {
+                "RadioModel",
+                "RadioPreTrainedModel",
+            },
+            "rag.modeling_rag": {
+                "RagModel",
+                "RagPreTrainedModel",
+                "RagSequenceForGeneration",
+                "RagTokenForGeneration",
+            },
+            "recurrent_gemma.modeling_recurrent_gemma": {
+                "RecurrentGemmaForCausalLM",
+                "RecurrentGemmaModel",
+                "RecurrentGemmaPreTrainedModel",
+            },
+            "reformer.modeling_reformer": {
+                "ReformerAttention",
+                "ReformerForMaskedLM",
+                "ReformerForQuestionAnswering",
+                "ReformerForSequenceClassification",
+                "ReformerLayer",
+                "ReformerModel",
+                "ReformerModelWithLMHead",
+                "ReformerPreTrainedModel",
+            },
+            "regnet.modeling_regnet": {
+                "RegNetForImageClassification",
+                "RegNetModel",
+                "RegNetPreTrainedModel",
+            },
+            "rembert.modeling_rembert": {
+                "RemBertForCausalLM",
+                "RemBertForMaskedLM",
+                "RemBertForMultipleChoice",
+                "RemBertForQuestionAnswering",
+                "RemBertForSequenceClassification",
+                "RemBertForTokenClassification",
+                "RemBertLayer",
+                "RemBertModel",
+                "RemBertPreTrainedModel",
+            },
+            "resnet.modeling_resnet": {
+                "ResNetBackbone",
+                "ResNetForImageClassification",
+                "ResNetModel",
+                "ResNetPreTrainedModel",
+            },
+            "rf_detr.modeling_rf_detr": {
+                "RfDetrDinov2Backbone",
+                "RfDetrDinov2PreTrainedModel",
+                "RfDetrForInstanceSegmentation",
+                "RfDetrForObjectDetection",
+                "RfDetrModel",
+                "RfDetrPreTrainedModel",
+            },
+            "roberta.modeling_roberta": {
+                "RobertaForCausalLM",
+                "RobertaForMaskedLM",
+                "RobertaForMultipleChoice",
+                "RobertaForQuestionAnswering",
+                "RobertaForSequenceClassification",
+                "RobertaForTokenClassification",
+                "RobertaModel",
+                "RobertaPreTrainedModel",
+            },
+            "roberta_prelayernorm.modeling_roberta_prelayernorm": {
+                "RobertaPreLayerNormForCausalLM",
+                "RobertaPreLayerNormForMaskedLM",
+                "RobertaPreLayerNormForMultipleChoice",
+                "RobertaPreLayerNormForQuestionAnswering",
+                "RobertaPreLayerNormForSequenceClassification",
+                "RobertaPreLayerNormForTokenClassification",
+                "RobertaPreLayerNormModel",
+                "RobertaPreLayerNormPreTrainedModel",
+            },
+            "roc_bert.modeling_roc_bert": {
+                "RoCBertForCausalLM",
+                "RoCBertForMaskedLM",
+                "RoCBertForMultipleChoice",
+                "RoCBertForPreTraining",
+                "RoCBertForQuestionAnswering",
+                "RoCBertForSequenceClassification",
+                "RoCBertForTokenClassification",
+                "RoCBertLayer",
+                "RoCBertModel",
+                "RoCBertPreTrainedModel",
+            },
+            "roformer.modeling_roformer": {
+                "RoFormerForCausalLM",
+                "RoFormerForMaskedLM",
+                "RoFormerForMultipleChoice",
+                "RoFormerForQuestionAnswering",
+                "RoFormerForSequenceClassification",
+                "RoFormerForTokenClassification",
+                "RoFormerLayer",
+                "RoFormerModel",
+                "RoFormerPreTrainedModel",
+            },
+            "rt_detr.modeling_rt_detr": {
+                "RTDetrForObjectDetection",
+                "RTDetrModel",
+                "RTDetrPreTrainedModel",
+            },
+            "rt_detr.modeling_rt_detr_resnet": {
+                "RTDetrResNetBackbone",
+                "RTDetrResNetPreTrainedModel",
+            },
+            "rt_detr_v2.modeling_rt_detr_v2": {
+                "RTDetrV2ForObjectDetection",
+                "RTDetrV2Model",
+                "RTDetrV2PreTrainedModel",
+            },
+            "rwkv.modeling_rwkv": {
+                "RwkvForCausalLM",
+                "RwkvModel",
+                "RwkvPreTrainedModel",
+            },
+            "sam2.modeling_sam2": {
+                "Sam2HieraDetModel",
+                "Sam2Model",
+                "Sam2PreTrainedModel",
+                "Sam2VisionModel",
+            },
+            "sam2.processing_sam2": {
+                "Sam2Processor",
+            },
+            "sam2_video.modeling_sam2_video": {
+                "Sam2VideoInferenceSession",
+                "Sam2VideoModel",
+                "Sam2VideoPreTrainedModel",
+            },
+            "sam2_video.processing_sam2_video": {
+                "Sam2VideoProcessor",
+            },
+            "sam3.modeling_sam3": {
+                "Sam3Model",
+                "Sam3ViTModel",
+                "Sam3VisionModel",
+            },
+            "sam3.processing_sam3": {
+                "Sam3Processor",
+            },
+            "sam3_lite_text.modeling_sam3_lite_text": {
+                "Sam3LiteTextModel",
+                "Sam3LiteTextPreTrainedModel",
+                "Sam3LiteTextTextModel",
+            },
+            "sam3_tracker.modeling_sam3_tracker": {
+                "Sam3TrackerModel",
+                "Sam3TrackerPreTrainedModel",
+            },
+            "sam3_tracker.processing_sam3_tracker": {
+                "Sam3TrackerProcessor",
+            },
+            "sam3_tracker_video.modeling_sam3_tracker_video": {
+                "Sam3TrackerVideoInferenceSession",
+                "Sam3TrackerVideoModel",
+                "Sam3TrackerVideoPreTrainedModel",
+            },
+            "sam3_tracker_video.processing_sam3_tracker_video": {
+                "Sam3TrackerVideoProcessor",
+            },
+            "sam3_video.modeling_sam3_video": {
+                "Sam3VideoInferenceSession",
+                "Sam3VideoModel",
+                "Sam3VideoPreTrainedModel",
+                "Sam3VideoSegmentationOutput",
+            },
+            "sam.modeling_sam": {
+                "SamModel",
+                "SamPreTrainedModel",
+                "SamVisionModel",
+            },
+            "sam_hq.modeling_sam_hq": {
+                "SamHQModel",
+                "SamHQPreTrainedModel",
+                "SamHQVisionModel",
+            },
+            "sapiens2.modeling_sapiens2": {
+                "Sapiens2Backbone",
+                "Sapiens2ForImageMatting",
+                "Sapiens2ForNormalEstimation",
+                "Sapiens2ForPointmapEstimation",
+                "Sapiens2ForPoseEstimation",
+                "Sapiens2ForSemanticSegmentation",
+                "Sapiens2Model",
+                "Sapiens2PreTrainedModel",
+            },
+            "seamless_m4t.modeling_seamless_m4t": {
+                "SeamlessM4TCodeHifiGan",
+                "SeamlessM4TForSpeechToSpeech",
+                "SeamlessM4TForSpeechToText",
+                "SeamlessM4TForTextToSpeech",
+                "SeamlessM4TForTextToText",
+                "SeamlessM4THifiGan",
+                "SeamlessM4TModel",
+                "SeamlessM4TPreTrainedModel",
+                "SeamlessM4TTextToUnitForConditionalGeneration",
+                "SeamlessM4TTextToUnitModel",
+            },
+            "seamless_m4t_v2.modeling_seamless_m4t_v2": {
+                "SeamlessM4Tv2ForSpeechToSpeech",
+                "SeamlessM4Tv2ForSpeechToText",
+                "SeamlessM4Tv2ForTextToSpeech",
+                "SeamlessM4Tv2ForTextToText",
+                "SeamlessM4Tv2Model",
+                "SeamlessM4Tv2PreTrainedModel",
+            },
+            "seed_oss.modeling_seed_oss": {
+                "SeedOssForCausalLM",
+                "SeedOssForQuestionAnswering",
+                "SeedOssForSequenceClassification",
+                "SeedOssForTokenClassification",
+                "SeedOssModel",
+                "SeedOssPreTrainedModel",
+            },
+            "segformer.modeling_segformer": {
+                "SegformerDecodeHead",
+                "SegformerForImageClassification",
+                "SegformerForSemanticSegmentation",
+                "SegformerLayer",
+                "SegformerModel",
+                "SegformerPreTrainedModel",
+            },
+            "seggpt.modeling_seggpt": {
+                "SegGptForImageSegmentation",
+                "SegGptModel",
+                "SegGptPreTrainedModel",
+            },
+            "sew.modeling_sew": {
+                "SEWForCTC",
+                "SEWForSequenceClassification",
+                "SEWModel",
+                "SEWPreTrainedModel",
+            },
+            "sew_d.modeling_sew_d": {
+                "SEWDForCTC",
+                "SEWDForSequenceClassification",
+                "SEWDModel",
+                "SEWDPreTrainedModel",
+            },
+            "shieldgemma2.modeling_shieldgemma2": {
+                "ShieldGemma2ForImageClassification",
+            },
+            "siglip2.modeling_siglip2": {
+                "Siglip2ForImageClassification",
+                "Siglip2Model",
+                "Siglip2PreTrainedModel",
+                "Siglip2TextModel",
+                "Siglip2VisionModel",
+            },
+            "siglip.modeling_siglip": {
+                "SiglipForImageClassification",
+                "SiglipModel",
+                "SiglipPreTrainedModel",
+                "SiglipTextModel",
+                "SiglipVisionModel",
+            },
+            "slanet.modeling_slanet": {
+                "SLANetBackbone",
+                "SLANetForTableRecognition",
+                "SLANetPreTrainedModel",
+                "SLANetSLAHead",
+            },
+            "slanext.modeling_slanext": {
+                "SLANeXtBackbone",
+                "SLANeXtForTableRecognition",
+                "SLANeXtPreTrainedModel",
+                "SLANeXtSLAHead",
+            },
+            "smollm3.modeling_smollm3": {
+                "SmolLM3ForCausalLM",
+                "SmolLM3ForQuestionAnswering",
+                "SmolLM3ForSequenceClassification",
+                "SmolLM3ForTokenClassification",
+                "SmolLM3Model",
+                "SmolLM3PreTrainedModel",
+            },
+            "smolvlm.modeling_smolvlm": {
+                "SmolVLMForConditionalGeneration",
+                "SmolVLMModel",
+                "SmolVLMPreTrainedModel",
+                "SmolVLMVisionTransformer",
+            },
+            "solar_open.modeling_solar_open": {
+                "SolarOpenForCausalLM",
+                "SolarOpenModel",
+                "SolarOpenPreTrainedModel",
+            },
+            "speech_encoder_decoder.modeling_speech_encoder_decoder": {
+                "SpeechEncoderDecoderModel",
+            },
+            "speech_to_text.modeling_speech_to_text": {
+                "Speech2TextForConditionalGeneration",
+                "Speech2TextModel",
+                "Speech2TextPreTrainedModel",
+            },
+            "speecht5.modeling_speecht5": {
+                "SpeechT5ForSpeechToSpeech",
+                "SpeechT5ForSpeechToText",
+                "SpeechT5ForTextToSpeech",
+                "SpeechT5HifiGan",
+                "SpeechT5Model",
+                "SpeechT5PreTrainedModel",
+            },
+            "splinter.modeling_splinter": {
+                "SplinterForPreTraining",
+                "SplinterForQuestionAnswering",
+                "SplinterLayer",
+                "SplinterModel",
+                "SplinterPreTrainedModel",
+            },
+            "squeezebert.modeling_squeezebert": {
+                "SqueezeBertForMaskedLM",
+                "SqueezeBertForMultipleChoice",
+                "SqueezeBertForQuestionAnswering",
+                "SqueezeBertForSequenceClassification",
+                "SqueezeBertForTokenClassification",
+                "SqueezeBertModel",
+                "SqueezeBertModule",
+                "SqueezeBertPreTrainedModel",
+            },
+            "stablelm.modeling_stablelm": {
+                "StableLmForCausalLM",
+                "StableLmForSequenceClassification",
+                "StableLmForTokenClassification",
+                "StableLmModel",
+                "StableLmPreTrainedModel",
+            },
+            "starcoder2.modeling_starcoder2": {
+                "Starcoder2ForCausalLM",
+                "Starcoder2ForSequenceClassification",
+                "Starcoder2ForTokenClassification",
+                "Starcoder2Model",
+                "Starcoder2PreTrainedModel",
+            },
+            "step3p7.modeling_step3p7": {
+                "Step3p7ForConditionalGeneration",
+                "Step3p7Model",
+                "Step3p7PreTrainedModel",
+                "Step3p7TextModel",
+                "Step3p7VisionModel",
+            },
+            "superglue.modeling_superglue": {
+                "SuperGlueForKeypointMatching",
+                "SuperGluePreTrainedModel",
+            },
+            "superpoint.modeling_superpoint": {
+                "SuperPointForKeypointDetection",
+                "SuperPointPreTrainedModel",
+            },
+            "swiftformer.modeling_swiftformer": {
+                "SwiftFormerForImageClassification",
+                "SwiftFormerModel",
+                "SwiftFormerPreTrainedModel",
+            },
+            "swin2sr.modeling_swin2sr": {
+                "Swin2SRForImageSuperResolution",
+                "Swin2SRModel",
+                "Swin2SRPreTrainedModel",
+            },
+            "swin.modeling_swin": {
+                "SwinBackbone",
+                "SwinForImageClassification",
+                "SwinForMaskedImageModeling",
+                "SwinModel",
+                "SwinPreTrainedModel",
+            },
+            "swinv2.modeling_swinv2": {
+                "Swinv2Backbone",
+                "Swinv2ForImageClassification",
+                "Swinv2ForMaskedImageModeling",
+                "Swinv2Model",
+                "Swinv2PreTrainedModel",
+            },
+            "switch_transformers.modeling_switch_transformers": {
+                "SwitchTransformersEncoderModel",
+                "SwitchTransformersForConditionalGeneration",
+                "SwitchTransformersModel",
+                "SwitchTransformersPreTrainedModel",
+                "SwitchTransformersSparseMLP",
+                "SwitchTransformersTop1Router",
+            },
+            "t5.modeling_t5": {
+                "T5EncoderModel",
+                "T5ForConditionalGeneration",
+                "T5ForQuestionAnswering",
+                "T5ForSequenceClassification",
+                "T5ForTokenClassification",
+                "T5Model",
+                "T5PreTrainedModel",
+            },
+            "t5gemma2.modeling_t5gemma2": {
+                "T5Gemma2Encoder",
+                "T5Gemma2ForConditionalGeneration",
+                "T5Gemma2ForSequenceClassification",
+                "T5Gemma2ForTokenClassification",
+                "T5Gemma2Model",
+                "T5Gemma2PreTrainedModel",
+            },
+            "t5gemma.modeling_t5gemma": {
+                "T5GemmaEncoderModel",
+                "T5GemmaForConditionalGeneration",
+                "T5GemmaForSequenceClassification",
+                "T5GemmaForTokenClassification",
+                "T5GemmaModel",
+                "T5GemmaPreTrainedModel",
+            },
+            "table_transformer.modeling_table_transformer": {
+                "TableTransformerForObjectDetection",
+                "TableTransformerModel",
+                "TableTransformerPreTrainedModel",
+            },
+            "tapas.modeling_tapas": {
+                "TapasForMaskedLM",
+                "TapasForQuestionAnswering",
+                "TapasForSequenceClassification",
+                "TapasModel",
+                "TapasPreTrainedModel",
+            },
+            "textnet.modeling_textnet": {
+                "TextNetBackbone",
+                "TextNetForImageClassification",
+                "TextNetModel",
+                "TextNetPreTrainedModel",
+            },
+            "time_series_transformer.modeling_time_series_transformer": {
+                "TimeSeriesTransformerForPrediction",
+                "TimeSeriesTransformerModel",
+                "TimeSeriesTransformerPreTrainedModel",
+            },
+            "timesfm2_5.modeling_timesfm2_5": {
+                "TimesFm2_5Model",
+                "TimesFm2_5ModelForPrediction",
+                "TimesFm2_5PreTrainedModel",
+            },
+            "timesfm.modeling_timesfm": {
+                "TimesFmModel",
+                "TimesFmModelForPrediction",
+                "TimesFmPreTrainedModel",
+            },
+            "timesformer.modeling_timesformer": {
+                "TimesformerForVideoClassification",
+                "TimesformerModel",
+                "TimesformerPreTrainedModel",
+            },
+            "timm_backbone.modeling_timm_backbone": {
+                "TimmBackbone",
+            },
+            "timm_wrapper.modeling_timm_wrapper": {
+                "TimmWrapperForImageClassification",
+                "TimmWrapperModel",
+                "TimmWrapperPreTrainedModel",
+            },
+            "tipsv2.modeling_tipsv2": {
+                "Tipsv2Model",
+                "Tipsv2PreTrainedModel",
+                "Tipsv2TextModel",
+                "Tipsv2TextPreTrainedModel",
+                "Tipsv2VisionBackbone",
+                "Tipsv2VisionModel",
+                "Tipsv2VisionPreTrainedModel",
+            },
+            "tipsv2_dpt.modeling_tipsv2_dpt": {
+                "Tipsv2DptForDensePrediction",
+                "Tipsv2DptForDepthEstimation",
+                "Tipsv2DptForNormalEstimation",
+                "Tipsv2DptForSemanticSegmentation",
+                "Tipsv2DptPreTrainedModel",
+            },
+            "trocr.modeling_trocr": {
+                "TrOCRForCausalLM",
+                "TrOCRPreTrainedModel",
+            },
+            "tvp.modeling_tvp": {
+                "TvpForVideoGrounding",
+                "TvpModel",
+                "TvpPreTrainedModel",
+            },
+            "udop.modeling_udop": {
+                "UdopEncoderModel",
+                "UdopForConditionalGeneration",
+                "UdopModel",
+                "UdopPreTrainedModel",
+            },
+            "ultrabert.modeling_ultrabert": {
+                "UltrabertForMaskedLM",
+                "UltrabertForQuestionAnswering",
+                "UltrabertForSequenceClassification",
+                "UltrabertForTokenClassification",
+                "UltrabertModel",
+                "UltrabertPreTrainedModel",
+            },
+            "ultravbert.modeling_ultravbert": {
+                "UltraVBertForMaskedLM",
+                "UltraVBertForSequenceClassification",
+                "UltraVBertForTokenClassification",
+                "UltraVBertModel",
+                "UltraVBertPreTrainedModel",
+            },
+            "umt5.modeling_umt5": {
+                "UMT5EncoderModel",
+                "UMT5ForConditionalGeneration",
+                "UMT5ForQuestionAnswering",
+                "UMT5ForSequenceClassification",
+                "UMT5ForTokenClassification",
+                "UMT5Model",
+                "UMT5PreTrainedModel",
+            },
+            "unispeech.modeling_unispeech": {
+                "UniSpeechForCTC",
+                "UniSpeechForPreTraining",
+                "UniSpeechForSequenceClassification",
+                "UniSpeechModel",
+                "UniSpeechPreTrainedModel",
+            },
+            "unispeech_sat.modeling_unispeech_sat": {
+                "UniSpeechSatForAudioFrameClassification",
+                "UniSpeechSatForCTC",
+                "UniSpeechSatForPreTraining",
+                "UniSpeechSatForSequenceClassification",
+                "UniSpeechSatForXVector",
+                "UniSpeechSatModel",
+                "UniSpeechSatPreTrainedModel",
+            },
+            "univnet.modeling_univnet": {
+                "UnivNetModel",
+            },
+            "unlimited_ocr.modeling_unlimited_ocr": {
+                "UnlimitedOcrForConditionalGeneration",
+                "UnlimitedOcrModel",
+                "UnlimitedOcrPreTrainedModel",
+                "UnlimitedOcrTextModel",
+                "UnlimitedOcrTextPreTrainedModel",
+                "UnlimitedOcrVisionModel",
+            },
+            "upernet.modeling_upernet": {
+                "UperNetForSemanticSegmentation",
+                "UperNetPreTrainedModel",
+            },
+            "uvdoc.modeling_uvdoc": {
+                "UVDocBackbone",
+                "UVDocBridge",
+                "UVDocModel",
+                "UVDocPreTrainedModel",
+            },
+            "vaultgemma.modeling_vaultgemma": {
+                "VaultGemmaForCausalLM",
+                "VaultGemmaModel",
+                "VaultGemmaPreTrainedModel",
+            },
+            "vibevoice.modeling_vibevoice": {
+                "VibeVoiceForConditionalGeneration",
+                "VibeVoiceModel",
+                "VibeVoicePreTrainedModel",
+            },
+            "vibevoice.processing_vibevoice": {
+                "VibeVoiceProcessor",
+            },
+            "vibevoice_acoustic_tokenizer.feature_extraction_vibevoice_acoustic_tokenizer": {
+                "VibeVoiceAcousticTokenizerFeatureExtractor",
+            },
+            "vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer": {
+                "VibeVoiceAcousticTokenizerDecoderModel",
+                "VibeVoiceAcousticTokenizerEncoderModel",
+                "VibeVoiceAcousticTokenizerModel",
+                "VibeVoiceAcousticTokenizerPreTrainedModel",
+            },
+            "vibevoice_asr.modeling_vibevoice_asr": {
+                "VibeVoiceAsrForConditionalGeneration",
+                "VibeVoiceAsrModel",
+                "VibeVoiceAsrPreTrainedModel",
+            },
+            "video_llama_3.modeling_video_llama_3": {
+                "VideoLlama3ForConditionalGeneration",
+                "VideoLlama3Model",
+                "VideoLlama3PreTrainedModel",
+                "VideoLlama3VisionModel",
+            },
+            "video_llava.modeling_video_llava": {
+                "VideoLlavaForConditionalGeneration",
+                "VideoLlavaModel",
+                "VideoLlavaPreTrainedModel",
+            },
+            "videomae.modeling_videomae": {
+                "VideoMAEForPreTraining",
+                "VideoMAEForVideoClassification",
+                "VideoMAEModel",
+                "VideoMAEPreTrainedModel",
+            },
+            "videomt.modeling_videomt": {
+                "VideomtForUniversalSegmentation",
+                "VideomtPreTrainedModel",
+            },
+            "videoprism.modeling_videoprism": {
+                "VideoPrismClipModel",
+                "VideoPrismForVideoClassification",
+                "VideoPrismPreTrainedModel",
+                "VideoPrismTextModel",
+                "VideoPrismVideoModel",
+                "VideoPrismVisionModel",
+            },
+            "vilt.modeling_vilt": {
+                "ViltForImageAndTextRetrieval",
+                "ViltForImagesAndTextClassification",
+                "ViltForMaskedLM",
+                "ViltForQuestionAnswering",
+                "ViltForTokenClassification",
+                "ViltLayer",
+                "ViltModel",
+                "ViltPreTrainedModel",
+            },
+            "vipllava.modeling_vipllava": {
+                "VipLlavaForConditionalGeneration",
+                "VipLlavaModel",
+                "VipLlavaPreTrainedModel",
+            },
+            "vision_encoder_decoder.modeling_vision_encoder_decoder": {
+                "VisionEncoderDecoderModel",
+            },
+            "vision_text_dual_encoder.modeling_vision_text_dual_encoder": {
+                "VisionTextDualEncoderModel",
+            },
+            "visual_bert.modeling_visual_bert": {
+                "VisualBertForMultipleChoice",
+                "VisualBertForPreTraining",
+                "VisualBertForQuestionAnswering",
+                "VisualBertForRegionToPhraseAlignment",
+                "VisualBertForVisualReasoning",
+                "VisualBertLayer",
+                "VisualBertModel",
+                "VisualBertPreTrainedModel",
+            },
+            "vit.modeling_vit": {
+                "ViTForImageClassification",
+                "ViTForMaskedImageModeling",
+                "ViTModel",
+                "ViTPreTrainedModel",
+            },
+            "vit_mae.modeling_vit_mae": {
+                "ViTMAEForPreTraining",
+                "ViTMAEModel",
+                "ViTMAEPreTrainedModel",
+            },
+            "vit_msn.modeling_vit_msn": {
+                "ViTMSNForImageClassification",
+                "ViTMSNModel",
+                "ViTMSNPreTrainedModel",
+            },
+            "vitdet.modeling_vitdet": {
+                "VitDetBackbone",
+                "VitDetModel",
+                "VitDetPreTrainedModel",
+            },
+            "vitmatte.modeling_vitmatte": {
+                "VitMatteForImageMatting",
+                "VitMattePreTrainedModel",
+            },
+            "vitpose.modeling_vitpose": {
+                "VitPoseForPoseEstimation",
+                "VitPosePreTrainedModel",
+            },
+            "vitpose_backbone.modeling_vitpose_backbone": {
+                "VitPoseBackbone",
+                "VitPoseBackbonePreTrainedModel",
+            },
+            "vits.modeling_vits": {
+                "VitsModel",
+                "VitsPreTrainedModel",
+            },
+            "vivit.modeling_vivit": {
+                "VivitForVideoClassification",
+                "VivitModel",
+                "VivitPreTrainedModel",
+            },
+            "vjepa2.modeling_vjepa2": {
+                "VJEPA2ForVideoClassification",
+                "VJEPA2Model",
+                "VJEPA2PreTrainedModel",
+            },
+            "voxtral.modeling_voxtral": {
+                "VoxtralEncoder",
+                "VoxtralForConditionalGeneration",
+                "VoxtralModel",
+                "VoxtralPreTrainedModel",
+            },
+            "voxtral.processing_voxtral": {
+                "VoxtralProcessor",
+            },
+            "voxtral_realtime.feature_extraction_voxtral_realtime": {
+                "VoxtralRealtimeFeatureExtractor",
+            },
+            "voxtral_realtime.modeling_voxtral_realtime": {
+                "VoxtralRealtimeEncoder",
+                "VoxtralRealtimeForConditionalGeneration",
+                "VoxtralRealtimeModel",
+                "VoxtralRealtimePreTrainedModel",
+            },
+            "wav2vec2.modeling_wav2vec2": {
+                "Wav2Vec2ForAudioFrameClassification",
+                "Wav2Vec2ForCTC",
+                "Wav2Vec2ForPreTraining",
+                "Wav2Vec2ForSequenceClassification",
+                "Wav2Vec2ForXVector",
+                "Wav2Vec2Model",
+                "Wav2Vec2PreTrainedModel",
+            },
+            "wav2vec2_bert.modeling_wav2vec2_bert": {
+                "Wav2Vec2BertForAudioFrameClassification",
+                "Wav2Vec2BertForCTC",
+                "Wav2Vec2BertForSequenceClassification",
+                "Wav2Vec2BertForXVector",
+                "Wav2Vec2BertModel",
+                "Wav2Vec2BertPreTrainedModel",
+            },
+            "wav2vec2_conformer.modeling_wav2vec2_conformer": {
+                "Wav2Vec2ConformerForAudioFrameClassification",
+                "Wav2Vec2ConformerForCTC",
+                "Wav2Vec2ConformerForPreTraining",
+                "Wav2Vec2ConformerForSequenceClassification",
+                "Wav2Vec2ConformerForXVector",
+                "Wav2Vec2ConformerModel",
+                "Wav2Vec2ConformerPreTrainedModel",
+            },
+            "wavlm.modeling_wavlm": {
+                "WavLMForAudioFrameClassification",
+                "WavLMForCTC",
+                "WavLMForSequenceClassification",
+                "WavLMForXVector",
+                "WavLMModel",
+                "WavLMPreTrainedModel",
+            },
+            "whisper.modeling_whisper": {
+                "WhisperForAudioClassification",
+                "WhisperForCausalLM",
+                "WhisperForConditionalGeneration",
+                "WhisperModel",
+                "WhisperPreTrainedModel",
+            },
+            "x_clip.modeling_x_clip": {
+                "XCLIPModel",
+                "XCLIPPreTrainedModel",
+                "XCLIPTextModel",
+                "XCLIPVisionModel",
+            },
+            "xcodec2.modeling_xcodec2": {
+                "Xcodec2Model",
+                "Xcodec2PreTrainedModel",
+            },
+            "xcodec.modeling_xcodec": {
+                "XcodecModel",
+                "XcodecPreTrainedModel",
+            },
+            "xglm.modeling_xglm": {
+                "XGLMForCausalLM",
+                "XGLMModel",
+                "XGLMPreTrainedModel",
+            },
+            "xlm.modeling_xlm": {
+                "XLMForMultipleChoice",
+                "XLMForQuestionAnswering",
+                "XLMForQuestionAnsweringSimple",
+                "XLMForSequenceClassification",
+                "XLMForTokenClassification",
+                "XLMModel",
+                "XLMPreTrainedModel",
+                "XLMWithLMHeadModel",
+            },
+            "xlm_roberta.modeling_xlm_roberta": {
+                "XLMRobertaForCausalLM",
+                "XLMRobertaForMaskedLM",
+                "XLMRobertaForMultipleChoice",
+                "XLMRobertaForQuestionAnswering",
+                "XLMRobertaForSequenceClassification",
+                "XLMRobertaForTokenClassification",
+                "XLMRobertaModel",
+                "XLMRobertaPreTrainedModel",
+            },
+            "xlm_roberta_xl.modeling_xlm_roberta_xl": {
+                "XLMRobertaXLForCausalLM",
+                "XLMRobertaXLForMaskedLM",
+                "XLMRobertaXLForMultipleChoice",
+                "XLMRobertaXLForQuestionAnswering",
+                "XLMRobertaXLForSequenceClassification",
+                "XLMRobertaXLForTokenClassification",
+                "XLMRobertaXLModel",
+                "XLMRobertaXLPreTrainedModel",
+            },
+            "xlnet.modeling_xlnet": {
+                "XLNetForMultipleChoice",
+                "XLNetForQuestionAnswering",
+                "XLNetForQuestionAnsweringSimple",
+                "XLNetForSequenceClassification",
+                "XLNetForTokenClassification",
+                "XLNetLMHeadModel",
+                "XLNetModel",
+                "XLNetPreTrainedModel",
+            },
+            "xlstm.modeling_xlstm": {
+                "xLSTMForCausalLM",
+                "xLSTMModel",
+                "xLSTMPreTrainedModel",
+            },
+            "xmod.modeling_xmod": {
+                "XmodForCausalLM",
+                "XmodForMaskedLM",
+                "XmodForMultipleChoice",
+                "XmodForQuestionAnswering",
+                "XmodForSequenceClassification",
+                "XmodForTokenClassification",
+                "XmodModel",
+                "XmodPreTrainedModel",
+            },
+            "yolos.modeling_yolos": {
+                "YolosForObjectDetection",
+                "YolosModel",
+                "YolosPreTrainedModel",
+            },
+            "yoso.modeling_yoso": {
+                "YosoForMaskedLM",
+                "YosoForMultipleChoice",
+                "YosoForQuestionAnswering",
+                "YosoForSequenceClassification",
+                "YosoForTokenClassification",
+                "YosoLayer",
+                "YosoModel",
+                "YosoPreTrainedModel",
+            },
+            "youtu.modeling_youtu": {
+                "YoutuForCausalLM",
+                "YoutuModel",
+                "YoutuPreTrainedModel",
+            },
+            "zamba2.modeling_zamba2": {
+                "Zamba2ForCausalLM",
+                "Zamba2ForSequenceClassification",
+                "Zamba2Model",
+                "Zamba2PreTrainedModel",
+            },
+            "zamba.modeling_zamba": {
+                "ZambaForCausalLM",
+                "ZambaForSequenceClassification",
+                "ZambaModel",
+                "ZambaPreTrainedModel",
+            },
+            "zaya.modeling_zaya": {
+                "ZayaForCausalLM",
+                "ZayaModel",
+                "ZayaPreTrainedModel",
+            },
+            "zoedepth.modeling_zoedepth": {
+                "ZoeDepthForDepthEstimation",
+                "ZoeDepthPreTrainedModel",
+            },
+        },
+        frozenset({"torch", "torchaudio"}): {
+            "fun_asr_nano.feature_extraction_fun_asr_nano": {
+                "FunAsrNanoFeatureExtractor",
+            },
+            "granite_speech5.feature_extraction_granite_speech5": {
+                "GraniteSpeech5FeatureExtractor",
+            },
+            "higgs_audio_v2_tokenizer.modeling_higgs_audio_v2_tokenizer": {
+                "HiggsAudioV2TokenizerModel",
+                "HiggsAudioV2TokenizerPreTrainedModel",
+            },
+        },
+        frozenset({"torch", "torchvision"}): {
+            "pixtral.processing_pixtral": {
+                "PixtralProcessor",
+            },
+            "sam3.modeling_sam3": {
+                "Sam3PreTrainedModel",
+            },
+            "sam3_video.processing_sam3_video": {
+                "Sam3VideoProcessor",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "aria.image_processing_aria": {
+                "AriaImageProcessor",
+            },
+            "auto.video_processing_auto": {
+                "AutoVideoProcessor",
+                "VIDEO_PROCESSOR_MAPPING",
+            },
+            "beit.image_processing_beit": {
+                "BeitImageProcessor",
+            },
+            "bit.image_processing_bit": {
+                "BitImageProcessor",
+            },
+            "blip.image_processing_blip": {
+                "BlipImageProcessor",
+            },
+            "bridgetower.image_processing_bridgetower": {
+                "BridgeTowerImageProcessor",
+            },
+            "chameleon.image_processing_chameleon": {
+                "ChameleonImageProcessor",
+            },
+            "chinese_clip.image_processing_chinese_clip": {
+                "ChineseCLIPImageProcessor",
+            },
+            "chmv2.image_processing_chmv2": {
+                "CHMv2ImageProcessor",
+            },
+            "clip.image_processing_clip": {
+                "CLIPImageProcessor",
+            },
+            "cohere2_vision.image_processing_cohere2_vision": {
+                "Cohere2VisionImageProcessor",
+            },
+            "cohere_compass.image_processing_cohere_compass": {
+                "CohereCompassImageProcessor",
+            },
+            "cohere_compass.video_processing_cohere_compass": {
+                "CohereCompassVideoProcessor",
+            },
+            "conditional_detr.image_processing_conditional_detr": {
+                "ConditionalDetrImageProcessor",
+            },
+            "convnext.image_processing_convnext": {
+                "ConvNextImageProcessor",
+            },
+            "cosmos3_edge.image_processing_cosmos3_edge": {
+                "Cosmos3EdgeImageProcessor",
+            },
+            "cosmos3_edge.video_processing_cosmos3_edge": {
+                "Cosmos3EdgeVideoProcessor",
+            },
+            "deepseek_ocr2.image_processing_deepseek_ocr2": {
+                "DeepseekOcr2ImageProcessor",
+            },
+            "deepseek_vl.image_processing_deepseek_vl": {
+                "DeepseekVLImageProcessor",
+            },
+            "deepseek_vl_hybrid.image_processing_deepseek_vl_hybrid": {
+                "DeepseekVLHybridImageProcessor",
+            },
+            "deformable_detr.image_processing_deformable_detr": {
+                "DeformableDetrImageProcessor",
+            },
+            "deit.image_processing_deit": {
+                "DeiTImageProcessor",
+            },
+            "depth_pro.image_processing_depth_pro": {
+                "DepthProImageProcessor",
+            },
+            "detr.image_processing_detr": {
+                "DetrImageProcessor",
+            },
+            "dinov3_vit.image_processing_dinov3_vit": {
+                "DINOv3ViTImageProcessor",
+            },
+            "donut.image_processing_donut": {
+                "DonutImageProcessor",
+            },
+            "dpt.image_processing_dpt": {
+                "DPTImageProcessor",
+            },
+            "efficientloftr.image_processing_efficientloftr": {
+                "EfficientLoFTRImageProcessor",
+            },
+            "efficientnet.image_processing_efficientnet": {
+                "EfficientNetImageProcessor",
+            },
+            "embedding_gemma2.video_processing_embedding_gemma2": {
+                "EmbeddingGemma2VideoProcessor",
+            },
+            "eomt.image_processing_eomt": {
+                "EomtImageProcessor",
+            },
+            "ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeImageProcessor",
+                "Ernie4_5_VL_MoeImageProcessor",
+            },
+            "ernie4_5_vl_moe.video_processing_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeVideoProcessor",
+            },
+            "flava.image_processing_flava": {
+                "FlavaImageProcessor",
+            },
+            "fuyu.image_processing_fuyu": {
+                "FuyuImageProcessor",
+            },
+            "gemma3.image_processing_gemma3": {
+                "Gemma3ImageProcessor",
+            },
+            "gemma4.image_processing_gemma4": {
+                "Gemma4ImageProcessor",
+            },
+            "gemma4.video_processing_gemma4": {
+                "Gemma4VideoProcessor",
+            },
+            "gemma4_unified.image_processing_gemma4_unified": {
+                "Gemma4UnifiedImageProcessor",
+            },
+            "gemma4_unified.video_processing_gemma4_unified": {
+                "Gemma4UnifiedVideoProcessor",
+            },
+            "glm4v.image_processing_glm4v": {
+                "Glm4vImageProcessor",
+            },
+            "glm4v.video_processing_glm4v": {
+                "Glm4vVideoProcessor",
+            },
+            "glm5_next.image_processing_glm5_next": {
+                "Glm5NextImageProcessor",
+            },
+            "glm5_next.video_processing_glm5_next": {
+                "Glm5NextVideoProcessor",
+            },
+            "glm46v.image_processing_glm46v": {
+                "Glm46VImageProcessor",
+            },
+            "glm46v.video_processing_glm46v": {
+                "Glm46VVideoProcessor",
+            },
+            "glm_image.image_processing_glm_image": {
+                "GlmImageImageProcessor",
+            },
+            "glmga.image_processing_glmga": {
+                "GlmgaImageProcessor",
+            },
+            "glmga.video_processing_glmga": {
+                "GlmgaVideoProcessor",
+            },
+            "glpn.image_processing_glpn": {
+                "GLPNImageProcessor",
+            },
+            "got_ocr2.image_processing_got_ocr2": {
+                "GotOcr2ImageProcessor",
+            },
+            "grounding_dino.image_processing_grounding_dino": {
+                "GroundingDinoImageProcessor",
+            },
+            "hunyuan_vl.image_processing_hunyuan_vl": {
+                "HunYuanVLImageProcessor",
+            },
+            "idefics2.image_processing_idefics2": {
+                "Idefics2ImageProcessor",
+            },
+            "idefics3.image_processing_idefics3": {
+                "Idefics3ImageProcessor",
+            },
+            "idefics.image_processing_idefics": {
+                "IdeficsImageProcessor",
+            },
+            "imagegpt.image_processing_imagegpt": {
+                "ImageGPTImageProcessor",
+            },
+            "inkling.image_processing_inkling": {
+                "InklingImageProcessor",
+            },
+            "instructblipvideo.video_processing_instructblipvideo": {
+                "InstructBlipVideoVideoProcessor",
+            },
+            "internvl.video_processing_internvl": {
+                "InternVLVideoProcessor",
+            },
+            "janus.image_processing_janus": {
+                "JanusImageProcessor",
+            },
+            "kimi_k25.image_processing_kimi_k25": {
+                "Kimi_K25ImageProcessor",
+            },
+            "kimi_k25.video_processing_kimi_k25": {
+                "Kimi_K25VideoProcessor",
+            },
+            "kosmos2_5.image_processing_kosmos2_5": {
+                "Kosmos2_5ImageProcessor",
+            },
+            "layoutlmv2.image_processing_layoutlmv2": {
+                "LayoutLMv2ImageProcessor",
+            },
+            "layoutlmv3.image_processing_layoutlmv3": {
+                "LayoutLMv3ImageProcessor",
+            },
+            "levit.image_processing_levit": {
+                "LevitImageProcessor",
+            },
+            "lfm2_vl.image_processing_lfm2_vl": {
+                "Lfm2VlImageProcessor",
+            },
+            "lightglue.image_processing_lightglue": {
+                "LightGlueImageProcessor",
+            },
+            "llama4.image_processing_llama4": {
+                "Llama4ImageProcessor",
+            },
+            "llava.image_processing_llava": {
+                "LlavaImageProcessor",
+            },
+            "llava_next.image_processing_llava_next": {
+                "LlavaNextImageProcessor",
+            },
+            "llava_next_video.video_processing_llava_next_video": {
+                "LlavaNextVideoVideoProcessor",
+            },
+            "llava_onevision.image_processing_llava_onevision": {
+                "LlavaOnevisionImageProcessor",
+            },
+            "llava_onevision.video_processing_llava_onevision": {
+                "LlavaOnevisionVideoProcessor",
+            },
+            "mask2former.image_processing_mask2former": {
+                "Mask2FormerImageProcessor",
+            },
+            "maskformer.image_processing_maskformer": {
+                "MaskFormerImageProcessor",
+            },
+            "minicpm_ocr.image_processing_minicpm_ocr": {
+                "MiniCPMOcrImageProcessor",
+            },
+            "minicpm_ocr.video_processing_minicpm_ocr": {
+                "MiniCPMOcrVideoProcessor",
+            },
+            "minicpmv4_6.image_processing_minicpmv4_6": {
+                "MiniCPMV4_6ImageProcessor",
+            },
+            "minicpmv4_6.video_processing_minicpmv4_6": {
+                "MiniCPMV4_6VideoProcessor",
+            },
+            "minimax_m3_vl.image_processing_minimax_m3_vl": {
+                "MiniMaxM3VLImageProcessor",
+            },
+            "minimax_m3_vl.video_processing_minimax_m3_vl": {
+                "MiniMaxM3VLVideoProcessor",
+            },
+            "mllama.image_processing_mllama": {
+                "MllamaImageProcessor",
+            },
+            "mobilenet_v1.image_processing_mobilenet_v1": {
+                "MobileNetV1ImageProcessor",
+            },
+            "mobilenet_v2.image_processing_mobilenet_v2": {
+                "MobileNetV2ImageProcessor",
+            },
+            "mobilevit.image_processing_mobilevit": {
+                "MobileViTImageProcessor",
+            },
+            "molmo2.image_processing_molmo2": {
+                "Molmo2ImageProcessor",
+            },
+            "molmo2.video_processing_molmo2": {
+                "Molmo2VideoProcessor",
+            },
+            "muse_glimmer.image_processing_muse_glimmer": {
+                "MuseGlimmerImageProcessor",
+            },
+            "muse_glimmer.video_processing_muse_glimmer": {
+                "MuseGlimmerVideoProcessor",
+            },
+            "nemotron_h_omni.image_processing_nemotron_h_omni": {
+                "NemotronH_Omni_Reasoning_V3ImageProcessor",
+            },
+            "nemotron_h_omni.video_processing_nemotron_h_omni": {
+                "NemotronH_Omni_Reasoning_V3VideoProcessor",
+            },
+            "neomme.image_processing_neomme": {
+                "NeoMMEImageProcessor",
+            },
+            "nougat.image_processing_nougat": {
+                "NougatImageProcessor",
+            },
+            "oneformer.image_processing_oneformer": {
+                "OneFormerImageProcessor",
+            },
+            "ovis2.image_processing_ovis2": {
+                "Ovis2ImageProcessor",
+            },
+            "owlv2.image_processing_owlv2": {
+                "Owlv2ImageProcessor",
+            },
+            "owlvit.image_processing_owlvit": {
+                "OwlViTImageProcessor",
+            },
+            "paddleocr_vl.image_processing_paddleocr_vl": {
+                "PaddleOCRVLImageProcessor",
+            },
+            "pe_video.video_processing_pe_video": {
+                "PeVideoVideoProcessor",
+            },
+            "perceiver.image_processing_perceiver": {
+                "PerceiverImageProcessor",
+            },
+            "perception_lm.image_processing_perception_lm": {
+                "PerceptionLMImageProcessor",
+            },
+            "perception_lm.video_processing_perception_lm": {
+                "PerceptionLMVideoProcessor",
+            },
+            "phi4_multimodal.image_processing_phi4_multimodal": {
+                "Phi4MultimodalImageProcessor",
+            },
+            "pi0.image_processing_pi0": {
+                "PI0ImageProcessor",
+            },
+            "pix2struct.image_processing_pix2struct": {
+                "Pix2StructImageProcessor",
+            },
+            "pixtral.image_processing_pixtral": {
+                "PixtralImageProcessor",
+            },
+            "poolformer.image_processing_poolformer": {
+                "PoolFormerImageProcessor",
+            },
+            "pp_chart2table.image_processing_pp_chart2table": {
+                "PPChart2TableImageProcessor",
+            },
+            "pp_doclayout_v2.image_processing_pp_doclayout_v2": {
+                "PPDocLayoutV2ImageProcessor",
+            },
+            "pp_doclayout_v3.image_processing_pp_doclayout_v3": {
+                "PPDocLayoutV3ImageProcessor",
+            },
+            "pp_doclayout_v4.image_processing_pp_doclayout_v4": {
+                "PPDocLayoutV4ImageProcessor",
+            },
+            "pp_formulanet.image_processing_pp_formulanet": {
+                "PPFormulaNetImageProcessor",
+            },
+            "pp_lcnet.image_processing_pp_lcnet": {
+                "PPLCNetImageProcessor",
+            },
+            "pp_ocrv5_server_det.image_processing_pp_ocrv5_server_det": {
+                "PPOCRV5ServerDetImageProcessor",
+            },
+            "pp_ocrv5_server_rec.image_processing_pp_ocrv5_server_rec": {
+                "PPOCRV5ServerRecImageProcessor",
+            },
+            "pp_ocrv6_small_rec.image_processing_pp_ocrv6_small_rec": {
+                "PPOCRV6SmallRecImageProcessor",
+            },
+            "prompt_depth_anything.image_processing_prompt_depth_anything": {
+                "PromptDepthAnythingImageProcessor",
+            },
+            "pvt.image_processing_pvt": {
+                "PvtImageProcessor",
+            },
+            "qwen2_vl.image_processing_qwen2_vl": {
+                "Qwen2VLImageProcessor",
+            },
+            "qwen2_vl.video_processing_qwen2_vl": {
+                "Qwen2VLVideoProcessor",
+            },
+            "qwen3_vl.video_processing_qwen3_vl": {
+                "Qwen3VLVideoProcessor",
+            },
+            "rf_detr.image_processing_rf_detr": {
+                "RfDetrImageProcessor",
+            },
+            "rt_detr.image_processing_rt_detr": {
+                "RTDetrImageProcessor",
+            },
+            "sam2.image_processing_sam2": {
+                "Sam2ImageProcessor",
+            },
+            "sam2_video.video_processing_sam2_video": {
+                "Sam2VideoVideoProcessor",
+            },
+            "sam3.image_processing_sam3": {
+                "Sam3ImageProcessor",
+            },
+            "sam.image_processing_sam": {
+                "SamImageProcessor",
+            },
+            "sapiens2.image_processing_sapiens2": {
+                "Sapiens2ImageProcessor",
+            },
+            "segformer.image_processing_segformer": {
+                "SegformerImageProcessor",
+            },
+            "seggpt.image_processing_seggpt": {
+                "SegGptImageProcessor",
+            },
+            "siglip2.image_processing_siglip2": {
+                "Siglip2ImageProcessor",
+            },
+            "siglip.image_processing_siglip": {
+                "SiglipImageProcessor",
+            },
+            "slanext.image_processing_slanext": {
+                "SLANeXtImageProcessor",
+            },
+            "smolvlm.image_processing_smolvlm": {
+                "SmolVLMImageProcessor",
+            },
+            "smolvlm.video_processing_smolvlm": {
+                "SmolVLMVideoProcessor",
+            },
+            "step3p7.image_processing_step3p7": {
+                "Step3p7ImageProcessor",
+            },
+            "superglue.image_processing_superglue": {
+                "SuperGlueImageProcessor",
+            },
+            "superpoint.image_processing_superpoint": {
+                "SuperPointImageProcessor",
+            },
+            "swin2sr.image_processing_swin2sr": {
+                "Swin2SRImageProcessor",
+            },
+            "textnet.image_processing_textnet": {
+                "TextNetImageProcessor",
+            },
+            "timesformer.video_processing_timesformer": {
+                "TimesformerVideoProcessor",
+            },
+            "tipsv2.image_processing_tipsv2": {
+                "Tipsv2ImageProcessor",
+            },
+            "tipsv2_dpt.image_processing_tipsv2_dpt": {
+                "Tipsv2DptImageProcessor",
+            },
+            "tvp.image_processing_tvp": {
+                "TvpImageProcessor",
+            },
+            "ultravbert.image_processing_ultravbert": {
+                "UltraVBertImageProcessor",
+            },
+            "unlimited_ocr.image_processing_unlimited_ocr": {
+                "UnlimitedOcrImageProcessor",
+            },
+            "uvdoc.image_processing_uvdoc": {
+                "UVDocImageProcessor",
+            },
+            "video_llama_3.image_processing_video_llama_3": {
+                "VideoLlama3ImageProcessor",
+            },
+            "video_llama_3.video_processing_video_llama_3": {
+                "VideoLlama3VideoProcessor",
+            },
+            "video_llava.video_processing_video_llava": {
+                "VideoLlavaVideoProcessor",
+            },
+            "videomae.image_processing_videomae": {
+                "VideoMAEImageProcessor",
+            },
+            "videomae.video_processing_videomae": {
+                "VideoMAEVideoProcessor",
+            },
+            "videomt.video_processing_videomt": {
+                "VideomtVideoProcessor",
+            },
+            "vilt.image_processing_vilt": {
+                "ViltImageProcessor",
+            },
+            "vit.image_processing_vit": {
+                "ViTImageProcessor",
+            },
+            "vitmatte.image_processing_vitmatte": {
+                "VitMatteImageProcessor",
+            },
+            "vitpose.image_processing_vitpose": {
+                "VitPoseImageProcessor",
+            },
+            "vivit.video_processing_vivit": {
+                "VivitVideoProcessor",
+            },
+            "vjepa2.video_processing_vjepa2": {
+                "VJEPA2VideoProcessor",
+            },
+            "yolos.image_processing_yolos": {
+                "YolosImageProcessor",
+            },
+            "zoedepth.image_processing_zoedepth": {
+                "ZoeDepthImageProcessor",
+            },
+        },
+        frozenset({"torch", "vision"}): {
+            "eomt.image_processing_pil_eomt": {
+                "EomtImageProcessorPil",
+            },
+            "fuyu.image_processing_pil_fuyu": {
+                "FuyuImageProcessorPil",
+            },
+            "kosmos2_5.image_processing_pil_kosmos2_5": {
+                "Kosmos2_5ImageProcessorPil",
+            },
+            "mask2former.image_processing_pil_mask2former": {
+                "Mask2FormerImageProcessorPil",
+            },
+            "maskformer.image_processing_pil_maskformer": {
+                "MaskFormerImageProcessorPil",
+            },
+            "oneformer.image_processing_pil_oneformer": {
+                "OneFormerImageProcessorPil",
+            },
+            "pi0.processing_pi0": {
+                "PI0Processor",
+            },
+            "pix2struct.image_processing_pil_pix2struct": {
+                "Pix2StructImageProcessorPil",
+            },
+            "zoedepth.image_processing_pil_zoedepth": {
+                "ZoeDepthImageProcessorPil",
+            },
+        },
+        frozenset({"torchaudio"}): {
+            "musicgen_melody.feature_extraction_musicgen_melody": {
+                "MusicgenMelodyFeatureExtractor",
+            },
+            "musicgen_melody.processing_musicgen_melody": {
+                "MusicgenMelodyProcessor",
+            },
+            "neucodec.feature_extraction_neucodec": {
+                "NeuCodecFeatureExtractor",
+            },
+            "xcodec2.feature_extraction_xcodec2": {
+                "Xcodec2FeatureExtractor",
+            },
+        },
+        frozenset({"torchvision", "vision"}): {
+            "omdet_turbo.processing_omdet_turbo": {
+                "OmDetTurboProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "aria.image_processing_pil_aria": {
+                "AriaImageProcessorPil",
+            },
+            "auto.image_processing_auto": {
+                "AutoImageProcessor",
+                "IMAGE_PROCESSOR_MAPPING",
+            },
+            "beit.image_processing_pil_beit": {
+                "BeitImageProcessorPil",
+            },
+            "bit.image_processing_pil_bit": {
+                "BitImageProcessorPil",
+            },
+            "blip.image_processing_pil_blip": {
+                "BlipImageProcessorPil",
+            },
+            "bridgetower.image_processing_pil_bridgetower": {
+                "BridgeTowerImageProcessorPil",
+            },
+            "chameleon.image_processing_pil_chameleon": {
+                "ChameleonImageProcessorPil",
+            },
+            "chinese_clip.image_processing_pil_chinese_clip": {
+                "ChineseCLIPImageProcessorPil",
+            },
+            "clip.image_processing_pil_clip": {
+                "CLIPImageProcessorPil",
+            },
+            "cohere_compass.image_processing_pil_cohere_compass": {
+                "CohereCompassImageProcessorPil",
+            },
+            "conditional_detr.image_processing_pil_conditional_detr": {
+                "ConditionalDetrImageProcessorPil",
+            },
+            "convnext.image_processing_pil_convnext": {
+                "ConvNextImageProcessorPil",
+            },
+            "cosmos3_edge.image_processing_pil_cosmos3_edge": {
+                "Cosmos3EdgeImageProcessorPil",
+            },
+            "deepseek_ocr2.image_processing_pil_deepseek_ocr2": {
+                "DeepseekOcr2ImageProcessorPil",
+            },
+            "deepseek_vl.image_processing_pil_deepseek_vl": {
+                "DeepseekVLImageProcessorPil",
+            },
+            "deepseek_vl_hybrid.image_processing_pil_deepseek_vl_hybrid": {
+                "DeepseekVLHybridImageProcessorPil",
+            },
+            "deformable_detr.image_processing_pil_deformable_detr": {
+                "DeformableDetrImageProcessorPil",
+            },
+            "deit.image_processing_pil_deit": {
+                "DeiTImageProcessorPil",
+            },
+            "detr.image_processing_pil_detr": {
+                "DetrImageProcessorPil",
+            },
+            "donut.image_processing_pil_donut": {
+                "DonutImageProcessorPil",
+            },
+            "dpt.image_processing_pil_dpt": {
+                "DPTImageProcessorPil",
+            },
+            "efficientloftr.image_processing_pil_efficientloftr": {
+                "EfficientLoFTRImageProcessorPil",
+            },
+            "efficientnet.image_processing_pil_efficientnet": {
+                "EfficientNetImageProcessorPil",
+            },
+            "emu3.image_processing_emu3": {
+                "Emu3ImageProcessor",
+            },
+            "emu3.processing_emu3": {
+                "Emu3Processor",
+            },
+            "ernie4_5_vl_moe.image_processing_pil_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeImageProcessorPil",
+                "Ernie4_5_VL_MoeImageProcessorPil",
+            },
+            "flava.image_processing_pil_flava": {
+                "FlavaImageProcessorPil",
+            },
+            "fuyu.processing_fuyu": {
+                "FuyuProcessor",
+            },
+            "gemma3.image_processing_pil_gemma3": {
+                "Gemma3ImageProcessorPil",
+            },
+            "gemma4.image_processing_pil_gemma4": {
+                "Gemma4ImageProcessorPil",
+            },
+            "glm4v.image_processing_pil_glm4v": {
+                "Glm4vImageProcessorPil",
+            },
+            "glm5_next.image_processing_pil_glm5_next": {
+                "Glm5NextImageProcessorPil",
+            },
+            "glm46v.image_processing_pil_glm46v": {
+                "Glm46VImageProcessorPil",
+            },
+            "glm_image.image_processing_pil_glm_image": {
+                "GlmImageImageProcessorPil",
+            },
+            "glmga.image_processing_pil_glmga": {
+                "GlmgaImageProcessorPil",
+            },
+            "glpn.image_processing_pil_glpn": {
+                "GLPNImageProcessorPil",
+            },
+            "got_ocr2.image_processing_pil_got_ocr2": {
+                "GotOcr2ImageProcessorPil",
+            },
+            "grounding_dino.image_processing_pil_grounding_dino": {
+                "GroundingDinoImageProcessorPil",
+            },
+            "hunyuan_vl.image_processing_pil_hunyuan_vl": {
+                "HunYuanVLImageProcessorPil",
+            },
+            "idefics2.image_processing_pil_idefics2": {
+                "Idefics2ImageProcessorPil",
+            },
+            "idefics3.image_processing_pil_idefics3": {
+                "Idefics3ImageProcessorPil",
+            },
+            "idefics.image_processing_pil_idefics": {
+                "IdeficsImageProcessorPil",
+            },
+            "imagegpt.image_processing_pil_imagegpt": {
+                "ImageGPTImageProcessorPil",
+            },
+            "janus.image_processing_pil_janus": {
+                "JanusImageProcessorPil",
+            },
+            "layoutlmv2.image_processing_pil_layoutlmv2": {
+                "LayoutLMv2ImageProcessorPil",
+            },
+            "layoutlmv3.image_processing_pil_layoutlmv3": {
+                "LayoutLMv3ImageProcessorPil",
+            },
+            "levit.image_processing_pil_levit": {
+                "LevitImageProcessorPil",
+            },
+            "lightglue.image_processing_pil_lightglue": {
+                "LightGlueImageProcessorPil",
+            },
+            "llava.image_processing_pil_llava": {
+                "LlavaImageProcessorPil",
+            },
+            "llava_next.image_processing_pil_llava_next": {
+                "LlavaNextImageProcessorPil",
+            },
+            "llava_onevision.image_processing_pil_llava_onevision": {
+                "LlavaOnevisionImageProcessorPil",
+            },
+            "minicpmv4_6.image_processing_pil_minicpmv4_6": {
+                "MiniCPMV4_6ImageProcessorPil",
+            },
+            "mllama.image_processing_pil_mllama": {
+                "MllamaImageProcessorPil",
+            },
+            "mobilenet_v1.image_processing_pil_mobilenet_v1": {
+                "MobileNetV1ImageProcessorPil",
+            },
+            "mobilenet_v2.image_processing_pil_mobilenet_v2": {
+                "MobileNetV2ImageProcessorPil",
+            },
+            "mobilevit.image_processing_pil_mobilevit": {
+                "MobileViTImageProcessorPil",
+            },
+            "nougat.image_processing_pil_nougat": {
+                "NougatImageProcessorPil",
+            },
+            "ovis2.image_processing_pil_ovis2": {
+                "Ovis2ImageProcessorPil",
+            },
+            "owlv2.image_processing_pil_owlv2": {
+                "Owlv2ImageProcessorPil",
+            },
+            "owlvit.image_processing_pil_owlvit": {
+                "OwlViTImageProcessorPil",
+            },
+            "paddleocr_vl.image_processing_pil_paddleocr_vl": {
+                "PaddleOCRVLImageProcessorPil",
+            },
+            "perceiver.image_processing_pil_perceiver": {
+                "PerceiverImageProcessorPil",
+            },
+            "pixtral.image_processing_pil_pixtral": {
+                "PixtralImageProcessorPil",
+            },
+            "poolformer.image_processing_pil_poolformer": {
+                "PoolFormerImageProcessorPil",
+            },
+            "pp_chart2table.image_processing_pil_pp_chart2table": {
+                "PPChart2TableImageProcessorPil",
+            },
+            "prompt_depth_anything.image_processing_pil_prompt_depth_anything": {
+                "PromptDepthAnythingImageProcessorPil",
+            },
+            "pvt.image_processing_pil_pvt": {
+                "PvtImageProcessorPil",
+            },
+            "qwen2_vl.image_processing_pil_qwen2_vl": {
+                "Qwen2VLImageProcessorPil",
+            },
+            "rt_detr.image_processing_pil_rt_detr": {
+                "RTDetrImageProcessorPil",
+            },
+            "sam.image_processing_pil_sam": {
+                "SamImageProcessorPil",
+            },
+            "segformer.image_processing_pil_segformer": {
+                "SegformerImageProcessorPil",
+            },
+            "seggpt.image_processing_pil_seggpt": {
+                "SegGptImageProcessorPil",
+            },
+            "siglip2.image_processing_pil_siglip2": {
+                "Siglip2ImageProcessorPil",
+            },
+            "siglip.image_processing_pil_siglip": {
+                "SiglipImageProcessorPil",
+            },
+            "smolvlm.image_processing_pil_smolvlm": {
+                "SmolVLMImageProcessorPil",
+            },
+            "superglue.image_processing_pil_superglue": {
+                "SuperGlueImageProcessorPil",
+            },
+            "superpoint.image_processing_pil_superpoint": {
+                "SuperPointImageProcessorPil",
+            },
+            "swin2sr.image_processing_pil_swin2sr": {
+                "Swin2SRImageProcessorPil",
+            },
+            "textnet.image_processing_pil_textnet": {
+                "TextNetImageProcessorPil",
+            },
+            "tvp.image_processing_pil_tvp": {
+                "TvpImageProcessorPil",
+            },
+            "video_llama_3.image_processing_pil_video_llama_3": {
+                "VideoLlama3ImageProcessorPil",
+            },
+            "video_llava.image_processing_video_llava": {
+                "VideoLlavaImageProcessor",
+            },
+            "videomae.image_processing_pil_videomae": {
+                "VideoMAEImageProcessorPil",
+            },
+            "vilt.image_processing_pil_vilt": {
+                "ViltImageProcessorPil",
+            },
+            "vit.image_processing_pil_vit": {
+                "ViTImageProcessorPil",
+            },
+            "vitmatte.image_processing_pil_vitmatte": {
+                "VitMatteImageProcessorPil",
+            },
+            "vitpose.image_processing_pil_vitpose": {
+                "VitPoseImageProcessorPil",
+            },
+            "vivit.image_processing_vivit": {
+                "VivitImageProcessor",
+            },
+            "yolos.image_processing_pil_yolos": {
+                "YolosImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__,
+        _file,
+        _import_structure,
+        module_spec=__spec__,
+        extra_objects={"_import_structure_by_backend": _import_structure},
+    )

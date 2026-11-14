@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -33,5 +32,38 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_video_llama_3": {
+                "VideoLlama3Config",
+                "VideoLlama3VisionConfig",
+            },
+            "processing_video_llama_3": {
+                "VideoLlama3Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_video_llama_3": {
+                "VideoLlama3ForConditionalGeneration",
+                "VideoLlama3Model",
+                "VideoLlama3PreTrainedModel",
+                "VideoLlama3VisionModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_video_llama_3": {
+                "VideoLlama3ImageProcessor",
+            },
+            "video_processing_video_llama_3": {
+                "VideoLlama3VideoProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_video_llama_3": {
+                "VideoLlama3ImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

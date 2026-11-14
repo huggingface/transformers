@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -33,5 +32,45 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_data2vec_audio": {
+                "Data2VecAudioConfig",
+            },
+            "configuration_data2vec_text": {
+                "Data2VecTextConfig",
+            },
+            "configuration_data2vec_vision": {
+                "Data2VecVisionConfig",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_data2vec_audio": {
+                "Data2VecAudioForAudioFrameClassification",
+                "Data2VecAudioForCTC",
+                "Data2VecAudioForSequenceClassification",
+                "Data2VecAudioForXVector",
+                "Data2VecAudioModel",
+                "Data2VecAudioPreTrainedModel",
+            },
+            "modeling_data2vec_text": {
+                "Data2VecTextForCausalLM",
+                "Data2VecTextForMaskedLM",
+                "Data2VecTextForMultipleChoice",
+                "Data2VecTextForQuestionAnswering",
+                "Data2VecTextForSequenceClassification",
+                "Data2VecTextForTokenClassification",
+                "Data2VecTextModel",
+                "Data2VecTextPreTrainedModel",
+            },
+            "modeling_data2vec_vision": {
+                "Data2VecVisionForImageClassification",
+                "Data2VecVisionForSemanticSegmentation",
+                "Data2VecVisionModel",
+                "Data2VecVisionPreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
