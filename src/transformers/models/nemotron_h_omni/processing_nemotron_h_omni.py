@@ -21,7 +21,7 @@ import numpy as np
 from ...audio_utils import load_audio
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 from ...utils.deprecation import deprecate_attr
@@ -249,6 +249,33 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         for _ in range(num_layers):
             length = (length + add_pad) // stride + 1
         return length
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            merge_size = round(1 / images_kwargs.get("downsample_ratio", self.image_processor.downsample_ratio))
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs, len(image_sizes))
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_patches // merge_size**2 for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """Forward to the tokenizer's [`~PreTrainedTokenizer.batch_decode`]."""

@@ -170,8 +170,7 @@ class InternVLProcessor(ProcessorMixin):
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            # Add 2 for BOI and EOI tokens
-            num_image_tokens = [2 + (self.image_seq_length * num_patches) for num_patches in num_image_patches]
+            num_image_tokens = [self.image_seq_length * num_patches for num_patches in num_image_patches]
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)

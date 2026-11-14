@@ -18,7 +18,7 @@ Processor class for SmolVLM.
 from datetime import timedelta
 
 from ...image_utils import make_nested_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_num2words_available, logging
 from ...utils.deprecation import deprecate_attr
 
@@ -275,6 +275,36 @@ class SmolVLMProcessor(ProcessorMixin):
     @property
     def unused_input_names(self) -> list[str]:
         return ["rows", "cols", "video_metadata"]
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+
+            num_image_tokens = []
+            num_image_patches = []
+            for image_size in image_sizes:
+                _, num_rows, num_cols = self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                # Each split crop plus the global image
+                num_crops = num_rows * num_cols + 1
+                num_image_tokens.append(self.image_seq_len * num_crops)
+                num_image_patches.append(num_crops)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"SmolVLMProcessorKwargs": (ProcessingKwargs, "5.29.0")})

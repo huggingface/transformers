@@ -487,6 +487,25 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        Returns the number of image patches for a given image size (1 global + local patches).
+        """
+        images_kwargs = images_kwargs or {}
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        tile_size = images_kwargs.get("tile_size", self.tile_size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+
+        num_patches = 1  # global view
+        if crop_to_patches and max(height, width) > tile_size:
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (tile_size, tile_size), min_patches, max_patches
+            )
+            num_patches += num_columns * num_rows
+
+        return num_patches
+
 
 @auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
 @strict
