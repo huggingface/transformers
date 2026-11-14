@@ -266,14 +266,6 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
     def test_generate_from_multimodal_encoder_outputs(self):
         pass
 
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_return_flat(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_return_flat(self):
-        pass
-
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
@@ -408,10 +400,6 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
     all_generative_model_classes = (Gemma4UnifiedForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids"]
     test_resize_embeddings = False
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_return_flat(self):
-        pass
 
     def setUp(self):
         self.model_tester = Gemma4UnifiedVision2TextModelTester(self)

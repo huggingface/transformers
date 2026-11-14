@@ -969,21 +969,36 @@ class MiniMaxM3VLModel(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.Tensor,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
+        them per image.
+        """
+        # Return the raw vision-tower output (so callers can inspect hidden states /
+        # attentions) while stashing the projected + spatially-merged features —
+        # ready to scatter into the text embeddings — in `pooler_output`.
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = image_features
+        return vision_outputs
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        # Return the raw vision-tower output (so callers can inspect hidden states /
-        # attentions) while stashing the projected + spatially-merged features —
-        # ready to scatter into the text embeddings — in `pooler_output`.
-        return_flat = kwargs.pop("return_flat", False)
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
-        if return_flat:
-            vision_outputs.pooler_output = image_features
-            return vision_outputs
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        image_features = vision_outputs.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_features, split_sizes)
         return vision_outputs
@@ -993,6 +1008,16 @@ class MiniMaxM3VLModel(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.Tensor,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        # Video frames flow through the same vision pipeline as images (the tower is
+        # grid-agnostic); only the placeholder token they scatter into differs.
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1074,28 +1099,32 @@ class MiniMaxM3VLModel(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_embeds = mm_encoder_outputs["video"].pooler_output
+            # Pre-encoded by `get_video_features` (`mm_encoder_outputs`), they come one tensor per video
+            if not isinstance(video_embeds, torch.Tensor):
+                video_embeds = torch.cat(video_embeds, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1124,8 +1153,15 @@ class MiniMaxM3VLModel(LlavaModel):
 class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
 
+    def get_image_embeddings(self, pixel_values, image_grid_thw, **kwargs):
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_video_embeddings(self, pixel_values_videos, video_grid_thw, **kwargs):
+        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):

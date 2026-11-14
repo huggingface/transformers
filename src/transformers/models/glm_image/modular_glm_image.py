@@ -29,9 +29,10 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
+    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
@@ -665,6 +666,15 @@ class GlmImageModel(Glm4vModel):
     def get_video_features(self):
         raise AttributeError("Not needed for GlmImage")
 
+    def get_video_embeddings(self):
+        raise AttributeError("Not needed for GlmImage")
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed for GlmImage")
+
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,

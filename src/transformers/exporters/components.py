@@ -65,8 +65,9 @@ def _flat(features):
 
 
 class ModalityEncoder(_ModelComponent):
-    """Runs one modality's `get_<modality>_features` and returns a single `[num_tokens, hidden]` tensor, or, for a
-    deepstack tower (Qwen3-VL), `{"features": ..., "deepstack_features": [one per decoder layer]}`."""
+    """Runs one modality's getter (`get_<modality>_embeddings`, or `get_<modality>_features` where a model has no
+    flat one) and returns a single `[num_tokens, hidden]` tensor, or, for a deepstack tower (Qwen3-VL),
+    `{"features": ..., "deepstack_features": [one per decoder layer]}`."""
 
     def __init__(self, model: PreTrainedModel, getter: str, grid_kwarg: str | None = None):
         super().__init__(model)
@@ -79,10 +80,7 @@ class ModalityEncoder(_ModelComponent):
         # The precompute may offer kwargs the getter never takes (`window_index` on minicpmv4_6).
         getter = getattr(self.model, self._getter)
         parameters = inspect.signature(getter).parameters
-        if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
-            # One tensor for every image: a list would fix the image count in the graph.
-            kwargs["return_flat"] = True
-        else:
+        if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
             kwargs = {name: value for name, value in kwargs.items() if name in parameters}
         outputs = getter(**kwargs)
         # Some outputs declare both fields and fill neither (granite4_vision), so fall through on `None`.
