@@ -41,7 +41,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = []
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
 
 
 @auto_docstring(
@@ -146,6 +146,7 @@ class FuyuModel(FuyuPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("image_patches", version="v5.24", new_name="pixel_values")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -153,7 +154,7 @@ class FuyuModel(FuyuPreTrainedModel):
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -169,10 +170,8 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_key_values_length, seq_len + past_key_values_length, dtype=torch.long, device=device
-            )
+            cache_length = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(cache_length, seq_len + cache_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
@@ -192,7 +191,7 @@ class FuyuModel(FuyuPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -218,6 +217,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     @auto_docstring
     @deprecate_kwarg("image_patches", version="v5.23", new_name="pixel_values")
     # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -226,7 +226,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         labels: torch.Tensor | None = None,
@@ -274,7 +274,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
@@ -293,7 +293,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

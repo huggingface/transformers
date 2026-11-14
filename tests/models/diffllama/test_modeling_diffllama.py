@@ -568,7 +568,7 @@ class Mask4DTestHard(unittest.TestCase):
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
         outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
+        cache_a = outs_1a["cache"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
         input_1b = input_ids_shared_prefix[:, part_a:]
@@ -578,7 +578,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
+            cache=cache_a,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
@@ -605,7 +605,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -619,7 +619,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            past_key_values=past_key_values,
+            cache=cache,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
             0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
@@ -646,7 +646,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         # forward run for the first part of input
         part_a = 3  # split point
@@ -666,7 +666,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         # forward run for the second part of input
@@ -682,7 +682,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values,
+            cache=cache,
         )
         decoded_1b = [
             self.tokenizer.decode(t)

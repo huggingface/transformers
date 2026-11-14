@@ -52,6 +52,7 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
+    destroy_megamoe_buffers,
 )
 from transformers.testing_utils import (
     require_torch,
@@ -589,7 +590,8 @@ class DeepGemmForwardTest(unittest.TestCase):
         hidden_states = torch.randn(num_tokens, 64, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (num_tokens, num_top_k), dtype=torch.long, device=torch_device)
         top_k_weights = torch.rand(num_tokens, num_top_k, dtype=torch.float32, device=torch_device)
-        pg = types.SimpleNamespace(size=lambda: 2)
+        pg = types.SimpleNamespace(size=lambda: 2, group_name="ep")
+        self.addCleanup(destroy_megamoe_buffers)
 
         with self._bundle(is_sm100=True) as captured:
             deepgemm_fp8_fp4_megamoe_experts_forward(
@@ -612,14 +614,16 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertTrue(torch.equal(module.down_proj.data, new_down))
         self.assertTrue(self._megamoe_flag_set(module))
 
-        # Symm buffer sized from global expert count (num_local * process_group.size()).
+        # Symm buffer sized from global expert count (num_local * process_group.size()), and to this batch.
         self.assertEqual(captured["symm_buffer_kwargs"]["num_experts"], 4 * 2)
+        self.assertEqual(captured["symm_buffer_kwargs"]["num_max_tokens_per_rank"], num_tokens)
 
         # Hidden states cast FP8/UE8M0 (gran_k=32 packed) and staged into the symm buffer.
         cast = captured["per_token_cast"][0]
         self.assertTrue(cast["use_ue8m0"] and cast["use_packed_ue8m0"])
         self.assertEqual(cast["gran_k"], 32)
         buf = captured["symm_buffer"]
+        self.assertEqual(list(dg._SYMM_BUFFERS["ep"].values()), [buf])
         self.assertTrue(torch.equal(buf.topk_idx[:num_tokens], top_k_index))
         self.assertTrue(torch.allclose(buf.topk_weights[:num_tokens], top_k_weights))
 
@@ -631,7 +635,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertEqual(mega["activation_clamp"], 7.0)
 
     @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
-    def test_megamoe_requires_fp4_weights_and_process_group(self):
+    def test_megamoe_rejects_unsupported_inputs(self):
         hidden_states = torch.randn(3, 64, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.randint(0, 4, (3, 2), dtype=torch.long, device=torch_device)
         top_k_weights = torch.rand(3, 2, dtype=torch.float32, device=torch_device)
@@ -646,7 +650,7 @@ class DeepGemmForwardTest(unittest.TestCase):
                     hidden_states,
                     top_k_index,
                     top_k_weights,
-                    process_group=types.SimpleNamespace(size=lambda: 1),
+                    process_group=types.SimpleNamespace(size=lambda: 1, group_name="ep"),
                 )
 
         # Missing process_group (EP group) is rejected — required for the symm-buffer rendezvous.
@@ -654,6 +658,17 @@ class DeepGemmForwardTest(unittest.TestCase):
         with self._bundle(is_sm100=True):
             with self.assertRaisesRegex(ValueError, "requires a .process_group."):
                 deepgemm_fp8_fp4_megamoe_experts_forward(module2, hidden_states, top_k_index, top_k_weights)
+
+        # The kernel has no backward, so inputs that need gradients are rejected.
+        with self._bundle(is_sm100=True):
+            with self.assertRaisesRegex(NotImplementedError, "no backward"):
+                deepgemm_fp8_fp4_megamoe_experts_forward(
+                    self._make_megamoe(),
+                    hidden_states.clone().requires_grad_(),
+                    top_k_index,
+                    top_k_weights,
+                    process_group=types.SimpleNamespace(size=lambda: 1, group_name="ep"),
+                )
 
     @staticmethod
     def _megamoe_flag_set(module):

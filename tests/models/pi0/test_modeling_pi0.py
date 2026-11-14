@@ -296,6 +296,10 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_4_from_config(self):
         pass
 
+    @unittest.skip("PI0 config.get_text_config() does not have num_hidden_layers.....")
+    def test_bc_cache_name_forward(self):
+        pass
+
     def test_full_run_smoke(self):
         torch.manual_seed(0)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

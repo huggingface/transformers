@@ -201,9 +201,7 @@ class NemotronHOmniModelTestMixin:
 
     _get_conv_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_conv_state_shape
     _get_recurrent_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_recurrent_state_shape
-    _check_past_key_values_for_generate = (
-        test_modeling_nemotron_h.NemotronHModelTest._check_past_key_values_for_generate
-    )
+    _check_cache_for_generate = test_modeling_nemotron_h.NemotronHModelTest._check_cache_for_generate
 
     def _image_features_prepare_config_and_inputs(self):
         tester = self.model_tester

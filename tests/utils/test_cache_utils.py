@@ -447,7 +447,7 @@ class CacheTest(unittest.TestCase):
         )
 
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing the global one
-        cache = out.past_key_values
+        cache = out.cache
         self.assertIsInstance(cache, StaticCache)
         self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 16, 8, 16])
 
@@ -482,7 +482,7 @@ class CacheTest(unittest.TestCase):
         )
 
         # Each layer must fall back to the `hidden_size // num_attention_heads` division
-        cache = out.past_key_values
+        cache = out.cache
         self.assertIsInstance(cache, StaticCache)
         self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
 
@@ -546,7 +546,7 @@ class CacheTest(unittest.TestCase):
         )
 
         # First generation pass filling a Cache
-        first_gen_ids = model.generate(inputs, past_key_values=cache, **generation_kwargs)
+        first_gen_ids = model.generate(inputs, cache=cache, **generation_kwargs)
 
         # Now make sure we get the same results with and without prefill chunking
         new_ids = torch.randint(10, 40, (1, 5), device=torch_device)
@@ -556,10 +556,10 @@ class CacheTest(unittest.TestCase):
         uncached_ids = full_sequence[:, cache.get_seq_length() :]
 
         no_chunked_only_new_ids = model.generate(
-            uncached_ids, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+            uncached_ids, attention_mask=full_sequence_mask, cache=copy.deepcopy(cache), **generation_kwargs
         )
         no_chunked_full_ids = model.generate(
-            full_sequence, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+            full_sequence, attention_mask=full_sequence_mask, cache=copy.deepcopy(cache), **generation_kwargs
         )
         # Not related to this test, but just to make sure
         self.assertTrue(
@@ -569,14 +569,14 @@ class CacheTest(unittest.TestCase):
         chunked_only_new_ids = model.generate(
             uncached_ids,
             attention_mask=full_sequence_mask,
-            past_key_values=copy.deepcopy(cache),
+            cache=copy.deepcopy(cache),
             prefill_chunk_size=2,
             **generation_kwargs,
         )
         chunked_full_ids = model.generate(
             full_sequence,
             attention_mask=full_sequence_mask,
-            past_key_values=copy.deepcopy(cache),
+            cache=copy.deepcopy(cache),
             prefill_chunk_size=2,
             **generation_kwargs,
         )
@@ -953,7 +953,7 @@ class CacheIntegrationTest(unittest.TestCase):
             disable_compile=True,
         )
         # Sanity check: a cache was used
-        self.assertIsInstance(gen_out.past_key_values, Cache)
+        self.assertIsInstance(gen_out.cache, Cache)
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
@@ -964,12 +964,12 @@ class CacheIntegrationTest(unittest.TestCase):
         second = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
 
         cache = DynamicCache(config=self.model.config)
-        self.model.generate(**first, past_key_values=cache, max_new_tokens=10, do_sample=False)
+        self.model.generate(**first, cache=cache, max_new_tokens=10, do_sample=False)
 
         # Reuse the same cache for a different prompt, which is what `reset` is for.
         cache.reset()
         self.assertEqual(cache.get_seq_length(), 0)
-        reused = self.model.generate(**second, past_key_values=cache, max_new_tokens=10, do_sample=False)
+        reused = self.model.generate(**second, cache=cache, max_new_tokens=10, do_sample=False)
 
         # Before the fix, the reset kept the first prompt's states around, so this silently generated gibberish.
         expected = self.model.generate(**second, max_new_tokens=10, do_sample=False)
@@ -1006,7 +1006,7 @@ class CacheIntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
         )
         # Sanity check: a cache was used
-        self.assertIsInstance(gen_out.past_key_values, Cache)
+        self.assertIsInstance(gen_out.cache, Cache)
         # At least one of the sequences requires multiple beam indices -> `reorder_cache` had to shift things around
         self.assertTrue(any(len(set(beams_in_sequence)) > 1 for beams_in_sequence in gen_out.beam_indices))
         # Confirm that the output matches expectations
@@ -1048,7 +1048,7 @@ class CacheIntegrationTest(unittest.TestCase):
             disable_compile=True,
         )
 
-        self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+        self.assertIsInstance(gen_out.cache, QuantizedCache)
 
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
@@ -1075,8 +1075,8 @@ class CacheIntegrationTest(unittest.TestCase):
                 cache_config=cache_config,
                 disable_compile=True,
             )
-            self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
-            self.assertEqual(len(gen_out.past_key_values.layers), self.model.config.num_hidden_layers)
+            self.assertIsInstance(gen_out.cache, QuantizedCache)
+            self.assertEqual(len(gen_out.cache.layers), self.model.config.num_hidden_layers)
             self.assertEqual(cache_config, expected_cache_config)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -1155,7 +1155,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         EXPECTED_SCORE_SUM = 10834.7919921875
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
         self.assertAlmostEqual(score_sum.item(), EXPECTED_SCORE_SUM, places=2)
-        self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
+        self.assertIsInstance(gen_out.cache, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
     @require_torch_accelerator
@@ -1184,21 +1184,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
+            self.assertIsInstance(gen_out.cache, DynamicCache)  # sanity check
 
         set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
+            self.assertIsInstance(gen_out.cache, StaticCache)  # sanity check
 
         set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
+            self.assertIsInstance(gen_out.cache, StaticCache)  # sanity check
 
     @require_torch_accelerator
     @slow
@@ -1223,7 +1223,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         )
 
         self.assertEqual(gen_out.sequences.shape[-1], inputs.input_ids.shape[-1] + 10)
-        cache = gen_out.past_key_values
+        cache = gen_out.cache
         self.assertIsInstance(cache, StaticCache)
 
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
@@ -1295,16 +1295,14 @@ class CacheHardIntegrationTest(unittest.TestCase):
         inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(torch_device)
         # This is the common prompt cached, we need to run forward without grad to be able to copy
         with torch.no_grad():
-            prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
+            prompt_cache = model(**inputs_initial_prompt, cache=prompt_cache).cache
 
         prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
         responses = []
         for prompt in prompts:
             new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(torch_device)
-            past_key_values = copy.deepcopy(prompt_cache)
-            outputs = model.generate(
-                **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
-            )
+            cache = copy.deepcopy(prompt_cache)
+            outputs = model.generate(**new_inputs, cache=cache, max_new_tokens=40, disable_compile=True)
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
@@ -1335,12 +1333,12 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model_inputs = tokenizer(["foo bar"] * num_gpus, return_tensors="pt").to(model.device)
 
         # w/o DP
-        no_parallelism_cache = model(**model_inputs).past_key_values
+        no_parallelism_cache = model(**model_inputs).cache
         self.assertIsInstance(no_parallelism_cache, DynamicCache)
 
         # w DP
         model = torch.nn.DataParallel(model)
-        parallelism_cache = model(**model_inputs).past_key_values
+        parallelism_cache = model(**model_inputs).cache
         self.assertIsInstance(parallelism_cache, DynamicCache)
 
         # Check that the caches are the same
@@ -1396,8 +1394,8 @@ class CacheHardIntegrationTest(unittest.TestCase):
             max_cache_len=requested_max_cache_len,
             return_dict_in_generate=True,
         )
-        self.assertIsInstance(out.past_key_values, StaticCache)
-        self.assertEqual(out.past_key_values.get_max_length(), requested_max_cache_len)
+        self.assertIsInstance(out.cache, StaticCache)
+        self.assertEqual(out.cache.get_max_length(), requested_max_cache_len)
 
     def test_chunked_prefill_initializes_static_cache_eagerly(self):
         """
@@ -1506,10 +1504,10 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
     def test_export_preserves_sliding_cache_behavior(self):
         # Update both layer types so export must preserve their different cache behavior.
         class CacheUpdateModule(torch.nn.Module):
-            def forward(self, new_states, past_key_values):
-                past_key_values.update(new_states, new_states, layer_idx=0)
-                past_key_values.update(new_states, new_states, layer_idx=1)
-                return past_key_values
+            def forward(self, new_states, cache):
+                cache.update(new_states, new_states, layer_idx=0)
+                cache.update(new_states, new_states, layer_idx=1)
+                return cache
 
         # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
         new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
@@ -1524,12 +1522,10 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
         exported_program = torch.export.export(
             CacheUpdateModule(),
             (),
-            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            {"new_states": new_states, "cache": DynamicCache(config=cache_config)},
             strict=False,
         )
-        exported_cache = exported_program.module()(
-            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
-        )
+        exported_cache = exported_program.module()(new_states=new_states, cache=DynamicCache(config=cache_config))
         eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
 
         self.assertEqual(len(exported_cache.layers), 2)
@@ -1562,10 +1558,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(config=model.config),
+            cache=DynamicCache(config=model.config),
             use_cache=True,
         )
-        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
+        self.assertTrue(len(res.cache) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
             3,
@@ -1578,15 +1574,15 @@ class CacheExportIntegrationTest(unittest.TestCase):
             ),
         )
 
-        past_key_values_eager = DynamicCache(config=model.config)
+        cache_eager = DynamicCache(config=model.config)
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values_eager,
+            cache=cache_eager,
             use_cache=True,
         )
         self.assertTrue(torch.allclose(res.logits, res_eager.logits, atol=1e-5))
-        for l1, l2 in zip(res.past_key_values.layers, res_eager.past_key_values.layers):
+        for l1, l2 in zip(res.cache.layers, res_eager.cache.layers):
             self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
@@ -1610,10 +1606,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(config=model.config),
+            cache=DynamicCache(config=model.config),
             use_cache=True,
         )
-        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
+        self.assertTrue(len(res.cache) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
             3,
@@ -1629,18 +1625,18 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(config=model.config),
+            cache=DynamicCache(config=model.config),
             use_cache=True,
         )
-        past_key_values_eager = res_eager.past_key_values
-        past_key_values = res.past_key_values
+        cache_eager = res_eager.cache
+        cache = res.cache
 
         shapes = torch.export.ShapesCollection()
         dyn = torch.export.Dim.DYNAMIC(max=512)
 
-        for ix in range(len(past_key_values)):
-            shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)
-            shapes[past_key_values.layers[ix].values] = (None, None, dyn, None)
+        for ix in range(len(cache)):
+            shapes[cache.layers[ix].keys] = (None, None, dyn, None)
+            shapes[cache.layers[ix].values] = (None, None, dyn, None)
 
         ep_second = torch.export.export(
             model,
@@ -1648,7 +1644,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             {
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "use_cache": True,
             },
             strict=False,
@@ -1657,31 +1653,31 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res_export = ep_second.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=True,
         )
         # It should work with variable len
         res_export_2 = ep_second.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=res_export.past_key_values,
+            cache=res_export.cache,
             use_cache=True,
         )
 
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values_eager,
+            cache=cache_eager,
             use_cache=True,
         )
         res_eager_2 = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=res_eager.past_key_values,
+            cache=res_eager.cache,
             use_cache=True,
         )
 
-        for l1, l2 in zip(res_export_2.past_key_values.layers, res_eager_2.past_key_values.layers):
+        for l1, l2 in zip(res_export_2.cache.layers, res_eager_2.cache.layers):
             self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 

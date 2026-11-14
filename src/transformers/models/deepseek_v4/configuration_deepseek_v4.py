@@ -97,7 +97,7 @@ class DeepseekV4Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_v4"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # `num_local_experts` is the standard MoE attr name (read by FP8 / TP integrations);
     # `intermediate_size` is what :class:`LlamaMLP` reads for the shared expert width
     # — V4 only ships `moe_intermediate_size` so we route the read through.

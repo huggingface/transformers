@@ -105,7 +105,7 @@ model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-past_key_values = DynamicCache(config=model.config)
+cache = DynamicCache(config=model.config)
 messages = [{"role": "user", "content": "Hello, what's your name."}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
@@ -113,7 +113,7 @@ generated_ids = inputs.input_ids
 max_new_tokens = 10
 
 for _ in range(max_new_tokens):
-    outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    outputs = model(**inputs, cache=cache, use_cache=True)
     # 탐욕적 기법으로 다음 토큰 하나를 샘플링
     next_token_ids = outputs.logits[:, -1:].argmax(-1)
     generated_ids = torch.cat([generated_ids, next_token_ids], dim=-1)

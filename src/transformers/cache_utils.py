@@ -1994,9 +1994,9 @@ class DynamicCache(Cache):
     >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
     >>> # Prepare a cache class and pass it to model's forward
-    >>> past_key_values = DynamicCache(config=model.config)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = DynamicCache(config=model.config)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     ```
     """
 
@@ -2085,9 +2085,9 @@ class StaticCache(Cache):
     >>> # Prepare a cache class and pass it to model's forward
     >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
     >>> max_generated_length = inputs.input_ids.shape[1] + 10
-    >>> past_key_values = StaticCache(config=model.config, max_cache_len=max_generated_length)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = StaticCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     StaticCache()
     ```
     """
@@ -2222,9 +2222,9 @@ class EncoderDecoderCache(Cache):
     >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
     >>> self_attention_cache = DynamicCache(config=self.config)
     >>> cross_attention_cache = DynamicCache(config=self.config)
-    >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     EncoderDecoderCache()
     ```
     """
@@ -2272,7 +2272,7 @@ class EncoderDecoderCache(Cache):
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
+        Support for backwards-compatible `cache` length, e.g. `len(cache)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.self_attention_cache)

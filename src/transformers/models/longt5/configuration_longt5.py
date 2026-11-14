@@ -43,7 +43,7 @@ class LongT5Config(PreTrainedConfig):
     """
 
     model_type = "longt5"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "num_heads",
