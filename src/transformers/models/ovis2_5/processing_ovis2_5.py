@@ -31,13 +31,11 @@ class Ovis2_5Processor(ProcessorMixin):
     ):
         self.image_token = "<image>"
         self.video_token = "<video>"
-        self.visual_atom_token = (
-            getattr(tokenizer, "image_token", None) or getattr(tokenizer, "video_token", None) or "<ovis_visual_atom>"
-        )
-        self.image_start_token = getattr(tokenizer, "image_start_token", None) or "<ovis_image_start>"
-        self.image_end_token = getattr(tokenizer, "image_end_token", None) or "<ovis_image_end>"
-        self.video_start_token = getattr(tokenizer, "video_start_token", None) or "<ovis_video_start>"
-        self.video_end_token = getattr(tokenizer, "video_end_token", None) or "<ovis_video_end>"
+        self.visual_atom_token = tokenizer.image_token
+        self.image_start_token = tokenizer.image_start_token
+        self.image_end_token = tokenizer.image_end_token
+        self.video_start_token = tokenizer.video_start_token
+        self.video_end_token = tokenizer.video_end_token
 
         self.visual_atom_token_id = tokenizer.convert_tokens_to_ids(self.visual_atom_token)
         # Image and video use the same atom ID after their prompt placeholders are expanded.

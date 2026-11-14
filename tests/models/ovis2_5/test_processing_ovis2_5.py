@@ -62,9 +62,9 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         super().test_apply_chat_template_video_frame_sampling()
 
     @slow
-    def test_processor_loads_legacy_hub_metadata(self):
-        """The original checkpoint's SigLIP metadata must select native Ovis processors."""
-        processor = self.processor_class.from_pretrained("AIDC-AI/Ovis2.5-2B", trust_remote_code=False)
+    def test_processor_loads_native_hub_metadata(self):
+        """The community checkpoint loads native Ovis processors with their published defaults."""
+        processor = self.processor_class.from_pretrained(self.model_id, trust_remote_code=False)
         self.assertIsInstance(processor.image_processor, Ovis2_5ImageProcessor)
         self.assertIsInstance(processor.video_processor, Ovis2_5VideoProcessor)
         for visual_processor in (processor.image_processor, processor.video_processor):
