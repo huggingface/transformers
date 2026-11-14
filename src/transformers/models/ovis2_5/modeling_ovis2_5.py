@@ -852,9 +852,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
 
     input_modalities = ("image", "video", "text")
 
-    # Reuse Exaone's forward with Ovis's visual boundary embeddings.
-    model: Ovis2_5Model
-
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         # Exaone uses an underscored model class, while Ovis exposes `Ovis2_5Model`.

@@ -953,9 +953,6 @@ class Ovis2_5Model(LlavaModel):
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForConditionalGeneration):
     """Ovis2.5 multimodal conditional generation model."""
 
-    # Reuse Exaone's forward with Ovis's visual boundary embeddings.
-    model: Ovis2_5Model
-
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         # Exaone uses an underscored model class, while Ovis exposes `Ovis2_5Model`.
