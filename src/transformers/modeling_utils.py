@@ -55,7 +55,11 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
+from .distributed.checkpoint import (
+    _get_resolved_distributed_checkpoint_files,
+    get_distributed_checkpoint_dir,
+    save_sharded_state_dict,
+)
 from .distributed.mixin import DistributedMixin
 from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_are_equal
 from .distributed.tensor_parallel import verify_tp_plan
@@ -3377,7 +3381,7 @@ class PreTrainedModel(
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
                 When saving an FSDP- or TP-sharded model, write safetensors with distributed checkpointing (DCP) instead of
                 gathering weights to CPU first. Every rank must call this method.
-                When `False`, weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
+                When `False`, the weights are gathered file by file and every rank writes some of the files.
                 It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`
                 features. With `push_to_hub=True`, rank 0 consolidates the checkpoint in a `consolidated/` subdirectory
                 and uploads that directory.
@@ -3523,23 +3527,8 @@ class PreTrainedModel(
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # If model was sharded with TP/FSDP, gather full tensors for saving
-        state_dict = self.gather_sharded_state_dict_for_save(
-            model_to_save,
-            state_dict,
-            distributed_config,
-            save_on_this_rank=save_on_this_rank,
-        )
-
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
-
-        # Revert all renaming and/or weight operations. In general, due to potential many-weights-to-one conversion patterns,
-        # we need to revert the whole state_dict at once to make sure all weights are available. For offloaded models though,
-        # some weights are on meta device, so we need to first load them back into cpu then convert (and we do it later inside a
-        # given shard, to avoid blowing cpu memory since offloading means constrained resources)
-        if save_original_format and not is_offloaded and not _hf_peft_config_loaded:
-            state_dict = revert_weight_conversion(model_to_save, state_dict)
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
@@ -3549,9 +3538,43 @@ class PreTrainedModel(
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME
 
         filename_pattern = weights_name.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
-        state_dict_split = split_torch_state_dict_into_shards(
-            state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+
+        # If the model was sharded with TP/FSDP, every rank gathers and writes some of the files.
+        is_sharded_model = distributed_config is not None and (
+            distributed_config.tp_size > 1 or distributed_config.dp_size > 1
         )
+        if is_sharded_model:
+            state_dict_split, weight_map = save_sharded_state_dict(
+                model_to_save,
+                state_dict,
+                save_directory,
+                filename_pattern=filename_pattern,
+                max_shard_size=max_shard_size,
+                metadata=metadata,
+                save_original_format=save_original_format and not _hf_peft_config_loaded,
+            )
+        else:
+            # Revert all renaming and/or weight operations. In general, due to potential many-weights-to-one conversion patterns,
+            # we need to revert the whole state_dict at once to make sure all weights are available. For offloaded models though,
+            # some weights are on meta device, so we need to first load them back into cpu then convert (and we do it later inside a
+            # given shard, to avoid blowing cpu memory since offloading means constrained resources)
+            if save_original_format and not is_offloaded and not _hf_peft_config_loaded:
+                state_dict = revert_weight_conversion(model_to_save, state_dict)
+
+            state_dict_split = split_torch_state_dict_into_shards(
+                state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+            )
+
+            # The weight_map may change compared to state_dict_split.tensor_to_filename due to revert weight conversions
+            weight_map = None
+            if state_dict_split.is_sharded:
+                # For offloaded weights, we will convert each shard later, so the weight names will change and we will fill
+                # the weight_map as we get them
+                weight_map = (
+                    state_dict_split.tensor_to_filename
+                    if not (is_offloaded and save_original_format and not _hf_peft_config_loaded)
+                    else {}
+                )
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -3573,60 +3596,51 @@ class PreTrainedModel(
             ):
                 os.remove(full_filename)
 
-        # The weight_map may change compared to state_dict_split.tensor_to_filename due to revert weight conversions
-        weight_map = None
-        if state_dict_split.is_sharded:
-            # For offloaded weights, we will convert each shard later, so the weight names will change and we will fill
-            # the weight_map as we get them
-            weight_map = (
-                state_dict_split.tensor_to_filename
-                if not (is_offloaded and save_original_format and not _hf_peft_config_loaded)
-                else {}
-            )
-
         # Save the model
         if save_on_this_rank:
-            for shard_file, tensor_names in logging.tqdm(
-                state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
-            ):
-                filename = os.path.join(save_directory, shard_file)
-                shard_state_dict = {}
-                for tensor_name in tensor_names:
-                    # Get the tensor, and remove it from state_dict to avoid keeping the ref
-                    tensor = state_dict.pop(tensor_name)
+            # The files of a TP/FSDP-sharded model were already written by all ranks
+            if not is_sharded_model:
+                for shard_file, tensor_names in logging.tqdm(
+                    state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+                ):
+                    filename = os.path.join(save_directory, shard_file)
+                    shard_state_dict = {}
+                    for tensor_name in tensor_names:
+                        # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                        tensor = state_dict.pop(tensor_name)
 
-                    # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                    # but it would otherwise not be contained in the saved shard if we were to simply move the file
-                    # or something
-                    if is_offloaded and tensor.device.type == "meta":
-                        tensor = load_offloaded_parameter(model_to_save, tensor_name)
+                        # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                        # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                        # or something
+                        if is_offloaded and tensor.device.type == "meta":
+                            tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                    # only do contiguous after it's permuted correctly in case of TP
-                    shard_state_dict[tensor_name] = tensor.contiguous()
+                        # only do contiguous after it's permuted correctly in case of TP
+                        shard_state_dict[tensor_name] = tensor.contiguous()
 
-                # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
-                # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
-                # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
-                # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
-                if is_offloaded and save_original_format and not _hf_peft_config_loaded:
-                    try:
-                        shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
-                        # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
-                        if state_dict_split.is_sharded:
-                            weight_map.update({k: os.path.basename(shard_file) for k in shard_state_dict.keys()})  # ty: ignore[unresolved-attribute]
-                    except Exception:
-                        raise RuntimeError(
-                            "We could not revert some weight conversions because of offlading, and several weights needed for a single "
-                            "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
-                            "set `save_original_format=False`."
-                        )
+                    # As explained above, for offloaded scenarios, weight format could not be reverted before due to meta weights,
+                    # so do it now after they were loaded onto cpu. For one-weight-to-many operations, it may be an issue, but usually the shards
+                    # contain all the necessary params, except if we are quite unlucky on the sharding. The failure surface is (very few models
+                    # with one-weight-to-many + offloading to disk + unlucky sharding), so it will almost never happen
+                    if is_offloaded and save_original_format and not _hf_peft_config_loaded:
+                        try:
+                            shard_state_dict = revert_weight_conversion(model_to_save, shard_state_dict)
+                            # Save the weight_map, since some names etc may have changed due to conversion compared to initial `state_dict_split`
+                            if state_dict_split.is_sharded:
+                                weight_map.update({k: os.path.basename(shard_file) for k in shard_state_dict.keys()})  # ty: ignore[unresolved-attribute]
+                        except Exception:
+                            raise RuntimeError(
+                                "We could not revert some weight conversions because of offlading, and several weights needed for a single "
+                                "conversion operation living in different shard files. Try reducing `max_shard_size` a bit, or worst case "
+                                "set `save_original_format=False`."
+                            )
 
-                # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
-                # so it's not possible for now....
-                # Write the shard to disk
-                safe_save_file(shard_state_dict, filename, metadata=metadata)
-                # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
-                del shard_state_dict
+                    # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+                    # so it's not possible for now....
+                    # Write the shard to disk
+                    safe_save_file(shard_state_dict, filename, metadata=metadata)
+                    # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+                    del shard_state_dict
 
             index = None
             if state_dict_split.is_sharded:
