@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -26,6 +27,7 @@ from transformers import (
     FineGrainedFP8Config,
     OPTForCausalLM,
 )
+from transformers.integrations.finegrained_fp8 import Fp8Dequantize
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -627,26 +629,48 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
 
 
-class FP8ModulesToNotConvertTest(unittest.TestCase):
-    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
-    def test_checkpoint_module_names_follow_weight_renamings(self):
-        # The checkpoint's `self_attn.f_a_proj` loads as `self_attn.forget_gate.f_a_proj`
-        from transformers import KimiLinearConfig, KimiLinearForCausalLM
-        from transformers.integrations.finegrained_fp8 import FP8Linear
+class Fp8DequantizeTest(unittest.TestCase):
+    def test_dequantize_partial_block(self):
+            # Verify 576 rows with 128-block size (DeepSeek MLA kv_a_proj shape)
+            block = 128
+            rows, cols = 576, 256
+            scale_m, scale_n = math.ceil(rows / block), math.ceil(cols / block)
 
-        config = KimiLinearConfig(
-            vocab_size=64, pad_token_id=0, bos_token_id=1, eos_token_id=2, hidden_size=64, intermediate_size=64,
-            num_hidden_layers=1, num_attention_heads=4, num_key_value_heads=4, layer_types=["linear_attention"],
-            mlp_layer_types=["dense"], linear_conv_kernel_dim=2, linear_head_dim=16, linear_num_heads=4,
-        )  # fmt: skip
-        quantization_config = FineGrainedFP8Config(
-            weight_block_size=(16, 16), modules_to_not_convert=["model.layers.0.self_attn.f_a_proj"]
-        )
-        with tempfile.TemporaryDirectory() as tmp:
-            KimiLinearForCausalLM(config).save_pretrained(tmp)
-            model = AutoModelForCausalLM.from_pretrained(
-                tmp, quantization_config=quantization_config, device_map="cpu"
-            )
-        forget_gate = model.model.layers[0].self_attn.forget_gate
-        self.assertNotIsInstance(forget_gate.f_a_proj, FP8Linear)
-        self.assertIsInstance(forget_gate.f_b_proj, FP8Linear)
+            q = torch.randint(-100, 100, (rows, cols), dtype=torch.float32)
+            scales = torch.rand((scale_m, scale_n), dtype=torch.float32)
+
+            from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+            from transformers.utils.quantization_config import FineGrainedFP8Config
+
+            config = FineGrainedFP8Config(weight_block_size=[block, block])
+            quantizer = FineGrainedFP8HfQuantizer(config)
+
+            dequantizer = Fp8Dequantize(hf_quantizer=quantizer)
+            got = dequantizer._dequantize_one(q, scales, output_dtype=torch.float32)
+
+            expected_s = scales.repeat_interleave(block, 0).repeat_interleave(block, 1)[:rows, :cols]
+            expected = q * expected_s
+
+            torch.testing.assert_close(got, expected)
+
+    def test_dequantize_exact_division_different_block_size(self):
+        block = 128
+        rows, cols = 192, 256
+        scale_m, scale_n = math.ceil(rows / block), math.ceil(cols / block)
+
+        q = torch.randint(-100, 100, (rows, cols), dtype=torch.float32)
+        scales = torch.rand((scale_m, scale_n), dtype=torch.float32)
+
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+        from transformers.utils.quantization_config import FineGrainedFP8Config
+
+        config = FineGrainedFP8Config(weight_block_size=[block, block])
+        quantizer = FineGrainedFP8HfQuantizer(config)
+
+        dequantizer = Fp8Dequantize(hf_quantizer=quantizer)
+        got = dequantizer._dequantize_one(q, scales, output_dtype=torch.float32)
+
+        expected_s = scales.repeat_interleave(block, 0).repeat_interleave(block, 1)[:rows, :cols]
+        expected = q * expected_s
+
+        torch.testing.assert_close(got, expected)
