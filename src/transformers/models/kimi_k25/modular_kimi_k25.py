@@ -484,8 +484,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
         """
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
@@ -616,7 +615,6 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
             if not isinstance(image_embeds, torch.Tensor):
                 image_embeds = torch.cat(image_embeds, dim=0)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -627,7 +625,6 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            # Pre-encoded by `get_video_features` (`mm_encoder_outputs`), they come one tensor per video
             if not isinstance(video_embeds, torch.Tensor):
                 video_embeds = torch.cat(video_embeds, dim=0)
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
