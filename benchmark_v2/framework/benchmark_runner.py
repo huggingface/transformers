@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import re
+import subprocess
 import tempfile
 import time
 from datetime import datetime
@@ -71,12 +72,14 @@ def compact_json_numeric_arrays(data: dict):
 
 
 def get_git_revision() -> str:
+    """Commit of the transformers checkout. Works with a detached HEAD, packed refs and worktrees."""
     base_path = pathlib.Path(__file__).parent.parent.parent
-    git_dir = base_path / ".git"
-    with (git_dir / "HEAD").open("r") as head:
-        ref = head.readline().split(" ")[-1].strip()
-    with (git_dir / ref).open("r") as git_hash:
-        return git_hash.readline().strip()
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=base_path, capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def flush_memory(flush_compile: bool = True) -> None:
