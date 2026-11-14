@@ -208,9 +208,9 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
         pass
 
     @unittest.skip(
-        reason="This test does not apply to VoxtralRealtime for now since encoder_past_key_values AND padding_cache are returned by generate"
+        reason="This test does not apply to VoxtralRealtime for now since encoder_cache AND padding_cache are returned by generate"
     )
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
     @unittest.skip(

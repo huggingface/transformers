@@ -218,7 +218,7 @@ class AttentionMaskVisualizer:
             config=model.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         if causal_mask is None:

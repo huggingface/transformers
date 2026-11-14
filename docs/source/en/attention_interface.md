@@ -250,14 +250,14 @@ attention_mask = create_causal_mask(
     config=self.config,
     inputs_embeds=inputs_embeds,
     attention_mask=attention_mask,
-    past_key_values=past_key_values,
+    cache=cache,
 )
 ```
 
 </hfoption>
 <hfoption id="encoder self-attention">
 
-Call [`create_bidirectional_mask`] for encoder self-attention. Drop `past_key_values` because encoders don't cache.
+Call [`create_bidirectional_mask`] for encoder self-attention. Drop `cache` because encoders don't cache.
 
 ```py
 from transformers.masking_utils import create_bidirectional_mask
@@ -298,7 +298,7 @@ mask_kwargs = {
     "config": self.config,
     "inputs_embeds": inputs_embeds,
     "attention_mask": attention_mask,
-    "past_key_values": past_key_values,
+    "cache": cache,
     "position_ids": position_ids,
     "or_mask_function": lambda *args: torch.tensor(True, dtype=torch.bool),
 }

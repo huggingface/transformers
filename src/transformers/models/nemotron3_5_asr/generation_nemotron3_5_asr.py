@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...utils.deprecation import deprecate_kwarg
 from ..nemotron_asr_streaming.generation_nemotron_asr_streaming import (
     NemotronAsrStreamingGenerationMixin,
     NemotronAsrStreamingRNNTDecoderCache,
@@ -22,6 +23,8 @@ class Nemotron3_5AsrRNNTDecoderCache(NemotronAsrStreamingRNNTDecoderCache): ...
 
 
 class Nemotron3_5AsrGenerationMixin(NemotronAsrStreamingGenerationMixin):
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(self, inputs=None, generation_config=None, **kwargs):
         self._prompt_ids = kwargs.pop("prompt_ids", None)
         get_audio_features = self.get_audio_features

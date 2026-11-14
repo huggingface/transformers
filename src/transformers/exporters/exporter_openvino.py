@@ -797,7 +797,7 @@ def _deduplicate_output_args(graph_module) -> None:
     decoding the debug alias on the second. Repeats arise when decomposition collapses the
     distinction between two output nodes (and ``aten.clone`` is no protection — OV folds it to
     identity). The copy must survive OV's neutral-constant elimination: ``add(x, 0)`` gets folded
-    back to ``x`` (so a duplicate output re-aliases the original — e.g. moshi's ``depth_past_key_values``
+    back to ``x`` (so a duplicate output re-aliases the original — e.g. moshi's ``depth_cache``
     ports collapsing onto the main-cache state buffer and losing their names), whereas ``maximum(x, x)``
     is a self-identity with no neutral constant and survives as a distinct tensor (mirroring the
     ``logical_and(x, x)`` used for the bool branch).

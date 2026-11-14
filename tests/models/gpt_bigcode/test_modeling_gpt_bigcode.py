@@ -179,7 +179,7 @@ class GPTBigCodeModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
+        self.parent.assertEqual(len(result.cache), config.n_layer)
 
     def create_and_check_gpt_bigcode_model_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTBigCodeModel(config=config)
@@ -205,9 +205,7 @@ class GPTBigCodeModelTester:
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -249,7 +247,7 @@ class GPTBigCodeModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -285,7 +283,7 @@ class GPTBigCodeModelTester:
             next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, cache=past
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
@@ -432,7 +430,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="BigCodeGPT has a non-standard KV cache format.")
-    def test_past_key_values_format(self):
+    def test_cache_format(self):
         pass
 
     @unittest.skip(reason="BigCodeGPT has a non-standard KV cache format and breaks this test.")

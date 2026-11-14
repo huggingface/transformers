@@ -21,6 +21,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -125,12 +126,13 @@ class CwmModel(LlamaModel):
             [CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -141,11 +143,11 @@ class CwmModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -154,7 +156,7 @@ class CwmModel(LlamaModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             sliding_mask_kwargs = mask_kwargs.copy()
@@ -172,7 +174,7 @@ class CwmModel(LlamaModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -180,7 +182,7 @@ class CwmModel(LlamaModel):
         hidden_states = self.norm(hidden_states)
         return CwmModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

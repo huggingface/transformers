@@ -87,17 +87,24 @@ pipeline(images="https://huggingface.co/datasets/huggingface/documentation-image
 ```
 
 </hfoption>
-<hfoption id="visual question answering">
+<hfoption id="image-text-to-text">
 
 ```py
 from transformers import pipeline
 
-pipeline = pipeline(task="visual-question-answering", model="Salesforce/blip-vqa-base")
-pipeline(
-    image="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg",
-    question="What is in the image?",
-)
-[{'answer': 'statue of liberty'}]
+pipeline = pipeline(task="image-text-to-text", model="HuggingFaceTB/SmolVLM-256M-Instruct")
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg"},
+            {"type": "text", "text": "What is in the image?"},
+        ],
+    }
+]
+pipeline(messages, max_new_tokens=50, return_full_text=False)
+[{'input_text': [{'role': 'user', 'content': [{'type': 'image', 'image': 'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg'}, {'type': 'text', 'text': 'What is in the image?'}]}],
+  'generated_text': ' There is a statue in the image.'}]
 ```
 
 </hfoption>

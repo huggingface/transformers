@@ -69,7 +69,7 @@ class MoonshineConfig(PreTrainedConfig):
     ```"""
 
     model_type = "moonshine"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_key_value_heads": "decoder_num_key_value_heads",
         "num_attention_heads": "decoder_num_attention_heads",
