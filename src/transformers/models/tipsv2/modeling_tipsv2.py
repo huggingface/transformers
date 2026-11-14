@@ -922,7 +922,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
         if pooling_mask is not None:
-            pooling_mask = pooling_mask.to(last_hidden_state.device)
+            pooling_mask = pooling_mask.to(device=last_hidden_state.device, dtype=last_hidden_state.dtype)
             masked_hidden_state = last_hidden_state * pooling_mask[..., None]
             pooled_output = masked_hidden_state.sum(dim=1) / (
                 pooling_mask.sum(dim=1, keepdim=True) + self.config.pooling_epsilon
