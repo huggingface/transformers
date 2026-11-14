@@ -42,7 +42,7 @@ alt="drawing" width="600"/>
 <small> Idefics2 architecture. Taken from the <a href="https://huggingface.co/papers/2405.02246">original paper.</a> </small>
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
-The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
+The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2-8b).
 
 ## Usage tips
 

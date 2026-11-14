@@ -41,7 +41,7 @@ class OlmoeConfig(PreTrainedConfig):
     """
 
     model_type = "olmoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_local_experts": "num_experts"}
 
     # Default tensor parallel plan for base model `Olmoe`

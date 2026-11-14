@@ -26,12 +26,18 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 if is_torch_available():
     import torch
 
-    from transformers import BeamConfig, BeamForCausalLM, BeamModel
+    from transformers import (
+        BeamConfig,
+        BeamForCausalLM,
+        BeamForTokenClassification,
+        BeamModel,
+    )
 
 
 class BeamModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BeamModel
+        token_classification_class = BeamForTokenClassification
 
     def __init__(self, parent, **kwargs):
         super().__init__(parent=parent, **kwargs)

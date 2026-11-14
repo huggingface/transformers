@@ -34,6 +34,7 @@ from ...generation.logits_process import (
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
 
@@ -380,6 +381,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         return timestamps
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         input_features: torch.Tensor | None = None,
@@ -1024,7 +1027,7 @@ class WhisperGenerationMixin(GenerationMixin):
                         generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0
                     )
 
-            if attention_mask is None and generate_kwargs.get("past_key_values") is not None:
+            if attention_mask is None and generate_kwargs.get("cache") is not None:
                 # This will force slicing of decoder_input_ids = decoder_input_ids[:, cache_length:] as the first tokens
                 # are already in the cache, but we do not have an `attention_mask` to give this info to `generate`
                 generation_config._mask_length = decoder_input_ids.shape[-1]
@@ -1178,11 +1181,11 @@ class WhisperGenerationMixin(GenerationMixin):
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-            elif key == "past_key_values":
+            elif key == "cache":
                 if not is_shortform:
-                    # we don't save `past_key_values` as this is too costly for longform
+                    # we don't save `cache` as this is too costly for longform
                     return None
-                all_past_key_values = []
+                all_cache = []
                 for layer_idx in range(self.config.decoder_layers):
                     layer_cache = (
                         values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
@@ -1190,8 +1193,8 @@ class WhisperGenerationMixin(GenerationMixin):
                         values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
                         values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
                     )
-                    all_past_key_values.append(layer_cache)
-                return EncoderDecoderCache(all_past_key_values)
+                    all_cache.append(layer_cache)
+                return EncoderDecoderCache(all_cache)
 
             return values[batch_idx].cpu()
 
@@ -1226,9 +1229,9 @@ class WhisperGenerationMixin(GenerationMixin):
                     )
                     for i in range(len(seek_outputs[0][key]))
                 )
-            elif key == "past_key_values":
+            elif key == "cache":
                 if seek_outputs[0][key] is not None:
-                    all_past_key_values = []
+                    all_cache = []
                     for layer_idx in range(len(seek_outputs[0][key])):
                         self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
                             torch.stack(
@@ -1242,10 +1245,8 @@ class WhisperGenerationMixin(GenerationMixin):
                             for sub_cache in ["self_attention_cache", "cross_attention_cache"]
                             for sub_key in ["keys", "values"]
                         )
-                        all_past_key_values.append(
-                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
-                        )
-                    outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
+                        all_cache.append((self_attention_k, self_attention_v, cross_attention_k, cross_attention_v))
+                    outputs[key] = EncoderDecoderCache(tuple(all_cache))
                 else:
                     outputs[key] = None
 

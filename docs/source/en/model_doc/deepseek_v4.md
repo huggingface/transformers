@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 # DeepSeek-V4
 
 [DeepSeek-V4](https://huggingface.co/deepseek-ai) is the next-generation MoE language model from DeepSeek
-([paper](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash/blob/main/DeepSeek_V4.pdf)). The architecture replaces
+([paper](https://huggingface.co/papers/2606.19348)). The architecture replaces
 DeepSeek-V3's Multi-head Latent Attention (MLA) with a hybrid local + long-range design, swaps residual connections
 for Manifold-Constrained Hyper-Connections (mHC), and bootstraps the first few MoE layers with a static
 token-id → expert-id hash table.

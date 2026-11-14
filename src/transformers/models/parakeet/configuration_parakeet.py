@@ -57,7 +57,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "parakeet_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     hidden_size: int = 1024
     num_hidden_layers: int = 24
