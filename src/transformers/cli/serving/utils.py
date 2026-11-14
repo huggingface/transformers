@@ -1118,6 +1118,40 @@ class BaseHandler:
             logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
 
     @staticmethod
+    def _frequency_penalty_to_repetition_penalty(frequency_penalty: float) -> float:
+        """Map OpenAI's ``frequency_penalty`` to ``repetition_penalty`` (``1.0 + frequency_penalty``).
+
+        Raises an HTTP 400 for values outside OpenAI's documented range ``[-2.0, 2.0]``, or for
+        values that would map to a non-positive ``repetition_penalty`` (i.e. less than or equal to
+        -1.0, including exactly -1.0, which maps to 0.0), which would make ``generate()`` fail with
+        a 500 otherwise.
+
+        Args:
+            frequency_penalty (`float`): The OpenAI ``frequency_penalty`` sent by the client.
+
+        Returns:
+            `float`: The equivalent ``repetition_penalty``.
+        """
+        from fastapi import HTTPException
+
+        if not -2.0 <= frequency_penalty <= 2.0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"`frequency_penalty` must be in the range [-2.0, 2.0], but is {frequency_penalty}.",
+            )
+        repetition_penalty = 1.0 + frequency_penalty
+        if repetition_penalty <= 0.0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"`frequency_penalty` of {frequency_penalty} is valid for OpenAI, but it maps to a "
+                    f"non-positive repetition penalty ({repetition_penalty}) which is unsupported by the "
+                    "current `1.0 + frequency_penalty` mapping; only values greater than -1.0 are supported."
+                ),
+            )
+        return repetition_penalty
+
+    @staticmethod
     def chunk_to_sse(chunk: "str | pydantic.BaseModel") -> str:
         """Format a pydantic model or string as an SSE ``data:`` line."""
         if isinstance(chunk, str):
