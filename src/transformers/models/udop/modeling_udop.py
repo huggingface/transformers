@@ -47,6 +47,7 @@ from ...utils import (
     auto_docstring,
     is_torchdynamo_compiling,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 
@@ -97,19 +98,19 @@ def eager_attention_forward(
 class BaseModelOutputWithAttentionMask(ModelOutput):
     r"""
     last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
+        Sequence of hidden-states at the output of the last layer of the model. If `cache` is used only
         the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Attention mask used in the model's forward pass to avoid performing attention on padding token indices.
         Mask values selected in `[0, 1]`:
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the
         self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
-        that can be used (see `past_key_values` input) to speed up sequential decoding.
+        that can be used (see `cache` input) to speed up sequential decoding.
     hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
@@ -126,7 +127,7 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
 
     last_hidden_state: torch.Tensor | None = None
     attention_mask: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     cross_attentions: tuple[torch.Tensor] | None = None
@@ -485,13 +486,14 @@ class UdopAttention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         mask=None,
         key_value_states=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
@@ -501,7 +503,7 @@ class UdopAttention(nn.Module):
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.key_value_proj_dim)
-        past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
+        past_seen_tokens = cache.get_seq_length(self.layer_idx) if cache is not None else 0
         # We clone here for StaticCache, as we get the value before updating it, but use it after and it's the same ref
         past_seen_tokens = past_seen_tokens.clone() if isinstance(past_seen_tokens, torch.Tensor) else past_seen_tokens
 
@@ -512,31 +514,31 @@ class UdopAttention(nn.Module):
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
-        if isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if isinstance(cache, EncoderDecoderCache):
+            is_updated = cache.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_values = past_key_values.cross_attention_cache
+                curr_cache = cache.cross_attention_cache
             else:
-                curr_past_key_values = past_key_values.self_attention_cache
+                curr_cache = cache.self_attention_cache
         else:
-            curr_past_key_values = past_key_values
+            curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             kv_shape = (*current_states.shape[:-1], -1, self.key_value_proj_dim)
             key_states = self.k(current_states).view(kv_shape).transpose(1, 2)
             value_states = self.v(current_states).view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         if position_bias is None:
@@ -589,12 +591,13 @@ class UdopLayerSelfAttention(nn.Module):
         self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -602,7 +605,7 @@ class UdopLayerSelfAttention(nn.Module):
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = hidden_states + self.dropout(attention_output)
@@ -619,13 +622,14 @@ class UdopLayerCrossAttention(nn.Module):
         self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -634,7 +638,7 @@ class UdopLayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         layer_output = hidden_states + self.dropout(attention_output)
@@ -657,6 +661,7 @@ class UdopBlock(GradientCheckpointingLayer):
 
         self.layer.append(UdopLayerFF(config))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
@@ -665,14 +670,14 @@ class UdopBlock(GradientCheckpointingLayer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states, self_attn_position_bias, _ = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
 
@@ -693,7 +698,7 @@ class UdopBlock(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -1100,6 +1105,7 @@ class UdopStack(UdopPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids=None,
@@ -1112,7 +1118,7 @@ class UdopStack(UdopPreTrainedModel):
         visual_bbox=None,
         image_embeddings=None,
         position_bias=None,
-        past_key_values=None,
+        cache=None,
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithAttentionMask:
@@ -1168,22 +1174,20 @@ class UdopStack(UdopPreTrainedModel):
             assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
         if self.is_decoder:
-            if use_cache and past_key_values is None:
+            if use_cache and cache is None:
                 if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(
-                        DynamicCache(config=self.config), DynamicCache(config=self.config)
-                    )
+                    cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 else:
-                    past_key_values = DynamicCache(config=self.config)
+                    cache = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
-            past_key_values = None
+            cache = None
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_length = cache.get_seq_length() if cache is not None else 0
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
+            mask_seq_length = cache_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
@@ -1191,7 +1195,7 @@ class UdopStack(UdopPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
         else:
             causal_mask = create_bidirectional_mask(
@@ -1228,7 +1232,7 @@ class UdopStack(UdopPreTrainedModel):
                 encoder_hidden_states,
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -1243,7 +1247,7 @@ class UdopStack(UdopPreTrainedModel):
         return BaseModelOutputWithAttentionMask(
             last_hidden_state=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1286,6 +1290,7 @@ class UdopModel(UdopPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: Tensor | None = None,
@@ -1297,7 +1302,7 @@ class UdopModel(UdopPreTrainedModel):
         decoder_attention_mask: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
         encoder_outputs: Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1317,8 +1322,8 @@ class UdopModel(UdopPreTrainedModel):
             Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
             [What are decoder input IDs?](../glossary#decoder-input-ids) T5 uses the `pad_token_id` as the starting
-            token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
-            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
+            token for `decoder_input_ids` generation. If `cache` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `cache`). To know more on how to prepare
             `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
@@ -1375,7 +1380,7 @@ class UdopModel(UdopPreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
@@ -1384,7 +1389,7 @@ class UdopModel(UdopPreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1446,6 +1451,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: Tensor | None = None,
@@ -1457,7 +1463,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         decoder_attention_mask: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
         encoder_outputs: Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
         use_cache: bool | None = None,
         labels: Tensor | None = None,
@@ -1478,8 +1484,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
             [What are decoder input IDs?](../glossary#decoder-input-ids) T5 uses the `pad_token_id` as the starting
-            token for `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
-            `decoder_input_ids` have to be input (see `past_key_values`). To know more on how to prepare
+            token for `decoder_input_ids` generation. If `cache` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `cache`). To know more on how to prepare
             `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
@@ -1543,7 +1549,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
@@ -1565,7 +1571,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return Seq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,

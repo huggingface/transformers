@@ -32,6 +32,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import (
@@ -153,12 +154,13 @@ class DiaCrossAttention(nn.Module):
         self.v_proj = nn.Linear(self.cross_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cross_attention_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -167,24 +169,24 @@ class DiaCrossAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
-        if past_key_values is not None and is_updated:
+        is_updated = cache.is_updated.get(self.layer_idx) if cache is not None else False
+        if cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
-            value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+            key_states = cache.cross_attention_cache.layers[self.layer_idx].keys
+            value_states = cache.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all states to the cache
-                key_states, value_states = past_key_values.cross_attention_cache.update(
+                key_states, value_states = cache.cross_attention_cache.update(
                     key_states,
                     value_states,
                     self.layer_idx,
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -306,6 +308,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         self.pre_mlp_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -313,10 +316,10 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-        self_attn_cache = past_key_values
+        self_attn_cache = cache
         if isinstance(self_attn_cache, EncoderDecoderCache):
             self_attn_cache = self_attn_cache.self_attention_cache
 
@@ -339,7 +342,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             normed_states,
             encoder_hidden_states,
             attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = residual + cross_states
@@ -378,6 +381,7 @@ class DiaDecoder(DiaPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -385,7 +389,7 @@ class DiaDecoder(DiaPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
         r"""
@@ -396,10 +400,10 @@ class DiaDecoder(DiaPreTrainedModel):
         """
 
         batch_size, seq_length = input_ids.size()[:-1]
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_length = cache.get_seq_length() if cache is not None else 0
 
         if position_ids is None:
-            position_ids = torch.arange(seq_length, device=input_ids.device) + past_key_values_length
+            position_ids = torch.arange(seq_length, device=input_ids.device) + cache_length
             position_ids = position_ids.unsqueeze(0)
 
         # RoPE
@@ -407,14 +411,14 @@ class DiaDecoder(DiaPreTrainedModel):
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
+            mask_seq_length = cache_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=input_ids.device)
 
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -433,7 +437,7 @@ class DiaDecoder(DiaPreTrainedModel):
                 attention_mask,
                 encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -442,7 +446,7 @@ class DiaDecoder(DiaPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -461,6 +465,7 @@ class DiaModel(DiaPreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -469,7 +474,7 @@ class DiaModel(DiaPreTrainedModel):
         decoder_position_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | tuple | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
@@ -507,8 +512,8 @@ class DiaModel(DiaPreTrainedModel):
                 )
                 use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -540,14 +545,14 @@ class DiaModel(DiaPreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -583,6 +588,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -591,7 +597,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         decoder_position_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: BaseModelOutput | tuple | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs,
@@ -629,7 +635,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             decoder_position_ids=decoder_position_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -652,7 +658,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         return Seq2SeqLMOutput(
             loss=loss,
             logits=audio_logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

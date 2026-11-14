@@ -387,7 +387,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.assertTrue(torch.isfinite(outputs.loss))
 
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
@@ -419,10 +419,10 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -443,7 +443,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[1]
             new_audio_input_ids_len = outputs_cached.audio_sequences.shape[1]
             inputs["input_ids"] = outputs_cached.sequences
@@ -473,7 +473,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
 
 class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
