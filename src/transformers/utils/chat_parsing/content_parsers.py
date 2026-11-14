@@ -105,6 +105,7 @@ def _xml_inline(text: str, args: dict) -> dict:
     merge = args.get("merge_duplicates", False)
 
     out: dict[str, Any] = {}
+    merged: set[str] = set()
     for m in re.finditer(tag_pattern, text, flags=re.DOTALL):
         groups = m.groupdict()
         key = groups.get("key")
@@ -112,8 +113,9 @@ def _xml_inline(text: str, args: dict) -> dict:
             raise ValueError(f"xml-inline: tag_pattern must have a named group 'key'. Pattern: {tag_pattern}")
         value = _sub_parse(groups.get("value", ""), value_parser)
         if key in out and merge:
-            if not isinstance(out[key], list):
+            if key not in merged:
                 out[key] = [out[key]]
+                merged.add(key)
             out[key].append(value)
         else:
             out[key] = value
