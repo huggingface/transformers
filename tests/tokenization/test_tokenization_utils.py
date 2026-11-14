@@ -39,6 +39,7 @@ from transformers import (
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
     CaptureStderr,
+    require_jinja,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -411,6 +412,43 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+
+    @require_jinja
+    @require_tokenizers
+    def test_apply_chat_template_assistant_mask_left_truncation(self):
+        vocab = ["[UNK]", "user", "assistant", "hello", "first", "reply", "question", "last", "answer"]
+        backend = Tokenizer(tokenizers.models.WordLevel({word: i for i, word in enumerate(vocab)}, unk_token="[UNK]"))
+        backend.pre_tokenizer = tokenizers.pre_tokenizers.WhitespaceSplit()
+        tokenizer = TokenizersBackend(tokenizer_object=backend, truncation_side="left")
+        template = (
+            "{% for message in messages %}{{ message['role'] }} "
+            "{% if message['role'] == 'assistant' %}"
+            "{% generation %}{{ message['content'] }}{% endgeneration %}"
+            "{% else %}{{ message['content'] }}{% endif %}{{ ' ' }}{% endfor %}"
+        )
+        conversation = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "first reply"},
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "last answer"},
+            {"role": "user", "content": "hello"},
+        ]
+        for max_length, expected_mask in [
+            (9, [1, 1, 0, 0, 0, 1, 1, 0, 0]),
+            (8, [1, 0, 0, 0, 1, 1, 0, 0]),
+            (6, [0, 0, 1, 1, 0, 0]),
+            (4, [1, 1, 0, 0]),
+        ]:
+            with self.subTest(max_length=max_length):
+                output = tokenizer.apply_chat_template(
+                    conversation,
+                    chat_template=template,
+                    return_dict=True,
+                    return_assistant_tokens_mask=True,
+                    truncation=True,
+                    max_length=max_length,
+                )
+                self.assertEqual(output["assistant_masks"], expected_mask)
 
     def test_apply_chat_template_sanitize_control_tokens(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
