@@ -150,6 +150,18 @@ class ExpertsOffloadTest(unittest.TestCase):
                     else:
                         self.assertEqual(store.prefetched, 0)
 
+    def test_mps_commit_hooks(self):
+        reference = tiny_qwen3_moe(3)
+        expected = greedy(reference, IDS, tokens=8)
+        with tempfile.TemporaryDirectory() as directory:
+            reference.save_pretrained(directory)
+            for enabled in (True, False):
+                with self.subTest(mps_commit=enabled):
+                    with mock.patch("transformers.integrations.experts_offload._commit_mps") as commit:
+                        model = self.load(directory, mps_commit=enabled)
+                        torch.testing.assert_close(greedy(model, IDS, tokens=8), expected)
+                    self.assertEqual(commit.called, enabled)
+
     def test_preload_and_fully_resident_layers_skip_the_host_copy(self):
         reference = tiny_qwen3_moe(4)
         with tempfile.TemporaryDirectory() as directory:

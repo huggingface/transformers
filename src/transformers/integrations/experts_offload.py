@@ -234,6 +234,7 @@ class ExpertStore:
         self.inflight = []
         # Recycled host buffers of quantized experts, see `_host_buffer`.
         self.free_host_buffers = []
+        self.commit = False  # see `_commit_mps`
 
     def register(self, prefix, module):
         shapes = {
@@ -466,7 +467,8 @@ class ExpertStore:
         """Install prefetched experts while queued device work runs, without counting lookups."""
         for expert in experts:
             key = (prefix, expert)
-            if key in self.cache or key not in self.pending:
+            # Only finished reads: waiting here would delay the next layer's launches for guesses that may go unused.
+            if key in self.cache or key not in self.pending or not self.pending[key].done():
                 continue
             if self._install(key, self.slot_bytes) is not None:
                 self.installed_ahead += 1
@@ -685,6 +687,19 @@ def _pool_forward(module, store, hidden_states, top_k_index, top_k_weights, slot
     return kernel(_PoolExperts(module, store), hidden_states, slots, top_k_weights)
 
 
+def _commit_mps(store):
+    """Hand the queued MPS work to the GPU without waiting for it.
+
+    PyTorch's MPS stream keeps small kernels in a command buffer that it commits at the next synchronization, so after
+    each layer's routing copy the GPU would idle while the host encodes the next layer. Recording an event commits the
+    buffer.
+    """
+    # TODO(portability): MPS-only workaround for PyTorch's lazy command-buffer commits; check whether other backends
+    # (CUDA streams submit eagerly) need an equivalent, and drop it once PyTorch's MPS stream commits on its own.
+    if store.device.type == "mps":
+        torch.mps.Event().record()
+
+
 def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
     """The ``experts_offload`` experts implementation: resident experts from the cache, missing ones from disk."""
     if module.training or torch.is_grad_enabled():
@@ -730,6 +745,8 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
         result = _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_weights, routing, experts)
     finally:
         store.discard(prefix)
+    if store.commit:
+        _commit_mps(store)
     if guessed:
         store.install_ahead(next_prefix, guessed)
     return result
@@ -808,6 +825,7 @@ _OPTIONS = {
     "experts_implementation",
     "token_chunk_size",
     "predict_max_routes",
+    "mps_commit",
 }
 
 
@@ -826,6 +844,8 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         experts_implementation (`str`, defaults to `"grouped_mm"`): kernel for cached BF16 experts, or `"batched_mm"`.
         token_chunk_size (`int`, defaults to 256): row chunk for experts that run uncached.
         predict_max_routes (`int`, defaults to 64): prefetch only for calls with at most this many routes (decode).
+        mps_commit (`bool`, defaults to `True`): on MPS, commit the queued work after each decoder-layer sub-block and
+            after the experts, so the GPU runs it while the host encodes what follows.
     """
     options = dict(options)
     unknown = set(options) - _OPTIONS
@@ -885,6 +905,16 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
             module.offload_next = routers[index + 1]
         if depth >= 2 and index + 2 < len(routers):
             module.offload_after_next = routers[index + 2]
+    if options.get("mps_commit", True):
+        store.commit = True
+
+        def commit_hook(module, args, output):
+            _commit_mps(store)  # returns nothing: a forward hook's return value would replace the output
+
+        for name, _ in experts:
+            layer = model.get_submodule(name.rpartition(".")[0].rpartition(".")[0])
+            for child in layer.children():
+                child.register_forward_hook(commit_hook)
     if options.get("preload", False):
         store.preload()
     model.experts_offload_store = store
@@ -902,6 +932,7 @@ def quantize_experts(checkpoint, output, *, bits=4, group_size=64, device="cpu")
     device = torch.device(device)
     quantize = lambda weight: _affine_quantize_tensor(weight, group_size, bits)  # noqa: E731
     quantizer = "pytorch-reference"
+    # TODO(portability): Metal quantizer on MPS only; other accelerators use the PyTorch reference.
     if device.type == "mps":
         from .hub_kernels import get_kernel
 
