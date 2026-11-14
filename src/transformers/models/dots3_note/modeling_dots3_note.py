@@ -510,8 +510,12 @@ class Dots3NoteTextAttention(nn.Module):
 
     def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
         """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
-        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row."""
-        return {"latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None)}
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row, and the keys
+        of its indexer if it has one."""
+        rows = {"latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None)}
+        if self.indexer is not None:
+            rows["index_key"] = ((self.config.index_head_dim,), None)
+        return rows
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -564,7 +568,11 @@ class Dots3NoteTextAttention(nn.Module):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         q_rot, k_rot = q_rot.to(q_dtype), k_rot.to(k_dtype)
 
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        elif cache is not None:
             k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -577,8 +585,8 @@ class Dots3NoteTextAttention(nn.Module):
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0],
-                position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
                 cache=cache,
+                **kwargs,
             )
             if self.config._attn_implementation in ("eager", "sdpa"):
                 index_mask = (
