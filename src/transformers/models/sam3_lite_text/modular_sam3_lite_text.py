@@ -106,6 +106,34 @@ class Sam3LiteTextConfig(PreTrainedConfig):
         Configuration for the DETR decoder.
     mask_decoder_config (`dict` or `Sam3LiteTextMaskDecoderConfig`, *optional*):
         Configuration for the mask decoder.
+    auxiliary_loss (`bool`, *optional*, defaults to `False`):
+        Whether to compute auxiliary decoding losses.
+    ce_loss_coefficient (`float`, *optional*, defaults to 20.0):
+        Weight for the IoU-adaptive BCE classification loss.
+    bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
+        Weight for the L1 bounding box regression loss.
+    giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
+        Weight for the GIoU bounding box loss.
+    mask_loss_coefficient (`float`, *optional*, defaults to 200.0):
+        Weight for the sigmoid focal mask loss.
+    dice_loss_coefficient (`float`, *optional*, defaults to 10.0):
+        Weight for the dice mask loss.
+    ce_pos_weight (`float`, *optional*, defaults to 10.0):
+        Positive class weight in the BCE loss.
+    ce_alpha (`float`, *optional*, defaults to 0.25):
+        Alpha parameter for the IoU-adaptive soft target.
+    ce_gamma (`float`, *optional*, defaults to 2.0):
+        Gamma parameter for focal weighting on negatives.
+    mask_focal_alpha (`float`, *optional*, defaults to 0.25):
+        Alpha parameter for sigmoid focal loss on masks.
+    mask_focal_gamma (`float`, *optional*, defaults to 2.0):
+        Gamma parameter for sigmoid focal loss on masks.
+    matcher_class_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the classification error in the matching cost.
+    matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
+        The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+    matcher_giou_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the generalized IoU loss of the bounding box in the matching cost.
 
     Example:
     ```python
@@ -139,6 +167,20 @@ class Sam3LiteTextConfig(PreTrainedConfig):
     detr_decoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
+    auxiliary_loss: bool = False
+    ce_loss_coefficient: float = 20.0
+    bbox_loss_coefficient: float = 5.0
+    giou_loss_coefficient: float = 2.0
+    mask_loss_coefficient: float = 200.0
+    dice_loss_coefficient: float = 10.0
+    ce_pos_weight: float = 10.0
+    ce_alpha: float = 0.25
+    ce_gamma: float = 2.0
+    mask_focal_alpha: float = 0.25
+    mask_focal_gamma: float = 2.0
+    matcher_class_cost: float = 2.0
+    matcher_bbox_cost: float = 5.0
+    matcher_giou_cost: float = 2.0
 
     @property
     def image_size(self):
@@ -336,7 +378,6 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
