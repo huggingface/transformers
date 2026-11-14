@@ -33,7 +33,15 @@ Transformers-compatible checkpoints are available from the Ovis community:
 These checkpoints retain the original weights and include native model, tokenizer, and processor metadata. The
 original repositories still use legacy processor metadata. Weight names are mapped during loading.
 
-## Image inference
+## Usage
+
+<Tip warning={true}>
+
+Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
+
+</Tip>
+
+### Image inference
 
 Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conversation, and tokenize it in one call.
 For the 9B checkpoint, replace the model ID.
@@ -80,11 +88,10 @@ print(response)
 Multiple images can be supplied by adding more `{"type": "image", ...}` items to the message in the same order in which
 they should appear in the prompt.
 
-## Video inference
+### Video inference
 
 The official example uniformly samples eight frames. Pass the video path directly in the conversation and let the
 processor load and sample it. The processor prepares the inputs needed for generation.
-Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
 
 ```python
 messages = [
@@ -116,7 +123,7 @@ response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
 
-## Thinking mode
+### Thinking mode
 
 Set `enable_thinking=True` when applying the chat template to leave the model's reasoning block open. Set it to `False`
 to request the immediate-answer prompt format.
