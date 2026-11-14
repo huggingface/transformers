@@ -26,7 +26,12 @@ _import_structure = {
         "NNCFTorchFXQuantizer",
         "NNCFWeightCompressionConfig",
     ],
-    "quantizer_onnxruntime": ["OnnxRuntimeDynamicConfig", "OnnxRuntimeQuantizer", "OnnxRuntimeStaticConfig"],
+    "quantizer_onnxruntime": [
+        "OnnxRuntimeCalibrationTableConfig",
+        "OnnxRuntimeDynamicConfig",
+        "OnnxRuntimeQuantizer",
+        "OnnxRuntimeStaticConfig",
+    ],
     "quantizer_pt2e": ["PT2EQuantizer"],
 }
 
@@ -40,7 +45,12 @@ if TYPE_CHECKING:
         NNCFTorchFXQuantizer,
         NNCFWeightCompressionConfig,
     )
-    from .quantizer_onnxruntime import OnnxRuntimeDynamicConfig, OnnxRuntimeQuantizer, OnnxRuntimeStaticConfig
+    from .quantizer_onnxruntime import (
+        OnnxRuntimeCalibrationTableConfig,
+        OnnxRuntimeDynamicConfig,
+        OnnxRuntimeQuantizer,
+        OnnxRuntimeStaticConfig,
+    )
     from .quantizer_pt2e import PT2EQuantizer
 else:
     import sys

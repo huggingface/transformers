@@ -21,6 +21,8 @@ take the attention mask as an input (PT2E's retrace trips on in-graph mask const
 """
 
 import copy
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -482,6 +484,44 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         outputs = get_leaf_tensors(exported(**copy.deepcopy(inputs)))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
+
+    @require_onnxscript
+    @require_onnxruntime
+    def test_onnxruntime_calibration_table(self):
+        """A calibration table for TensorRT's implicit int8 leaves the graph unquantized and goes in its metadata; a
+        TensorRT provider turning int8 on reads it from its engine cache directory."""
+        import json
+
+        from transformers.exporters import (
+            OnnxConfig,
+            OnnxExporter,
+            OnnxRuntimeCalibrationTableConfig,
+            OnnxRuntimeQuantizer,
+        )
+        from transformers.exporters.quantizers.quantizer_onnxruntime import TENSORRT_CALIBRATION_TABLE
+        from transformers.exporters.runners.runner_onnx import _with_calibration_table
+
+        model, inputs = self._quantization_target("dense")
+        quantizer = OnnxRuntimeQuantizer(
+            OnnxRuntimeCalibrationTableConfig(), calibration_dataset=[copy.deepcopy(inputs)]
+        )
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
+        program = exported.program
+        self.assertFalse(_has_onnx_quantize_ops(program))
+        table = json.loads(program.metadata_props[TENSORRT_CALIBRATION_TABLE])
+        self.assertTrue(table and all(value >= 0 for value in table.values()))
+
+        with tempfile.TemporaryDirectory() as cache:
+            options = {"trt_int8_enable": True, "trt_engine_cache_path": cache}
+            ((name, resolved), cuda) = _with_calibration_table(
+                program, [("TensorrtExecutionProvider", options), "CUDAExecutionProvider"]
+            )
+            self.assertEqual(name, "TensorrtExecutionProvider")
+            self.assertEqual(cuda, "CUDAExecutionProvider")
+            self.assertTrue(os.path.isfile(os.path.join(cache, resolved["trt_int8_calibration_table_name"])))
+            # Without int8, or with a table of its own, the provider is left alone
+            plain = [("TensorrtExecutionProvider", {"trt_engine_cache_path": cache})]
+            self.assertEqual(_with_calibration_table(program, plain), plain)
 
     @parameterized.expand(
         [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]

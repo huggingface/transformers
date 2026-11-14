@@ -107,6 +107,8 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.quantizers.OnnxRuntimeDynamicConfig
 
+[[autodoc]] exporters.quantizers.OnnxRuntimeCalibrationTableConfig
+
 [[autodoc]] exporters.quantizers.NNCFOpenVINOQuantizer
 
 [[autodoc]] exporters.quantizers.NNCFOnnxQuantizer
