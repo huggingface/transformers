@@ -1426,6 +1426,9 @@ class Florence2Model(LlavaModel):
             image_hidden_states=image_features if encoder_outputs is None and pixel_values is not None else None,
         )
 
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
+
 
 @auto_docstring(
     custom_intro="""
@@ -1578,6 +1581,9 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         )
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Florence2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
