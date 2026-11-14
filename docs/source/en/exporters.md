@@ -408,11 +408,23 @@ messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggi
 inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
 
 exported = DynamoExporter().export_multimodal(model, inputs, config=DynamoConfig(dynamic=True))
-# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model" and "language_model"
+# exported: ExportedMultimodalModel with "text_embeddings_model", "vision_embeddings_model" and "language_model"
 exported.save_pretrained("qwen2-vl-dynamo")
 ```
 
 Pass a `{component: config}` dict to configure each component on its own terms.
+
+An [`ExportedMultimodalModel`] runs the components as the model's own forward does, called with the processor's
+whole output: the token ids are embedded, each modality's features are scattered into its placeholder tokens, and
+`language_model` returns what the model returns. [`ExportedModel.from_pretrained`] loads any saved export, as the
+class it runs as.
+
+```python
+from transformers.exporters import ExportedModel
+
+model = ExportedModel.from_pretrained("qwen2-vl-dynamo")
+logits = model(**inputs).logits
+```
 
 ## Generative models
 

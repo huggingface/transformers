@@ -319,10 +319,25 @@ class ExportedModel(PushToHubMixin):
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
-        model = cls(components, exporter.export_format, config=config, generation_config=generation_config)
+        model_class = _exported_model_class(components)
+        if not issubclass(model_class, cls):
+            raise TypeError(
+                f"{pretrained_model_name_or_path} runs as a {model_class.__name__}, not a {cls.__name__}: load it with "
+                f"`{model_class.__name__}.from_pretrained` or `ExportedModel.from_pretrained`."
+            )
+        model = model_class(components, exporter.export_format, config=config, generation_config=generation_config)
         if has_runner:
             model.to(device, **runner_kwargs)
         return model
+
+
+def _exported_model_class(component_names) -> type[ExportedModel]:
+    """The class an export runs as, from its components: a multimodal split as an `ExportedMultimodalModel`."""
+    from .multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
+
+    if {"language_model", "text_embeddings_model"} <= set(component_names) <= MULTIMODAL_COMPONENTS:
+        return ExportedMultimodalModel
+    return ExportedModel
 
 
 class HfExporter(ABC):
@@ -492,7 +507,7 @@ class HfExporter(ABC):
                 to those samples.
 
         Returns:
-            [`ExportedModel`]: One [`ExportedComponent`] per component.
+            [`ExportedMultimodalModel`]: One [`ExportedComponent`] per component, called like the model.
         """
         components = decompose_multimodal(model, sample_inputs)
 
@@ -503,7 +518,9 @@ class HfExporter(ABC):
                     samples.setdefault(name, []).append(component.inputs)
             return samples
 
-        return ExportedModel(
+        from .multimodal import ExportedMultimodalModel
+
+        return ExportedMultimodalModel(
             self._export_components(components, config, calibration),
             self.export_format,
             config=getattr(model, "config", None),
