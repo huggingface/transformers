@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
 
 from transformers import DebertaConfig, is_torch_available
@@ -264,6 +265,16 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_token_classification(*config_and_inputs)
+
+    def test_load_in_bfloat16(self):
+        config, input_ids, token_type_ids, input_mask, *_ = self.model_tester.prepare_config_and_inputs()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            DebertaModel(config).save_pretrained(tmp_dir)
+            model = DebertaModel.from_pretrained(tmp_dir, dtype=torch.bfloat16).to(torch_device).eval()
+
+        self.assertEqual({p.dtype for p in model.parameters()}, {torch.bfloat16})
+        with torch.no_grad():
+            model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
     @slow
     def test_model_from_pretrained(self):

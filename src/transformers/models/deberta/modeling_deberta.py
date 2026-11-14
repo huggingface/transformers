@@ -157,8 +157,8 @@ class DisentangledSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.in_proj = nn.Linear(config.hidden_size, self.all_head_size * 3, bias=False)
-        self.q_bias = nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
-        self.v_bias = nn.Parameter(torch.zeros((self.all_head_size), dtype=torch.float))
+        self.q_bias = nn.Parameter(torch.zeros(self.all_head_size))
+        self.v_bias = nn.Parameter(torch.zeros(self.all_head_size))
         self.pos_att_type = config.pos_att_type if config.pos_att_type is not None else []
 
         self.relative_attention = getattr(config, "relative_attention", False)
