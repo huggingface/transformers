@@ -3138,10 +3138,7 @@ class UtilsFunctionsTest(unittest.TestCase):
     def test_beam_sampling_sorts_candidates(self):
         from transformers.generation.utils import GenerationMixin
 
-        scores = torch.tensor(
-            [[-1.0, -0.1, -0.45, -1.2, -1.5, -2.0,
-              -2.5, -3.0, -3.5, -1.1, -2.3, -2.9]]
-        )
+        scores = torch.tensor([[-1.0, -0.1, -0.45, -1.2, -1.5, -2.0, -2.5, -3.0, -3.5, -1.1, -2.3, -2.9]])
         sequences = torch.zeros((1, 2, 3), dtype=torch.long)
         beam_indices = torch.full((1, 2, 2), -1, dtype=torch.int32)
 
@@ -3161,9 +3158,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                 batch_size=1,
             )
 
-        torch.testing.assert_close(
-            picked, torch.tensor([[-0.1, -1.0, -1.1, -1.2]])
-        )
+        torch.testing.assert_close(picked, torch.tensor([[-0.1, -1.0, -1.1, -1.2]]))
         self.assertEqual(tokens[0, :, 1].tolist(), [1, 0, 3, 3])
         self.assertEqual(beams[0, :, 0].tolist(), [0, 0, 1, 0])
 
