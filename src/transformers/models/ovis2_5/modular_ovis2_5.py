@@ -46,6 +46,7 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6VisionEmbeddings
 from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGlimmerVisionRotaryEmbedding
 from ..ovis2.modeling_ovis2 import Ovis2Model
 from ..video_llama_3.modeling_video_llama_3 import (
@@ -468,25 +469,12 @@ class Ovis2_5VisionRotaryEmbedding(MuseGlimmerVisionRotaryEmbedding):
     pass
 
 
-class Ovis2_5VisionEmbeddings(nn.Module):
+class Ovis2_5VisionEmbeddings(MiniCPMV4_6VisionEmbeddings):
+    """Patch embeddings and interpolated learned positions for packed Ovis2.5 inputs."""
+
     def __init__(self, config: Ovis2_5VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            padding="valid",
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
         self.interpolation_align_corners = False

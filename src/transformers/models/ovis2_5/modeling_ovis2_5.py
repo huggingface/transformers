@@ -118,9 +118,10 @@ class Ovis2_5VisionRotaryEmbedding(nn.Module):
 
 
 class Ovis2_5VisionEmbeddings(nn.Module):
+    """Patch embeddings and interpolated learned positions for packed Ovis2.5 inputs."""
+
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
-        self.config = config
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
@@ -133,9 +134,11 @@ class Ovis2_5VisionEmbeddings(nn.Module):
             padding="valid",
         )
 
-        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_patches_per_side = self.image_size // self.patch_size
+        self.num_patches = self.num_patches_per_side**2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.config = config
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
         self.interpolation_align_corners = False
