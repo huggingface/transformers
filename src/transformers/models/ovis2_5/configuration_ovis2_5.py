@@ -119,8 +119,6 @@ class Ovis2_5Config(PreTrainedConfig):
             self.vision_config.pop("use_rope", None)
             self.vision_config.pop("num_patches", None)
         super().__post_init__(**kwargs)
-        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
-            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
 
 __all__ = ["Ovis2_5Config", "Ovis2_5VisionConfig"]
