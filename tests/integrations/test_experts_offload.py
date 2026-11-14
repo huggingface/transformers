@@ -248,6 +248,44 @@ class ExpertsOffloadTest(unittest.TestCase):
             model = self.load(path, cache_bytes=3000, quantized_experts=quantized)
             torch.testing.assert_close(greedy(model, ids), expected)
 
+    def test_host_tier(self):
+        reference = tiny_qwen3_moe(6)
+        ids = [[1, 7, 3, 9, 2, 11, 5, 13, 4, 8, 6, 10]]
+        with tempfile.TemporaryDirectory() as directory:
+            path, quantized = Path(directory) / "model", Path(directory) / "experts-q8"
+            reference.save_pretrained(path)
+            quantize_experts(path, quantized, bits=8, group_size=8)
+            expected = greedy(self.load(path, cache_bytes=3000, quantized_experts=quantized), ids)
+            slot_bytes = self.load(
+                path, cache_bytes=3000, quantized_experts=quantized
+            ).experts_offload_store.slot_bytes
+            total = 2 * EXPERTS  # two layers
+            for host_experts, preload, io_threads in (
+                (total, False, 2),
+                (3, False, 2),
+                (total, True, 0),
+                (total, True, 4),
+            ):
+                with self.subTest(host_experts=host_experts, preload=preload, io_threads=io_threads):
+                    model = self.load(
+                        path, cache_bytes=3000, quantized_experts=quantized, io_threads=io_threads,
+                        host_cache_bytes=host_experts * slot_bytes, host_preload=preload,
+                    )  # fmt: skip
+                    store = model.experts_offload_store
+                    self.assertEqual(store.host_slots, host_experts)
+                    reads = store.stats()["read_calls"]
+                    self.assertEqual(reads, total if preload else 0)
+                    torch.testing.assert_close(greedy(model, ids), expected)
+                    torch.testing.assert_close(greedy(model, ids), expected)
+                    if host_experts == total:
+                        # Every expert was read at most once: device-cache misses are served from host memory.
+                        self.assertEqual(store.stats()["read_calls"], total)
+                        self.assertGreater(store.host_hits, 0)
+                    store.synchronize()  # rows of the last copies are released at the next synchronization
+                    self.assertEqual(store.host_busy, set())  # every handed-out row was released
+            with self.assertRaises(ValueError):
+                self.load(path, cache_bytes=3000, host_cache_bytes=1 << 20)  # needs quantized experts
+
     def test_inference_only_and_option_validation(self):
         reference = tiny_qwen3_moe(7)
         with tempfile.TemporaryDirectory() as directory:

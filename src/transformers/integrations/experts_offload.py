@@ -235,6 +235,15 @@ class ExpertStore:
         # Recycled host buffers of quantized experts, see `_host_buffer`.
         self.free_host_buffers = []
         self.commit = False  # see `_commit_mps`
+        # Optional host tier (quantized experts): a pool of expert rows in host memory between storage and the device
+        # cache, see `allocate_host_cache`. `host_busy` holds the rows handed out and not yet released.
+        self.host_pool = None
+        self.host_slots = 0
+        self.host_cache = OrderedDict()
+        self.host_free = []
+        self.host_busy = set()
+        self.host_lock = threading.Lock()
+        self.host_hits = self.host_misses = 0
 
     def register(self, prefix, module):
         shapes = {
@@ -382,8 +391,88 @@ class ExpertStore:
             self._evict(victim)
         return True
 
+    def allocate_host_cache(self, host_cache_bytes):
+        """Keep up to ``host_cache_bytes`` of quantized experts in (pinned) host memory, between storage and the device
+        cache: a device-cache miss then costs one host-to-device copy instead of a storage read. Worth it when host
+        memory is larger than device memory (discrete GPUs); on unified memory the device cache already is host RAM."""
+        if self.quantized is None:
+            raise ValueError("host_cache_bytes needs quantized_experts")
+        self.host_slots = host_cache_bytes // self.slot_bytes
+        if not self.host_slots:
+            return
+        self.host_pool = torch.empty(
+            (self.host_slots, self.slot_bytes), dtype=torch.uint8, pin_memory=self.device.type != "cpu"
+        )
+        self.host_free = list(range(self.host_slots))
+
+    def _host_row(self, tensor):
+        """The host-pool row ``tensor`` is, or None."""
+        if self.host_pool is None:
+            return None
+        offset = tensor.data_ptr() - self.host_pool.data_ptr()
+        if 0 <= offset < self.host_pool.numel() and offset % self.slot_bytes == 0:
+            return offset // self.slot_bytes
+        return None
+
+    def _release_host_row(self, tensor):
+        row = self._host_row(tensor)
+        if row is not None:
+            with self.host_lock:
+                self.host_busy.discard(row)
+        return row is not None
+
+    def _read_host_cached(self, prefix, expert):
+        """A quantized expert through the host tier: a hit hands out its row, a miss reads into a free (or the least
+        recently used, not busy) row. Returns None when every row is busy. Safe on I/O threads."""
+        key = (prefix, expert)
+        with self.host_lock:
+            row = self.host_cache.get(key)
+            if row is not None:
+                self.host_cache.move_to_end(key)
+                self.host_busy.add(row)
+                self.host_hits += 1
+                return (self.host_pool[row],)
+            if self.host_free:
+                row = self.host_free.pop()
+            else:
+                victim = next((k for k, r in self.host_cache.items() if r not in self.host_busy), None)
+                if victim is None:
+                    return None
+                row = self.host_cache.pop(victim)
+            self.host_busy.add(row)
+            self.host_misses += 1
+        try:
+            self.quantized[0].read(f"{prefix}.experts", expert, out=self.host_pool[row])
+        except BaseException:
+            with self.host_lock:
+                self.host_busy.discard(row)
+                self.host_free.append(row)
+            raise
+        with self.host_lock:
+            self.host_cache[key] = row
+        return (self.host_pool[row],)
+
+    def preload_host(self):
+        """Read every expert into the host tier now (in parallel when there are I/O threads)."""
+        keys = [(prefix, expert) for prefix, table in self.slot_tables.items() for expert in range(table.numel())]
+        if self.host_slots < len(keys):
+            raise ValueError(
+                f"host preload needs room for all {len(keys)} experts; the host tier has {self.host_slots}"
+            )
+        if self.executor is not None:
+            results = [f.result() for f in [self.executor.submit(self._read_host_cached, *key) for key in keys]]
+        else:
+            results = [self._read_host_cached(*key) for key in keys]
+        for tensors in results:
+            self._release_host_row(tensors[0])
+        self.host_hits = self.host_misses = 0
+
     def _read_host(self, prefix, expert):
         """Read expert bytes or floating weights on the host; safe to run on I/O threads."""
+        if self.host_pool is not None:
+            tensors = self._read_host_cached(prefix, expert)
+            if tensors is not None:
+                return tensors
         if self.quantized is not None:
             # Straight into a recycled pinned buffer: copying pinned memory to the device costs the host ~5x less
             # than pageable memory (0.03 vs 0.14 ms for a 2 MB expert on an M5).
@@ -410,7 +499,14 @@ class ExpertStore:
     def discard(self, prefix):
         """Drop the reads started for ``prefix`` that its forward call did not use (wrong predictions)."""
         for key in [key for key in self.pending if key[0] == prefix]:
-            self.pending.pop(key).cancel()
+            future = self.pending.pop(key)
+            if not future.cancel() and self.host_pool is not None:
+                # Already read (or reading): its host-tier row was handed out and will not be copied.
+                future.add_done_callback(self._release_unused)
+
+    def _release_unused(self, future):
+        if not future.cancelled() and future.exception() is None:
+            self._release_host_row(future.result()[0])
 
     def _take_host(self, prefix, expert):
         """One expert in host memory: from a read already started by :meth:`prefetch`, else read now."""
@@ -435,6 +531,8 @@ class ExpertStore:
         if self.quantized is not None:
             # list.append / pop are atomic, so I/O threads can take buffers back while this runs.
             for tensors in self.inflight:
+                if self._release_host_row(tensors[0]):
+                    continue  # a host-tier row: it stays cached, now free to be evicted
                 if tensors[0].dtype == torch.uint8 and tensors[0].numel() == self.slot_bytes:
                     self.free_host_buffers.append(tensors[0])
         self.inflight.clear()
@@ -544,6 +642,9 @@ class ExpertStore:
             "peak_cache_bytes": self.peak_cache_bytes,
             "read_bytes": sum(reader.read_bytes for reader in self._readers()),
             "read_calls": sum(reader.read_calls for reader in self._readers()),
+            "host_slots": self.host_slots,
+            "host_hits": self.host_hits,
+            "host_misses": self.host_misses,
         }
 
 
@@ -826,6 +927,8 @@ _OPTIONS = {
     "token_chunk_size",
     "predict_max_routes",
     "mps_commit",
+    "host_cache_bytes",
+    "host_preload",
 }
 
 
@@ -844,6 +947,9 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         experts_implementation (`str`, defaults to `"grouped_mm"`): kernel for cached BF16 experts, or `"batched_mm"`.
         token_chunk_size (`int`, defaults to 256): row chunk for experts that run uncached.
         predict_max_routes (`int`, defaults to 64): prefetch only for calls with at most this many routes (decode).
+        host_cache_bytes (`int`, defaults to 0): host memory (pinned on accelerators) kept as a tier of quantized
+            experts between storage and the device cache; for discrete GPUs with more host than device memory.
+        host_preload (`bool`, defaults to `False`): read every expert into the host tier at load time.
         mps_commit (`bool`, defaults to `True`): on MPS, commit the queued work after each decoder-layer sub-block and
             after the experts, so the GPU runs it while the host encodes what follows.
     """
@@ -915,6 +1021,10 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
             layer = model.get_submodule(name.rpartition(".")[0].rpartition(".")[0])
             for child in layer.children():
                 child.register_forward_hook(commit_hook)
+    if options.get("host_cache_bytes", 0):
+        store.allocate_host_cache(options["host_cache_bytes"])
+    if options.get("host_preload", False):
+        store.preload_host()
     if options.get("preload", False):
         store.preload()
     model.experts_offload_store = store
