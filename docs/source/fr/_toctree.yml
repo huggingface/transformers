@@ -29,4 +29,6 @@
     title: Ce que 🤗 Transformers peut faire
   - local: tasks_explained
     title: Comment 🤗 Transformers résout ces tâches
+  - local: philosophy
+    title: Philosophie
   title: Guides conceptuels
