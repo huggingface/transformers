@@ -32,7 +32,7 @@ deps = {
     "optuna": "optuna",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized>=0.9",
-    "peft": "peft>=0.20.0",
+    "peft": "peft>=0.22.0",
     "phonemizer": "phonemizer",
     "protobuf": "protobuf",
     "psutil": "psutil",
