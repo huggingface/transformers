@@ -144,7 +144,7 @@ print("Predicted class:", model.config.id2label[predicted_class_idx])
   patch_features = last_hidden_states[:, 1:, :].unflatten(1, (num_patches_height, num_patches_width))
   ```
 
-- Use [torch.jit.trace](https://pytorch.org/docs/stable/generated/torch.jit.trace.html) to speedup inference.
+- Use [torch.jit.trace](https://docs.pytorch.org/docs/2.9/generated/torch.jit.trace.html) to speedup inference.
   However, it will produce some mismatched elements. The difference between the original and traced model is 1e-4.
 
   ```py
