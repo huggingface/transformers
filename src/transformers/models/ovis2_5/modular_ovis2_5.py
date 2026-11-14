@@ -32,7 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, get_max_seqlen, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -638,6 +638,8 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
     def pixel_shuffle(self):
         raise AttributeError("Not needed for Ovis2.5")
 
+    # Unlike Muse, Ovis has no input LayerNorm or pixel shuffle, and does not flip or offset RoPE positions.
+    # Its visual tokenizer also needs encoder features before the final LayerNorm.
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -661,6 +663,9 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
             kwargs=kwargs,
         )
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        )
 
         sequence_length = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
@@ -673,7 +678,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
 
         cu_seqlens_mapping = {
             "full_attention": (cu_seqlens, max_seqlen),
-            "sliding_attention": (cu_window_seqlens, None),
+            "sliding_attention": (cu_window_seqlens, max_window_seqlen),
         }
         for layer_index, encoder_layer in enumerate(self.layers):
             layer_cu_seqlens, layer_max_seqlen = cu_seqlens_mapping[self.config.layer_types[layer_index]]

@@ -564,6 +564,9 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
             kwargs=kwargs,
         )
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        )
 
         sequence_length = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
@@ -576,7 +579,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 
         cu_seqlens_mapping = {
             "full_attention": (cu_seqlens, max_seqlen),
-            "sliding_attention": (cu_window_seqlens, None),
+            "sliding_attention": (cu_window_seqlens, max_window_seqlen),
         }
         for layer_index, encoder_layer in enumerate(self.layers):
             layer_cu_seqlens, layer_max_seqlen = cu_seqlens_mapping[self.config.layer_types[layer_index]]
