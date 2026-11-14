@@ -748,43 +748,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @filter_output_hidden_states
-    @auto_docstring(
-        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
-        "one `(num_image_tokens, hidden_size)` tensor for all images."
-    )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_token_pooling: torch.Tensor,
-        image_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
-        """
-        image_shape = None
-        if pixel_values.dim() == 4:
-            image_shape = pixel_values.shape[:3]
-            pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
-
-        image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
-        image_features = torch.cat(
-            [
-                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
-                for layer in self.config.adapter_config.vision_feature_layer
-            ],
-            dim=-1,
-        )
-
-        if image_shape is not None:
-            image_features = image_features.reshape(*image_shape, -1)
-        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
-        image_outputs.pooler_output = pooled_features
-        return image_outputs
-
-    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is a "
         "tuple with one `(num_image_tokens, hidden_size)` tensor per image."
@@ -879,8 +842,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
             image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
-            # Pre-encoded by `get_image_features` or `get_video_features` (`mm_encoder_outputs`), they come one
-            # tensor per image or video
             if not isinstance(image_features, torch.Tensor):
                 image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device)
@@ -924,6 +885,42 @@ class Molmo2Model(Molmo2PreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features,
         )
+
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring(
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
+        "one `(num_image_tokens, hidden_size)` tensor for all images."
+    )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        image_shape = None
+        if pixel_values.dim() == 4:
+            image_shape = pixel_values.shape[:3]
+            pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
+
+        image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
+        image_features = torch.cat(
+            [
+                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
+                for layer in self.config.adapter_config.vision_feature_layer
+            ],
+            dim=-1,
+        )
+
+        if image_shape is not None:
+            image_features = image_features.reshape(*image_shape, -1)
+        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        image_outputs.pooler_output = pooled_features
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring(

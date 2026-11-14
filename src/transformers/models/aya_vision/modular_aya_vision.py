@@ -201,9 +201,6 @@ class AyaVisionModel(LlavaModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
-
 
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -269,9 +266,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
-
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
 
 
 __all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel", "AyaVisionModel"]

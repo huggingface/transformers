@@ -360,9 +360,6 @@ class Ovis2Model(LlavaModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
-
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMixin):
@@ -447,9 +444,6 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
 
 
 __all__ = ["Ovis2PreTrainedModel", "Ovis2Model", "Ovis2ForConditionalGeneration"]

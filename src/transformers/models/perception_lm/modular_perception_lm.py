@@ -274,9 +274,6 @@ class PerceptionLMModel(LlavaModel):
             video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
 
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
-
 
 @auto_docstring
 class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
@@ -379,9 +376,6 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
 
     def get_image_features(self, **kwargs):
         raise AttributeError("Not needed for PerceptionLM")
-
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
 
 
 __all__ = [

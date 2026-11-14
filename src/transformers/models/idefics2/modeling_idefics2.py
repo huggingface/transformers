@@ -827,7 +827,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all real (non-padding) images as one tensor: `get_image_features` splits them per batch row.
+        All real (non-padding) images' features as one tensor; `get_image_features` splits them per batch row.
 
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -887,7 +887,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             The attention mask indicating padded regions in the image.
         """
         image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
-        # Padding images are full 0: the features hold the real ones' tokens, in batch order
+        # Padding images are all zeros
         real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
         num_real_images_per_batch = real_images.sum(dim=1)
         tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)

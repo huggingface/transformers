@@ -760,8 +760,7 @@ class Glm4vModel(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all videos as one tensor, in the order the model embeds them: `get_video_features` splits
-        them per video.
+        All videos' features as one tensor; `get_video_features` splits them per video.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
@@ -906,7 +905,6 @@ class Glm4vModel(Qwen2VLModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
             if not isinstance(image_embeds, torch.Tensor):
                 image_embeds = torch.cat(image_embeds, dim=0)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -915,7 +913,6 @@ class Glm4vModel(Qwen2VLModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            # Pre-encoded by `get_video_features` (`mm_encoder_outputs`), they come one tensor per video
             if not isinstance(video_embeds, torch.Tensor):
                 video_embeds = torch.cat(video_embeds, dim=0)
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
