@@ -1200,6 +1200,34 @@ class BaseHandler:
         return generation_config
 
     @staticmethod
+    def _apply_frequency_penalty(body: dict, generation_config: "GenerationConfig") -> None:
+        """Validate and apply frequency_penalty to generation_config as repetition_penalty."""
+        from fastapi import HTTPException
+
+        if body.get("frequency_penalty") is not None:
+            try:
+                freq_penalty = float(body["frequency_penalty"])
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="frequency_penalty must be a valid float.")
+
+            if not (-2.0 <= freq_penalty <= 2.0):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"frequency_penalty must be between -2.0 and 2.0, but got {freq_penalty}.",
+                )
+
+            repetition_penalty = 1.0 + freq_penalty
+            if repetition_penalty <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"frequency_penalty of {freq_penalty} results in a non-positive repetition_penalty "
+                        f"({repetition_penalty}). repetition_penalty must be strictly positive."
+                    ),
+                )
+            generation_config.repetition_penalty = repetition_penalty
+
+    @staticmethod
     def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
