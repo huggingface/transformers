@@ -35,6 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_pocket_tts_audio_tokenizer import (
@@ -149,7 +150,7 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
         Continuous latents of the audio, one frame per `config.frame_size` audio samples.
     latents_mask (`torch.LongTensor` of shape `(batch_size, num_frames)`, *optional*):
         Mask of the latent frames computed from audio samples (`1`) rather than padding (`0`).
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Key-value cache of the encoder transformer, returned when streaming.
     padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
         Padding cache of the encoder's causal convolutions, returned when streaming.
@@ -161,7 +162,7 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
 
     latents: torch.Tensor | None = None
     latents_mask: torch.LongTensor | None = None
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
@@ -173,13 +174,13 @@ class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.Tensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
         Decoded audio values, obtained using the decoder part of PocketTTSAudioTokenizer.
-    decoder_past_key_values (`Cache`, *optional*):
+    decoder_cache (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-        This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+        This typically consists in the `cache` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
         The model will output the same cache format that is fed as input.
 
-        If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+        If `cache` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
         have their past key value states given to this model).
     hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the decoder transformer at the output of each layer plus its input.
@@ -188,7 +189,7 @@ class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
     """
 
     audio_values: torch.Tensor | None = None
-    decoder_past_key_values: Cache | None = None
+    decoder_cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
 
@@ -485,11 +486,12 @@ class PocketTTSAudioTokenizerAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.sliding_window = config.sliding_window
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -503,8 +505,8 @@ class PocketTTSAudioTokenizerAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -540,11 +542,12 @@ class PocketTTSAudioTokenizerTransformerLayer(GradientCheckpointingLayer):
         self.self_attn_layer_scale = PocketTTSAudioTokenizerLayerScale(config)
         self.mlp_layer_scale = PocketTTSAudioTokenizerLayerScale(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -556,7 +559,7 @@ class PocketTTSAudioTokenizerTransformerLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -578,7 +581,7 @@ class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
     input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PocketTTSAudioTokenizerTransformerLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -618,7 +621,7 @@ class PocketTTSAudioTokenizerEncoderModelOutput(ModelOutput):
     r"""
     latents (`torch.Tensor` of shape `(batch_size, latent_dim, frames)`):
         Continuous latents of the audio, one frame per `config.frame_size` audio samples.
-    past_key_values (`Cache`, *optional*):
+    cache (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
         when streaming.
     padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
@@ -630,7 +633,7 @@ class PocketTTSAudioTokenizerEncoderModelOutput(ModelOutput):
     """
 
     latents: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
@@ -802,12 +805,13 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
         self.gradient_checkpointing = False
         self.config = config
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -827,11 +831,11 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
                 config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Cache`, *optional*):
+            cache (`Cache`, *optional*):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding (see
+                `cache`).
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -841,11 +845,11 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
             )
             use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -853,7 +857,7 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -863,12 +867,12 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
 
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 @auto_docstring(
@@ -939,11 +943,12 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
 
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None,
         use_streaming: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -954,7 +959,7 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
             for *masked*.
-        past_key_values (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, used to
             speed up streaming encoding.
         padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
@@ -994,12 +999,12 @@ class PocketTTSAudioTokenizerEncoderModel(PocketTTSAudioTokenizerPreTrainedModel
         hidden_states = self.encoder_seanet(input_values, padding_cache=padding_cache)
         # TODO: @eustlb, convert the padding mask to attention mask.
         encoder_outputs = self.encoder_transformer(
-            hidden_states.transpose(1, 2), past_key_values=past_key_values, use_cache=use_streaming, **kwargs
+            hidden_states.transpose(1, 2), cache=cache, use_cache=use_streaming, **kwargs
         )
         latents = self.downsample(encoder_outputs.last_hidden_state.transpose(1, 2), padding_cache=padding_cache)
 
         return PocketTTSAudioTokenizerEncoderModelOutput(
-            latents=latents, past_key_values=encoder_outputs.past_key_values, padding_cache=padding_cache
+            latents=latents, cache=encoder_outputs.cache, padding_cache=padding_cache
         )
 
 
@@ -1135,11 +1140,12 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
 
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         latents: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerDecoderOutput:
         r"""
@@ -1148,7 +1154,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
             for *masked*.
-        past_key_values (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) of the decoder transformer, used to
             speed up streaming decoding.
 
@@ -1156,18 +1162,14 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         input. In that case, any extra steps at the end can be trimmed.
         """
         hidden_states = self.upsample(latents)
-        decoder_outputs = self.decoder_transformer(
-            hidden_states.transpose(1, 2), past_key_values=past_key_values, **kwargs
-        )
+        decoder_outputs = self.decoder_transformer(hidden_states.transpose(1, 2), cache=cache, **kwargs)
         audio_values = self.decoder_seanet(decoder_outputs.last_hidden_state.transpose(1, 2))
 
         # truncate based on padding mask
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
             audio_values = audio_values[..., : padding_mask.shape[-1]]
 
-        return PocketTTSAudioTokenizerDecoderOutput(
-            audio_values=audio_values, decoder_past_key_values=decoder_outputs.past_key_values
-        )
+        return PocketTTSAudioTokenizerDecoderOutput(audio_values=audio_values, decoder_cache=decoder_outputs.cache)
 
 
 @auto_docstring(
@@ -1191,7 +1193,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
-        encoder_past_key_values: Cache | None = None,
+        encoder_cache: Cache | None = None,
         padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None,
         use_streaming: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1206,7 +1208,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
                 `config.frame_size` samples as the original does.
             padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
                 Mask of the audio samples (`1`) as opposed to padding (`0`), from which `latents_mask` is computed.
-            encoder_past_key_values (`Cache`, *optional*):
+            encoder_cache (`Cache`, *optional*):
                 Key-value cache of the encoder transformer, returned by the previous call when streaming.
             padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
                 Padding cache of the encoder's causal convolutions, returned by the previous call when streaming.
@@ -1219,7 +1221,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
             )
         encoder_outputs = self.encoder(
             input_values,
-            past_key_values=encoder_past_key_values,
+            cache=encoder_cache,
             padding_cache=padding_cache,
             use_streaming=use_streaming,
             return_dict=True,
@@ -1235,7 +1237,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         return PocketTTSAudioTokenizerEncoderOutput(
             latents=latents,
             latents_mask=latents_mask,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
@@ -1245,7 +1247,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
     def decode(
         self,
         latents: torch.Tensor,
-        decoder_past_key_values: Cache | None = None,
+        decoder_cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerDecoderOutput:
         """
@@ -1255,7 +1257,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         Args:
             latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`):
                 Continuous latents to decode, one frame per `config.frame_size` audio samples.
-            decoder_past_key_values (`Cache`, *optional*):
+            decoder_cache (`Cache`, *optional*):
                 Key-value cache of the decoder transformer, returned by the previous call when decoding in chunks.
         """
         if self.decoder is None:
@@ -1264,7 +1266,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
             )
         return self.decoder(
             self.latent_proj(latents.transpose(1, 2)),
-            past_key_values=decoder_past_key_values,
+            cache=decoder_cache,
             return_dict=True,
             **kwargs,
         )

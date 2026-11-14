@@ -116,7 +116,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     audio_token_id: int = 151671
     projector_hidden_act: str = "silu"
     projector_bias: bool = True
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     audio_merge_size: int = 4
     audio_chunk_size: int = 480_000
     tie_word_embeddings: bool = True

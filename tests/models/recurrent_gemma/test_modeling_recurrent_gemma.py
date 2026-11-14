@@ -173,7 +173,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
+    @unittest.skip(reason="Rely on `cache` to crop the assistant pkv. Not supported")
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
@@ -189,7 +189,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
+    @unittest.skip(reason="Relies on `cache` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
         pass
 
