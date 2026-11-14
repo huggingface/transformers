@@ -25,6 +25,8 @@ limitations under the License.
 
 MiniMax-M3-VL is the vision-language member of the MiniMax-M3 family. It pairs a CLIP-style vision tower (Conv3d patch embedding with 3D rotary position embeddings) with the MiniMax-M3 text backbone, a mixed dense/sparse Mixture-of-Experts decoder that uses SwiGLU-OAI gated experts and a lightning indexer for block-sparse attention.
 
+[MiniMax-M3.1-Flash](#minimax-m31-flash), introduced on October 23rd 2026, was released as an mxfp8 checkpoint with experts quantized to nvfp4.
+
 ## Architecture
 ### Block-sparse attention (Lightning Indexer)
 
@@ -195,6 +197,49 @@ if int(os.environ.get("RANK", "0")) == 0:
 if dist.is_initialized():
     sys.stdout.flush()
     os._exit(0)
+```
+
+## MiniMax-M3.1-Flash
+
+MiniMax-M3.1-Flash, introduced on October 23rd 2026, is a mixture-of-experts model with 428B parameters (23B activated per token). It was released as a combined mxfp8 and nvfp4 checkpoint to reduce memory requirements. It can be loaded on compatible devices using the snippet below.
+
+> [!IMPORTANT]
+> Transformers must be installed from this branch:
+>
+> ```bash
+> pip install git+https://github.com/huggingface/transformers.git@nvfp4-experts
+> ```
+
+
+```python
+import os
+from transformers import AutoModelForMultimodalLM, AutoProcessor, DistributedConfig
+
+distributed_config = DistributedConfig(
+    tp_size=int(os.environ["WORLD_SIZE"]),
+    ep_size=int(os.environ["WORLD_SIZE"]),
+)
+
+model_id = "MiniMaxAI/MiniMax-M3.1-Flash"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForMultimodalLM.from_pretrained(
+        model_id,
+        distributed_config=distributed_config,
+)
+
+messages = [{"role": "user", "content": "What is the capital of France?"}]
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device).to(model.dtype)
+input_len = inputs["input_ids"].shape[-1]
+
+outputs = model.generate(**inputs, max_new_tokens=100)
+if int(os.environ["RANK"]) == 0:
+    print(processor.decode(outputs[0][input_len:], skip_special_tokens=False
 ```
 
 ## MiniMaxM3VLConfig
