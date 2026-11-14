@@ -3,6 +3,22 @@
 A comprehensive benchmarking framework for transformer models that supports multiple execution modes (eager, compiled, kernelized), detailed performance metrics collection, and structured output format.
 
 
+## Workload and execution settings
+
+The main runner uses exactly `--sequence-length` input tokens per request. It truncates the fixed passage for shorter inputs and repeats its tokenized contents for longer inputs. Prompts remain identical across the batch. EOS stopping is explicitly disabled for fixed-length output measurements: regular generation uses `eos_token_id=None`, while continuous batching uses its `eos_token_id=-1` convention.
+
+Continuous batching disables prefix sharing through `ContinuousBatchingConfig` and disables automatic switching to Flash Attention. Eager attention uses its continuous-batching variant, `paged|eager`. Each call creates and warms up a manager; that lifecycle work remains inside API-call latency. Compiled regular generation uses a static cache.
+
+Saved measurements include `execution_settings`: actual input token lengths, attention implementation, dtype, generation settings, and the supplied continuous-batching settings. Unset continuous-batching fields remain subject to manager heuristics; this is not a dump of its resolved runtime configuration. Configuration hashes include the workload policy to distinguish these measurements from earlier runs.
+
+The separate continuous-batching suite inherits the model's generation configuration when no override is supplied (including IFEval), preserving natural EOS stopping. Fixed-length workloads explicitly use `eos_token_id=-1`. Saved configuration summaries retain EOS lists and nested settings.
+
+## Failed workloads
+
+Both runners reject incomplete or failed continuous-batching results before computing measurements or accuracy. Validation checks the request IDs assigned by a fresh manager (including sampled children), prompt tokens, and terminal success status. Accuracy scoring pairs documents with request IDs, independently of dictionary order.
+
+The main runner records setup and generation errors in `metadata.error`, continues with the remaining scenarios, and saves results before raising if none succeeded. Failed scenarios print `FAILED` with the error; empty measurements do not print zero-valued statistics. The continuous-batching suite records setup failures in each entry and includes error status in its summary.
+
 ## Quick Start
 
 ### Running All Benchmarks
