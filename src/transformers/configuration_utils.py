@@ -322,6 +322,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
       (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
     - **base_model_pp_plan** (`dict[str, tuple[list[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
+    - **base_model_cp_plan** (`dict[str, str]`) -- A dict that maps sub-modules FQNs of a base model to a context
+      parallel style: `"cp_split_sequence"` on the decoder layers, an attention style on their attention modules.
 
     Common attributes (present in all subclasses):
 
@@ -402,6 +404,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     }
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
+    base_model_cp_plan: ClassVar[dict[str, str] | None] = None
     _auto_class: ClassVar[str | None] = None
     # EXPERIMENTAL: files of checkpoints that ship a decision head next to their weights, read with them
     extra_files: ClassVar[tuple[str, ...]] = ()  # safetensors weights
@@ -1426,6 +1429,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "base_model_tp_plan",
             "base_model_pp_plan",
             "base_model_fsdp_plan",
+            "base_model_cp_plan",
             "distributed_config",
         ]:
             d.pop(key_to_remove, None)

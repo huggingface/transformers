@@ -63,6 +63,7 @@ class DistributedMixin:
     _mesh_manager: TransformersDeviceMesh | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
+    _cp_plan: dict[str, str] | None = None
     _tp_size = None
     _fsdp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
@@ -81,6 +82,7 @@ class DistributedMixin:
         model_cls = type(self)
         self._tp_plan = dict(getattr(model_cls, "_tp_plan", None) or {})
         self._ep_plan = dict(getattr(model_cls, "_ep_plan", None) or {})
+        self._cp_plan = dict(getattr(model_cls, "_cp_plan", None) or {})
         self._pp_plan = dict(getattr(model_cls, "_pp_plan", None) or {})
         self._fsdp_plan = dict(getattr(model_cls, "_fsdp_plan", None) or {})
 
@@ -88,6 +90,7 @@ class DistributedMixin:
             self._pp_plan.update(self.config.base_model_pp_plan or {})
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
+            self._cp_plan.update(self.config.base_model_cp_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
             # Shard the input embeddings on the vocabulary unless the plan already names them.
             if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
@@ -98,10 +101,15 @@ class DistributedMixin:
                 self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_cp_plan", None):
+                # the child's `""` is the child itself, not this model
+                self._cp_plan.update({f"{name}.{k}": v for k, v in plan.items() if k})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
                 self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+        # context parallelism installs `"cp_model"` on the model it is applied to, whatever its plan
+        self._cp_plan = {"": "cp_model", **self._cp_plan}
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -112,6 +120,11 @@ class DistributedMixin:
     def ep_plan(self) -> dict[str, str]:
         """The full expert parallel plan for the model's modules, kept separate from `tp_plan`."""
         return self._ep_plan
+
+    @property
+    def cp_plan(self) -> dict[str, str]:
+        """The full context parallel plan for the model's modules, `""` being the model itself."""
+        return self._cp_plan
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
