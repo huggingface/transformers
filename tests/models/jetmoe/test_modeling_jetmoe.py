@@ -106,6 +106,13 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_disk_offload_safetensors = False
     model_tester_class = JetMoeModelTester
 
+    def test_router_logits_recorded_once_per_router(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = JetMoeForCausalLM(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(**inputs_dict, output_router_logits=True)
+        self.assertEqual(len(outputs.router_logits), 2 * config.num_hidden_layers)
+
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
