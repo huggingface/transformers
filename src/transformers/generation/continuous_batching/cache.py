@@ -526,10 +526,11 @@ class PagedAttentionCache:
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         """On the decode fast path, for a layer whose kernel reads its rows where they sit in the cache pages: writes
         the rows of each sequence's new token at its slot, and returns the layer's pages by name, each of shape
-        [num_pages, tokens_per_page, *shape], the block table indexing them and the key length of each sequence."""
+        [num_pages, tokens_per_page, *shape], the block table indexing them and the key length of each sequence. The
+        kwargs are those `update` selected for the layer."""
         allocator: FullAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
         block_table = kwargs["block_table"][allocator.index]
-        seqlens_k = kwargs["cu_seq_lens_k"][allocator.layer_type].diff().to(torch.int32)
+        seqlens_k = kwargs["cu_seq_lens_k"].diff()
         # The new token is the last of its sequence. Padding sequences have a key length of 0 and a block table row of
         # -1, so they write to the trash
         position = seqlens_k.to(torch.int64) - 1
