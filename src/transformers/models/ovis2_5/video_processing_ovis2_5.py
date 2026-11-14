@@ -269,16 +269,19 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
         """
         if num_frames <= 0:
             raise ValueError(f"`num_frames` must be positive, got {num_frames}.")
+
         videos_kwargs = videos_kwargs or {}
         patch_size = videos_kwargs.get("patch_size", self.patch_size)
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
         merge_size = videos_kwargs.get("merge_size", self.merge_size)
         do_resize = videos_kwargs.get("do_resize", self.do_resize)
+
         resized_height, resized_width = height, width
         if do_resize:
             size = videos_kwargs.get("size", self.size)
             min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
             max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+
             # Mirror `resize` so the estimate matches the processed video grid.
             resized_height, resized_width = smart_resize(
                 height,
