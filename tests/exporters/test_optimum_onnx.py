@@ -105,7 +105,7 @@ class OptimumOnnxTest(unittest.TestCase):
         self.assertEqual(model.generate(**inputs, generation_config=generation_config).tolist(), expected.tolist())
 
     def test_multimodal(self):
-        """transformers.js' split (text embeddings, a vision encoder, a merged decoder on the embeddings), run as the
+        """onnx-community's multimodal split (text embeddings, a vision encoder, a merged decoder on the embeddings), run as the
         multimodal split: the eager model's answer, token for token."""
         from transformers import AutoModelForImageTextToText, AutoProcessor
         from transformers.exporters import ExportedMultimodalModelForCausalLM

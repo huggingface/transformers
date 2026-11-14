@@ -13,7 +13,7 @@
 # limitations under the License.
 """Loading optimum-onnx's ONNX graphs: a causal LM taking and returning its cache (`model.onnx`, or a merged decoder), an
 encoder-decoder (an encoder and a merged decoder) and an encoder, the cache renamed as the runtime names it; and the
-multimodal exports transformers.js publishes (onnx-community's): text embeddings, an encoder per modality and a merged
+multimodal exports on onnx-community: text embeddings, an encoder per modality and a merged
 decoder on the embeddings. A decoder split in two graphs, the prompt's and the steps', each holding the weights, is
 refused."""
 
@@ -40,13 +40,13 @@ if TYPE_CHECKING:
 
 
 # The graph files read, in order: one graph taking and returning the cache, or a merged decoder (which also takes a
-# `use_cache_branch` flag), at the root or in `onnx/` (transformers.js' layout).
+# `use_cache_branch` flag), at the root or in `onnx/` (onnx-community's layout).
 ONNX_FILES = tuple(
     f"{folder}{name}" for name in ("model.onnx", "decoder_model_merged.onnx") for folder in ("", "onnx/")
 )
 # An encoder-decoder's encoder, beside its merged decoder
 ONNX_ENCODER_FILES = ("encoder_model.onnx", "onnx/encoder_model.onnx")
-# A multimodal export's graphs beside its merged decoder (transformers.js'): its text embeddings, and one encoder per
+# A multimodal export's graphs beside its merged decoder (onnx-community's): its text embeddings, and one encoder per
 # modality, by the component it serves
 ONNX_TEXT_EMBEDDINGS = "embed_tokens.onnx"
 _ONNX_MODALITY_ENCODERS = {
@@ -127,7 +127,7 @@ def _rename_onnx_cache(program: onnx_ir.Model) -> dict[int, tuple[int, int, int]
                 heads, dim = value.shape[1], value.shape[3]
                 geometry.setdefault(index, [heads, dim, dim])[1 if kind == "key" else 2] = dim
     outputs = list(graph.outputs)
-    # A decoder exported with its attentions too (transformers.js' Whisper, for timestamps) returns only its logits and
+    # A decoder exported with its attentions too (onnx-community's Whisper, for timestamps) returns only its logits and
     # cache here
     if order and any(value.name == "logits" for value in outputs):
         outputs = [value for value in outputs if value.name == "logits" or value.name in order]
@@ -265,7 +265,7 @@ def _bool_inputs_as_int64(program: onnx_ir.Model) -> None:
 def _load_onnx_multimodal(
     pretrained_model_name_or_path, config, decoder_file: str, **kwargs
 ) -> tuple[dict[str, ExportedComponent], bool]:
-    """A transformers.js multimodal export: `embed_tokens` (`input_ids` to `inputs_embeds`, and Gemma 3n's
+    """An optimum-onnx multimodal export (onnx-community's): `embed_tokens` (`input_ids` to `inputs_embeds`, and Gemma 3n's
     `per_layer_inputs`), `vision_encoder` / `audio_encoder` on their modality's data (the image grid fed as
     `grid_thw`), and a merged decoder on the embeddings.
 
@@ -318,7 +318,7 @@ def _load_onnx_seq2seq(
         )
     hidden = BaseModelOutput(last_hidden_state=torch.zeros(1))
     encoder = _read_onnx(pretrained_model_name_or_path, encoder_file, **kwargs)
-    # Only the hidden states: an encoder exported with its attentions too (transformers.js' Whisper) returns them after
+    # Only the hidden states: an encoder exported with its attentions too (onnx-community's Whisper) returns them after
     encoder_outputs = [value for value in encoder.graph.outputs if value.name == "last_hidden_state"]
     if encoder_outputs:
         encoder.graph.outputs.clear()
@@ -373,7 +373,7 @@ def _load_onnx_seq2seq(
 
 def _load_onnx(pretrained_model_name_or_path, config, **kwargs) -> tuple[dict[str, ExportedComponent], bool]:
     """A causal LM taking and returning its cache (inputs `input_ids`, `attention_mask`, maybe `position_ids`,
-    `past_key_values.*`; outputs `logits`, `present.*`), an encoder-decoder, a transformers.js multimodal export, or an
+    `past_key_values.*`; outputs `logits`, `present.*`), an encoder-decoder, a multimodal export, or an
     encoder."""
     if (encoder_file := _find(pretrained_model_name_or_path, ONNX_ENCODER_FILES, **kwargs)) is not None:
         return _load_onnx_seq2seq(pretrained_model_name_or_path, config, encoder_file, **kwargs)

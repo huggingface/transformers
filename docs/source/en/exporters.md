@@ -262,12 +262,11 @@ lowered for. [`ExportedModel.from_pretrained`] returns the class an export runs 
 multimodal split, an [`ExportedModelForCausalLM`] (or its multimodal and seq2seq variants) for a generation export,
 driven by `generate`.
 
-### optimum and transformers.js exports
+### optimum exports
 
-[`ExportedModel.from_pretrained`] also loads models exported by optimum-intel (OpenVINO), optimum-onnx and
-transformers.js (ONNX), and optimum-executorch (ExecuTorch), such as the OpenVINO, onnx-community, Xenova and
-executorch-community organizations' on the Hub. None writes export metadata, so it is rebuilt from the graphs and the
-model's config.
+[`ExportedModel.from_pretrained`] also loads models exported by optimum-intel (OpenVINO), optimum-onnx (ONNX) and
+optimum-executorch (ExecuTorch), such as the OpenVINO, onnx-community, Xenova and executorch-community organizations'
+on the Hub. None writes export metadata, so it is rebuilt from the graphs and the model's config.
 
 - A causal LM or an encoder-decoder runs through `generate`.
 - A multimodal model runs as the multimodal split; optimum-intel towers split into several graphs are fused into one.
