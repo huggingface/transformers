@@ -481,19 +481,59 @@ class DecomposeMultimodalTest(unittest.TestCase):
         torch.testing.assert_close(actual, expected)
 
     def test_vision_graph_runs_on_another_image_count(self):
-        """The vision graph takes any number of images: `get_image_embeddings` returns its features as one tensor,
-        which `get_image_features`' per-image list would have fixed to the traced count."""
+        """The vision graph takes other image counts than it was traced on: it exports `get_image_embeddings`, whose
+        features are one tensor, where `get_image_features`' per-image split would have fixed the count."""
+        from transformers import Qwen2VLConfig, Qwen2VLForConditionalGeneration
         from transformers.exporters import DynamoExporter
-        from transformers.exporters.components import ModalityEncoder
+        from transformers.exporters.decompose import decompose_multimodal
+        from transformers.exporters.precompute import precompute_export_inputs
 
-        model, _ = _tiny_llava()
-        vision = ModalityEncoder(model.model, "get_image_embeddings")
-        pixel_values = torch.randn(2, 3, 30, 30)
-        exported = DynamoExporter().export(vision, {"pixel_values": pixel_values}, DynamoConfig(dynamic=True))
+        config = Qwen2VLConfig(
+            text_config={
+                "vocab_size": 99,
+                "hidden_size": 32,
+                "intermediate_size": 37,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 2,
+                "rope_parameters": {"rope_type": "default", "mrope_section": [1, 1, 2]},
+            },
+            vision_config={
+                "depth": 2,
+                "embed_dim": 32,
+                "hidden_size": 32,
+                "num_heads": 4,
+                "patch_size": 2,
+                "spatial_merge_size": 2,
+                "temporal_patch_size": 2,
+            },
+            image_token_id=98,
+            vision_start_token_id=96,
+            vision_end_token_id=97,
+        )
+        model = Qwen2VLForConditionalGeneration(config).eval()
+
+        def images(count):
+            # 4x4 patches each, merged into 4 tokens
+            return torch.randn(16 * count, 3 * 2 * 2 * 2), torch.tensor([[1, 4, 4]] * count)
+
+        pixel_values, grid = images(2)
+        input_ids = torch.tensor([([96] + [98] * 4 + [97]) * 2 + [5, 6, 7]])
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "mm_token_type_ids": (input_ids == 98).long(),
+            "pixel_values": pixel_values,
+            "image_grid_thw": grid,
+        }
+        vision = decompose_multimodal(model, inputs)["vision_embeddings_model"]
+        exported = DynamoExporter().export(vision.module, vision.inputs, DynamoConfig(dynamic=True))
         with torch.no_grad():
-            for images in (pixel_values, pixel_values[:1], torch.randn(3, 3, 30, 30)):
-                expected = torch.cat(model.model.get_image_features(images).pooler_output)
-                torch.testing.assert_close(exported(pixel_values=images), expected)
+            for count in (2, 3, 5):
+                pixel_values, grid = images(count)
+                feed = precompute_export_inputs(config, {"pixel_values": pixel_values, "grid_thw": grid})
+                expected = torch.cat(model.model.get_image_features(pixel_values, grid).pooler_output)
+                torch.testing.assert_close(exported(**{k: v for k, v in feed.items() if k in vision.inputs}), expected)
 
     def test_embedded_inputs_drop_the_modality_side_inputs(self):
         """The language model takes the embeddings, not a modality's side inputs (EmbeddingGemma2's
