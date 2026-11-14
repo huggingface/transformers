@@ -271,14 +271,14 @@ Hub. None writes export metadata, so it is rebuilt from the graphs and the model
 - A causal LM runs through `generate`: optimum-intel's stateful one, optimum-onnx's taking and returning its cache
   (`model.onnx`, or a merged decoder), and optimum-executorch's keeping its cache in the program.
 - An encoder-decoder (Whisper, T5) runs through `generate` too, from all three.
-- A multimodal model runs as the multimodal split: Gemma 3, Pixtral, LLaVA-NeXT, LFM3-VL from optimum-intel, and its
+- A multimodal model runs as the multimodal split: Gemma 3, Pixtral, LLaVA-NeXT, LFM3-VL, MiniCPM-V 4.7 from optimum-intel, and its
   Qwen2-VL, Qwen2.5-VL and Qwen3-VL, whose vision tower is split into more graphs, fused into one at load; Gemma 3 from
   optimum-executorch.
 - An optimum-intel or optimum-onnx encoder (feature extraction, classification) is called with the graph's inputs and
   returns a dict by its output names.
 
 The others are refused with the reason: optimum-intel multimodal exports with graphs the loader has no glue for
-(Phi-3.5/4's projections, MiniCPM-V's resampler or vision indices), optimum-onnx decoders split in two graphs, and
+(Phi-3.5/4's projections, MiniCPM-V 4.5's resampler), optimum-onnx decoders split in two graphs, and
 optimum-executorch encoders. Loading warns that the metadata was rebuilt: re-export
 the model with [`OpenVINOExporter`], [`OnnxExporter`] or [`ExecutorchExporter`] for the full runtime.
 
