@@ -47,6 +47,83 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
+    @slow
+    @require_torch
+    def test_string_assistant_prefill_full_text(self):
+        import torch
+
+        from transformers.pipelines.any_to_any import AnyToAnyPipeline
+        from transformers.pipelines.any_to_any import Chat as AnyChat
+        from transformers.pipelines.any_to_any import ReturnType as AnyReturnType
+        from transformers.utils.chat_template_utils import Chat
+
+        pipe = pipeline(
+            "image-text-to-text",
+            model="HuggingFaceTB/SmolVLM-256M-Instruct",
+            device=0 if torch.cuda.is_available() else -1,
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        )
+        template = (
+            "{%- for message in messages -%}"
+            "{%- if message['role'] == 'user' -%}<|im_start|>User:"
+            "{%- elif message['role'] == 'assistant' -%}Assistant:"
+            "{%- else -%}{{ message['role'] }}:{%- endif -%}"
+            "{%- if message['content'] is string -%}{{ message['content'] }}"
+            "{%- else -%}{%- for item in message['content'] -%}"
+            "{%- if item['type'] == 'image' -%}<image>"
+            "{%- elif item['type'] == 'text' -%}{{ item['text'] }}"
+            "{%- endif -%}{%- endfor -%}{%- endif -%}"
+            "<end_of_utterance>{% endfor -%}"
+            "{%- if add_generation_prompt -%}Assistant:{%- endif -%}"
+        )
+        user = {
+            "role": "user",
+            "content": [
+                {"type": "image", "path": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+                {"type": "text", "text": "Describe this image."},
+            ],
+        }
+        string_chat = [user, {"role": "assistant", "content": "The image shows"}]
+        list_chat = [user, {"role": "assistant", "content": [{"type": "text", "text": "The image shows"}]}]
+
+        def ids(chat):
+            return pipe.processor.apply_chat_template(
+                chat,
+                chat_template=template,
+                continue_final_message=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            )["input_ids"]
+
+        self.assertTrue(torch.equal(ids(string_chat), ids(list_chat)))
+        params = {
+            "chat_template": template,
+            "continue_final_message": True,
+            "generate_kwargs": {"max_new_tokens": 3, "do_sample": False},
+        }
+        list_full = pipe(text=list_chat, return_full_text=True, **params)[0]["generated_text"][-1]["content"][-1][
+            "text"
+        ]
+        string_new = pipe(text=string_chat, return_full_text=False, **params)[0]["generated_text"]
+        string_full = pipe(text=string_chat, return_full_text=True, **params)[0]["generated_text"][-1]["content"]
+        self.assertEqual(string_full, list_full)
+        self.assertEqual(string_full, "The image shows" + string_new)
+        self.assertEqual(string_chat[-1]["content"], "The image shows")
+
+        # Exercise the second pipeline's real postprocessor using real processor/model outputs.
+        model_inputs = pipe.preprocess(Chat(string_chat), continue_final_message=True, chat_template=template)
+        model_outputs = pipe.forward(model_inputs, generate_kwargs=params["generate_kwargs"])
+        model_outputs["prompt_text"] = AnyChat(string_chat)
+        any_full = AnyToAnyPipeline.postprocess(
+            pipe,
+            model_outputs,
+            return_type=AnyReturnType.FULL_TEXT,
+            continue_final_message=True,
+            generation_mode=None,
+        )[0]["generated_text"][-1]["content"]
+        self.assertEqual(any_full, string_full)
+
     @require_torch
     def test_multiple_candidates_tiny_model(self):
         pipe = pipeline(

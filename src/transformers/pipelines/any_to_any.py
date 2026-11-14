@@ -501,12 +501,17 @@ class AnyToAnyPipeline(Pipeline):
                         continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                     if continue_final_message:
                         # With assistant prefill, concat onto the end of the last message
-                        new_text = dict(prompt_text.messages[-1]["content"][-1].items())
-                        new_text["text"] += generated_text
+                        content = prompt_text.messages[-1]["content"]
+                        if isinstance(content, str):
+                            content += generated_text
+                        else:
+                            new_text = dict(content[-1].items())
+                            new_text["text"] += generated_text
+                            content = content[:-1] + [new_text]
                         generated_text = list(prompt_text.messages)[:-1] + [
                             {
                                 "role": prompt_text.messages[-1]["role"],
-                                "content": prompt_text.messages[-1]["content"][:-1] + [new_text],
+                                "content": content,
                             }
                         ]
                     else:
