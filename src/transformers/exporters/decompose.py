@@ -902,6 +902,11 @@ def decompose_for_generation(
 DECODE_GRAPHS = ("model", "decoder_model", "language_model")
 
 
+# The prompt graph `export_for_generation` exports beside a decode graph taking one token: the decode graph's module,
+# traced on the whole prompt.
+PREFILL_GRAPH = "prefill_model"
+
+
 def decode_graph_name(components) -> str:
     """The name of the decode graph among `components` (`model`, `decoder_model` or `language_model`), if any."""
     return next((name for name in DECODE_GRAPHS if name in components), None)

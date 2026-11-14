@@ -1416,6 +1416,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         exported = exporter.export_for_generation(
             model, copy.deepcopy(inputs), config, generation_config=generation_config, multi_token_decode=dynamic
         )
+        # A single-token decode graph (a static export's) leaves the prompt to a graph of its own, unless the export is
+        # stateful (OpenVINO's), whose cache is the decode graph's state.
+        disaggregated = not dynamic and not getattr(config, "stateful", False)
+        self.assertEqual("prefill_model" in exported.components, disaggregated)
         with torch.no_grad():
             expected = model.generate(**copy.deepcopy(inputs), generation_config=generation_config)
         # The fresh export: saving and loading it back is `test_runtime.py`'s.
