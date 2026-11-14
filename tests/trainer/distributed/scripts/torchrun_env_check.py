@@ -87,6 +87,7 @@ def main():
     output_file = os.path.join(args.output_dir, f"env_rank{args.process_index}.json")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(env_info, f)
+    print(f"Saved distributed environment to {output_file}", flush=True)
 
 
 if __name__ == "__main__":

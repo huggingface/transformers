@@ -1,25 +1,13 @@
-# Plain CUDA base, like `transformers-all-latest-gpu`, but deliberately held on CUDA 12.x rather
-# than following that image to 13.0.
-#
-# DeepSpeed pre-compiles its CUDA ops here, and `op_builder/builder.py` picks the architectures to
-# cross-compile for in `get_default_compute_capabilities()`, which only has branches for CUDA 11 and
-# CUDA 12. On CUDA 13 neither matches, so the list stays at the `DEFAULT_COMPUTE_CAPABILITIES` of
-# `6.0;6.1;7.0` -- every one of which CUDA 13 dropped -- and the build dies on
-# `nvcc fatal: Unsupported gpu architecture 'compute_60'`. This is still the case on DeepSpeed
-# master and in the latest release (0.19.6).
-#
-# So: bump this to a CUDA 13 base and `cu130` torch once DeepSpeed knows about CUDA 13, and keep the
-# toolkit here matching `$CUDA` in the meantime -- `assert_no_cuda_mismatch()` compares them exactly
-# and refuses to compile when they differ.
-FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
+# DeepSpeed compiles CUDA extensions, so the toolkit must match the PyTorch CUDA version below.
+FROM nvidia/cuda:13.2.1-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Torch version is kept in sync with `transformers-all-latest-gpu`; `CUDA` is not, see above.
-ARG PYTORCH='2.13.0'
+# Keep PyTorch and CUDA versions in sync with `transformers-all-latest-gpu`.
+ARG PYTORCH='2.15.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu132'
 
 RUN apt update
 # On top of what the general test image installs: `libaio-dev` for DeepSpeed's async I/O.
@@ -50,13 +38,11 @@ RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]'
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
-# Narrow DeepSpeed's cross-compile list to the architectures the CI runners actually use, instead of
-# the `6.0;6.1;7.0;8.0;8.6;9.0` default -- the old entries are dead weight in the op build, which is
-# repeated inside every GPU VM. `TORCH_CUDA_ARCH_LIST` takes priority over the default list.
+# Build for the CI GPUs. DeepSpeed's default architecture list includes GPUs unsupported by CUDA 13.
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0"
 
 # Pre-build **latest** DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
