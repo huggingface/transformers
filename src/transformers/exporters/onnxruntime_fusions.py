@@ -1492,8 +1492,10 @@ _STEPS = (
     # 5. More fusions.
     (_WEIGHTLESS_RMS_NORMS.apply_to_model, None),
     (_narrow_norms, None),
-    # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
+    # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again, and those a float32
+    # scale still keeps apart (Qwen3.5's `1 + weight`) undone again.
     (fuse_skip_rms_normalization, None),
+    (_unfuse_mixed_dtype_skip_norms, None),
     # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
     # `MultiHeadAttention`'s (microsoft/onnxruntime#33869).
     (_fuse_group_query_attention, ("cpu",)),
