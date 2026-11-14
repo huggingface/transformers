@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_git import GitConfig, GitVisionConfig
@@ -88,7 +89,7 @@ class GitEmbeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values_length: int = 0,
+        cache_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -98,7 +99,7 @@ class GitEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, cache_length : seq_length + cache_length]
 
         if inputs_embeds is None:
             embeddings = self.word_embeddings(input_ids)
@@ -142,11 +143,12 @@ class GitSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -155,8 +157,8 @@ class GitSelfAttention(nn.Module):
 
         key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
         value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
-        if past_key_values is not None:
-            key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
+        if cache is not None:
+            key_layer, value_layer = cache.update(key_layer, value_layer, self.layer_idx, kwargs=kwargs)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -208,17 +210,18 @@ class GitAttention(nn.Module):
         self.self = GIT_SELF_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.output = GitSelfOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         attn_output, _ = self.self(
             hidden_states,
             attention_mask,
-            past_key_values,
+            cache,
             **kwargs,
         )
         attention_output = self.output(attn_output, hidden_states)
@@ -265,17 +268,18 @@ class GitLayer(GradientCheckpointingLayer):
         self.intermediate = GitIntermediate(config)
         self.output = GitOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
 
@@ -297,11 +301,12 @@ class GitEncoder(nn.Module):
         self.layer = nn.ModuleList([GitLayer(config, i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -309,13 +314,13 @@ class GitEncoder(nn.Module):
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                past_key_values,
+                cache,
                 **kwargs,
             )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -738,6 +743,7 @@ class GitModel(GitPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -745,7 +751,7 @@ class GitModel(GitPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -776,23 +782,19 @@ class GitModel(GitPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
-        # past_key_values_length
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values.get_seq_length()
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+        # cache_length
+        cache_length = 0
+        if cache is not None:
+            cache_length = cache.get_seq_length() if not isinstance(cache, Cache) else cache.get_seq_length()
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
+            cache_length=cache_length,
         )
 
         # Always create `token_type_ids` so we can re-use Gemma3 style mask preparation fn
@@ -836,12 +838,7 @@ class GitModel(GitPreTrainedModel):
                 attention_mask = torch.cat(
                     [torch.ones_like(image_token_type_ids, dtype=attention_mask.dtype), attention_mask], dim=-1
                 )
-        elif (
-            past_key_values is not None
-            and past_key_values_length > 0
-            and attention_mask is not None
-            and attention_mask.ndim == 2
-        ):
+        elif cache is not None and cache_length > 0 and attention_mask is not None and attention_mask.ndim == 2:
             # GIT keeps the image tokens in the cache without placeholder tokens in `input_ids`, so the
             # incoming padding mask is narrower than the cache — widen it over the cached image tokens.
             extended_attention_mask = torch.ones(
@@ -861,7 +858,7 @@ class GitModel(GitPreTrainedModel):
             config=self.config.get_text_config(),
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
             block_sequence_ids=group_ids,
         )
@@ -871,14 +868,14 @@ class GitModel(GitPreTrainedModel):
         encoder_outputs: BaseModelOutputWithPast = self.encoder(
             hidden_states,
             attention_mask=causal_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
         return BaseModelOutputWithPast(
             last_hidden_state=encoder_outputs.last_hidden_state,
-            past_key_values=encoder_outputs.past_key_values,
+            cache=encoder_outputs.cache,
         )
 
 
@@ -908,6 +905,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -916,7 +914,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         pixel_values: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool = False,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1064,7 +1062,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             pixel_values=pixel_values,
             inputs_embeds=inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
@@ -1097,7 +1095,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

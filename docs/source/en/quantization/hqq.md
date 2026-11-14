@@ -98,4 +98,4 @@ Refer to the [Backend](https://github.com/mobiusml/hqq/#backend) guide for more 
 
 ## Resources
 
-Read the [Half-Quadratic Quantization of Large Machine Learning Models](https://mobiusml.github.io/hqq_blog/) blog post for more details about HQQ.
+Read the [Half-Quadratic Quantization of Large Machine Learning Models](https://dropbox.github.io/hqq_blog/) blog post for more details about HQQ.

@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -441,7 +442,7 @@ class Ovis2_5Config(PreTrainedConfig):
         "vision_config": Ovis2_5VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: PreTrainedConfig | dict | None = None
@@ -876,12 +877,13 @@ class Ovis2_5Model(Ovis2Model):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.FloatTensor | None = None,
@@ -954,7 +956,7 @@ class Ovis2_5Model(Ovis2Model):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=merged_inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
@@ -962,7 +964,7 @@ class Ovis2_5Model(Ovis2Model):
         )
         return Ovis2_5ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
