@@ -1258,13 +1258,23 @@ def _replace_by_swapped_heads(node: ir.Node, x: ir.Value) -> None:
 
 def _sink_head_transposes(model: ir.Model) -> None:
     """Move the transposes between `[batch, length, heads, head_dim]` and `[batch, heads, length, head_dim]` past the
-    ops that read either layout alike, the rotary embeddings, the repeat of the key-value heads and the zeroing of
-    unattended rows, until they meet the transpose back and cancel: `MultiHeadAttention` reads and writes the first
+    ops that read either layout alike, the per-head norms, the rotary embeddings, the repeat of the key-value heads and
+    the zeroing of unattended rows, until they meet the transpose back and cancel: `MultiHeadAttention` reads and writes the first
     layout, so each attention copied its query, keys, values and output there and back."""
     graph = model.graph
     for index, node in enumerate(list(graph)):
         name = f"head_transposes_{index}"
-        if node.op_type == "RotaryEmbedding" and node.domain == "com.microsoft":
+        if node.op_type == "SimplifiedLayerNormalization" and (x := _swapped_heads(node.inputs[0])) is not None:
+            # A norm over each head (Gemma's query, key and value norms) reads either layout alike.
+            if node.attributes.get_int("axis", -1) not in (-1, 3) or any(o.uses() for o in node.outputs[1:]):
+                continue
+            attributes = {key: attribute.value for key, attribute in node.attributes.items()}
+            dtype = node.outputs[0].dtype
+            normed = _add_node(
+                graph, node, node.op_type, [x, *node.inputs[1:]], x.shape, dtype, node.domain, **attributes
+            )
+            _replace_by_swapped_heads(node, normed)
+        elif node.op_type == "RotaryEmbedding" and node.domain == "com.microsoft":
             # Rotated in `[batch, length, heads * head_dim]`, which it takes given the heads.
             x = _swapped_heads(node.inputs[0])
             heads, head_size = (_static_dim(x, 2), _static_dim(x, 3)) if x is not None else (None, None)
