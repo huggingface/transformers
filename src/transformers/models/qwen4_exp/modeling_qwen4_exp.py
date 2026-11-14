@@ -1580,8 +1580,12 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
             text_position_ids = None
 
         # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
-        # such as reset, crop and beam reordering also update the position history.
-        if cache is not None and "indexed_attention" in self.config.layer_types:
+        # such as reset, crop and beam reordering also update the position history. The paged cache keeps no history.
+        if (
+            cache is not None
+            and not isinstance(cache, PagedAttentionCache)
+            and "indexed_attention" in self.config.layer_types
+        ):
             indexer_cache = cache.layers[self.config.layer_types.index("indexed_attention")]
             if indexer_cache.indexer_position_ids is not None:
                 position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
