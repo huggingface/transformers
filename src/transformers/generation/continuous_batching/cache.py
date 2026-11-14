@@ -270,6 +270,14 @@ class PagedAttentionCache:
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
+        # Layers caching rows other than keys and values (the latents of multi-head latent attention) rebuild their
+        # keys and values from every token a varlen batch reads, while the decode fast path reads them in place: for
+        # those, a single prefill in a batch of decodes costs a whole rebuild, so prefills get batches of their own
+        self.prefills_apart = self.max_decode_fast_path_length > 0 and any(
+            "key" not in allocator.rows  # type: ignore
+            for allocator in self.cache_allocators.values()
+            if not allocator.indexes_by_sequence
+        )
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
@@ -508,6 +516,31 @@ class PagedAttentionCache:
         read_index = kwargs["read_index"][allocator.index]
         write_index = kwargs["write_index"][allocator.index]
         return allocator.update(rows, layer_idx, read_index, write_index)
+
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
+    def update_paged_rows(
+        self,
+        layer_idx: int,
+        rows: dict[str, torch.Tensor],  # shapes [num_sequences, *shape], one new token per sequence
+        kwargs: dict[str, Any],
+    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+        """On the decode fast path, for a layer whose kernel reads its rows where they sit in the cache pages: writes
+        the rows of each sequence's new token at its slot, and returns the layer's pages by name, each of shape
+        [num_pages, tokens_per_page, *shape], the block table indexing them and the key length of each sequence."""
+        allocator: FullAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
+        block_table = kwargs["block_table"][allocator.index]
+        seqlens_k = kwargs["cu_seq_lens_k"][allocator.layer_type].diff().to(torch.int32)
+        # The new token is the last of its sequence. Padding sequences have a key length of 0 and a block table row of
+        # -1, so they write to the trash
+        position = seqlens_k.to(torch.int64) - 1
+        entry = block_table.gather(1, (position // allocator.tokens_per_page).clamp(min=0)[:, None])[:, 0].to(
+            torch.int64
+        )
+        block = entry // (len(allocator.rows) * allocator.pages_per_block)
+        write_index = block * allocator.tokens_per_page + position % allocator.tokens_per_page
+        write_index = torch.where(entry < 0, allocator.write_trash_index, write_index)
+        allocator.update(rows, layer_idx, write_index[:0], write_index)
+        return allocator.get_cache_for_block_table(layer_idx), block_table, seqlens_k
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
     def read_cache_states(
