@@ -4404,9 +4404,12 @@ class PreTrainedModel(
         skip_keys = set()
         if experts_offload is not None:
             devices = set(device_map.values()) if isinstance(device_map, dict) else {device_map or "cpu"}
-            if len(devices) != 1 or gguf_file or hf_quantizer is not None or state_dict is not None:
+            # Metal quantization only converts nn.Linear modules, never the expert banks this removes.
+            dense_quantizer = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == "metal"
+            if len(devices) != 1 or gguf_file or (hf_quantizer is not None and not dense_quantizer) or state_dict:
                 raise ValueError(
-                    "experts_offload needs a single-device device_map and an unquantized safetensors checkpoint"
+                    "experts_offload needs a single-device device_map and a safetensors checkpoint, unquantized or "
+                    "with MetalConfig for its dense layers"
                 )
             skip_keys = prepare_experts_offload(
                 model, checkpoint_files, dtype=dtype, device=devices.pop(), options=experts_offload

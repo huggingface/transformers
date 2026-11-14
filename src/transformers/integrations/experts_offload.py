@@ -44,24 +44,31 @@ _MLX_QUANTIZATION_KERNEL = ("kernels-community/mlx-quantization-metal-kernels", 
 _COUNTER_LOCK = threading.Lock()
 
 
-def _read_exact(path, offset, size, bypass_page_cache, what):
-    """Read a byte range, optionally bypassing or dropping the OS page cache."""
+def _read_exact(path, offset, size, bypass_page_cache, what, out=None, fd=None):
+    """Read a byte range into ``out`` (or a new buffer), optionally bypassing or dropping the OS page cache.
+
+    ``fd`` is an open descriptor of ``path``; positional reads are thread-safe."""
     # TODO(portability): implement Windows cache bypass; report unsupported OS/filesystem combinations.
-    data = bytearray(size)
-    with path.open("rb", buffering=0) as handle:
+    data = bytearray(size) if out is None else out
+    own = fd is None
+    if own:
+        fd = os.open(path, os.O_RDONLY)
         if bypass_page_cache and hasattr(fcntl, "F_NOCACHE"):
-            fcntl.fcntl(handle.fileno(), fcntl.F_NOCACHE, 1)
-        handle.seek(offset)
-        view = memoryview(data)
+            fcntl.fcntl(fd, fcntl.F_NOCACHE, 1)
+    try:
+        view = memoryview(data).cast("B")
         done = 0
         while done < size:
-            count = handle.readinto(view[done:])
+            count = os.preadv(fd, [view[done:size]], offset + done)
             if not count:
                 raise OSError(f"Short checkpoint read: {path}, {what}")
             done += count
         # TODO(portability): distinguish best-effort cache eviction from uncached reads.
         if bypass_page_cache and hasattr(os, "posix_fadvise"):
-            os.posix_fadvise(handle.fileno(), offset, size, os.POSIX_FADV_DONTNEED)
+            os.posix_fadvise(fd, offset, size, os.POSIX_FADV_DONTNEED)
+    finally:
+        if own:
+            os.close(fd)
     return data
 
 
@@ -82,6 +89,7 @@ class SafetensorsReader:
         self.tensors = {}
         self.read_bytes = 0
         self.read_calls = 0
+        self._fds = {}
         for filename in filenames:
             path = (directory / filename).resolve()
             if not path.is_file():
@@ -105,7 +113,8 @@ class SafetensorsReader:
     def shape(self, name):
         return tuple(self.tensors[name][2]["shape"])
 
-    def read(self, name, expert=None):
+    def read(self, name, expert=None, out=None):
+        """Read a tensor, or one expert slice of it, into ``out`` (a CPU uint8 tensor of its size) when given."""
         path, offset, info = self.tensors[name]
         shape = tuple(info["shape"])
         if info["dtype"] not in self.dtypes:
@@ -118,11 +127,40 @@ class SafetensorsReader:
             shape = shape[1:]
             offset += expert * math.prod(shape) * item_size
         size = math.prod(shape) * item_size
-        data = _read_exact(path, offset, size, self.bypass_page_cache, f"tensor {name}")
+        if out is not None:
+            if out.dtype != torch.uint8 or out.numel() != size or out.device.type != "cpu":
+                raise ValueError(f"`out` must be a CPU uint8 tensor of {size} bytes")
+            _read_exact(path, offset, size, self.bypass_page_cache, f"tensor {name}", out.numpy(), self._fd(path))
+            data = out
+        else:
+            data = torch.frombuffer(
+                _read_exact(path, offset, size, self.bypass_page_cache, f"tensor {name}", fd=self._fd(path)),
+                dtype=torch.uint8,
+            )
         with _COUNTER_LOCK:
             self.read_bytes += size
             self.read_calls += 1
-        return torch.frombuffer(data, dtype=dtype).reshape(shape)
+        return data.view(dtype).reshape(shape)
+
+    def _fd(self, path):
+        """One read-only descriptor per shard, opened on first use and shared by the I/O threads."""
+        fd = self._fds.get(path)
+        if fd is None:
+            with _COUNTER_LOCK:
+                fd = self._fds.get(path)
+                if fd is None:
+                    fd = os.open(path, os.O_RDONLY)
+                    if self.bypass_page_cache and hasattr(fcntl, "F_NOCACHE"):
+                        fcntl.fcntl(fd, fcntl.F_NOCACHE, 1)
+                    self._fds[path] = fd
+        return fd
+
+    def __del__(self):
+        for fd in getattr(self, "_fds", {}).values():
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
     def read_expert(self, prefix, expert):
         if f"{prefix}.gate_up_proj" in self.tensors:
@@ -181,7 +219,11 @@ class ExpertStore:
             self.gather_qmm = _load_gather_qmm(self.device)
         self.num_slots = 0
         self.free_slots = []
+        # expert -> slot per layer, kept on the host (installs and evictions are host bookkeeping) and copied to the
+        # device only when a device-side lookup needs it.
         self.slot_tables = {}
+        self.host_slot_tables = {}
+        self.stale_slot_tables = set()
         self.total_experts = 0
         self.compute = "grouped_mm"
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload-io") if io_threads else None
@@ -190,6 +232,8 @@ class ExpertStore:
         self.prefetched = self.prefetch_used = self.installed_ahead = 0
         # Retain host buffers until the next routing copy synchronizes the device.
         self.inflight = []
+        # Recycled host buffers of quantized experts, see `_host_buffer`.
+        self.free_host_buffers = []
 
     def register(self, prefix, module):
         shapes = {
@@ -276,6 +320,7 @@ class ExpertStore:
         elif [tuple(pool.shape[1:]) for pool in self.pools] != [shape for shape, _ in shapes]:
             raise ValueError("All MoE layers must have the same expert shapes to share the expert pool")
         self.slot_tables[prefix] = torch.full((module.num_experts,), self.num_slots, device=self.device)
+        self.host_slot_tables[prefix] = torch.full((module.num_experts,), self.num_slots)
         self.total_experts += module.num_experts
 
     def all_resident(self):
@@ -312,7 +357,8 @@ class ExpertStore:
         self.resident_bytes -= entry[-1]
         self.evictions += 1
         self.free_slots.append(entry[0])
-        self.slot_tables[victim[0]][victim[1]] = self.num_slots
+        self.host_slot_tables[victim[0]][victim[1]] = self.num_slots
+        self.stale_slot_tables.add(victim[0])
 
     def _make_room(self, key, size, pinned=()):
         """Evict unpinned experts until size fits; return False if admission is declined."""
@@ -338,8 +384,17 @@ class ExpertStore:
     def _read_host(self, prefix, expert):
         """Read expert bytes or floating weights on the host; safe to run on I/O threads."""
         if self.quantized is not None:
-            return (self.quantized[0].read(f"{prefix}.experts", expert),)
+            # Straight into a recycled pinned buffer: copying pinned memory to the device costs the host ~5x less
+            # than pageable memory (0.03 vs 0.14 ms for a 2 MB expert on an M5).
+            return (self.quantized[0].read(f"{prefix}.experts", expert, out=self._host_buffer()),)
         return tuple(t.to(self.dtype) for t in self.reader.read_expert(prefix, expert))
+
+    def _host_buffer(self):
+        """A host buffer for one quantized expert, pinned when the device can use it; called from I/O threads."""
+        try:
+            return self.free_host_buffers.pop()
+        except IndexError:
+            return torch.empty(self.slot_bytes, dtype=torch.uint8, pin_memory=self.device.type != "cpu")
 
     def prefetch(self, prefix, experts):
         """Start reading the experts of ``prefix`` that are neither resident nor already being read."""
@@ -376,7 +431,36 @@ class ExpertStore:
     def release_host_buffers(self):
         """Called right after a host synchronization: every queued copy has read its host buffer."""
         # TODO(portability): validate copy completion and slot reuse on each backend before releasing buffers.
+        if self.quantized is not None:
+            # list.append / pop are atomic, so I/O threads can take buffers back while this runs.
+            for tensors in self.inflight:
+                if tensors[0].dtype == torch.uint8 and tensors[0].numel() == self.slot_bytes:
+                    self.free_host_buffers.append(tensors[0])
         self.inflight.clear()
+
+    def synchronize(self):
+        """Wait for queued device work, then release the host buffers of its copies."""
+        # TODO(portability): synchronize other accelerator backends.
+        if self.device.type == "mps":
+            torch.mps.synchronize()
+        elif self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+        self.release_host_buffers()
+
+    def device_slot_table(self, prefix):
+        """The layer's expert -> slot table on the device, refreshed from the host copy when it changed."""
+        if prefix in self.stale_slot_tables:
+            snapshot = self.host_slot_tables[prefix].clone()
+            self.inflight.append((snapshot,))  # read by a queued non-blocking copy
+            self.slot_tables[prefix].copy_(snapshot, non_blocking=True)
+            self.stale_slot_tables.discard(prefix)
+        return self.slot_tables[prefix]
+
+    def device_slots(self, prefix, routing):
+        """Slots of host-side ``routing`` as a device tensor: one small copy instead of a device lookup."""
+        slots = self.host_slot_tables[prefix][routing]
+        self.inflight.append((slots,))
+        return slots.to(self.device, non_blocking=True)
 
     def install_ahead(self, prefix, experts):
         """Install prefetched experts while queued device work runs, without counting lookups."""
@@ -399,7 +483,8 @@ class ExpertStore:
         else:
             for pool, tensor in zip(self.pools, tensors):
                 pool[slot].copy_(tensor, non_blocking=True)
-        self.slot_tables[key[0]][key[1]] = slot
+        self.host_slot_tables[key[0]][key[1]] = slot
+        self.stale_slot_tables.add(key[0])
         self.cache[key] = (slot, size)
         self.resident_bytes += size
         self.peak_cache_bytes = max(self.peak_cache_bytes, self.resident_bytes)
@@ -439,12 +524,7 @@ class ExpertStore:
             self.prefetch(prefix, experts)
             for expert in experts:
                 self.acquire(prefix, expert)
-            # TODO(portability): synchronize other accelerator backends before releasing host buffers.
-            if self.device.type == "mps":
-                torch.mps.synchronize()
-            elif self.device.type == "cuda":
-                torch.cuda.synchronize(self.device)
-            self.release_host_buffers()
+            self.synchronize()
         self.hits = self.misses = 0
 
     def stats(self):
@@ -560,21 +640,30 @@ def _sorted_kernel_applies(rows, experts):
     return rows >= 16 and rows >= 4 * experts
 
 
-def _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_weights, experts, banks):
-    """Sort routes for prefill. Use float32 to avoid incorrect fp16/bf16 results in the v2 M5 kernel."""
-    num_tokens, top_k = top_k_index.shape
-    lookup = torch.zeros(module.num_experts, dtype=torch.long, device=hidden_states.device)
+# Experts per sorted `gather_qmm` call in prefill: bounds the transient bank when a long prompt routes to nearly every
+# expert of a layer (64 x 2.15 MB for Qwen3.8's 3-bit experts instead of 512).
+PREFILL_EXPERT_GROUP = 64
+
+
+def _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_weights, experts, banks, result):
+    """Add the routes to ``experts`` (sorted by expert, over ``banks`` holding only them) into ``result`` (float32).
+
+    Uses float32 to avoid incorrect fp16/bf16 results in the v2 M5 kernel."""
+    top_k = top_k_index.shape[1]
+    lookup = torch.full((module.num_experts,), -1, dtype=torch.long, device=hidden_states.device)
     lookup[torch.tensor(experts, device=hidden_states.device)] = torch.arange(
         len(experts), device=hidden_states.device
     )
-    rhs, order = torch.sort(lookup[top_k_index.reshape(-1)], stable=True)
+    flat = lookup[top_k_index.reshape(-1)]
+    selected = torch.nonzero(flat >= 0).squeeze(1)
+    rhs, permutation = torch.sort(flat[selected], stable=True)
+    order = selected[permutation]
     banks = [bank.float() if bank.is_floating_point() else bank for bank in banks]
 
     x = hidden_states.float()[order // top_k]
     output = _quantized_mlp(module, store, x, banks, rhs, sorted_indices=True)
     output = output * top_k_weights.reshape(-1)[order, None].float()
-    routed = torch.zeros_like(output).index_copy_(0, order, output)
-    return routed.view(num_tokens, top_k, -1).sum(dim=1).to(hidden_states.dtype)
+    result.index_add_(0, order // top_k, output)
 
 
 def _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights):
@@ -587,8 +676,9 @@ def _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights):
     return (output * weights.to(output.dtype)).view(num_tokens, top_k, -1).sum(dim=1).to(hidden_states.dtype)
 
 
-def _pool_forward(module, store, hidden_states, top_k_index, top_k_weights):
-    slots = store.slot_tables[module.offload_prefix][top_k_index]
+def _pool_forward(module, store, hidden_states, top_k_index, top_k_weights, slots=None):
+    if slots is None:
+        slots = store.device_slot_table(module.offload_prefix)[top_k_index]
     if store.quantized is not None:
         return _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights)
     kernel = ExpertsInterface._global_mapping[store.compute]
@@ -654,17 +744,27 @@ def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_
         else:
             pinned.add((prefix, expert))
     if store.quantized is not None and _sorted_kernel_applies(top_k_index.numel(), len(experts)):
-        per_expert = []
-        for expert in experts:
-            if (prefix, expert) in pinned:
-                slot = store.cache[(prefix, expert)][0]
-                per_expert.append([pool[slot] for pool in store.pools])
-            else:
-                per_expert.append(store._read(prefix, expert))
-        banks = [torch.stack(parts) for parts in zip(*per_expert)]
-        return _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_weights, experts, banks)
+        # A group of experts at a time: a prefill that routes to every expert never holds a whole layer of them.
+        result = torch.zeros(hidden_states.shape, dtype=torch.float32, device=hidden_states.device)
+        for start in range(0, len(experts), PREFILL_EXPERT_GROUP):
+            group = experts[start : start + PREFILL_EXPERT_GROUP]
+            per_expert = []
+            for position, expert in enumerate(group):
+                if (prefix, expert) in pinned:
+                    slot = store.cache[(prefix, expert)][0]
+                    per_expert.append([pool[slot] for pool in store.pools])
+                else:
+                    store.prefetch(prefix, experts[start + position + 1 : start + position + 1 + store.window])
+                    per_expert.append(store._read(prefix, expert))
+            banks = [torch.stack(parts) for parts in zip(*per_expert)]
+            del per_expert
+            _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_weights, group, banks, result)
+            if store.inflight:
+                store.synchronize()
+        return result.to(hidden_states.dtype)
     if pinned:
-        result = _pool_forward(module, store, hidden_states, top_k_index, top_k_weights)
+        slots = store.device_slots(prefix, routing)
+        result = _pool_forward(module, store, hidden_states, top_k_index, top_k_weights, slots)
     else:
         result = torch.zeros_like(hidden_states)
     for position, expert in enumerate(uncached):
