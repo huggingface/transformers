@@ -77,6 +77,8 @@ class DistributedConfig:
             - `"all_to_all"` exchanges the routed tokens with all-to-all collectives.
             - `"all_reduce"` runs each rank's experts on the batch the EP group shares, and sums the outputs. It
               requires `ep_size == tp_size`.
+            - `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the tokens itself.
+              Loading with `experts_implementation="deepgemm_megamoe"` selects it.
             - `"auto"` runs `"all_reduce"` at inference when the EP group shares one batch, and `"all_to_all"`
               otherwise.
     """
@@ -198,14 +200,6 @@ class DistributedConfig:
                 raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
             if not is_torch_greater_or_equal("2.7"):
                 raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
-        elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
-            raise ValueError(
-                "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
-            )
-        elif "megamoe_experts" in ep_plan.values() and self.ep_size != self.tp_size:
-            raise ValueError(
-                "DeepGEMM Mega MoE expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
-            )
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":

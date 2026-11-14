@@ -2,7 +2,6 @@ import os
 
 import torch
 
-from ..generation.continuous_batching.cache import PagedAttentionCache
 from ..utils import is_torch_mps_available, is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal, is_torchdynamo_compiling
 
@@ -102,7 +101,6 @@ def sdpa_attention_forward(
     scaling: float | None = None,
     is_causal: bool | None = None,
     position_bias: torch.Tensor | None = None,
-    cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("softcap") is not None:
@@ -113,15 +111,6 @@ def sdpa_attention_forward(
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
-        )
-
-    # If there is a paged cache, it is updated before the KV heads are repeated.
-    if isinstance(cache, PagedAttentionCache):
-        key, value = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,
-            kwargs=kwargs,
         )
 
     sdpa_kwargs = {}

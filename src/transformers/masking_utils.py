@@ -20,7 +20,9 @@ from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
 
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
+from .generation.continuous_batching.cache import PagedAttentionCache
 from .utils import is_torch_xpu_available, logging
+from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
     is_torch_flex_attn_available,
@@ -783,7 +785,7 @@ def _preprocess_mask_arguments(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | BlockMask | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None,
     layer_idx: int | None,
     encoder_hidden_states: torch.Tensor | None = None,
@@ -801,12 +803,12 @@ def _preprocess_mask_arguments(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
             It can also be an already prepared 4D mask, in which case it is returned as-is.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         position_ids (`torch.Tensor`, optional)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
         layer_idx (`int`, optional):
-            If `past_key_values` is not None, this is the layer index of the cache from which to get the key-value
+            If `cache` is not None, this is the layer index of the cache from which to get the key-value
             length and offset. Indeed, for hybrid caches, different layers may return different lengths.
         encoder_hidden_states (`torch.Tensor`, optional):
             The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
@@ -833,6 +835,10 @@ def _preprocess_mask_arguments(
     if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
         return True, attention_mask, None, None, None, None, None
 
+    # If the cache is from CB, immediate exit as well, we don't need any mask
+    if isinstance(cache, PagedAttentionCache):
+        return True, None, None, None, None, None, None
+
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     # Note: it's not ideal to check the `_global_mapping` attribute instead of the object itself, however otherwise
     # full graph dynamo tracing (i.e. torch.export or compile with `fullgraph=True`) will fail on Python<3.11
@@ -847,12 +853,12 @@ def _preprocess_mask_arguments(
 
     q_length = inputs_embeds.shape[1]
     # If using a cache, it can give all information about mask sizes based on seen tokens
-    if past_key_values is not None:
-        q_offset = past_key_values.get_query_offset(layer_idx)
+    if cache is not None:
+        q_offset = cache.get_query_offset(layer_idx)
         # To avoid graph breaks, StaticLayer returns a tensor instead of an int -> this has no impact on the ops, but
         # we need the correct device
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
-        kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
+        kv_length, kv_offset = cache.get_mask_sizes(q_length, layer_idx)
     # Otherwise, we infer based on our input
     else:
         q_offset = 0
@@ -871,9 +877,9 @@ def _preprocess_mask_arguments(
             kv_length, kv_offset = attention_mask.shape[-1], 0
 
     # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
-    # and we don't have past_key_values, i.e. generally a training setup)
+    # and we don't have cache, i.e. generally a training setup)
     packed_sequence_mask = None
-    if position_ids is not None and attention_mask is None and past_key_values is None:
+    if position_ids is not None and attention_mask is None and cache is None:
         batch_size = inputs_embeds.shape[0]
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:
@@ -900,11 +906,12 @@ def find_first_full_attention_index(cache: Cache | None) -> int:
     return layer_idx
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -913,7 +920,7 @@ def create_causal_mask(
     allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
-    Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
+    Create a standard causal mask based on the attention implementation used (stored in the config). If `cache`
     has a hybrid cache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
     to what is needed in the `modeling_xxx.py` files).
 
@@ -926,7 +933,7 @@ def create_causal_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
             It can also be an already prepared 4D mask, in which case it is returned as-is.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         position_ids (`torch.Tensor`, optional)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
@@ -956,7 +963,7 @@ def create_causal_mask(
             config,
             inputs_embeds,
             attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
             allow_is_bidirectional_skip=allow_is_causal_skip,
@@ -964,10 +971,10 @@ def create_causal_mask(
 
     # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     if layer_idx is None:
-        layer_idx = find_first_full_attention_index(past_key_values)
+        layer_idx = find_first_full_attention_index(cache)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
-        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
+        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, cache, position_ids, layer_idx)
     )
     if early_exit:
         return attention_mask
@@ -983,9 +990,7 @@ def create_causal_mask(
 
     # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
     # prefill is not compiled)
-    allow_is_causal_skip = allow_is_causal_skip and not (
-        getattr(past_key_values, "is_compileable", False) and q_length == 1
-    )
+    allow_is_causal_skip = allow_is_causal_skip and not (getattr(cache, "is_compileable", False) and q_length == 1)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1029,12 +1034,13 @@ def create_causal_mask(
     return causal_mask
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_bidirectional_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     encoder_hidden_states: torch.Tensor | None = None,
-    past_key_values: Cache | None = None,
+    cache: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_bidirectional_skip: bool = True,
@@ -1056,7 +1062,7 @@ def create_bidirectional_mask(
         encoder_hidden_states (`torch.Tensor`, optional):
             The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
             `inputs_embeds` to infer the batch size, kv length and dtype.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the union of both). This is
@@ -1070,11 +1076,11 @@ def create_bidirectional_mask(
             `True`.
     """
     # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
-    layer_idx = find_first_full_attention_index(past_key_values)
+    layer_idx = find_first_full_attention_index(cache)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
+        config, inputs_embeds, attention_mask, cache, None, layer_idx, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
@@ -1125,11 +1131,12 @@ def create_bidirectional_mask(
     return attention_mask
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1139,7 +1146,7 @@ def create_sliding_window_causal_mask(
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Mistral. If `past_key_values` has a hybrid cache structure, this
+    of attention pattern was mostly democratized by Mistral. If `cache` has a hybrid cache structure, this
     function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -1152,7 +1159,7 @@ def create_sliding_window_causal_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
             It can also be an already prepared 4D mask, in which case it is returned as-is.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         position_ids (`torch.Tensor`, optional)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
@@ -1182,7 +1189,7 @@ def create_sliding_window_causal_mask(
             config,
             inputs_embeds,
             attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
             allow_is_bidirectional_skip=allow_is_causal_skip,
@@ -1190,13 +1197,13 @@ def create_sliding_window_causal_mask(
 
     # If we have a hybrid cache structure, here we want to create the mask for the sliding layers
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(True)
+        if hasattr(cache, "is_sliding") and True in cache.is_sliding:
+            layer_idx = cache.is_sliding.index(True)
         else:
             layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
-        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
+        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, cache, position_ids, layer_idx)
     )
     if early_exit:
         return attention_mask
@@ -1215,9 +1222,7 @@ def create_sliding_window_causal_mask(
     use_vmap = False
     # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
     # prefill is not compiled)
-    allow_is_causal_skip = allow_is_causal_skip and not (
-        getattr(past_key_values, "is_compileable", False) and q_length == 1
-    )
+    allow_is_causal_skip = allow_is_causal_skip and not (getattr(cache, "is_compileable", False) and q_length == 1)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1262,12 +1267,13 @@ def create_sliding_window_causal_mask(
     return causal_mask
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     encoder_hidden_states: torch.Tensor | None = None,
-    past_key_values: Cache | None = None,
+    cache: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_bidirectional_skip: bool = True,
@@ -1289,7 +1295,7 @@ def create_bidirectional_sliding_window_mask(
         encoder_hidden_states (`torch.Tensor`, optional):
             The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
             `inputs_embeds` to infer the batch size, kv length and dtype.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the union of both). This is
@@ -1303,14 +1309,14 @@ def create_bidirectional_sliding_window_mask(
             `True`.
     """
     # If we have a hybrid cache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(True)
+    if hasattr(cache, "is_sliding") and True in cache.is_sliding:
+        layer_idx = cache.is_sliding.index(True)
     else:
         layer_idx = 0
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, past_key_values, None, layer_idx, encoder_hidden_states
+        config, inputs_embeds, attention_mask, cache, None, layer_idx, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
@@ -1358,11 +1364,12 @@ def create_bidirectional_sliding_window_mask(
     return attention_mask
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_chunked_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1372,7 +1379,7 @@ def create_chunked_causal_mask(
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Llama4. If `past_key_values` has a hybrid cache structure, this
+    of attention pattern was mostly democratized by Llama4. If `cache` has a hybrid cache structure, this
     function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -1385,7 +1392,7 @@ def create_chunked_causal_mask(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
             It can also be an already prepared 4D mask, in which case it is returned as-is.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         position_ids (`torch.Tensor`, optional)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
@@ -1410,13 +1417,13 @@ def create_chunked_causal_mask(
     """
     if layer_idx is None:
         # If we have a hybrid cache structure, here we want to create the mask for the sliding layers
-        if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(True)
+        if hasattr(cache, "is_sliding") and True in cache.is_sliding:
+            layer_idx = cache.is_sliding.index(True)
         else:
             layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
-        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
+        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, cache, position_ids, layer_idx)
     )
     if early_exit:
         return attention_mask
@@ -1449,9 +1456,7 @@ def create_chunked_causal_mask(
     use_vmap = False
     # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
     # prefill is not compiled)
-    allow_is_causal_skip = allow_is_causal_skip and not (
-        getattr(past_key_values, "is_compileable", False) and q_length == 1
-    )
+    allow_is_causal_skip = allow_is_causal_skip and not (getattr(cache, "is_compileable", False) and q_length == 1)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1496,11 +1501,12 @@ def create_chunked_causal_mask(
     return causal_mask
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_recurrent_attention_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None = None,
+    cache: Cache | None = None,
     **kwargs,
 ) -> torch.Tensor | None:
     """Return the 2D padding mask for mamba / linear-attention layers, sized to the local sequence.
@@ -1545,11 +1551,12 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
 }
 
 
+@deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_masks_for_generate(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1569,7 +1576,7 @@ def create_masks_for_generate(
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
             It can also be an already prepared 4D mask, in which case it is returned as-is.
-        past_key_values (`Cache`, optional):
+        cache (`Cache`, optional):
             The past key values, if we use a cache.
         position_ids (`torch.Tensor`, optional)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
@@ -1591,7 +1598,7 @@ def create_masks_for_generate(
         "config": effective_config,
         "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
+        "cache": cache,
         "position_ids": position_ids,
         "or_mask_function": or_mask_function,
         "and_mask_function": and_mask_function,

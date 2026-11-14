@@ -720,6 +720,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
                 "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n�\n\n addCriterion\nI'm sorry, but I don't understand your question. Could you please provide more context or clarify what you're asking",
             ],
+            ("cuda", 8): [
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
+                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and',
+            ],
             ("rocm", (9, 4)): [
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
                 'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'

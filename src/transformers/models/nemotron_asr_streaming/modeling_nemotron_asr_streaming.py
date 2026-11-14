@@ -43,6 +43,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -330,14 +331,14 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    past_key_values (`Cache`, *optional*):
+    cache (`Cache`, *optional*):
         Updated attention K/V sliding-window cache from the encoder. Pass to the next chunk call.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
         Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
     """
 
     attention_mask: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None
 
 
@@ -533,7 +534,7 @@ def eager_attention_forward(
 class NemotronAsrStreamingEncoderAttention(nn.Module):
     """
     Multi-head attention with relative positional encoding.
-    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `cache`.
     See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
     """
 
@@ -566,12 +567,13 @@ class NemotronAsrStreamingEncoderAttention(nn.Module):
         # global positional bias
         self.bias_v = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -582,8 +584,8 @@ class NemotronAsrStreamingEncoderAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         total_key_length = key_states.shape[2]
 
@@ -751,13 +753,14 @@ class NemotronAsrStreamingEncoderBlock(GradientCheckpointingLayer):
         self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size)
         self.norm_out = nn.LayerNorm(config.hidden_size)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         all_masked_rows: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -770,7 +773,7 @@ class NemotronAsrStreamingEncoderBlock(GradientCheckpointingLayer):
             hidden_states=normalized_hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = hidden_states + attn_output
@@ -900,12 +903,13 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
@@ -913,7 +917,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        past_key_values (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             Sliding-window K/V cache (`DynamicCache` built from `config.sliding_window`) for cache-aware
             streaming attention.
         output_attention_mask (`bool`, *optional*, defaults to `True`):
@@ -945,8 +949,8 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
         ```
         """
         if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache(config=self.config)
+            if cache is None:
+                cache = DynamicCache(config=self.config)
 
             if padding_cache is None:
                 padding_cache = NemotronAsrStreamingEncoderCausalConvPaddingCache()
@@ -956,7 +960,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -968,7 +972,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=output_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
             and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
         )
@@ -980,9 +984,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
             else:
                 all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
 
-        cached_frames = (
-            past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
-        )
+        cached_frames = cache.get_mask_sizes(seq_length, 0)[0] - seq_length if cache is not None else 0
         position_embeddings = self.encode_positions(inputs_embeds, cached_frames=cached_frames)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
@@ -1006,7 +1008,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
                     attention_mask=attention_mask,
                     all_masked_rows=all_masked_rows,
                     position_embeddings=position_embeddings,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     padding_cache=padding_cache,
                     use_cache=use_cache,
                     **kwargs,
@@ -1015,7 +1017,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
         return NemotronAsrStreamingEncoderModelOutput(
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
-            past_key_values=past_key_values,
+            cache=cache,
             padding_cache=padding_cache,
         )
 
@@ -1036,7 +1038,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
 @dataclass
 class NemotronAsrStreamingRNNTOutput(BaseModelOutputWithPooling):
     r"""
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
@@ -1048,7 +1050,7 @@ class NemotronAsrStreamingRNNTOutput(BaseModelOutputWithPooling):
     logits: torch.Tensor | None = None
     decoder_cache: NemotronAsrStreamingRNNTDecoderCache | None = None
 
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None
 
 
@@ -1226,7 +1228,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
         )
 

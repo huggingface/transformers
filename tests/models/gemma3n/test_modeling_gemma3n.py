@@ -466,7 +466,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
+                "return_dict_in_generate": True,  # Required to return `cache`
             }
 
             text_config = model.config.get_text_config()
@@ -487,9 +487,9 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             # -1 because the last generated token isn't yet in the cache.
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
-            self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
-            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+            self.assertIsInstance(outputs.cache, StaticCache)
+            self.assertEqual(len(outputs.cache), num_hidden_layers)
+            self.assertListEqual(list(outputs.cache.layers[0].keys.shape), cache_shape)
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -526,7 +526,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
-                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "return_dict_in_generate": True,  # Required to return `cache`
                     "output_scores": True,
                     "use_cache": True,
                 }
@@ -549,9 +549,9 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 )
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
-                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
-                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+                self.assertTrue(isinstance(static_cache_generation.cache, StaticCache))
+                self.assertTrue(len(static_cache_generation.cache) == num_hidden_layers)
+                self.assertTrue(static_cache_generation.cache.layers[0].keys.shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)

@@ -31,7 +31,7 @@ Some noteworthy use case examples for VQA include:
 
 In this guide you'll learn how to:
 
-- Fine-tune a classification VQA model, specifically [ViLT](../model_doc/vilt), on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
+- Fine-tune a classification VQA model, specifically [ViLT](../model_doc/vilt), on the Graphcore/vqa dataset.
 - Use your fine-tuned ViLT for inference.
 - Run zero-shot VQA inference with a generative model, like BLIP-2.
 
@@ -69,9 +69,8 @@ Let's define the model checkpoint as a global variable.
 ## Load the data
 
 For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset.
-You can find the full dataset on [🤗 Hub](https://huggingface.co/datasets/Graphcore/vqa).
 
-As an alternative to the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa), you can download the
+As an alternative to the Graphcore/vqa dataset, you can download the
 same data manually from the official [VQA dataset page](https://visualqa.org/download.html). If you prefer to follow the
 tutorial with your custom data, check out how to [Create an image dataset](https://huggingface.co/docs/datasets/image_dataset#loading-script)
 guide in the 🤗 Datasets documentation.

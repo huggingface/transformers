@@ -41,7 +41,7 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cosmos3_edge_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -159,7 +159,7 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
         "vision_config": Cosmos3EdgeVisionConfig,
         "text_config": Cosmos3EdgeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: Cosmos3EdgeTextConfig | dict | None = None
     vision_config: Cosmos3EdgeVisionConfig | dict | None = None

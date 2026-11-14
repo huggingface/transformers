@@ -423,6 +423,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v.modeling_glm4v.Glm4vVisionAttention.forward",
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
+    "transformers.models.dots3_note.modeling_dots3_note.Dots3NoteVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
     # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
@@ -439,6 +440,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
+    "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",

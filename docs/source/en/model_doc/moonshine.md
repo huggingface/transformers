@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice commands. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
 
-You can find all the original Moonshine checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
+You can find all the original Moonshine checkpoints under the [Moonshine AI](https://huggingface.co/moonshine-ai) organization.
 
 > [!TIP]
 > Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
@@ -42,7 +42,7 @@ from transformers import pipeline
 
 pipeline = pipeline(
     task="automatic-speech-recognition",
-    model="UsefulSensors/moonshine-base",
+    model="moonshine-ai/moonshine-base",
     device=0
 )
 pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -57,8 +57,8 @@ from datasets import load_dataset
 from transformers import AutoProcessor, MoonshineForConditionalGeneration
 
 
-processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
-model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base", device_map="auto")
+processor = AutoProcessor.from_pretrained("moonshine-ai/moonshine-base")
+model = MoonshineForConditionalGeneration.from_pretrained("moonshine-ai/moonshine-base", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
 audio_sample = ds[0]["audio"]
