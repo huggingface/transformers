@@ -39,6 +39,9 @@ original repositories still use legacy processor metadata. Weight names are mapp
 
 Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
 
+The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
+Transformers generation API.
+
 </Tip>
 
 ### Image inference
@@ -141,9 +144,7 @@ inputs = processor.apply_chat_template(
 generated_ids = model.generate(**inputs, max_new_tokens=1024)
 ```
 
-`enable_thinking` changes the chat template; it is not a generation argument and does not impose a token budget. The
-two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
-Transformers generation API.
+`enable_thinking` changes the chat template; it is not a generation argument and does not impose a token budget.
 
 ## Ovis2_5Config
 
