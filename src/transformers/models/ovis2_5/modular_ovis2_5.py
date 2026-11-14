@@ -40,15 +40,15 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ..auto import AutoConfig, AutoModel
+from ..auto import AutoConfig
 from ..cosmos3_edge.configuration_cosmos3_edge import Cosmos3EdgeVisionConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+from ..llava.modeling_llava import LlavaModel
 from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6VisionEmbeddings
 from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGlimmerVisionRotaryEmbedding
-from ..ovis2.modeling_ovis2 import Ovis2Model
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3ModelOutputWithPast,
     VideoLlama3PreTrainedModel,
@@ -702,16 +702,14 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
 
 
 @auto_docstring(custom_intro="The bare Ovis2.5 multimodal model, without the language modeling head.")
-class Ovis2_5Model(Ovis2Model):
+class Ovis2_5Model(LlavaModel):
     def __init__(self, config: Ovis2_5Config):
-        PreTrainedModel.__init__(self, config)
+        super().__init__(config)
         self.vision_tower = Ovis2_5VisionModel(config.vision_config)
         self.multi_modal_projector = Ovis2_5MultiModalProjector(
             config.vision_config,
             config.text_config.hidden_size,
         )
-        self.language_model = AutoModel.from_config(config.text_config)
-        self.post_init()
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
