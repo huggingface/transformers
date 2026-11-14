@@ -314,6 +314,46 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
             exporter_utils._PATCHES.pop(backend, None)
 
 
+@require_torch
+class ChunkedVisionAttentionPatchTest(unittest.TestCase):
+    def test_window_attention_with_uneven_windows(self):
+        # Window attention leaves smaller windows at the image's edges when the grid isn't a multiple of the window
+        from transformers import Qwen2_5_VLConfig
+        from transformers.exporters import exporter_dynamo  # noqa: F401
+        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
+
+        torch.manual_seed(0)
+        config = Qwen2_5_VLConfig(vision_config={"hidden_size": 32, "num_heads": 4}).vision_config
+        config._attn_implementation = "sdpa"
+        attention = Qwen2_5_VLVisionAttention(config).eval()
+
+        def inputs(cu_seqlens):
+            length = cu_seqlens[-1]
+            angles = torch.randn(length, 4).repeat(1, 2)
+            return torch.randn(length, 32), torch.tensor(cu_seqlens, dtype=torch.int32), (angles.cos(), angles.sin())
+
+        class Wrapper(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attention = attention
+
+            def forward(self, hidden_states, cu_seqlens, cos, sin):
+                return self.attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
+
+        hidden_states, cu_seqlens, (cos, sin) = inputs([0, 4, 8, 10])
+        auto = {0: torch.export.Dim.AUTO}
+        with torch.no_grad(), exporter_utils.apply_patches("dynamo"):
+            program = torch.export.export(
+                Wrapper(), (hidden_states, cu_seqlens, cos, sin), dynamic_shapes=(auto, auto, auto, auto)
+            )
+
+        hidden_states, cu_seqlens, (cos, sin) = inputs([0, 6, 9, 12, 13])
+        with torch.no_grad():
+            expected = attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
+            actual = program.module()(hidden_states, cu_seqlens, cos, sin)
+        torch.testing.assert_close(actual, expected)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Leaf-tensor invariants that integration tests wouldn't visibly catch
 # ─────────────────────────────────────────────────────────────────────────────
