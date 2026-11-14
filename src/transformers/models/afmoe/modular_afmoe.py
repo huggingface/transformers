@@ -282,8 +282,8 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
-        "expert_bias",
     ]
+    _keep_in_fp32_modules_strict = ["expert_bias"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
