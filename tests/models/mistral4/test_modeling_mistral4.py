@@ -47,9 +47,26 @@ class Mistral4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Mistral4Model
 
+    def __init__(
+        self,
+        parent,
+        n_routed_experts=8,
+        kv_lora_rank=256,
+        q_lora_rank=64,
+        qk_nope_head_dim=64,
+        qk_rope_head_dim=64,
+        v_head_dim=128,
+    ):
+        super().__init__(parent=parent)
+        self.n_routed_experts = n_routed_experts
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.v_head_dim = v_head_dim
+
 
 @require_torch
-@unittest.skip("Causing a lot of failures on CI")
 class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
@@ -67,6 +84,13 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+    @unittest.skip(
+        "The test keeps `mscale_all_dim` from Mistral4's default YaRN parameters when switching to `dynamic`, and MLA "
+        "applies it to the softmax scale for any non-default rope type, so short-input outputs differ by design"
+    )
+    def test_model_rope_scaling_from_config_1_dynamic(self):
+        pass
 
     @require_flash_attn
     @require_torch_accelerator
