@@ -118,6 +118,7 @@ class ModelManager:
         attn_implementation: str | None = None,
         continuous_batching: bool = False,
         quantization: str | None = None,
+        experts_implementation: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
     ):
@@ -139,6 +140,7 @@ class ModelManager:
             attn_implementation, self.device, continuous_batching
         )
         self.quantization = quantization
+        self.experts_implementation = experts_implementation
         self.model_timeout = model_timeout
         self.force_model = force_model
 
@@ -275,6 +277,8 @@ class ModelManager:
             "trust_remote_code": self.trust_remote_code,
             "tqdm_class": tqdm_class,
         }
+        if self.experts_implementation is not None:
+            model_kwargs["experts_implementation"] = self.experts_implementation
         quantization_config = self.get_quantization_config()
         if quantization_config is not None:
             model_kwargs["quantization_config"] = quantization_config
