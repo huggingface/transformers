@@ -109,7 +109,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## 참고사항[[notes]]
 
 - GPT-2는 절대 위치 임베딩을 사용하므로 입력을 오른쪽에 패딩하세요.
-- GPT-2는 이전에 계산된 키-값 어텐션 쌍을 재사용할 수 있습니다. [`GPT2Model.forward`]의 [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) 매개변수로 이 기능에 접근하세요.
+- GPT-2는 이전에 계산된 키-값 어텐션 쌍을 재사용할 수 있습니다. [`GPT2Model.forward`]의 [cache](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.cache) 매개변수로 이 기능에 접근하세요.
 - [Mistral](./mistral)의 학습 안정성 개선 사항을 적용하려면 [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx)와 [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) 매개변수를 활성화하세요.
 
 ## GPT2Config

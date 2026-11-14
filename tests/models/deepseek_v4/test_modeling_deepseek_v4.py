@@ -118,7 +118,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # V4 layers with a Compressor attend to extra pooled positions, so the KV
         # length varies per layer. We only check the shape invariants: batched, same
@@ -162,7 +162,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                         (inputs_dict["input_ids"].shape[0], seq_len, config.hc_mult, config.hidden_size),
                     )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # Every V4 layer is sliding-window, so the cache is length-bounded to
         # ``sliding_window`` instead of the full ``seq_length`` the parent tester expects.
         # We also accept the compressed-segment positions that ``DeepseekV4Attention``
@@ -171,7 +171,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
 
         num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = config.head_dim
-        for layer in past_key_values.layers:
+        for layer in cache.layers:
             keys, values = layer.keys, layer.values
             self.assertIsInstance(keys, torch.Tensor)
             self.assertEqual(keys.shape[0], batch_size)

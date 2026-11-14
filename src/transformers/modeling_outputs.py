@@ -128,13 +128,13 @@ class BaseModelOutputWithPast(ModelOutput):
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
             input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -150,7 +150,7 @@ class BaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
 
@@ -218,18 +218,18 @@ class BaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
 
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
             input) to speed up sequential decoding.
     """
 
     last_hidden_state: torch.Tensor | None = None
     pooler_output: torch.Tensor | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
 
@@ -243,13 +243,13 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
             input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -271,7 +271,7 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -318,11 +318,11 @@ class MoeModelOutputWithPast(ModelOutput):
     Args:
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
             input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -343,7 +343,7 @@ class MoeModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     router_logits: tuple[torch.Tensor] | None = None
@@ -372,11 +372,11 @@ class MoeCausalLMOutputWithPast(ModelOutput):
             Raw router logits computed by the MoE routers. They can be used to compute a load-balancing loss or to
             inspect how tokens are dispatched to experts.
 
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
+            `cache` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -393,7 +393,7 @@ class MoeCausalLMOutputWithPast(ModelOutput):
     loss: torch.Tensor | None = None
     aux_loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     router_logits: tuple[torch.Tensor] | None = None
@@ -409,13 +409,13 @@ class MoEModelOutputWithPastAndCrossAttentions(ModelOutput):
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
             input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -442,7 +442,7 @@ class MoEModelOutputWithPastAndCrossAttentions(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -460,13 +460,13 @@ class Seq2SeqModelOutput(ModelOutput):
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -500,7 +500,7 @@ class Seq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -519,13 +519,13 @@ class Seq2SeqMoEModelOutput(ModelOutput):
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -568,7 +568,7 @@ class Seq2SeqMoEModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     decoder_router_logits: tuple[torch.Tensor] | None = None
@@ -618,11 +618,11 @@ class CausalLMOutputWithPast(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
+            `cache` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -638,7 +638,7 @@ class CausalLMOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
 
@@ -670,16 +670,16 @@ class CausalLMOutputWithCrossAttentions(ModelOutput):
 
             Cross attentions weights after the attention softmax, used to compute the weighted average in the
             cross-attention heads.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
+            `cache` input) to speed up sequential decoding.
     """
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -695,11 +695,11 @@ class SequenceClassifierOutputWithPast(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
+            `cache` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -715,7 +715,7 @@ class SequenceClassifierOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
 
@@ -759,11 +759,11 @@ class Seq2SeqLMOutput(ModelOutput):
             Language modeling loss.
         logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -798,7 +798,7 @@ class Seq2SeqLMOutput(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -817,11 +817,11 @@ class Seq2SeqMoEOutput(ModelOutput):
             Language modeling loss.
         logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -869,7 +869,7 @@ class Seq2SeqMoEOutput(ModelOutput):
     decoder_z_loss: torch.Tensor | None = None
     encoder_aux_loss: torch.Tensor | None = None
     decoder_aux_loss: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     decoder_router_logits: tuple[torch.Tensor] | None = None
@@ -949,11 +949,11 @@ class Seq2SeqSequenceClassifierOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -988,7 +988,7 @@ class Seq2SeqSequenceClassifierOutput(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -1101,11 +1101,11 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
             Span-start scores (before SoftMax).
         end_logits (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -1141,7 +1141,7 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
     loss: torch.Tensor | None = None
     start_logits: torch.Tensor | None = None
     end_logits: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -1430,11 +1430,11 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
             Spectrogram generation loss.
         spectrogram (`torch.Tensor` of shape `(batch_size, sequence_length, num_bins)`):
             The predicted spectrogram.
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -1469,7 +1469,7 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
 
     loss: torch.Tensor | None = None
     spectrogram: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -1488,13 +1488,13 @@ class Seq2SeqTSModelOutput(ModelOutput):
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -1536,7 +1536,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None
@@ -1559,11 +1559,11 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
             Distributional loss.
         params (`torch.Tensor` of shape `(batch_size, num_samples, num_params)`):
             Parameters of the chosen distribution.
-        past_key_values (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        cache (`EncoderDecoderCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.EncoderDecoderCache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `cache` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -1606,7 +1606,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
 
     loss: torch.Tensor | None = None
     params: tuple[torch.Tensor, ...] | None = None
-    past_key_values: EncoderDecoderCache | None = None
+    cache: EncoderDecoderCache | None = None
     decoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     decoder_attentions: tuple[torch.Tensor, ...] | None = None
     cross_attentions: tuple[torch.Tensor, ...] | None = None

@@ -216,7 +216,7 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             "test_beam",
             "test_sample_generate",
             "test_greedy_generate",
-            "test_generate_continue_from_past_key_values",
+            "test_generate_continue_from_cache",
             "test_generate_from_random_inputs_embeds",
             "test_generate_from_inputs_embeds",
             "test_generate_methods_with_logits_to_keep",
@@ -279,11 +279,11 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             )
             voice_cache = model(
                 input_ids=input_ids[:, :prefix_length], audio_prompt_latents=voice, use_cache=True
-            ).past_key_values
+            ).cache
             from_cache = model.generate(
                 input_ids=input_ids[:, prefix_length:],
                 attention_mask=attention_mask[:, prefix_length:],
-                past_key_values=voice_cache,
+                cache=voice_cache,
                 **kwargs,
             )
         torch.testing.assert_close(from_cache.audio_latents, expected.audio_latents, atol=1e-5, rtol=1e-5)
@@ -582,7 +582,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def _prepare(self, processor, texts, voices=None, audio=None):
         """
         One conversation per text, the voice given as recordings (in the conversations), as precomputed latents, or
-        neither: the text only, the voice coming as a cache (`past_key_values`).
+        neither: the text only, the voice coming as a cache (`cache`).
         """
         conversations = []
         for row, text in enumerate(texts):
@@ -618,7 +618,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         input_ids = torch.cat([inputs["input_ids"], placeholders], dim=-1)
         audio_latents = expected_latents[None, :-1].to(model.device)
         if voice_cache is not None:
-            voice = {"past_key_values": voice_cache}
+            voice = {"cache": voice_cache}
             attention_mask = torch.ones(1, voice_cache.get_seq_length() + input_ids.shape[1], device=model.device)
         else:
             voice = {key: inputs[key] for key in ("audio_prompt_latents", "audio_prompt_latents_mask")}
@@ -641,7 +641,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         text, voice = self.CASES[0]
         # the shipped voice is the cache of its prefix: the prompt is the text only
         inputs = self._prepare(self.processor, [text])
-        output = self._generate(model, inputs, past_key_values=self._load_voices(model, [voice]), do_sample=False)
+        output = self._generate(model, inputs, cache=self._load_voices(model, [voice]), do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         latents, eos_logits = self._teacher_forced(
@@ -666,7 +666,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # the positions follow the mask, which covers both
         inputs = self._prepare(self.processor, texts)
         voice_cache = self._load_voices(model, voices, inputs=inputs)
-        output = self._generate(model, inputs, past_key_values=voice_cache, do_sample=False)
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=False)
 
         self.assertListEqual(
             output.audio_latents_mask.sum(-1).tolist(), [row["sanity"]["num_frames"] for row in metadata["rows"]]
@@ -687,9 +687,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         inputs = self._prepare(self.processor, [text])
         voice_cache = self._load_voices(model, [voice])
         torch.manual_seed(self.SAMPLED_SEED)
-        output = self._generate(
-            model, inputs, past_key_values=voice_cache, do_sample=True, temperature=self.SAMPLED_TEMPERATURE
-        )
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=True, temperature=self.SAMPLED_TEMPERATURE)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         # compared in the flow head's normalised space (the original's)
@@ -711,7 +709,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         text, voice = self.CASES[0]
         inputs = self._prepare(processor, [text])
         voice_cache = self._load_voices(model, [voice], checkpoint_name=self.drifting_checkpoint_name)
-        output = self._generate(model, inputs, past_key_values=voice_cache, do_sample=False)
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         # generation filled the cache: load a fresh one
