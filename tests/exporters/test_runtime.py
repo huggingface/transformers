@@ -793,3 +793,48 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
     @pytest.mark.executorch_export_test
     def test_executorch(self):
         self._check_backend(ExecutorchExporter(), ExecutorchConfig)
+
+    def _check_cuda_graphs(self, providers):
+        """A static export, its prefill and decode disaggregated, generates as eager does with both graphs replaying
+        CUDA graphs: a second `generate` replays the prompt graph's and the decode graph's captures."""
+        torch.manual_seed(0)
+        model, inputs = self._llama()
+        model, inputs = model.to("cuda"), {name: value.to("cuda") for name, value in inputs.items()}
+        generation_config = GenerationConfig(
+            max_new_tokens=6, do_sample=False, eos_token_id=None, cache_implementation="static", max_cache_len=48
+        )
+        with torch.no_grad():
+            expected = model.generate(**copy.deepcopy(inputs), generation_config=generation_config)
+        exported = OnnxExporter().export_for_generation(
+            model, copy.deepcopy(inputs), OnnxConfig(dynamic=False), generation_config=generation_config
+        )
+        exported.to(providers=providers)
+        runners = [exported.runners[name] for name in ("model", "prefill_model")]
+        self.assertTrue(all(runner.replays_cuda_graph for runner in runners))
+        for _ in range(2):
+            generated = exported.generate(**copy.deepcopy(inputs), generation_config=generation_config)
+            self.assertEqual(generated.tolist(), expected.tolist())
+        self.assertTrue(all(runner.cuda_graph is not None for runner in runners))
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_cuda_graphs(self):
+        self._check_cuda_graphs([("CUDAExecutionProvider", {"device_id": 0, "enable_cuda_graph": "1"})])
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_tensorrt_cuda_graphs(self):
+        import onnxruntime
+
+        try:
+            import tensorrt_libs  # noqa: F401  (TensorRT's libraries from its wheel, loaded on import)
+        except ImportError:
+            pass
+        if "TensorrtExecutionProvider" not in onnxruntime.get_available_providers():
+            self.skipTest("test requires ONNX Runtime's TensorRT execution provider")
+        tensorrt = {"device_id": 0, "trt_cuda_graph_enable": True}
+        self._check_cuda_graphs([("TensorrtExecutionProvider", tensorrt), ("CUDAExecutionProvider", {"device_id": 0})])
