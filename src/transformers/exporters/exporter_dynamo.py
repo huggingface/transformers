@@ -313,10 +313,12 @@ def _reshaped_vision_attention_forward(
     rotary_pos_emb: torch.Tensor | None = None,
     position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     returns_tuple: bool = False,
+    uneven_segments: bool = False,
     **kwargs,
 ):
-    """Export-safe chunked vision/audio attention: reshape segments into a batch dim,
-    apply rotary if provided, run one SDPA call, project, and re-emit in the original layout."""
+    """Export-safe chunked vision/audio attention: reshape segments into a batch dim (or, for uneven segments such as
+    window attention's, mask attention to each segment), apply rotary if provided, run one SDPA call, project, and
+    re-emit in the original layout."""
 
     # Normalise NaViT-style `(1, T, D)` packing (minicpmv4_6) to the flat `(T, D)` layout
     # the rest of this wrapper assumes. The leading dim is always 1 — multi-image batches
@@ -334,7 +336,7 @@ def _reshaped_vision_attention_forward(
     # The reshape-into-batch below needs equal-length segments.
     segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
     torch_compilable_check(
-        (segment_lengths == segment_lengths[0]).all(),
+        uneven_segments or (segment_lengths == segment_lengths[0]).all(),
         "Chunked vision attention requires uniform segment lengths during export. "
         "Ensure all images have the same resolution (use do_resize=True in the processor) "
         "or pad inputs to a common size.",
@@ -381,7 +383,15 @@ def _reshaped_vision_attention_forward(
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
-    seg_len = seq_length // num_segments
+    attention_mask = None
+    if uneven_segments:
+        # One sequence, each token attending to its own segment
+        positions = torch.arange(seq_length, device=hidden_states.device)
+        segment_ids = (positions[:, None] >= cu_seqlens[None, 1:]).sum(-1)
+        attention_mask = segment_ids[:, None] == segment_ids[None, :]
+        num_segments, seg_len = 1, seq_length
+    else:
+        seg_len = seq_length // num_segments
 
     # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
     def _to_batched(t):
@@ -397,6 +407,7 @@ def _reshaped_vision_attention_forward(
         query_states,
         key_states,
         value_states,
+        attn_mask=attention_mask,
         is_causal=False,
         scale=self.scaling,
         dropout_p=0.0 if not self.training else self.attention_dropout,
@@ -455,12 +466,15 @@ def _reshaped_vision_attention_forward(
     "transformers.models.qwen3_asr.modeling_qwen3_asr.Qwen3ASRAudioAttention.forward",
 )
 def _patch_chunked_vision_attention(original):
-    """Bind `returns_tuple` once per class by inspecting the original forward's source."""
+    """Bind `returns_tuple` and `uneven_segments` (window attention) once per class by inspecting the sources."""
     src = inspect.getsource(original)
     returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
+    uneven_segments = "cu_window_seqlens" in inspect.getsource(inspect.getmodule(original))
 
     def forward(self, *args, **kwargs):
-        return _reshaped_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
+        return _reshaped_vision_attention_forward(
+            self, *args, returns_tuple=returns_tuple, uneven_segments=uneven_segments, **kwargs
+        )
 
     return forward
 
