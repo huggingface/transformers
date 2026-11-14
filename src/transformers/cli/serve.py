@@ -111,6 +111,12 @@ class Serve:
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
         enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
+        api_key: Annotated[
+            str | None,
+            typer.Option(
+                help="Require this key in an `Authorization: Bearer <key>` header on every request but /health."
+            ),
+        ] = None,
         log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "warning",
         default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
         non_blocking: Annotated[
@@ -216,6 +222,7 @@ class Serve:
             systemone_handler=self._systemone_handler,
             generation_state=self._generation_state,
             enable_cors=enable_cors,
+            api_key=api_key,
         )
 
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
