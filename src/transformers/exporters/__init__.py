@@ -32,7 +32,9 @@ _import_structure = {
     "exporter_executorch": ["ExecutorchExporter"],
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
+    "generation": ["ExportedModelForCausalLM", "ExportedModelForSeq2SeqLM", "ExportedMultimodalModelForCausalLM"],
     "metadata": ["ExportMetadata"],
+    "multimodal": ["ExportedMultimodalModel"],
     "quantizers": [
         "ExportQuantizer",
         "NNCFOnnxQuantizer",
@@ -45,8 +47,6 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
-    "generation": ["ExportedModelForCausalLM", "ExportedModelForSeq2SeqLM", "ExportedMultimodalModelForCausalLM"],
-    "multimodal": ["ExportedMultimodalModel"],
     "runners": ["ModelRunner"],
 }
 
