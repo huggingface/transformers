@@ -426,6 +426,19 @@ class VideoProcessorMixin(BaseImageProcessor):
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
 
+        if not is_local:
+            path_to_repo = hf_api().snapshot_download(
+                pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+            )
+        else:
+            path_to_repo = pretrained_model_name_or_path
+        video_processor_dict["_path_to_repo"] = path_to_repo
         return video_processor_dict, kwargs
 
     @classmethod
@@ -445,9 +458,13 @@ class VideoProcessorMixin(BaseImageProcessor):
             [`~video_processing_utils.VideoProcessorBase`]: The video processor object instantiated from those
             parameters.
         """
+        # pop out as not used in most cases, but some models need to know full `cached_path`
+        video_processor_dict.pop("_path_to_repo", None)
+
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+        valid_keys = cls.valid_kwargs.__annotations__.keys()
+        video_processor_dict.update({k: v for k, v in kwargs.items() if k in valid_keys})
         video_processor = cls(**video_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
@@ -477,6 +494,7 @@ class VideoProcessorMixin(BaseImageProcessor):
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         filtered_dict = super().to_dict()
+        filtered_dict.pop("_path_to_repo", None)
         filtered_dict.pop("image_processor_type", None)
         filtered_dict["video_processor_type"] = self.__class__.__name__
 

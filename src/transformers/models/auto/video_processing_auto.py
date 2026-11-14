@@ -32,6 +32,7 @@ from ...utils import (
     resolve_revision,
     safe_load_json_file,
 )
+from ...utils.hub import hf_api
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -259,6 +260,19 @@ def get_video_processor_config(
     if resolved_video_processor_file is not None and video_processor_dict is None:
         video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
+    if video_processor_dict:
+        if not os.path.isdir(pretrained_model_name_or_path):
+            video_processor_dict["_path_to_repo"] = hf_api().snapshot_download(
+                pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+            )
+        else:
+            video_processor_dict["_path_to_repo"] = pretrained_model_name_or_path
     return video_processor_dict or {}
 
 
@@ -348,20 +362,39 @@ class AutoVideoProcessor:
         >>> # video_processor = AutoVideoProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
+        config_dict = kwargs.pop("processor_config", None)
         backend = kwargs.pop("backend", "torchvision")
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs["_from_auto"] = True
 
-        # Resolve the revision once, so that all the files below come from the same repository state.
-        kwargs["revision"] = resolve_revision(
+        hub_kwargs_names = [
+            "cache_dir",
+            "force_download",
+            "local_files_only",
+            "proxies",
+            "revision",
+            "subfolder",
+            "token",
+        ]
+        hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
+        hub_kwargs["_from_auto"] = True
+        code_revision = kwargs.pop("code_revision", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+        token = hub_kwargs.pop("token", None)
+        if token is not None:
+            hub_kwargs["token"] = token
+
+        # Resolve the revision once, so that all the files below come from the same repository state
+        requested_revision = hub_kwargs.get("revision")
+        hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            local_files_only=kwargs.get("local_files_only", False),
-            cache_dir=kwargs.get("cache_dir"),
+            requested_revision,
+            token=token,
+            local_files_only=hub_kwargs.get("local_files_only", False),
+            cache_dir=hub_kwargs.get("cache_dir"),
         )
 
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        if not isinstance(config_dict, dict):
+            config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **hub_kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
@@ -387,7 +420,10 @@ class AutoVideoProcessor:
             try:
                 if not isinstance(config, PreTrainedConfig):
                     config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        pretrained_model_name_or_path,
+                        trust_remote_code=trust_remote_code,
+                        code_revision=code_revision,
+                        **hub_kwargs,
                     )
 
                 # It could be in `config.video_processor_type``
@@ -427,12 +463,14 @@ class AutoVideoProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-            _ = kwargs.pop("code_revision", None)
+            video_processor_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs
+            )
+            _ = hub_kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()
-            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return video_processor_class.from_dict(config_dict, *inputs, **kwargs)
         elif video_processor_class is not None:
-            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return video_processor_class.from_dict(config_dict, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_mapping = VIDEO_PROCESSOR_MAPPING[type(config)]
@@ -440,7 +478,7 @@ class AutoVideoProcessor:
                 video_processor_mapping.get(backend) if video_processor_mapping is not None else video_processor_class
             )
             if video_processor_class is not None:
-                return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return video_processor_class.from_dict(config_dict, *inputs, **kwargs)
 
             if backend == "torchvision" and not is_torchvision_available():
                 raise ValueError(
