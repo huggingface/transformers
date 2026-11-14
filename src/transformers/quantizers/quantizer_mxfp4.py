@@ -186,6 +186,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        # Saved in the config of a model quantized on load, like the list of a pre-quantized checkpoint
+        if self.quantization_config.modules_to_not_convert is None:
+            self.quantization_config.modules_to_not_convert = sorted(self.modules_to_not_convert)
 
         model = replace_with_mxfp4_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
