@@ -469,6 +469,24 @@ class VideoLlama3Model(Qwen2VLModel):
     def compute_3d_position_ids(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
+        """
+        return self.get_image_embeddings(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            image_merge_sizes=video_merge_sizes,
+            **kwargs,
+        )
+
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -487,6 +505,32 @@ class VideoLlama3Model(Qwen2VLModel):
             **kwargs,
         )
 
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor,
+        image_merge_sizes: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
+        them per image.
+
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
+        """
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            grid_thw=image_grid_thw,
+            merge_sizes=image_merge_sizes,
+            return_dict=True,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_embeds = self.projector(last_hidden_state)
+        vision_outputs.pooler_output = image_embeds
+        return vision_outputs
+
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -498,20 +542,10 @@ class VideoLlama3Model(Qwen2VLModel):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
-        return_flat = kwargs.pop("return_flat", False)
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            grid_thw=image_grid_thw,
-            merge_sizes=image_merge_sizes,
-            return_dict=True,
-            **kwargs,
+        vision_outputs = self.get_image_embeddings(
+            pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
         )
-        last_hidden_state = vision_outputs.last_hidden_state
-        image_embeds = self.projector(last_hidden_state)
-
-        if return_flat:
-            vision_outputs.pooler_output = image_embeds
-            return vision_outputs
+        image_embeds = vision_outputs.pooler_output
         split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
         return vision_outputs
@@ -553,18 +587,21 @@ class VideoLlama3Model(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -572,7 +609,10 @@ class VideoLlama3Model(Qwen2VLModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            # Pre-encoded by `get_video_features` (`mm_encoder_outputs`), they come one tensor per video
+            if not isinstance(video_embeds, torch.Tensor):
+                video_embeds = torch.cat(video_embeds, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
                 video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
             _, video_mask = self.get_placeholder_mask(

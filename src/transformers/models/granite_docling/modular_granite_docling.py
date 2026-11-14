@@ -1232,6 +1232,9 @@ class GraniteDoclingModel(Idefics3Model):
             router_logits=router_logits,
         )
 
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
+
 
 @auto_docstring(
     custom_intro="""
@@ -1343,6 +1346,9 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
             router_logits=router_logits,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
 
 
 __all__ = [
