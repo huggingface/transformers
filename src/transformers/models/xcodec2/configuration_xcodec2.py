@@ -57,7 +57,7 @@ class Xcodec2Config(PreTrainedConfig):
     ```"""
 
     model_type = "xcodec2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     hidden_size: int = 1024
     intermediate_size: int = 4096
     num_hidden_layers: int = 12

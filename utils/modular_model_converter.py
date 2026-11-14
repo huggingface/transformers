@@ -978,9 +978,20 @@ def get_decorators_to_keep(
         return []
 
     if modular_node.decorators:
+        # This is a special case: if we simply have a @deprecate_kwarg decorator in modular, keep it AND all the
+        # original decorators
+        if len(decorator_names) == 1 and "deprecate_kwarg" in decorator_names[0]:
+            original_decorators = original_node.decorators if original_node is not None else ()
+            # The same @deprecate_kwarg may already be present in the original_node, just remove it silently to avoid adding twice
+            original_decorators = tuple(
+                dec
+                for dec in original_decorators
+                if mapper.python_module.code_for_node(dec.decorator) != decorator_names[0]
+            )
+            return original_decorators + modular_node.decorators
         return modular_node.decorators
 
-    return original_node.decorators if original_node is not None else []
+    return original_node.decorators if original_node is not None else ()
 
 
 def replace_class_node(

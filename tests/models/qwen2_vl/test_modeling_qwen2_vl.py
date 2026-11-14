@@ -320,7 +320,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 ),
             }
 
-            with_cache = model.generate(**inputs, past_key_values=first_turn.past_key_values, **generation_kwargs)
+            with_cache = model.generate(**inputs, cache=first_turn.cache, **generation_kwargs)
             from_scratch = model.generate(**inputs, **generation_kwargs)
             torch.testing.assert_close(
                 torch.stack(with_cache.logits), torch.stack(from_scratch.logits), rtol=1e-4, atol=1e-4

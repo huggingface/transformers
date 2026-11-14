@@ -535,7 +535,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         kwargs.pop("is_causal", None)

@@ -151,7 +151,7 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
         input_ids=None,
         position_ids=None,
         query_embeds=None,
-        past_key_values_length=0,
+        cache_length=0,
     ):
         if input_ids is not None:
             seq_length = input_ids.size()[1]
@@ -159,7 +159,7 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
             seq_length = 0
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length].clone()
+            position_ids = self.position_ids[:, cache_length : seq_length + cache_length].clone()
 
         if input_ids is not None:
             embeddings = self.word_embeddings(input_ids)

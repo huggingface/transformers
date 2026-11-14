@@ -719,7 +719,7 @@ class EsmModel(EsmPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=None,
+            cache=None,
         )
 
         if self.position_embedding_type == "rotary":
@@ -753,14 +753,14 @@ class EsmModel(EsmPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        past_key_values,
+        cache,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
         else:
             attention_mask = create_bidirectional_mask(
