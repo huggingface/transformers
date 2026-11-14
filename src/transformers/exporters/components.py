@@ -60,8 +60,10 @@ class _ModelComponent(torch.nn.Module):
 
 
 def _flat(features):
-    """Per-image features (a list) as one tensor."""
-    return torch.cat(features) if isinstance(features, (tuple, list)) else features
+    """Per-image features (a list, or LLaVA's `[num_images, num_tokens, hidden]` tensor) as one `[num_tokens, hidden]`
+    tensor."""
+    features = torch.cat(features) if isinstance(features, (tuple, list)) else features
+    return features.reshape(-1, features.shape[-1])
 
 
 class ModalityEncoder(_ModelComponent):
