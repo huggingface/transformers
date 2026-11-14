@@ -1086,8 +1086,7 @@ class MuseGlimmerModel(Kimi_K25Model):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
         """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
