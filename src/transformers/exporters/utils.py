@@ -484,10 +484,15 @@ def openvino_input_value(tensor: torch.Tensor) -> Any:
 def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
-    leaves = {path: openvino_input_value(tensor) for path, tensor in get_leaf_tensors(sample).items()}
+    names = {name for port in ov_model.inputs for name in port.get_names()}
+    # A stateful model keeps its cache as state: skip walking a cache no port takes (48 tensors a step for a 24-layer
+    # model)
+    if isinstance(sample, Mapping) and not any(name.startswith("input.cache.") for name in names):
+        sample = {key: value for key, value in sample.items() if key != "cache"}
+    leaves = get_leaf_tensors(sample)
     # `beam_idx` reorders the cache's batch axis: read it off a cache tensor (not a sliding layer's 0-d counter), else
     # a text input (the first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`).
-    batched = [path for path, value in leaves.items() if len(value.shape)]
+    batched = [path for path, tensor in leaves.items() if tensor.dim()]
     batch_path = next(
         (path for path in batched if path.startswith("cache.")),
         next((name for name in BATCH_INPUTS if name in batched), batched[0] if batched else None),
@@ -497,7 +502,7 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     def port_value(name: str) -> Any:
         path = name.removeprefix("input.")
         if path in leaves:
-            return leaves[path]
+            return openvino_input_value(leaves[path])
         if name == "beam_idx":
             return np.arange(batch, dtype=np.int32)
         if name in sample:
