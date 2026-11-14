@@ -27,6 +27,7 @@ from transformers.models.llava.modeling_llava import (
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -251,7 +252,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         >>> gen_tokens = model.generate(**inputs, max_new_tokens=300, do_sample=True, temperature=0.3)
         >>> processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
         ```"""
-        super().forward(
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -260,11 +261,29 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            labels=labels,
-            logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+        logits = logits * self.config.text_config.logit_scale
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return AyaVisionCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
 

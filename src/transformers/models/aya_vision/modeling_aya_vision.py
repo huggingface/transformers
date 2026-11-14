@@ -391,6 +391,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
+        logits = logits * self.config.text_config.logit_scale
 
         loss = None
         if labels is not None:
