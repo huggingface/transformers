@@ -218,6 +218,26 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
             self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
 
+    def test_save_pretrained_writes_the_backend_truncation_not_the_last_call(self):
+        """A call sets its own truncation on the backend, which `save_pretrained` doesn't write: a processor would
+        otherwise reload the call's `max_length` as a default for every modality, e.g. an audio length in samples.
+        Truncation set on the backend directly is the tokenizer's own, and is saved."""
+
+        def saved_max_length(tokenizer):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                tokenizer.save_pretrained(temp_dir)
+                reloaded = PreTrainedTokenizerFast.from_pretrained(temp_dir)
+            return reloaded.init_kwargs.get("max_length")
+
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.model_paths[0])
+        tokenizer(["hello world test"], truncation=True, max_length=2)
+        self.assertIsNone(saved_max_length(tokenizer))
+        tokenizer.backend_tokenizer.enable_truncation(8)
+        self.assertEqual(saved_max_length(tokenizer), 8)
+        tokenizer(["hello world test"], truncation=True, max_length=2)
+        self.assertEqual(saved_max_length(tokenizer), 8)
+        self.assertEqual(tokenizer.backend_tokenizer.truncation["max_length"], 2)
+
     def test_bpe_tokenizer_skips_clean_up_tokenization_spaces(self):
         """BPE tokenizers should not apply clean_up_tokenization even when the flag is True.
 
