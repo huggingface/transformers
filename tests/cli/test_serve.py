@@ -425,8 +425,39 @@ class TestBuildGenerationConfig(unittest.TestCase):
     def test_frequency_penalty(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"frequency_penalty": 0.5}, GenerationConfig())
+        handler = self._make_handler()
+        for fp, expected_rep in [(0.0, 1.0), (0.5, 1.5), (2.0, 3.0), (-0.5, 0.5)]:
+            with self.subTest(frequency_penalty=fp):
+                result = handler._build_generation_config({"frequency_penalty": fp}, GenerationConfig())
+                self.assertAlmostEqual(result.repetition_penalty, expected_rep)
+
+    def test_frequency_penalty_invalid(self):
+        from fastapi import HTTPException
+
+        from transformers import GenerationConfig
+
+        handler = self._make_handler()
+        # Invalid values: out of [-2.0, 2.0], non-positive repetition penalty, or non-numeric
+        for invalid_fp in [-1.0, -1.5, -2.0, -2.5, 2.5, "invalid"]:
+            with self.subTest(frequency_penalty=invalid_fp):
+                with self.assertRaises(HTTPException) as cm:
+                    handler._build_generation_config({"frequency_penalty": invalid_fp}, GenerationConfig())
+                self.assertEqual(cm.exception.status_code, 400)
+
+    def test_completion_frequency_penalty(self):
+        from fastapi import HTTPException
+
+        from transformers import GenerationConfig
+
+        handler = CompletionHandler(model_manager=MagicMock(), generation_state=MagicMock())
+        result = handler._build_generation_config({"frequency_penalty": 0.5}, GenerationConfig())
         self.assertAlmostEqual(result.repetition_penalty, 1.5)
+
+        for invalid_fp in [-1.0, -1.5, -2.0, -2.5, 2.5, "invalid"]:
+            with self.subTest(frequency_penalty=invalid_fp):
+                with self.assertRaises(HTTPException) as cm:
+                    handler._build_generation_config({"frequency_penalty": invalid_fp}, GenerationConfig())
+                self.assertEqual(cm.exception.status_code, 400)
 
     def test_logit_bias_tuple_keys(self):
         from transformers import GenerationConfig
