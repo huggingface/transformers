@@ -22,6 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -307,6 +308,11 @@ class DeepseekV2Attention(nn.Module):
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row."""
+        return {"latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None)}
+
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
@@ -354,7 +360,11 @@ class DeepseekV2Attention(nn.Module):
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         # Cache read / write is performed while the latent KV is still compressed
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            latent = torch.cat((k_nope, k_pe), dim=-1)[0, 0]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_nope, k_pe = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        elif cache is not None:
             k_nope, k_pe = cache.update(k_nope, k_pe, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)

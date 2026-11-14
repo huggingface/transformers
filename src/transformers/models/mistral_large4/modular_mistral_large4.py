@@ -23,6 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
@@ -331,6 +332,7 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
         cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -369,7 +371,9 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
             k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
         k = k.squeeze(2)
 
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            k = cache.update_rows(self.layer_idx, {"index_key": k[0]}, kwargs)["index_key"][None]
+        elif cache is not None:
             k = cache.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
@@ -415,6 +419,16 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
             MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
         )
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row, and its
+        indexer's keys. All layers declare the same rows, as they share one allocator: the layers without RoPE, without
+        an indexer, or reusing the keys of another layer leave part of them unused."""
+        return {
+            "latent": ((self.config.kv_lora_rank + self.config.qk_rope_head_dim,), None),
+            "index_key": ((self.config.index_head_dim,), None),
+        }
+
     # trf-ignore: TRF043
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -454,7 +468,15 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
                 q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Update the cache while latent KV is still compressed
-        if cache is not None and not self.is_kv_shared_layer:
+        if isinstance(cache, PagedAttentionCache) and not self.is_kv_shared_layer:  # continuous batching
+            # The layers without RoPE have no rotary key, and leave the end of their latent row unused
+            latent = F.pad(
+                torch.cat((k_pass, k_rot), dim=-1)[0, 0], (0, self.config.qk_rope_head_dim - k_rot.shape[-1])
+            )
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None, :, : self.kv_lora_rank], latent[None, None, :, self.kv_lora_rank :]
+            k_rot = k_rot[..., : self.qk_rope_head_dim]
+        elif cache is not None and not self.is_kv_shared_layer:
             k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
         if self.store_full_length_kv:
@@ -474,6 +496,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
                 cache=cache,
+                **kwargs,
             )  # [B, S, topk]
         else:
             if prev_topk_indices is None:

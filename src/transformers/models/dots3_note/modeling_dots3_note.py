@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -225,6 +226,7 @@ class Dots3NoteTextIndexer(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -257,7 +259,9 @@ class Dots3NoteTextIndexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            k = cache.update_rows(self.layer_idx, {"index_key": k[0]}, kwargs)["index_key"][None]
+        elif cache is not None:
             k = cache.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
@@ -504,6 +508,15 @@ class Dots3NoteTextAttention(nn.Module):
             Dots3NoteTextIndexer(config, layer_idx) if config.layer_types[layer_idx] == "indexed_attention" else None
         )
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row, and the keys
+        of its indexer if it has one."""
+        rows = {"latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None)}
+        if self.indexer is not None:
+            rows["index_key"] = ((self.config.index_head_dim,), None)
+        return rows
+
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
@@ -555,7 +568,11 @@ class Dots3NoteTextAttention(nn.Module):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         q_rot, k_rot = q_rot.to(q_dtype), k_rot.to(k_dtype)
 
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        elif cache is not None:
             k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -568,8 +585,8 @@ class Dots3NoteTextAttention(nn.Module):
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0],
-                position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
                 cache=cache,
+                **kwargs,
             )
             if self.config._attn_implementation in ("eager", "sdpa"):
                 index_mask = (

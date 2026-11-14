@@ -23,6 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -189,7 +190,11 @@ class KimiLinearAttention(DeepseekV3Attention):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         # Cache read / write is performed while latent KV is still compressed
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            latent = torch.cat((kv_nope, k_rot), dim=-1)[0, 0]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            kv_nope, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        elif cache is not None:
             kv_nope, k_rot = cache.update(kv_nope, k_rot, self.layer_idx, kwargs=kwargs)
 
         key_states, value_states = self.expand_kv(kv_nope, k_rot)

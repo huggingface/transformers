@@ -31,6 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
@@ -1154,6 +1155,15 @@ class Glm5NextTextAttention(nn.Module):
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row, and its
+        indexer's keys."""
+        return {
+            "latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None),
+            "index_key": ((self.config.index_head_dim,), None),
+        }
+
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
@@ -1195,7 +1205,11 @@ class Glm5NextTextAttention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         # Cache read / write is performed while latent KV is still compressed
-        if cache is not None:
+        if isinstance(cache, PagedAttentionCache):  # continuous batching
+            latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
+            latent = cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        elif cache is not None:
             k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
