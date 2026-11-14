@@ -900,7 +900,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
                 if len(output_1[key].shape) == 0:
                     self.assertEqual(output_1[key].item(), output_2[key].item())
                 else:
-                    self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
+                    self.assertListAlmostEqual(output_1[key].flatten().tolist(), output_2[key].flatten().tolist())
 
     @slow
     def test_to_eng_text(self):
