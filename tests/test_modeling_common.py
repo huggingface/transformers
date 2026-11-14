@@ -6718,7 +6718,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Copy to avoid polluting between iterations
             local_inputs_dict = copy.deepcopy(inputs_dict)
             with self.subTest(model_class.__name__):
-                model = model_class(config)
+                model = model_class(config).to(torch_device)
                 model.eval()
 
                 if "cache" not in inspect.signature(model.forward).parameters.keys():
