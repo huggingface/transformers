@@ -761,8 +761,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
         """
         image_shape = None
         if pixel_values.dim() == 4:
@@ -879,8 +878,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
             image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
-            # Pre-encoded by `get_image_features` or `get_video_features` (`mm_encoder_outputs`), they come one
-            # tensor per image or video
             if not isinstance(image_features, torch.Tensor):
                 image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device)

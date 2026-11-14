@@ -653,8 +653,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all videos as one tensor, in the order the model embeds them: `get_video_features` splits
-        them per video.
+        All videos' features as one tensor; `get_video_features` splits them per video.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
@@ -683,8 +682,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
-        them per image.
+        All images' features as one tensor; `get_image_features` splits them per image.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)

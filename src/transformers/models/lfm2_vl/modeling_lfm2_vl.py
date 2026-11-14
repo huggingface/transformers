@@ -174,7 +174,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
             The pixel attention mask of the input images.
         """
-        # The features are built image by image (variable length in naflex): concatenated here
+        # Built image by image (naflex), concatenated here
         image_outputs = self.get_image_features(
             pixel_values, spatial_shapes, pixel_attention_mask, return_dict=True, **kwargs
         )
@@ -299,7 +299,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
             if not isinstance(image_features, torch.Tensor):
                 image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
