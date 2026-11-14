@@ -44,7 +44,8 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, select_hidden_states
 from ..auto import AutoConfig, AutoTokenizer
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
@@ -803,6 +804,12 @@ class AriaModel(LlavaModel):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -882,6 +889,9 @@ class AriaModel(LlavaModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
             router_logits=outputs.router_logits,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
 
 
 @auto_docstring(
@@ -1020,6 +1030,9 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
 
 
 __getattr__ = deprecate_attr(

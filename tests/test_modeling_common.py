@@ -5611,29 +5611,6 @@ class ModelTesterMixin(ExportTesterMixin):
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
 
-    def _check_features_return_flat(self, modality, prepare_config_and_inputs):
-        """`return_flat=True` gives every item's features as one tensor: the per-item `pooler_output` concatenated."""
-        getter_name = f"get_{modality}_features"
-        for model_class in self.all_model_classes:
-            if not hasattr(model_class, getter_name):
-                continue
-            config, inputs_dict = prepare_config_and_inputs()
-            model = model_class(config).eval().to(torch_device)
-            owner = model.base_model if hasattr(model.base_model, getter_name) else model
-            if "return_flat" not in inspect.getsource(getattr(type(owner), getter_name)):
-                continue
-            getter = getattr(model, getter_name)
-            with torch.no_grad():
-                per_item = getter(**inputs_dict, return_dict=True).pooler_output
-                flat = getter(**inputs_dict, return_dict=True, return_flat=True).pooler_output
-            torch.testing.assert_close(flat, torch.cat(per_item), rtol=0, atol=0)
-
-    def test_get_image_features_return_flat(self):
-        self._check_features_return_flat("image", self._image_features_prepare_config_and_inputs)
-
-    def test_get_video_features_return_flat(self):
-        self._check_features_return_flat("video", self._video_features_prepare_config_and_inputs)
-
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))

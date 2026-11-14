@@ -179,6 +179,9 @@ class VipLlavaModel(LlavaModel):
         )
         return output
 
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
+
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
     @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
@@ -286,6 +289,9 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("Not needed")
 
 
 __all__ = ["VipLlavaModel", "VipLlavaForConditionalGeneration", "VipLlavaPreTrainedModel"]

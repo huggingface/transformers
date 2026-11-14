@@ -1107,6 +1107,21 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        The features of all videos as one tensor, in the order the model embeds them: `get_video_features` splits
+        them per video.
+        """
+        # Same implementation as for images
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1119,22 +1134,33 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        The features of all images as one tensor, in the order the model embeds them: `get_image_features` splits
+        them per image.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
+            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
+        )
+        return vision_output
+
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return_flat = kwargs.pop("return_flat", False)
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
-            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
-        )
-        image_embeds = vision_output.pooler_output
-        if return_flat:
-            return vision_output
+        vision_output = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_output.pooler_output = torch.split(image_embeds, split_sizes)
+        vision_output.pooler_output = torch.split(vision_output.pooler_output, split_sizes)
         vision_output.deepstack_features = [
             torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
         ]
@@ -1276,8 +1302,14 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            deepstack_image_embeds = [
+                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
+                for feat in mm_encoder_outputs["image"].deepstack_features
+            ]
+            # Pre-encoded by `get_image_features` (`mm_encoder_outputs`), they come one tensor per image
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1285,8 +1317,14 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            deepstack_video_embeds = [
+                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
+                for feat in mm_encoder_outputs["video"].deepstack_features
+            ]
+            # Pre-encoded by `get_video_features` (`mm_encoder_outputs`), they come one tensor per video
+            if not isinstance(video_embeds, torch.Tensor):
+                video_embeds = torch.cat(video_embeds, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1303,8 +1341,6 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
-                img_embed = torch.cat(img_embed, dim=0)
-                vid_embed = torch.cat(vid_embed, dim=0)
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
 
                 embed_joint[image_mask_joint, :] = img_embed
@@ -1313,11 +1349,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
             visual_pos_masks = image_mask
-            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
+            deepstack_visual_embeds = deepstack_image_embeds
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
             visual_pos_masks = video_mask
-            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
+            deepstack_visual_embeds = deepstack_video_embeds
 
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
@@ -1430,6 +1466,19 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         self.post_init()
 
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1441,6 +1490,19 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
