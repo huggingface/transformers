@@ -572,11 +572,19 @@ def _patch_chunk_gated_delta_rule(_original):
 
 
 def _scan(combine_fn, init, xs):
-    """`torch`'s `scan` of `combine_fn` over the leading dim of the tensors `xs`, looked up on each call (as is
-    `scan` itself): a backend that can't lower it patches either."""
-    from torch._higher_order_ops.scan import scan
+    """`torch`'s `scan` of `combine_fn` over the leading dim of the tensors `xs`, a backend that can't lower it patches.
 
-    return scan(combine_fn, init, xs)
+    The `scan` operator itself, not `torch`'s `scan` wrapper: the wrapper traces the loop body with dynamo, whose cache
+    hands a later export the body an earlier one traced, sizes baked in.
+    """
+    from torch._higher_order_ops.scan import scan_op
+
+    def flat_combine_fn(carry, *chunk):
+        carry, output = combine_fn(carry, list(chunk))
+        return [carry, output]
+
+    carry, outputs = scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
+    return carry, outputs
 
 
 def _unit_lower_triangular_inverse(matrix):
