@@ -558,3 +558,30 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
         self.assertEqual(outputs, "Two cats are sleeping on a pink blanket, with")
+
+    def test_postprocess_assistant_string_prefill_full_text(self):
+        from unittest.mock import MagicMock
+        import torch
+        from transformers.pipelines.base import Chat
+        from transformers.pipelines.image_text_to_text import ReturnType
+
+        pipe = ImageTextToTextPipeline.__new__(ImageTextToTextPipeline)
+        pipe.tokenizer = None
+        pipe.processor = MagicMock()
+        pipe.processor.post_process_image_text_to_text.side_effect = [
+            ["User: Hello Assistant: The answer is 42."],
+            ["User: Hello Assistant: The answer is "],
+        ]
+        chat = Chat([
+            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            {"role": "assistant", "content": "The answer is "},
+        ])
+        model_outputs = {
+            "generated_sequence": torch.tensor([[1, 2]]),
+            "input_ids": torch.tensor([[1]]),
+            "prompt_text": [chat],
+        }
+        res = pipe.postprocess(model_outputs, return_type=ReturnType.FULL_TEXT)
+        self.assertEqual(res[0]["generated_text"][-1]["content"], "The answer is 42.")
+
+
