@@ -2965,6 +2965,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        # An empty batch has no sequences to decode, `decode` would read it as a single empty sequence
+        if (isinstance(sequences, (list, tuple)) or getattr(sequences, "ndim", 0) > 0) and len(sequences) == 0:
+            return []
+
         # Forward to decode() which now handles batched input natively
         result = self.decode(
             token_ids=sequences,
