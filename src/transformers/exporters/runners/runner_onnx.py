@@ -110,10 +110,13 @@ class OnnxModelRunner(ModelRunner):
                 "Pass either `device` or `providers`: the providers choose the device (`device_id` in the CUDA or "
                 "TensorRT provider's options)."
             )
+        # A CUDA graph replays one input shape: a static export's.
+        config = metadata.export_config
+        static = not (config.get("dynamic") or config.get("dynamic_shapes"))
         if providers is None:
-            config = metadata.export_config
-            static = not (config.get("dynamic") or config.get("dynamic_shapes"))
             providers = _execution_providers(device, cuda_graph=static)
+        elif not static:
+            providers = _without_cuda_graph(providers)
         if "path" in program.meta:
             return cls(metadata, _open_session(program.meta["path"], session_options, providers))
 
@@ -220,13 +223,19 @@ def _open_session(source, session_options, providers: list) -> ort.InferenceSess
     except Exception as error:
         if "graph capture" not in str(error):
             raise
-    providers = [
-        (entry[0], {key: value for key, value in entry[1].items() if key != "enable_cuda_graph"})
+    return ort.InferenceSession(source, session_options, providers=_without_cuda_graph(providers))
+
+
+def _without_cuda_graph(providers: list) -> list:
+    """`providers` with their CUDA graph options (CUDA's `enable_cuda_graph`, TensorRT's `trt_cuda_graph_enable`)
+    removed."""
+    graph_options = ("enable_cuda_graph", "trt_cuda_graph_enable")
+    return [
+        (entry[0], {key: value for key, value in entry[1].items() if key not in graph_options})
         if isinstance(entry, tuple)
         else entry
         for entry in providers
     ]
-    return ort.InferenceSession(source, session_options, providers=providers)
 
 
 def _bind_input(binding: ort.IOBinding, name: str, tensor: torch.Tensor, data_ptr: int) -> None:
