@@ -36,7 +36,7 @@ from ..utils.hub import cached_file, cached_files, hf_api
 from ..utils.import_utils import is_torch_available
 from .components import Component
 from .configs import ExportConfigMixin, ExportFormat
-from .decompose import decode_graph_name, decompose_for_generation, decompose_multimodal
+from .decompose import PREFILL_GRAPH, decode_graph_name, decompose_for_generation, decompose_multimodal
 from .metadata import ExportMetadata, register_treespec_types
 from .precompute import precompute_export_inputs
 from .quantizers.utils import capture_calibration_inputs
@@ -358,11 +358,16 @@ def _exported_model_class(component_names) -> type[ExportedModel]:
     return ExportedModel
 
 
+def _is_dynamic(config) -> bool:
+    """Whether the decode graph's export config (or the single config) exports dynamic shapes."""
+    decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
+    return bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
+
+
 def _switches_kernels_on_query_length(model) -> bool:
     """Whether the model's linear attention runs the chunked gated delta rule beyond one token and the recurrent one
     for a single token (Qwen3.5's, Qwen3-Next's): a decode graph traced on several tokens keeps the chunked kernel,
-    which a one-token step then runs wrong, so the decode graph takes one token and the prompt goes through it a
-    token at a time."""
+    which a one-token step then runs wrong, so the decode graph takes one token."""
     return any(
         hasattr(sys.modules.get(type(module).__module__), "torch_chunk_gated_delta_rule") for module in model.modules()
     )
@@ -482,6 +487,9 @@ class HfExporter(ABC):
         exported: dict[str, ExportedComponent] = {}
         for name, component in components.items():
             component_config = config[name] if isinstance(config, dict) else config
+            # A single config's prompt graph is dynamic, taking any prompt, even behind a static decode graph.
+            if name == PREFILL_GRAPH and not isinstance(config, dict):
+                component_config = dataclasses.replace(config, dynamic=True)
             try:
                 exported[name] = self._export_component(component.module, component.inputs, component_config)
             except Exception as e:
@@ -571,8 +579,13 @@ class HfExporter(ABC):
         Decompose a generative model into the components a generation loop drives, and export each.
 
         The model is run on **generate** kwargs to capture what each component is called with
-        ([`~exporters.decompose.decompose_for_generation`]). The decode graph also serves the prompt, so no prompt
-        graph duplicates the model's weights.
+        ([`~exporters.decompose.decompose_for_generation`]). A decode graph taking several tokens
+        (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or with
+        `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
+        prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights. With a single static
+        config, the prompt graph is dynamic all the same; a static one (a per-component config) takes prompts of the
+        captured length only (another raises). A stateful export (OpenVINO's) keeps the
+        cache as each graph's state: the decode graph continues from a copy of the prompt graph's.
 
         Args:
             model ([`PreTrainedModel`]):
@@ -587,8 +600,8 @@ class HfExporter(ABC):
             multi_token_decode (`bool`, *optional*):
                 Whether the decode graph takes several query tokens at once, so it takes the whole prompt in one call.
                 Defaults to whether the decode config is dynamic, except for a model whose linear attention switches
-                kernels on the query length (Qwen3.5's); refused on a static one, whose decode graph takes the prompt
-                a token at a time.
+                kernels on the query length (Qwen3.5's); refused on a static one. Without it the prompt gets a graph
+                of its own (see above).
             decoder_writes_cross_cache (`bool`, *optional*):
                 For an encoder-decoder, whether the decode graph computes its own cross-attention cache instead of
                 the encoder graph. Defaults to the exporter's `decoder_writes_cross_cache`.
@@ -611,8 +624,10 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
             decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
-        # The decode graph serves the prefill step: it isn't a graph of its own.
-        components.pop("prefill")
+        prefill = components.pop("prefill")
+        # A decode graph taking one token leaves the prompt to a graph of its own.
+        if not multi_token_decode:
+            components[PREFILL_GRAPH] = prefill
         if keep_all_logits:
             # Without the captured `logits_to_keep` the forward defaults to 0, i.e. every position.
             for component in components.values():
@@ -655,8 +670,7 @@ class HfExporter(ABC):
                 defaults = GenerationConfig()
                 for name in ("temperature", "top_p", "top_k", "min_p", "typical_p", "epsilon_cutoff", "eta_cutoff"):
                     setattr(generation_config, name, getattr(defaults, name))
-        decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
-        dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
+        dynamic = _is_dynamic(config)
         if multi_token_decode is None:
             multi_token_decode = dynamic and not _switches_kernels_on_query_length(model)
         elif multi_token_decode and not dynamic:

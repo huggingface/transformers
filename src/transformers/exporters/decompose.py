@@ -283,6 +283,8 @@ def decompose_prefill_decode(
     no_mm_encoder_outputs = []
     if hasattr(model, "_supports_mm_encoder_outputs"):
         no_mm_encoder_outputs.append((model, "_supports_mm_encoder_outputs", lambda original: lambda: False))
+    # One sequence per prompt: repeating it per beam is the runtime's job
+    capture_config.num_beams = capture_config.num_return_sequences = 1
     try:
         with _capture_calls(model, "forward") as calls, patch_attributes(no_mm_encoder_outputs):
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
@@ -838,7 +840,7 @@ def decompose_for_generation(
     """Decompose a generative model into independently exportable components.
 
     Captures prefill and decode kwargs from a real `generate` and splits a multi-modal model into components. The
-    decode graph serves the prefill step too (all at once with `multi_token_decode`, else a token at a time), so
+    decode graph serves the prefill step too (with `multi_token_decode`; else it is the prompt graph's), so
     `"prefill"` is that step's call to the decode graph, not a graph of its own: a caller exports the decode graph only
     (as `export_for_generation` does) and can use `"prefill"`'s inputs to calibrate or check it on that step. A model
     whose prefill step needs a graph of its own raises.
@@ -917,6 +919,11 @@ def decompose_for_generation(
 # The decode graph's names, after optimum-intel's: a causal LM's `model`, an encoder-decoder's `decoder_model` (beside
 # its `encoder_model`), and a multi-modal model's `language_model`.
 DECODE_GRAPHS = ("model", "decoder_model", "language_model")
+
+
+# The prompt graph `export_for_generation` exports beside a decode graph taking one token: the decode graph's module,
+# traced on the whole prompt.
+PREFILL_GRAPH = "prefill_model"
 
 
 def decode_graph_name(components) -> str:

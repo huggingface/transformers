@@ -19,10 +19,11 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from ..decompose import decode_graph_name, decompose_for_generation
+from ..decompose import PREFILL_GRAPH, decode_graph_name, decompose_for_generation
 
 
 if TYPE_CHECKING:
+    from ...generation import GenerationConfig
     from ...modeling_utils import PreTrainedModel
 
 
@@ -31,11 +32,12 @@ def capture_calibration_inputs(
     calibration_dataset: Iterable[dict[str, Any]],
     *,
     multi_token_decode: bool,
-    generation_config: Any = None,
+    generation_config: GenerationConfig | None = None,
     decoder_writes_cross_cache: bool = False,
 ) -> dict[str, list[dict]]:
     """Run each generate-style sample through `decompose_for_generation` and collect every exported component's
-    forward kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
+    forward kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component, the prompt graph a
+    single-token decode graph leaves included."""
     calibration: dict[str, list[dict]] = {}
     for sample in calibration_dataset:
         components = decompose_for_generation(
@@ -49,9 +51,11 @@ def capture_calibration_inputs(
         for name, component in components.items():
             calibration.setdefault(name, []).append(component.inputs)
         # A multi-token decode graph also runs the prefill step, so it calibrates on that call too; a single-token
-        # one only ever takes one token.
+        # one leaves it to the prompt graph.
         if multi_token_decode:
             calibration[decode_graph_name(components)].append(prefill.inputs)
+        else:
+            calibration.setdefault(PREFILL_GRAPH, []).append(prefill.inputs)
     return calibration
 
 

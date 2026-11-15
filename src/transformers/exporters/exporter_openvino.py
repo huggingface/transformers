@@ -159,7 +159,10 @@ class OpenVINOExporter(DynamoExporter):
             compress_model_transformation(ov_model)
 
         _record_runtime_precision(ov_model, model)
-        record_output_structure(metadata, traced_outputs[-1])
+        outputs = traced_outputs[-1]
+        if config.stateful:
+            outputs = _without_folded_outputs(outputs, ov_model)
+        record_output_structure(metadata, outputs)
         return ov_model, metadata
 
     @classmethod
@@ -181,6 +184,16 @@ class OpenVINOExporter(DynamoExporter):
 # ── Conversion helpers ──────────────────────────────────────────────────────
 # Small helpers for ``OpenVINOExporter.export`` — extracted for readability and so each stage
 # of the conversion has a single responsibility.
+
+
+def _without_folded_outputs(outputs: Any, ov_model: openvino.Model) -> Any:
+    """`outputs` without the fields a stateful graph no longer returns: those whose every tensor was folded into
+    state (the cache)."""
+    kept = {port.get_any_name().removeprefix("output.") for port in ov_model.outputs}
+    if not isinstance(outputs, Mapping) or set(get_leaf_tensors(outputs)) <= kept:
+        return outputs
+    fields = {key: value for key, value in outputs.items() if set(get_leaf_tensors({key: value})) & kept}
+    return fields if type(outputs) is dict else type(outputs)(**fields)
 
 
 def _record_runtime_precision(ov_model: openvino.Model, model: PreTrainedModel) -> None:
@@ -672,6 +685,37 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
     ov_model.validate_nodes_and_infer_types()
 
 
+def _read_overwritten_states(ov_model: openvino.Model, init_dims: dict[str, list]) -> None:
+    """Make every growing state's update read its variable.
+
+    A graph that overwrites a state without reading it (a prompt graph's KV cache, whose concatenation with the empty
+    cache folds away) runs, but OpenVINO's IR reader drops the unread ``ReadValue`` and can't resolve the ``Assign``'s
+    variable when the model is loaded back. Concatenating an empty slice of the variable to the update keeps the read.
+    """
+    reads = {op.get_variable_id(): op for op in ov_model.get_ops() if op.get_type_name() == "ReadValue"}
+    for sink in ov_model.get_sinks():
+        variable_id = sink.get_variable_id()
+        dims = init_dims.get(variable_id) or []
+        if "grow" not in dims:
+            continue
+        read = reads[variable_id]
+        update = sink.input_value(0)
+        # By name: OpenVINO hands out a new Python wrapper for a node on every access.
+        seen, stack = set(), [update.get_node()]
+        while stack:
+            node = stack.pop()
+            if node.get_name() == read.get_name():
+                break
+            if node.get_name() not in seen:
+                seen.add(node.get_name())
+                stack.extend(value.get_node() for value in node.input_values())
+        else:
+            axis = dims.index("grow")
+            empty = ov_ops.slice(read.output(0), [0], [0], [1], [axis])
+            sink.set_arguments([ov_ops.concat([empty, update], axis)])
+    ov_model.validate_nodes_and_infer_types()
+
+
 def _align_state_pair_types(ov_model: openvino.Model, pairs: dict[str, str]) -> None:
     """Give each state pair one CPU-friendly storage type, converting at the boundaries.
 
@@ -788,6 +832,7 @@ def _make_stateful(
     _build_state_initializers(ov_model, init_dims)
     _initialize_cross_state_from_its_write(ov_model, sample_inputs)
     _pin_state_update_shapes(ov_model)
+    _read_overwritten_states(ov_model, init_dims)
 
 
 def _cross_cache_paths(sample_inputs: MutableMapping[str, Any]) -> set[str]:
